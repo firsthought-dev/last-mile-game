@@ -4369,15 +4369,21 @@
 
       // Ground-clip safety: the chase/sky cameras are positioned purely
       // relative to the car (offset + lerp), with no awareness of the
-      // terrain underneath. On a hill or embankment the camera's own (x,z)
-      // can end up inside solid ground — the double-sided terrain material
-      // then renders its interior faces all around the view, which reads
-      // as the car being "buried" even though the car itself is fine.
-      // Clamp against raw terrain height (always >= the actual carved
-      // road/embankment surface) as a cheap conservative floor.
-      if (this.world && this.world.getRawTerrainHeight && this.activeCameraMode !== 'hood') {
-        const camGroundY = this.world.getRawTerrainHeight(this.camera.position.x, this.camera.position.z);
-        const minClearance = camGroundY + 1.4;
+      // terrain underneath, so on a steep embankment the camera's (x,z)
+      // could in principle end up inside solid ground.
+      //
+      // This used to clamp against getRawTerrainHeight — the raw,
+      // un-carved noise terrain — which is wrong: the road is explicitly
+      // carved BELOW raw terrain on hills (see createTerrainMesh's
+      // embankment cut), so on any hill this clamp yanked the camera up
+      // to the height of the surrounding hillside instead of the actual
+      // road, producing a sudden top-down-looking view for no visible
+      // reason. The car's own position is already the correct, carved
+      // road height at this exact point — use that instead. (The chase
+      // branch above already clamps to carPos.y+[1.6,4.2]; this is only a
+      // backstop for the sky/drone mode, which has no such clamp.)
+      if (this.activeCameraMode !== 'hood') {
+        const minClearance = carPos.y + 1.0;
         if (this.camera.position.y < minClearance) {
           this.camera.position.y = minClearance;
         }
