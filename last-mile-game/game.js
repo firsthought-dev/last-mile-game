@@ -1802,7 +1802,8 @@
                 setTimeout(() => app.classList.remove('screen-shake'), 350);
               }
               if (window.game) {
-                window.game.showScorePopup(-0, `⚠️ SUSPENSION HIT! Health -14%`);
+                window.game.addNotification('⚠️ POTHOLE HIT! Health -14%', 'warning', 3500);
+                window.game.updateHUDStats();
               }
               setTimeout(() => { p.hitRecently = false; }, 1500);
             }
@@ -1832,7 +1833,7 @@
                 window.game.earnings = Math.max(0, window.game.earnings - 150);
                 window.game.updateHUDStats();
                 const overKmh = Math.round(this.speed * 3.6);
-                window.game.showScorePopup(-150, `🚨 E-CHALLAN! Overspeeding ${overKmh} km/h (Limit: ${cam.speedLimitKmh})`);
+                window.game.addNotification(`🚨 E-CHALLAN! Overspeeding ${overKmh} km/h (-₹150)`, 'danger', 4000);
               }
 
               setTimeout(() => { cam.triggeredRecently = false; }, 4000);
@@ -1851,7 +1852,7 @@
               this.health = 100;
               sound.playRepair();
               if (window.game) {
-                window.game.showScorePopup(0, `🔧 FULL SERVICE! Vehicle Condition 100%`);
+                window.game.addNotification(`🔧 FULL SERVICE COMPLETED! Health 100%`, 'success', 3500);
               }
               setTimeout(() => { bay.visitedRecently = false; }, 5000);
             }
@@ -1859,58 +1860,8 @@
         });
       }
 
-      // 7. Physical Tree, Rock & Pole Obstacle Collisions
-      if (world.obstacles && world.curve) {
-        const tangentNow = world.curve.getTangentAt(this.splineProgress).normalize();
-        const roadNormalNow = new THREE.Vector3().crossVectors(tangentNow, new THREE.Vector3(0, 1, 0)).normalize();
-
-        for (let j = 0; j < world.obstacles.length; j++) {
-          const obs = world.obstacles[j];
-          const dist = carPos.distanceTo(obs.pos);
-          const hitRadius = obs.radius + 1.3; // Half-width vehicle allowance
-          if (dist < hitRadius) {
-            const diff = carPos.clone().sub(obs.pos);
-            diff.y = 0;
-            const overlap = hitRadius - dist;
-            if (overlap > 0 && diff.lengthSq() > 0.0001) {
-              diff.normalize();
-
-              // Correctly project displacement onto road normal axis
-              const normalPush = diff.dot(roadNormalNow);
-              const pushSign = (normalPush !== 0) ? Math.sign(normalPush) : (this.lateralOffset >= 0 ? 1 : -1);
-              this.lateralOffset += pushSign * (overlap + 0.35);
-
-              // Elastic bounce restitution
-              const impactSpeed = Math.abs(this.speed);
-              this.speed = -Math.sign(this.speed || 1) * Math.max(3.2, impactSpeed * 0.45); // Clean rebound
-              this.lateralVelocity = pushSign * Math.max(4.0, Math.abs(this.lateralVelocity));
-              this.steerAngle += (Math.random() - 0.5) * 0.4;
-
-              // Damage/toast/sound only once per impact — cooldown prevents spam while pinned against the obstacle
-              if (!obs.hitRecently) {
-                obs.hitRecently = true;
-                setTimeout(() => { obs.hitRecently = false; }, 800);
-
-                const dmg = Math.min(35, Math.max(10, Math.round(Math.max(2.0, impactSpeed) * 0.8)));
-                this.health = Math.max(0, this.health - dmg);
-                sound.playCrash();
-
-                const app = document.getElementById('game-app');
-                if (app) {
-                  app.classList.add('screen-shake');
-                  setTimeout(() => app.classList.remove('screen-shake'), 400);
-                }
-
-                if (window.game) {
-                  const typeName = obs.type === 'tree' ? 'TREE' : (obs.type === 'rock' ? 'BOULDER' : (obs.type === 'building' ? 'BUILDING' : 'POLE'));
-                  window.game.showScorePopup(-dmg, `COLLISION: ${typeName} (-${dmg}% Health)`);
-                  window.game.updateHUDStats();
-                }
-              }
-            }
-          }
-        }
-      }
+      // 7. Environment collision disabled — collisions now restricted to potholes/debris only
+      // Tree, rock, pole, and building collisions removed per design.
     }
 
     resetToSpline(curve) {
@@ -2122,6 +2073,7 @@
         sound.playTone(220, 'sawtooth', 0.3, 0.35);
 
         this.showScoreBanner(`⚠️ TIME EXPIRED! (LATE)`, `Penalty -₹25 • Customer Rating 1★`);
+        this.addNotification('❌ DELIVERY MISSED! Time expired (-₹25)', 'danger', 3500);
 
         this.activeOrderIndex++;
         this.updateActiveOrderCard();
@@ -2261,6 +2213,7 @@
             sound.playCombo();
             const bonusMsg = (this.orderTimer > this.maxOrderTimer * 0.5 ? `⚡ EXPRESS SPEED BONUS!` : `🎯 ON-TIME BULLSEYE!`);
             this.showScoreBanner(`${bonusMsg} +₹${earnedBonus}`, `🔥 ${this.streakCount}x STREAK • +${timeBonus} TIME BONUS`);
+            this.addNotification(`✅ DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
 
             this.activeOrderIndex++;
             this.updateActiveOrderCard();
@@ -2434,6 +2387,31 @@
     showScorePopup(amount, text) {
       const sub = (amount !== 0) ? (amount > 0 ? `+₹${amount}` : `-₹${Math.abs(amount)}`) : '';
       this.showScoreBanner(text, sub);
+    }
+
+    addNotification(message, type = 'neutral', duration = 4000) {
+      const stack = document.getElementById('notification-stack');
+      if (!stack) return;
+
+      const item = document.createElement('div');
+      item.className = `notification-item ${type}`;
+      item.textContent = message;
+      item.style.opacity = '0';
+
+      stack.appendChild(item);
+
+      // Trigger animation
+      requestAnimationFrame(() => {
+        item.style.opacity = '1';
+      });
+
+      // Auto-remove after duration
+      if (duration > 0) {
+        setTimeout(() => {
+          item.classList.add('removing');
+          setTimeout(() => item.remove(), 250);
+        }, duration);
+      }
     }
 
     toggleMute() {
