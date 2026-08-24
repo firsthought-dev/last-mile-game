@@ -698,6 +698,19 @@
       }
 
       this.curve = new THREE.CatmullRomCurve3(this.splineNodes, false, 'centripetal');
+
+      // Bounding box of the actual road extent — the spline is a random
+      // walk and does not stay centered near the origin, so anything that
+      // needs to blanket the whole world (e.g. the background floor) must
+      // size and center itself off this, not off a fixed assumption.
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      for (const n of this.splineNodes) {
+        if (n.x < minX) minX = n.x;
+        if (n.x > maxX) maxX = n.x;
+        if (n.z < minZ) minZ = n.z;
+        if (n.z > maxZ) maxZ = n.z;
+      }
+      this.worldBounds = { minX, maxX, minZ, maxZ };
     }
 
     createSkyDome(season, todKey = 'day') {
@@ -1060,10 +1073,26 @@
     // background plane fills that void with continuous ground so every
     // visible part of the world sits on land.
     createWorldFloor(season) {
-      const size = CONFIG.TERRAIN_SIZE * 3.0;
-      const segments = CONFIG.TERRAIN_SEGMENTS;
+      // Size and center the floor off the road spline's actual bounding
+      // box (it's a random walk, not centered near the origin) with a
+      // generous margin, instead of assuming a fixed origin-centered size —
+      // otherwise large stretches of road fall outside the floor entirely.
+      const b = this.worldBounds;
+      const margin = 500.0;
+      const spanX = (b.maxX - b.minX) + margin * 2;
+      const spanZ = (b.maxZ - b.minZ) + margin * 2;
+      const size = Math.max(spanX, spanZ, CONFIG.TERRAIN_SIZE);
+      const centerX = (b.minX + b.maxX) / 2;
+      const centerZ = (b.minZ + b.maxZ) / 2;
+
+      // Keep grid cells small enough (~15m) to track the terrain noise
+      // closely — too coarse and the floor's interpolated surface diverges
+      // from the ribbon terrain's fine sampling, opening visible gaps.
+      const segments = Math.min(400, Math.ceil(size / 15));
+
       const geom = new THREE.PlaneGeometry(size, size, segments, segments);
       geom.rotateX(-Math.PI / 2);
+      geom.translate(centerX, 0, centerZ);
 
       const grassCol = new THREE.Color(season.grassColor);
       const grassLight = new THREE.Color(season.grassLight);
