@@ -1360,6 +1360,12 @@
 
       const sampledPoints = this.curve.getSpacedPoints(800);
 
+      // Trees are built during the main loop below but not added to the
+      // scene immediately — see the deferred-resolution pass after the
+      // loop for why (buildings placed later in the same iteration would
+      // otherwise be invisible to the overlap check).
+      const pendingTrees = [];
+
       for (let i = 2; i < sampledPoints.length - 2; i++) {
         const pt = sampledPoints[i];
         const u = i / sampledPoints.length;
@@ -1636,8 +1642,14 @@
           const scale = this.prng.range(0.9, 1.7);
           tree.scale.set(scale, scale, scale);
           tree.position.copy(nearPos);
-          this.foliageGroup.add(tree);
-          this.obstacles.push({ pos: nearPos.clone(), radius: 1.3 * scale, type: 'tree' });
+          // Deferred, not added directly: buildings (cabins in particular)
+          // are placed later in this same loop iteration, so a tree built
+          // and registered immediately here has no way to know about a
+          // cabin that hasn't spawned yet — the two would silently overlap
+          // (reported directly: a tree canopy clipping straight through a
+          // delivery cabin's roof). Queue it and resolve overlaps in one
+          // pass after every prop for the whole route has been placed.
+          pendingTrees.push({ tree, pos: nearPos.clone(), radius: 1.3 * scale });
           } // end spawnTree
 
           // City Skyline: procedural skyscrapers set well back beyond the
@@ -1774,6 +1786,17 @@
               antenna.position.set(0, height + 3.4, 0);
               bldgGroup.add(antenna);
             }
+
+            // Foundation slab: buildings sit at a single anchor point on
+            // sloped hillside terrain, but the box geometry has a flat
+            // bottom — on a slope that either buries the downhill corner
+            // or leaves a visible gap under the uphill corner. A tall
+            // foundation extending well underground fills that gap from
+            // any slope angle without needing to sample the terrain footprint.
+            const foundationMat = new THREE.MeshPhongMaterial({ color: 0x5f5348, flatShading: true });
+            const foundation = new THREE.Mesh(new THREE.BoxGeometry(width * 0.96, 16.0, depth * 0.96), foundationMat);
+            foundation.position.y = -8.0;
+            bldgGroup.add(foundation);
 
             bldgGroup.position.copy(bldgPos);
             bldgGroup.rotation.y = this.prng.range(-0.06, 0.06);
@@ -2302,6 +2325,19 @@
           });
         }
       }
+
+      // Resolve tree/building overlaps now that every building (garages,
+      // stalls, cabins, monuments, skyline) has been placed and registered
+      // in this.obstacles — a tree queued anywhere in the loop above can
+      // now see buildings regardless of which ran first for a given index.
+      pendingTrees.forEach(({ tree, pos, radius }) => {
+        const overlapsBuilding = this.obstacles.some(o =>
+          o.type === 'building' && o.pos.distanceTo(pos) < (o.radius + radius + 1.0)
+        );
+        if (overlapsBuilding) return;
+        this.foliageGroup.add(tree);
+        this.obstacles.push({ pos, radius, type: 'tree' });
+      });
 
       // Add Real-Time Road Traffic (Rickshaws, BEST Buses, Mini-Trucks, Kaali-Peeli Cabs)
       for (let i = 8; i < sampledPoints.length - 8; i += 30) {
