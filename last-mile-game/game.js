@@ -41,6 +41,77 @@
   IndianTruckAsset.load();
 
   // --------------------------------------------------------------------------
+  // 0b. LOCALIZED PLAYER CAR: SWIFT/NEXON-STYLE SPORTS HATCH (CC0, Kenney Car Kit)
+  // Replaces the old stacked-boxes hatchback with an actual sculpted car mesh,
+  // recolored to the same fiery-red/gloss-black livery so the branding holds.
+  // --------------------------------------------------------------------------
+  const SwiftCarAsset = {
+    template: null,
+    loading: false,
+    pendingControllers: [],
+    load() {
+      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
+      this.loading = true;
+      new THREE.GLTFLoader().load('assets/models/sedan-sports.glb', (gltf) => {
+        const bodyMat = new THREE.MeshPhongMaterial({ color: 0xd90429, flatShading: true }); // Fiery Red
+        const trimMat = new THREE.MeshLambertMaterial({ color: 0x0a0a0a }); // Gloss black spoiler/trim
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1e293b }); // Diamond-cut alloy
+        gltf.scene.traverse((child) => {
+          if (!child.isMesh) return;
+          child.castShadow = true;
+          if (child.name === 'body') child.material = bodyMat;
+          else if (child.name === 'spoiler') child.material = trimMat;
+          else if (child.name.startsWith('wheel')) child.material = wheelMat;
+        });
+        this.template = gltf.scene;
+        // Rebuild any player vehicle that was already stuck on the boxy fallback
+        this.pendingControllers.forEach((vc) => vc.buildModel());
+        this.pendingControllers.length = 0;
+      }, undefined, (err) => {
+        console.warn('SwiftCarAsset: failed to load sedan-sports.glb, falling back to procedural model', err);
+      });
+    },
+    clone() {
+      return this.template ? this.template.clone(true) : null;
+    }
+  };
+  SwiftCarAsset.load();
+
+  // --------------------------------------------------------------------------
+  // 0c. LOCALIZED PLAYER TRUCK: TATA ACE "CHHOTA HATHI" MINI PICKUP (CC0, Kenney Car Kit)
+  // Replaces the old boxy cab+bed stack with a sculpted open-bed pickup mesh,
+  // recolored to the same Indian Cargo Green livery.
+  // --------------------------------------------------------------------------
+  const ChotaHathiAsset = {
+    template: null,
+    loading: false,
+    pendingControllers: [],
+    load() {
+      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
+      this.loading = true;
+      new THREE.GLTFLoader().load('assets/models/truck.glb', (gltf) => {
+        const bodyMat = new THREE.MeshPhongMaterial({ color: 0x059669, flatShading: true }); // Indian Cargo Green
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+        gltf.scene.traverse((child) => {
+          if (!child.isMesh) return;
+          child.castShadow = true;
+          if (child.name === 'body') child.material = bodyMat;
+          else if (child.name.startsWith('wheel')) child.material = wheelMat;
+        });
+        this.template = gltf.scene;
+        this.pendingControllers.forEach((vc) => vc.buildModel());
+        this.pendingControllers.length = 0;
+      }, undefined, (err) => {
+        console.warn('ChotaHathiAsset: failed to load truck.glb, falling back to procedural model', err);
+      });
+    },
+    clone() {
+      return this.template ? this.template.clone(true) : null;
+    }
+  };
+  ChotaHathiAsset.load();
+
+  // --------------------------------------------------------------------------
   // 1. DETERMINISTIC PRNG
   // --------------------------------------------------------------------------
   class PRNG {
@@ -1950,10 +2021,50 @@
       this.mesh.clear();
       this.wheels = [];
 
-      if (this.vehicleType === 'swift') {
+      if (this.vehicleType === 'swift' && SwiftCarAsset.template) {
         // ====================================================================
-        // 1. MARUTI SUZUKI SWIFT / TATA NEXON SPORTS HATCHBACK
+        // 1. MARUTI SUZUKI SWIFT / TATA NEXON SPORTS HATCHBACK (sculpted mesh)
         // ====================================================================
+        const carModel = SwiftCarAsset.clone();
+        this.mesh.add(carModel);
+        carModel.traverse((child) => {
+          if (child.isMesh && child.name && child.name.startsWith('wheel')) {
+            this.wheels.push(child);
+          }
+        });
+
+        // Signature accent details carried over from the original design
+        const headMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const tailMat = new THREE.MeshBasicMaterial({ color: 0xef233c });
+        const trimMat = new THREE.MeshLambertMaterial({ color: 0x0a0a0a });
+        const headGeom = new THREE.BoxGeometry(0.4, 0.1, 0.06);
+        const tailGeom = new THREE.BoxGeometry(0.4, 0.12, 0.06);
+        const mirrorGeom = new THREE.BoxGeometry(0.18, 0.1, 0.12);
+
+        [[-0.42, 0.5, 1.3], [0.42, 0.5, 1.3]].forEach((p) => {
+          const h = new THREE.Mesh(headGeom, headMat);
+          h.position.set(...p);
+          this.mesh.add(h);
+        });
+        [[-0.45, 0.58, -1.3], [0.45, 0.58, -1.3]].forEach((p) => {
+          const t = new THREE.Mesh(tailGeom, tailMat);
+          t.position.set(...p);
+          this.mesh.add(t);
+        });
+        [[-0.72, 0.7, 0.35], [0.72, 0.7, 0.35]].forEach((p) => {
+          const m = new THREE.Mesh(mirrorGeom, trimMat);
+          m.position.set(...p);
+          this.mesh.add(m);
+        });
+
+      } else if (this.vehicleType === 'swift') {
+        // ====================================================================
+        // 1. MARUTI SUZUKI SWIFT / TATA NEXON SPORTS HATCHBACK (procedural fallback,
+        // used only until SwiftCarAsset finishes loading, then auto-rebuilt)
+        // ====================================================================
+        if (SwiftCarAsset.pendingControllers.indexOf(this) === -1) {
+          SwiftCarAsset.pendingControllers.push(this);
+        }
         // Sporty Dual-Tone Red Body with Floating Black Roof & Honeycomb Grille
         const bodyGeom = new THREE.BoxGeometry(1.85, 0.62, 3.8);
         const bodyMat = new THREE.MeshPhongMaterial({ color: 0xd90429, flatShading: true }); // Fiery Red
@@ -2038,10 +2149,81 @@
           this.wheels.push(w);
         });
 
+      } else if (this.vehicleType === 'chotahathi' && ChotaHathiAsset.template) {
+        // ====================================================================
+        // 2. TATA ACE "CHHOTA HATHI" MINI TRUCK (sculpted open-bed pickup mesh)
+        // ====================================================================
+        const truckModel = ChotaHathiAsset.clone();
+        this.mesh.add(truckModel);
+        truckModel.traverse((child) => {
+          if (child.isMesh && child.name && child.name.startsWith('wheel')) {
+            this.wheels.push(child);
+          }
+        });
+
+        // Front Windshield
+        const glassGeom = new THREE.BoxGeometry(1.4, 0.5, 0.06);
+        const glassMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+        const windshield = new THREE.Mesh(glassGeom, glassMat);
+        windshield.position.set(0, 1.05, 1.3);
+        this.mesh.add(windshield);
+
+        // Heavy-duty Black Front Bumper & Dual Headlights
+        // (offset clear of the mesh's front bbox face at z=1.475 to avoid z-fighting/burial)
+        const bumperGeom = new THREE.BoxGeometry(1.55, 0.24, 0.16);
+        const bumperMat = new THREE.MeshLambertMaterial({ color: 0x111827 });
+        const bumper = new THREE.Mesh(bumperGeom, bumperMat);
+        bumper.position.set(0, 0.35, 1.55);
+        this.mesh.add(bumper);
+
+        const headGeom = new THREE.CylinderGeometry(0.12, 0.12, 0.06, 12);
+        headGeom.rotateX(Math.PI / 2);
+        const headMat = new THREE.MeshBasicMaterial({ color: 0xfffaed });
+        [[-0.5, 0.55, 1.55], [0.5, 0.55, 1.55]].forEach((p) => {
+          const h = new THREE.Mesh(headGeom, headMat);
+          h.position.set(...p);
+          this.mesh.add(h);
+        });
+
+        // Stacked Courier Cargo Sacks & Crates in the open bed
+        const crate1Geom = new THREE.BoxGeometry(1.15, 0.4, 0.75);
+        const crate1Mat = new THREE.MeshLambertMaterial({ color: 0xd4a373 }); // Wooden box
+        const crate1 = new THREE.Mesh(crate1Geom, crate1Mat);
+        crate1.position.set(0, 0.85, -0.55);
+        this.mesh.add(crate1);
+
+        const crate2Geom = new THREE.BoxGeometry(0.9, 0.32, 0.6);
+        const crate2Mat = new THREE.MeshLambertMaterial({ color: 0xff9f1c }); // Saffron box
+        const crate2 = new THREE.Mesh(crate2Geom, crate2Mat);
+        crate2.position.set(0, 1.15, -0.55);
+        this.mesh.add(crate2);
+
+        // Rear "HORN OK PLEASE" Painted Bumper Board
+        // (offset clear of the mesh's rear bbox face at z=-1.475 to avoid z-fighting/burial)
+        const flapGeom = new THREE.BoxGeometry(1.5, 0.2, 0.06);
+        const flapMat = new THREE.MeshLambertMaterial({ color: 0xfca311 });
+        const flap = new THREE.Mesh(flapGeom, flapMat);
+        flap.position.set(0, 0.3, -1.55);
+        this.mesh.add(flap);
+
+        // Dual Circular Red Taillights
+        const tailGeom = new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12);
+        tailGeom.rotateX(Math.PI / 2);
+        const tailMat = new THREE.MeshBasicMaterial({ color: 0xef233c });
+        [[-0.55, 0.5, -1.55], [0.55, 0.5, -1.55]].forEach((p) => {
+          const t = new THREE.Mesh(tailGeom, tailMat);
+          t.position.set(...p);
+          this.mesh.add(t);
+        });
+
       } else if (this.vehicleType === 'chotahathi') {
         // ====================================================================
-        // 2. TATA ACE "CHHOTA HATHI" MINI TRUCK (DELIVERY EDITION)
+        // 2. TATA ACE "CHHOTA HATHI" MINI TRUCK (procedural fallback, used only
+        // until ChotaHathiAsset finishes loading, then auto-rebuilt)
         // ====================================================================
+        if (ChotaHathiAsset.pendingControllers.indexOf(this) === -1) {
+          ChotaHathiAsset.pendingControllers.push(this);
+        }
         // Front White/Yellow Driver Cabin
         const cabGeom = new THREE.BoxGeometry(1.65, 1.25, 1.2);
         const cabMat = new THREE.MeshPhongMaterial({ color: 0xf8f9fa, flatShading: true });
@@ -2088,19 +2270,20 @@
         crate2.position.set(0, 1.5, -0.75);
 
         // Rear "HORN OK PLEASE" Painted Bumper Board
+        // (offset clear of the bed's rear face at z=-1.85 to avoid z-fighting)
         const flapGeom = new THREE.BoxGeometry(1.68, 0.22, 0.06);
         const flapMat = new THREE.MeshLambertMaterial({ color: 0xfca311 });
         const flap = new THREE.Mesh(flapGeom, flapMat);
-        flap.position.set(0, 0.35, -1.86);
+        flap.position.set(0, 0.35, -1.91);
 
         // Dual Circular Red Taillights
         const tailGeom = new THREE.CylinderGeometry(0.1, 0.1, 0.08, 12);
         tailGeom.rotateX(Math.PI / 2);
         const tailMat = new THREE.MeshBasicMaterial({ color: 0xef233c });
         const leftTail = new THREE.Mesh(tailGeom, tailMat);
-        leftTail.position.set(-0.6, 0.58, -1.86);
+        leftTail.position.set(-0.6, 0.58, -1.93);
         const rightTail = new THREE.Mesh(tailGeom, tailMat);
-        rightTail.position.set(0.6, 0.58, -1.86);
+        rightTail.position.set(0.6, 0.58, -1.93);
 
         this.mesh.add(cab);
         this.mesh.add(windshield);
