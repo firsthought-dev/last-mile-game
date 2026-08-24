@@ -1138,14 +1138,19 @@
         }
 
         // Sit a hair below the road-ribbon terrain so the two meshes
-        // never z-fight where they overlap near the road. Within 200m of
-        // any road sample, additionally clamp to never exceed that road's
-        // elevation (minus a safety margin) — beyond that, distance/fog
-        // hides any inaccuracy so raw terrain height alone is fine, and
-        // natural valleys are still allowed to dip below this clamp.
-        let finalY = rawH - 0.3;
+        // never z-fight where they overlap near the road. Near the road,
+        // additionally cap height against that road's elevation so hills
+        // can't rise up and bury it — but blend that cap smoothly toward
+        // the natural height as distance grows (40m = ribbon's own edge,
+        // 200m = fully natural) instead of a hard clamp, which flattened
+        // wide stretches beside the road into one dead-flat plateau.
+        const naturalY = rawH - 0.3;
+        let finalY = naturalY;
         if (nearestDistSq < 200.0 * 200.0) {
-          finalY = Math.min(finalY, nearestRoadY - 2.0);
+          const dist = Math.sqrt(nearestDistSq);
+          const t = THREE.MathUtils.smoothstep(dist, 40.0, 200.0);
+          const ceiling = THREE.MathUtils.lerp(nearestRoadY - 2.0, naturalY, t);
+          finalY = Math.min(naturalY, ceiling);
         }
         pos.setY(i, finalY);
 
