@@ -1393,6 +1393,32 @@
           shed.position.set(0, 1.75, 0);
           garageGroup.add(shed);
 
+          // Sloped 4-sided roof, matching the bus-shelter/tapri roof style
+          // used elsewhere so it doesn't read as a bare box.
+          const shedRoof = new THREE.Mesh(
+            new THREE.ConeGeometry(4.3, 1.4, 4),
+            new THREE.MeshLambertMaterial({ color: 0x1e3a5f, flatShading: true })
+          );
+          shedRoof.position.set(0, 3.5 + 0.7, 0);
+          shedRoof.rotateY(Math.PI / 4);
+          garageGroup.add(shedRoof);
+
+          // Garage door and window on the road-facing wall (+Z, matching
+          // the lookAt(pt) convention used for this group below).
+          const shedDoor = new THREE.Mesh(
+            new THREE.BoxGeometry(1.6, 2.3, 0.1),
+            new THREE.MeshLambertMaterial({ color: 0x0f172a })
+          );
+          shedDoor.position.set(-1.3, 1.15, 2.41);
+          garageGroup.add(shedDoor);
+
+          const shedWindow = new THREE.Mesh(
+            new THREE.BoxGeometry(1.2, 1.0, 0.08),
+            new THREE.MeshBasicMaterial({ color: 0xbae6fd })
+          );
+          shedWindow.position.set(1.3, 2.1, 2.41);
+          garageGroup.add(shedWindow);
+
           // Glowing Green Repair Pad on Ground
           const padGeom = new THREE.RingGeometry(1.6, 3.8, 16);
           padGeom.rotateX(-Math.PI / 2);
