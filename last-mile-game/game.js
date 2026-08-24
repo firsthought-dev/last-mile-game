@@ -8,6 +8,39 @@
   'use strict';
 
   // --------------------------------------------------------------------------
+  // 0. LOCALIZED TRAFFIC ASSET: TATA ACE-STYLE MINI-TRUCK (CC0, Kenney Car Kit)
+  // Recolored from stock to a teal-green/white Indian goods-carrier livery so
+  // it reads distinctly from the yellow auto-rickshaws and red BEST buses.
+  // --------------------------------------------------------------------------
+  const IndianTruckAsset = {
+    template: null,
+    loading: false,
+    load() {
+      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
+      this.loading = true;
+      new THREE.GLTFLoader().load('assets/models/delivery.glb', (gltf) => {
+        const cabMat = new THREE.MeshPhongMaterial({ color: 0xf1f1f1, flatShading: true }); // white cab/door
+        const bodyMat = new THREE.MeshPhongMaterial({ color: 0x2a9d8f, flatShading: true }); // teal-green cargo body
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+        gltf.scene.traverse((child) => {
+          if (!child.isMesh) return;
+          child.castShadow = true;
+          if (child.name === 'body') child.material = bodyMat;
+          else if (child.name === 'door') child.material = cabMat;
+          else if (child.name.startsWith('wheel')) child.material = wheelMat;
+        });
+        this.template = gltf.scene;
+      }, undefined, (err) => {
+        console.warn('IndianTruckAsset: failed to load delivery.glb, falling back to procedural traffic', err);
+      });
+    },
+    clone() {
+      return this.template ? this.template.clone(true) : null;
+    }
+  };
+  IndianTruckAsset.load();
+
+  // --------------------------------------------------------------------------
   // 1. DETERMINISTIC PRNG
   // --------------------------------------------------------------------------
   class PRNG {
@@ -1854,10 +1887,11 @@
         }
       }
 
-      // Add Real-Time Road Traffic (Rickshaws, BEST Buses, Kaali-Peeli Cabs)
+      // Add Real-Time Road Traffic (Rickshaws, BEST Buses, Mini-Trucks, Kaali-Peeli Cabs)
       for (let i = 8; i < sampledPoints.length - 8; i += 30) {
         const trafficGroup = new THREE.Group();
         const isBus = (i % 60 === 0);
+        const isTruck = !isBus && (i % 90 === 0);
 
         if (isBus) {
           // BEST Red Double-Decker / Single Bus
@@ -1866,6 +1900,9 @@
           const bus = new THREE.Mesh(busGeom, busMat);
           bus.position.y = 1.4;
           trafficGroup.add(bus);
+        } else if (isTruck && IndianTruckAsset.template) {
+          // Tata Ace-style Mini-Truck (teal-green/white livery)
+          trafficGroup.add(IndianTruckAsset.clone());
         } else {
           // Bajaj Auto Rickshaw (Yellow & Green)
           const autoGeom = new THREE.BoxGeometry(1.4, 1.3, 2.4);
