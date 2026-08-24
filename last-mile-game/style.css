@@ -808,7 +808,7 @@ html, body {
   left: 50%;
   transform: translateX(-50%);
   width: auto;
-  max-width: 560px;
+  max-width: 680px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -835,7 +835,8 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 22px;
+  gap: 32px;
+  padding: 0 28px;
   box-shadow: var(--shadow-dock);
   position: relative;
   overflow: hidden;
@@ -867,7 +868,7 @@ html, body {
 .dock-nav-items {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 30px;
 }
 
 .dock-tab-btn {
@@ -909,14 +910,14 @@ html, body {
 .dock-icons-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
 }
 
 .dock-icon {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
-  padding: 5px 10px;
+  padding: 5px 14px;
   height: 26px;
   display: inline-flex;
   align-items: center;
@@ -952,7 +953,13 @@ html, body {
   box-shadow: var(--shadow-panel);
   animation: dockSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+}
+
+.dock-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .dock-panel-container::before {

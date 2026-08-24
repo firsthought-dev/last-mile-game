@@ -3438,7 +3438,7 @@
             </div>
             <div class="dock-panel-col">
               <span class="dock-panel-label">ROAD SURFACE</span>
-              <div style="display: flex; gap: 6px;">
+              <div class="dock-btn-row">
                 <button class="dock-sq-btn ${this.selectedRoadTerrain === 'asphalt' ? 'active-sq' : ''}" data-rt="asphalt">ASPHALT</button>
                 <button class="dock-sq-btn ${this.selectedRoadTerrain === 'gravel' ? 'active-sq' : ''}" data-rt="gravel">GRAVEL</button>
                 <button class="dock-sq-btn ${this.selectedRoadTerrain === 'mud' ? 'active-sq' : ''}" data-rt="mud">MUD</button>
@@ -3491,7 +3491,7 @@
           <div class="dock-panel-grid">
             <div class="dock-panel-col">
               <span class="dock-panel-label">TIME OF DAY [T]</span>
-              <div style="display: flex; gap: 6px;">
+              <div class="dock-btn-row">
                 <button class="dock-sq-btn ${this.selectedTimeOfDay === 'dawn' ? 'active-sq' : ''}" data-tod="dawn">DAWN</button>
                 <button class="dock-sq-btn ${this.selectedTimeOfDay === 'day' ? 'active-sq' : ''}" data-tod="day">DAY</button>
                 <button class="dock-sq-btn ${this.selectedTimeOfDay === 'dusk' ? 'active-sq' : ''}" data-tod="dusk">DUSK</button>
@@ -3500,7 +3500,7 @@
             </div>
             <div class="dock-panel-col">
               <span class="dock-panel-label">SEASON & BIOME</span>
-              <div style="display: flex; gap: 6px;">
+              <div class="dock-btn-row">
                 <button class="dock-sq-btn ${this.selectedSeason === 'spring' ? 'active-sq' : ''}" data-s="spring">SPRING</button>
                 <button class="dock-sq-btn ${this.selectedSeason === 'summer' ? 'active-sq' : ''}" data-s="summer">SUMMER</button>
                 <button class="dock-sq-btn ${this.selectedSeason === 'autumn' ? 'active-sq' : ''}" data-s="autumn">AUTUMN</button>
@@ -3529,7 +3529,7 @@
           <div class="dock-panel-grid">
             <div class="dock-panel-col">
               <span class="dock-panel-label">COURIER FLEET</span>
-              <div style="display: flex; gap: 8px;">
+              <div class="dock-btn-row">
                 <button class="dock-sq-btn ${this.selectedVehicle === 'swift' ? 'active-sq' : ''}" data-v="swift">HATCH</button>
                 <button class="dock-sq-btn ${this.selectedVehicle === 'chotahathi' ? 'active-sq' : ''}" data-v="chotahathi">TRUCK</button>
                 <button class="dock-sq-btn ${this.selectedVehicle === 'scooter' ? 'active-sq' : ''}" data-v="scooter">SCOOTER</button>
