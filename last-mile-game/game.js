@@ -726,16 +726,23 @@
       this.clouds = [];
       const tod = CONFIG.TIME_OF_DAY[todKey] || CONFIG.TIME_OF_DAY.day;
 
-      let cloudColor = 0xf8fafc;
-      if (tod.night) cloudColor = 0x243247;
-      else if (tod.id === 'dusk') cloudColor = 0xfca380;
-      else if (tod.id === 'dawn') cloudColor = 0xfef08a;
+      let cloudColor = 0xffffff;
+      let cloudOpacity = 0.95;
+      if (tod.night) {
+        cloudColor = 0xaab8dc;
+        cloudOpacity = 0.6;
+      } else if (tod.id === 'dusk') {
+        cloudColor = 0xffcba3;
+        cloudOpacity = 0.92;
+      } else if (tod.id === 'dawn') {
+        cloudColor = 0xfff3b0;
+        cloudOpacity = 0.92;
+      }
 
-      const cloudMat = new THREE.MeshLambertMaterial({
+      const cloudMat = new THREE.MeshBasicMaterial({
         color: cloudColor,
-        flatShading: true,
         transparent: true,
-        opacity: tod.night ? 0.72 : 0.88
+        opacity: cloudOpacity
       });
 
       // Spawn 16 fluffy low-poly cumulus clouds drifting across the sky dome
@@ -1044,18 +1051,25 @@
         const up = new THREE.Vector3(0, 1, 0);
         const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
-        // Exact terrain height calculator matching terrain mesh elevation
+        // Terrain height calculator — mirrors createTerrainMesh's embankment
+        // carving formula exactly so props sit flush with the ground instead
+        // of floating above or sinking below it.
+        const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
+        const SHOULDER_TRANSITION = 9.0;
+        const EMBANKMENT_BLEND = 45.0;
         const calcTerrainY = (pos, latDist) => {
           const absDist = Math.abs(latDist);
-          if (absDist <= CONFIG.ROAD_WIDTH * 0.55) {
-            return pt.y - 0.08;
-          } else if (absDist <= 20.0) {
-            const vergeNoise = this.simplex.noise2D(pos.x * 0.02, pos.z * 0.02) * 1.2;
-            return pt.y - 0.14 + vergeNoise;
+          if (absDist <= roadHalf) {
+            return pt.y - 0.18;
+          } else if (absDist <= SHOULDER_TRANSITION) {
+            const t = (absDist - roadHalf) / (SHOULDER_TRANSITION - roadHalf);
+            return pt.y - 0.18 - t * 0.32;
           } else {
-            const blend = THREE.MathUtils.smoothstep(absDist, 20.0, 130.0);
             const rawH = this.getRawTerrainHeight(pos.x, pos.z);
-            return pt.y + rawH * blend - (absDist > 70.0 ? 6.0 : 0);
+            const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
+            const shoulderDrop = pt.y - 0.5;
+            const embankmentHeight = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
+            return Math.min(pt.y + 0.2, embankmentHeight);
           }
         };
 
