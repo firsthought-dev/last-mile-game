@@ -1106,17 +1106,20 @@
       const grassLight = new THREE.Color(season.grassLight);
       const cliffCol = new THREE.Color(season.cliffColor);
 
-      // Coarse sample of the road's own elevation. The ribbon terrain
-      // explicitly carves an embankment cutting for the road (so raw
-      // terrain can be far above the actual road bed on hills), but this
-      // background floor has no such awareness — without a clamp against
-      // nearby road height, it can rise up and bury the road/camera on
-      // any hilly stretch. Sampling every 10th spline node keeps this
-      // cheap (a few dozen points) while still catching nearby hills.
-      const roadSamples = [];
-      for (let i = 0; i < this.splineNodes.length; i += 10) {
-        roadSamples.push(this.splineNodes[i]);
-      }
+      // Dense sample of the road curve, used to keep the floor from
+      // burying the road on hills. Two earlier versions of this code
+      // approximated a "clamp toward road height" with their own simplified
+      // formula that only roughly agreed with the ribbon's actual
+      // embankment math — close but not equal, leaving real multi-meter
+      // gaps at the seam (measured directly: up to 18m even after tightening
+      // the sample spacing). Sampling from curve.getSpacedPoints (the same
+      // 800-point sampling createTerrainMesh itself uses) and reusing its
+      // exact formula below removes the approximation entirely.
+      const roadSamples = this.curve.getSpacedPoints(260);
+
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
+      const SHOULDER_TRANSITION = 9.0;
+      const EMBANKMENT_BLEND = 45.0;
 
       const pos = geom.attributes.position;
       const colors = [];
@@ -1137,20 +1140,28 @@
           }
         }
 
-        // Sit a hair below the road-ribbon terrain so the two meshes
-        // never z-fight where they overlap near the road. Near the road,
-        // additionally cap height against that road's elevation so hills
-        // can't rise up and bury it — but blend that cap smoothly toward
-        // the natural height as distance grows (40m = ribbon's own edge,
-        // 200m = fully natural) instead of a hard clamp, which flattened
-        // wide stretches beside the road into one dead-flat plateau.
         const naturalY = rawH - 0.3;
         let finalY = naturalY;
-        if (nearestDistSq < 200.0 * 200.0) {
-          const dist = Math.sqrt(nearestDistSq);
-          const t = THREE.MathUtils.smoothstep(dist, 40.0, 200.0);
-          const ceiling = THREE.MathUtils.lerp(nearestRoadY - 2.0, naturalY, t);
-          finalY = Math.min(naturalY, ceiling);
+        const dist = Math.sqrt(nearestDistSq);
+        if (dist <= EMBANKMENT_BLEND) {
+          if (dist <= SHOULDER_TRANSITION) {
+            // Always hidden under the ribbon here — just keep it far
+            // enough below that the camera can never clip through it.
+            finalY = nearestRoadY - 25.0;
+          } else {
+            // Exact replica of createTerrainMesh's embankment formula
+            // (same shoulderDrop/lerp/clamp), using the nearest sampled
+            // curve point in place of that formula's own `pt`. At
+            // dist === EMBANKMENT_BLEND this reduces to exactly naturalY
+            // (blendFactor=1 → embankmentHeight=rawH → ribbonY≈rawH),
+            // matching the >45m branch by construction — continuous at
+            // the seam, not just approximately close.
+            const blendFactor = THREE.MathUtils.smoothstep(dist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
+            const shoulderDrop = nearestRoadY - 0.5;
+            const embankmentHeight = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
+            const ribbonY = Math.min(nearestRoadY + 0.2, embankmentHeight);
+            finalY = ribbonY - 0.3;
+          }
         }
         pos.setY(i, finalY);
 
@@ -1403,7 +1414,12 @@
 
         // 6. Dense Multi-Tiered Pine & Broadleaf Forests, Rocks, Fences & Lanterns (Left and Right)
         [-1, 1].forEach(side => {
-          const nearDist = CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(3.5, 18.0);
+          // Minimum offset kept clear of the vehicle's own max lateral
+          // drift (±9m from centerline, see lateralOffset clamp in
+          // VehicleController) plus the tree canopy's ~2.4m radius —
+          // otherwise trees spawn directly inside the player's drivable
+          // area and the car ends up driving through them.
+          const nearDist = CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(8.0, 18.0);
           const nearPos = pt.clone().addScaledVector(normal, side * nearDist);
           nearPos.y = calcTerrainY(nearPos, side * nearDist);
 
@@ -1520,16 +1536,29 @@
             post.position.y = 2.75;
             lampGroup.add(post);
 
-            // Curved horizontal boom reaching over the road
-            const arm = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.08, 0.08), poleMat);
-            arm.position.set(0.7, 5.4, 0);
+            // Curved horizontal boom reaching over the road, drooping
+            // slightly toward the tip (real lamp booms aren't dead flat —
+            // a perfectly perpendicular bar crossing a perfectly vertical
+            // pole reads as a plain crucifix silhouette at a distance,
+            // which is exactly what this looked like before). Built along
+            // local +Z to match lookAt()'s actual behavior on this group
+            // (empirically verified: after lampGroup.lookAt(pt), local +Z
+            // — not -Z — ends up pointing at pt).
+            const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.8), poleMat);
+            arm.position.set(0, 5.4, 0.7);
+            arm.rotateX(-0.22);
             lampGroup.add(arm);
 
-            // Lantern housing & glowing lens
-            const lanternHousing = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.28), new THREE.MeshLambertMaterial({ color: 0x1e293b }));
-            lanternHousing.position.set(1.5, 5.35, 0);
-            const lightLens = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.06, 0.22), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
-            lightLens.position.set(1.5, 5.28, 0);
+            // Lantern head: hangs distinctly below the arm's tip (breaks
+            // the straight cross-bar line) and is sized to actually read
+            // as a lamp shape, not a sliver. A saturated amber — not the
+            // pale yellow used before, which blended into autumn/summer
+            // foliage colors and made the whole fixture disappear into
+            // the tree canopy behind it.
+            const lanternHousing = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.62), new THREE.MeshLambertMaterial({ color: 0x1e293b }));
+            lanternHousing.position.set(0, 5.05, 1.55);
+            const lightLens = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.1, 0.5), new THREE.MeshBasicMaterial({ color: 0xffb703 }));
+            lightLens.position.set(0, 4.92, 1.55);
             lampGroup.add(lanternHousing);
             lampGroup.add(lightLens);
 
@@ -2341,6 +2370,13 @@
       const lookTarget = vehiclePos.clone().add(tangent);
       this.mesh.lookAt(lookTarget);
 
+      // Hard safety ceiling — this mesh's quaternion is read directly by
+      // the camera as its forward direction every frame, so any unbounded
+      // steerAngle (from any current or future code path) would swing the
+      // camera to point at the ground at a steep angle instead of just
+      // producing a bigger visual wobble.
+      this.steerAngle = THREE.MathUtils.clamp(this.steerAngle, -1.2, 1.2);
+
       if (Math.abs(this.steerAngle) > 0.001) {
         // +Y rotation swings +Z toward +X (the model's left), so a positive
         // steerAngle (from A / left) must yaw positively to visually turn left.
@@ -2369,7 +2405,17 @@
             if (!p.hitRecently) {
               p.hitRecently = true;
               this.speed *= 0.65;
-              this.steerAngle += (Math.random() - 0.5) * 0.45;
+              // Clamped: hitting several potholes in quick succession (easy
+              // at high speed) used to stack this kick unbounded, since
+              // normal steering only lerps toward a ±0.42 limit but this
+              // was a raw += with no ceiling. steerAngle feeds directly
+              // into the chassis's visual yaw (mesh.rotateY) every frame,
+              // and the camera reads its forward direction straight off
+              // that mesh — so an unclamped steerAngle could swing the
+              // camera to point at near-ground terrain at a steep angle,
+              // reading as a giant close-up terrain fill with the car
+              // rendering as a flattened silhouette.
+              this.steerAngle = THREE.MathUtils.clamp(this.steerAngle + (Math.random() - 0.5) * 0.45, -0.9, 0.9);
               this.health = Math.max(0, this.health - 14); // Pothole damage
               sound.playPothole();
 
@@ -3826,6 +3872,16 @@
 
       document.getElementById('btn-close-settings').onclick = () => {
         this.modalContainer.innerHTML = '';
+        // This modal is reused both for the pre-drive dispatch hub's
+        // "Fleet Tuning" link and the in-drive dock's settings icon. In
+        // the hub case, opening it replaced the hub's own HTML in the
+        // same container — closing with just an innerHTML clear left an
+        // empty overlay over the un-started scene (no vehicle/HUD, since
+        // buildWorldAndScene()/startDrive() were never called). Restore
+        // the hub explicitly when we haven't started a drive yet.
+        if (this.gameState === 'menu') {
+          this.renderDispatchHub();
+        }
       };
     }
 
