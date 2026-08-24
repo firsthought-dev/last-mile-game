@@ -354,7 +354,10 @@
         grassColor: 0x78350f,
         grassLight: 0xb45309,
         cliffColor: 0x451a03,
-        treeLeaves: [0xd97706, 0xb45309, 0xca8a04, 0xe11d48]
+        // Kept visually distinct from grassColor/grassLight/cliffColor above —
+        // the old palette shared 0xb45309 with grassLight, which let dense
+        // clusters of trees blend into the hillside into one flat mass.
+        treeLeaves: [0xdc2626, 0xea580c, 0xeab308, 0x991b1b]
       },
       spring: {
         id: 'spring',
@@ -366,7 +369,10 @@
         grassColor: 0x15803d,
         grassLight: 0x22c55e,
         cliffColor: 0x3f3f46,
-        treeLeaves: [0x16a34a, 0x22c55e, 0x4ade80, 0x15803d]
+        // Distinct from grassColor/grassLight above — the old palette
+        // duplicated both exactly, which let dense tree clusters blend
+        // into the meadow into one flat mass.
+        treeLeaves: [0xf9a8d4, 0x6ee7b7, 0x14532d, 0xfbbf24]
       },
       summer: {
         id: 'summer',
@@ -378,7 +384,9 @@
         grassColor: 0x65a30d,
         grassLight: 0x84cc16,
         cliffColor: 0x78350f,
-        treeLeaves: [0x4d7c0f, 0x65a30d, 0x84cc16, 0x15803d]
+        // Distinct from grassColor/grassLight above — same duplicate-color
+        // issue as spring/autumn.
+        treeLeaves: [0x166534, 0x0f766e, 0xea580c, 0x854d0e]
       },
       winter: {
         id: 'winter',
