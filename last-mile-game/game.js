@@ -1053,6 +1053,53 @@
       return this.terrainMesh;
     }
 
+    // The road-hugging terrain ribbon above only extends ±40m from the
+    // road centerline. Since the spline winds and loops back on itself
+    // over its ~5km length, distant loops of road would otherwise render
+    // as disconnected islands floating over open sky. This large, coarse
+    // background plane fills that void with continuous ground so every
+    // visible part of the world sits on land.
+    createWorldFloor(season) {
+      const size = CONFIG.TERRAIN_SIZE * 3.0;
+      const segments = CONFIG.TERRAIN_SEGMENTS;
+      const geom = new THREE.PlaneGeometry(size, size, segments, segments);
+      geom.rotateX(-Math.PI / 2);
+
+      const grassCol = new THREE.Color(season.grassColor);
+      const grassLight = new THREE.Color(season.grassLight);
+      const cliffCol = new THREE.Color(season.cliffColor);
+
+      const pos = geom.attributes.position;
+      const colors = [];
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const z = pos.getZ(i);
+        // Sit a hair below the road-ribbon terrain so the two meshes
+        // never z-fight where they overlap near the road.
+        const rawH = this.getRawTerrainHeight(x, z);
+        pos.setY(i, rawH - 0.3);
+
+        if (rawH > 22.0) {
+          colors.push(cliffCol.r, cliffCol.g, cliffCol.b);
+        } else {
+          const mixT = (this.simplex.noise2D(x * 0.008, z * 0.008) + 1) / 2;
+          const c = grassCol.clone().lerp(grassLight, mixT * 0.5);
+          colors.push(c.r, c.g, c.b);
+        }
+      }
+      geom.computeVertexNormals();
+      geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+      const floorMat = new THREE.MeshLambertMaterial({
+        vertexColors: true,
+        side: THREE.DoubleSide
+      });
+
+      this.floorMesh = new THREE.Mesh(geom, floorMat);
+      this.floorMesh.receiveShadow = true;
+      return this.floorMesh;
+    }
+
     createFoliageAndProps(scene, season, difficulty = 'medium') {
       this.foliageGroup.clear();
       this.deliveryTargets = [];
@@ -2477,12 +2524,14 @@
         if (this.world.skyMesh) this.scene.remove(this.world.skyMesh);
         if (this.world.roadMesh) this.scene.remove(this.world.roadMesh);
         if (this.world.terrainMesh) this.scene.remove(this.world.terrainMesh);
+        if (this.world.floorMesh) this.scene.remove(this.world.floorMesh);
         if (this.world.foliageGroup) this.scene.remove(this.world.foliageGroup);
       }
 
       this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
       this.scene.add(this.world.createSkyDome(season, this.selectedTimeOfDay));
       this.scene.add(this.world.createRoadMesh(this.selectedRoadTerrain));
+      this.scene.add(this.world.createWorldFloor(season));
       this.scene.add(this.world.createTerrainMesh(season));
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
 
