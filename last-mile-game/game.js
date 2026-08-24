@@ -1940,6 +1940,107 @@
             this.obstacles.push({ pos: kiranaPos.clone(), radius: 2.4, type: 'building' });
           }
 
+          // City-specific landmark monument — rare (a couple per route),
+          // one distinct silhouette per city, hand-built in this game's
+          // own low-poly style rather than an imported asset (checked a
+          // Unity Asset Store monument pack for this — paid, FBX/Unity
+          // format, no fit for a single-file browser Three.js project).
+          if (i % 400 === 0 && i > 50 && side === 1) {
+            const monDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 9.0);
+            const monPos = pt.clone().addScaledVector(normal, monDist);
+            monPos.y = calcTerrainY(monPos, monDist);
+
+            const monGroup = new THREE.Group();
+
+            if (this.cityKey === 'mumbai') {
+              // Gateway of India — basalt-yellow triumphal archway with
+              // domed corner turrets, built as a gate frame (pillars +
+              // lintel) so the arch opening reads without needing CSG.
+              const stoneMat = new THREE.MeshLambertMaterial({ color: 0xd4b483 });
+              [-2.6, 2.6].forEach(px => {
+                const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 7.5, 1.4), stoneMat);
+                pillar.position.set(px, 3.75, 0);
+                monGroup.add(pillar);
+                const turretDome = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.6, 8), stoneMat);
+                turretDome.position.set(px, 8.3, 0);
+                monGroup.add(turretDome);
+              });
+              const lintel = new THREE.Mesh(new THREE.BoxGeometry(6.8, 1.6, 1.4), stoneMat);
+              lintel.position.set(0, 7.3, 0);
+              monGroup.add(lintel);
+              const centerDome = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.2, 10), stoneMat);
+              centerDome.position.set(0, 9.2, 0);
+              monGroup.add(centerDome);
+            } else if (this.cityKey === 'delhi') {
+              // India Gate — sandstone triumphal arch with an eternal-flame
+              // accent at the base.
+              const sandMat = new THREE.MeshLambertMaterial({ color: 0xc2703d });
+              [-2.4, 2.4].forEach(px => {
+                const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 8.0, 1.6), sandMat);
+                pillar.position.set(px, 4.0, 0);
+                monGroup.add(pillar);
+              });
+              const arch = new THREE.Mesh(new THREE.BoxGeometry(6.4, 1.8, 1.6), sandMat);
+              arch.position.set(0, 7.9, 0);
+              monGroup.add(arch);
+              const flame = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 6), new THREE.MeshBasicMaterial({ color: 0xf97316 }));
+              flame.position.set(0, 0.6, 1.2);
+              monGroup.add(flame);
+            } else if (this.cityKey === 'kolkata') {
+              // Victoria Memorial — white marble dome on a colonnaded base.
+              const marbleMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
+              const base = new THREE.Mesh(new THREE.BoxGeometry(7.0, 3.2, 5.5), marbleMat);
+              base.position.set(0, 1.6, 0);
+              monGroup.add(base);
+              const dome = new THREE.Mesh(new THREE.SphereGeometry(2.4, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), marbleMat);
+              dome.position.set(0, 3.2, 0);
+              monGroup.add(dome);
+              const finial = new THREE.Mesh(new THREE.ConeGeometry(0.25, 1.0, 6), marbleMat);
+              finial.position.set(0, 5.9, 0);
+              monGroup.add(finial);
+            } else if (this.cityKey === 'pune') {
+              // Shaniwar Wada — fortress gate: dark teak door studded with
+              // brass bosses, set in a stone wall.
+              const wallMat = new THREE.MeshLambertMaterial({ color: 0x57534e });
+              const wall = new THREE.Mesh(new THREE.BoxGeometry(7.5, 6.0, 1.6), wallMat);
+              wall.position.set(0, 3.0, 0);
+              monGroup.add(wall);
+              const doorMat = new THREE.MeshLambertMaterial({ color: 0x422006 });
+              const door = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.6, 0.3), doorMat);
+              door.position.set(0, 2.3, 0.95);
+              monGroup.add(door);
+              const bossMat = new THREE.MeshLambertMaterial({ color: 0xca8a04 });
+              for (let bx = -1; bx <= 1; bx++) {
+                for (let by = 0; by < 4; by++) {
+                  const boss = new THREE.Mesh(new THREE.DodecahedronGeometry(0.13, 0), bossMat);
+                  boss.position.set(bx * 1.1, 0.8 + by * 1.1, 1.12);
+                  monGroup.add(boss);
+                }
+              }
+            } else {
+              // Bengaluru (and default) — Vidhana Soudha: granite-pink
+              // pillared facade under a white central dome.
+              const graniteMat = new THREE.MeshLambertMaterial({ color: 0xd6a8a8 });
+              const base = new THREE.Mesh(new THREE.BoxGeometry(7.5, 3.0, 4.5), graniteMat);
+              base.position.set(0, 1.5, 0);
+              monGroup.add(base);
+              for (let cx = -2.8; cx <= 2.8; cx += 1.4) {
+                const col = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 3.0, 8), new THREE.MeshLambertMaterial({ color: 0xf1e4e4 }));
+                col.position.set(cx, 1.5, 2.35);
+                monGroup.add(col);
+              }
+              const domeMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
+              const dome = new THREE.Mesh(new THREE.SphereGeometry(1.8, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
+              dome.position.set(0, 3.0, 0);
+              monGroup.add(dome);
+            }
+
+            monGroup.position.copy(monPos);
+            monGroup.lookAt(pt);
+            this.foliageGroup.add(monGroup);
+            this.obstacles.push({ pos: monPos.clone(), radius: 4.0, type: 'building' });
+          }
+
           // Firewood Log Stacks along forest verges
           if (i % 38 === 0 && this.prng.next() > 0.5) {
             const logDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(2.6, 4.5));
