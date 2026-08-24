@@ -1886,6 +1886,60 @@
             this.obstacles.push({ pos: tapriPos.clone(), radius: 2.6, type: 'building' });
           }
 
+          // Roadside Kirana General Store (shutter, signboard, crates)
+          if (i % 62 === 0 && side === 1) {
+            const kiranaDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.4);
+            const kiranaPos = pt.clone().addScaledVector(normal, kiranaDist);
+            kiranaPos.y = calcTerrainY(kiranaPos, kiranaDist);
+
+            const kiranaGroup = new THREE.Group();
+
+            // Shop body
+            const shopMat = new THREE.MeshLambertMaterial({ color: 0x0e7490 });
+            const shopBody = new THREE.Mesh(new THREE.BoxGeometry(3.6, 2.6, 3.0), shopMat);
+            shopBody.position.set(0, 1.3, 0);
+            kiranaGroup.add(shopBody);
+
+            // Roller shutter (front face)
+            const shutterMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
+            const shutter = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.8, 0.08), shutterMat);
+            shutter.position.set(0, 0.95, 1.52);
+            kiranaGroup.add(shutter);
+            // Shutter slat lines (thin ridges for a corrugated look)
+            const slatMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+            for (let s = 0; s < 6; s++) {
+              const slat = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.02), slatMat);
+              slat.position.set(0, 0.25 + s * 0.28, 1.57);
+              kiranaGroup.add(slat);
+            }
+
+            // Bright signboard above shutter
+            const signMat = new THREE.MeshLambertMaterial({ color: 0xfacc15 });
+            const sign = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.6, 0.12), signMat);
+            sign.position.set(0, 2.5, 1.5);
+            kiranaGroup.add(sign);
+
+            // Forward-sloping awning over the shutter
+            const kAwningMat = new THREE.MeshLambertMaterial({ color: 0xc2410c });
+            const kAwning = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.1, 1.3), kAwningMat);
+            kAwning.position.set(0, 2.15, 2.2);
+            kAwning.rotateX(-0.22);
+            kiranaGroup.add(kAwning);
+
+            // Crates of goods stacked outside
+            const crateMat = new THREE.MeshLambertMaterial({ color: 0x92400e });
+            [[-1.5, 0.25, 2.1], [-1.5, 0.72, 2.1], [1.6, 0.25, 1.9]].forEach(([cx, cy, cz]) => {
+              const crate = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.45, 0.6), crateMat);
+              crate.position.set(cx, cy, cz);
+              kiranaGroup.add(crate);
+            });
+
+            kiranaGroup.position.copy(kiranaPos);
+            kiranaGroup.lookAt(pt);
+            this.foliageGroup.add(kiranaGroup);
+            this.obstacles.push({ pos: kiranaPos.clone(), radius: 2.4, type: 'building' });
+          }
+
           // Firewood Log Stacks along forest verges
           if (i % 38 === 0 && this.prng.next() > 0.5) {
             const logDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(2.6, 4.5));
