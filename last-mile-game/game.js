@@ -2734,7 +2734,23 @@
 
       // Apply lateral displacement across road width
       const vehiclePos = currentPos.clone().addScaledVector(roadRight, this.lateralOffset);
-      vehiclePos.y += 0.25;
+
+      // Follow the actual carved road/shoulder surface, not the spline
+      // centerline height — lateralOffset can reach ±9m (the shoulder
+      // boundary), and the terrain there sits lower than the road center
+      // (see createTerrainMesh's roadHalf/shoulder formula). Using
+      // currentPos.y unconditionally let the car clip into or float above
+      // the ground the moment it drifted off-center.
+      const roadHalfW = CONFIG.ROAD_WIDTH * 0.52;
+      const absLat = Math.abs(this.lateralOffset);
+      let groundY;
+      if (absLat <= roadHalfW) {
+        groundY = currentPos.y - 0.18;
+      } else {
+        const t = (absLat - roadHalfW) / (9.0 - roadHalfW);
+        groundY = currentPos.y - 0.18 - t * 0.32;
+      }
+      vehiclePos.y = groundY + 0.25;
 
       // Surface elevation bump on gravel / mud
       if (roadTerrainKey === 'gravel' || roadTerrainKey === 'mud') {
@@ -2872,7 +2888,10 @@
       const pt = curve.getPointAt(this.splineProgress);
       const tangent = curve.getTangentAt(this.splineProgress).normalize();
       this.mesh.position.copy(pt);
-      this.mesh.position.y += 0.25;
+      // Matches the on-road branch of the ground-following formula in
+      // update() (pt.y - 0.18 + 0.25) — using the old flat +0.25 here made
+      // the car visibly pop up 0.18m on every crash/checkpoint reset.
+      this.mesh.position.y += 0.07;
       this.mesh.lookAt(pt.clone().add(tangent));
       this.speed = 0;
       this.steerAngle = 0;
@@ -2897,7 +2916,8 @@
       const pt = curve.getPointAt(bestU);
       const tangent = curve.getTangentAt(bestU).normalize();
       this.mesh.position.copy(pt);
-      this.mesh.position.y += 0.25;
+      // See resetToSpline — matches the on-road ground-following formula.
+      this.mesh.position.y += 0.07;
       this.mesh.lookAt(pt.clone().add(tangent));
       this.speed = 0;
       this.steerAngle = 0;
@@ -4315,6 +4335,22 @@
         const targetFOV = 60 + speedRatio * 8.0;
         this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFOV, 0.1);
         this.camera.updateProjectionMatrix();
+      }
+
+      // Ground-clip safety: the chase/sky cameras are positioned purely
+      // relative to the car (offset + lerp), with no awareness of the
+      // terrain underneath. On a hill or embankment the camera's own (x,z)
+      // can end up inside solid ground — the double-sided terrain material
+      // then renders its interior faces all around the view, which reads
+      // as the car being "buried" even though the car itself is fine.
+      // Clamp against raw terrain height (always >= the actual carved
+      // road/embankment surface) as a cheap conservative floor.
+      if (this.world && this.world.getRawTerrainHeight && this.activeCameraMode !== 'hood') {
+        const camGroundY = this.world.getRawTerrainHeight(this.camera.position.x, this.camera.position.z);
+        const minClearance = camGroundY + 1.4;
+        if (this.camera.position.y < minClearance) {
+          this.camera.position.y = minClearance;
+        }
       }
 
       // Center Atmospheric Sky Dome on Camera
