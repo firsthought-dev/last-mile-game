@@ -594,11 +594,11 @@ html, body {
    EVENT NOTIFICATION PANEL (Collisions, Fines, Deliveries)
    ========================================================================== */
 .notification-panel {
-  position: absolute;
-  bottom: 168px;
+  position: fixed;
+  bottom: 180px;
   right: 28px;
   max-width: 280px;
-  max-height: 280px;
+  max-height: 240px;
   display: flex;
   flex-direction: column-reverse;
   gap: 6px;
