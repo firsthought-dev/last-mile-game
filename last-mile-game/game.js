@@ -392,6 +392,9 @@
         // clusters of trees blend into the hillside into one flat mass.
         treeLeaves: [0xdc2626, 0xea580c, 0xeab308, 0x991b1b]
       },
+      // Spring/Summer are green-first by design — foliage should read as
+      // living trees rather than a rainbow. Autumn keeps its fire tones,
+      // winter stays evergreen-only (see isPine forcing in the tree loop).
       spring: {
         id: 'spring',
         name: 'Alpine Meadow Mist',
@@ -402,10 +405,9 @@
         grassColor: 0x15803d,
         grassLight: 0x22c55e,
         cliffColor: 0x3f3f46,
-        // Distinct from grassColor/grassLight above — the old palette
-        // duplicated both exactly, which let dense tree clusters blend
-        // into the meadow into one flat mass.
-        treeLeaves: [0xf9a8d4, 0x6ee7b7, 0x14532d, 0xfbbf24]
+        // Mostly fresh green with one soft cherry-blossom pink accent for
+        // seasonal character — no longer a scattershot of unrelated hues.
+        treeLeaves: [0x22c55e, 0x16a34a, 0x4ade80, 0xf9a8d4]
       },
       summer: {
         id: 'summer',
@@ -417,9 +419,9 @@
         grassColor: 0x65a30d,
         grassLight: 0x84cc16,
         cliffColor: 0x78350f,
-        // Distinct from grassColor/grassLight above — same duplicate-color
-        // issue as spring/autumn.
-        treeLeaves: [0x166534, 0x0f766e, 0xea580c, 0x854d0e]
+        // Deep lush summer greens — no orange/brown outliers pulling the
+        // canopy toward autumn colors.
+        treeLeaves: [0x166534, 0x15803d, 0x22c55e, 0x14532d]
       },
       winter: {
         id: 'winter',
@@ -1250,6 +1252,38 @@
       const rumbleGeom = new THREE.BoxGeometry(CONFIG.ROAD_WIDTH * 0.82, 0.08, 0.45);
       const rumbleMat = new THREE.MeshLambertMaterial({ color: 0xfca311 });
 
+      // Skyscraper window-grid texture, generated once on a canvas and
+      // reused (tinted per-building via material color) across every tower
+      // so the city skyline doesn't need per-building unique geometry.
+      const skyscraperWindowTex = (() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, 32, 64);
+        const cols = 4, rows = 10;
+        const cw = 32 / cols, rh = 64 / rows;
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            if (this.prng.next() > 0.4) {
+              ctx.fillStyle = this.prng.next() > 0.15 ? '#ffe08a' : '#9fd0ff';
+              ctx.fillRect(c * cw + 1, r * rh + 1, cw - 2, rh - 2);
+            }
+          }
+        }
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.colorSpace = THREE.SRGBColorSpace;
+        return tex;
+      })();
+      const SKYSCRAPER_PALETTE = [0xc9d2db, 0xb8c4d9, 0xd8cdb8, 0xa9b8c2, 0xcfd8c4, 0xe0dccf];
+      // Low/mid-rise shophouse & apartment colors — the vivid pastel washes
+      // (teal, mustard, terracotta) common on Indian street-level buildings,
+      // distinct from the muted glass/concrete high-rise palette above.
+      const LOWRISE_PALETTE = [0xe8b04b, 0xd97a5f, 0x6fa8a0, 0xd9c9a8, 0x8fb0c9, 0xc97b8f, 0xb8c98f];
+
       const sampledPoints = this.curve.getSpacedPoints(800);
 
       for (let i = 2; i < sampledPoints.length - 2; i++) {
@@ -1482,7 +1516,11 @@
           const nearPos = pt.clone().addScaledVector(normal, side * nearDist);
           nearPos.y = calcTerrainY(nearPos, side * nearDist);
 
-          const isPine = (this.prng.next() > 0.35);
+          // Winter forces evergreen-only canopy — broadleaf trees would be
+          // bare in winter, and we don't model leafless geometry, so we
+          // simply keep the forest all-pine rather than showing full green
+          // canopies that would look wrong for the season.
+          const isPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
           const leafColHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
           const leavesMat = new THREE.MeshPhongMaterial({ color: leafColHex, flatShading: true });
 
@@ -1518,6 +1556,128 @@
           tree.position.copy(nearPos);
           this.foliageGroup.add(tree);
           this.obstacles.push({ pos: nearPos.clone(), radius: 1.3 * scale, type: 'tree' });
+
+          // City Skyline: procedural skyscrapers set well back beyond the
+          // treeline so they read as a backdrop rather than roadside clutter.
+          // Spaced out per side so towers don't visually collide with each
+          // other at close draw distance.
+          if (i % 11 === (side > 0 ? 0 : 5) && this.prng.next() > 0.25) {
+            const bldgDist = side * this.prng.range(34.0, 78.0);
+            const bldgPos = pt.clone().addScaledVector(normal, bldgDist);
+            bldgPos.y = calcTerrainY(bldgPos, bldgDist);
+
+            const width = this.prng.range(7.0, 13.0);
+            const depth = this.prng.range(7.0, 13.0);
+
+            // Real Indian streetscapes are mostly low/mid-rise shophouses
+            // and apartment blocks with the occasional tower punching up —
+            // not a uniform wall of skyscrapers. Weight the roll heavily
+            // toward short buildings so towers read as landmarks.
+            const heightRoll = this.prng.next();
+            let height, palette;
+            if (heightRoll < 0.55) {
+              height = this.prng.range(8.0, 20.0);
+              palette = LOWRISE_PALETTE;
+            } else if (heightRoll < 0.85) {
+              height = this.prng.range(20.0, 40.0);
+              palette = this.prng.next() > 0.5 ? LOWRISE_PALETTE : SKYSCRAPER_PALETTE;
+            } else {
+              height = this.prng.range(40.0, 90.0);
+              palette = SKYSCRAPER_PALETTE;
+            }
+            const isLowRise = height < 20.0;
+
+            const bodyColor = palette[Math.floor(this.prng.range(0, palette.length))];
+            const accentColor = palette[Math.floor(this.prng.range(0, palette.length))];
+
+            const bldgGroup = new THREE.Group();
+
+            const makeFacadeMat = (w, h, color) => {
+              // Windows use an emissiveMap rather than a color map so they
+              // glow at a constant brightness independent of scene lighting —
+              // otherwise the tower reads as a flat dark silhouette at night
+              // since ambient/directional light is too dim to reveal a map.
+              const tex = skyscraperWindowTex.clone();
+              tex.repeat.set(Math.max(1, Math.round(w / 3.2)), Math.max(1, Math.round(h / 4.0)));
+              tex.needsUpdate = true;
+              return new THREE.MeshPhongMaterial({
+                color,
+                flatShading: true,
+                emissiveMap: tex,
+                emissive: 0xffffff,
+                emissiveIntensity: 0.85
+              });
+            };
+
+            // Four massing archetypes so the skyline doesn't read as one
+            // repeated box at different sizes — stepped-tier and podium
+            // towers are common in dense Indian commercial districts.
+            const archetype = isLowRise ? 0 : Math.floor(this.prng.range(0, 4));
+
+            if (archetype === 0) {
+              // Plain slab tower
+              const body = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), makeFacadeMat(width, height, bodyColor));
+              body.position.y = height / 2;
+              bldgGroup.add(body);
+            } else if (archetype === 1) {
+              // Stepped-tier tower: wide base, narrower upper block set back
+              const baseH = height * 0.55;
+              const topH = height - baseH;
+              const base = new THREE.Mesh(new THREE.BoxGeometry(width, baseH, depth), makeFacadeMat(width, baseH, bodyColor));
+              base.position.y = baseH / 2;
+              bldgGroup.add(base);
+              const top = new THREE.Mesh(new THREE.BoxGeometry(width * 0.62, topH, depth * 0.62), makeFacadeMat(width * 0.62, topH, accentColor));
+              top.position.y = baseH + topH / 2;
+              bldgGroup.add(top);
+            } else if (archetype === 2) {
+              // Podium + tower: squat wide podium floors, slender tower rising off it
+              const podiumH = Math.min(10.0, height * 0.18);
+              const towerH = height - podiumH;
+              const podium = new THREE.Mesh(new THREE.BoxGeometry(width * 1.35, podiumH, depth * 1.35), makeFacadeMat(width * 1.35, podiumH, accentColor));
+              podium.position.y = podiumH / 2;
+              bldgGroup.add(podium);
+              const tower = new THREE.Mesh(new THREE.BoxGeometry(width * 0.68, towerH, depth * 0.68), makeFacadeMat(width * 0.68, towerH, bodyColor));
+              tower.position.y = podiumH + towerH / 2;
+              bldgGroup.add(tower);
+            } else {
+              // Twin-block tower: two slim offset blocks of differing height
+              const hA = height;
+              const hB = height * this.prng.range(0.55, 0.8);
+              const blockA = new THREE.Mesh(new THREE.BoxGeometry(width * 0.55, hA, depth), makeFacadeMat(width * 0.55, hA, bodyColor));
+              blockA.position.set(-width * 0.24, hA / 2, 0);
+              bldgGroup.add(blockA);
+              const blockB = new THREE.Mesh(new THREE.BoxGeometry(width * 0.55, hB, depth * 0.9), makeFacadeMat(width * 0.55, hB, accentColor));
+              blockB.position.set(width * 0.28, hB / 2, -depth * 0.05);
+              bldgGroup.add(blockB);
+            }
+
+            // Parapet / rooftop cap
+            const capMat = new THREE.MeshPhongMaterial({ color: 0x6b7480, flatShading: true });
+            const cap = new THREE.Mesh(new THREE.BoxGeometry(width * 0.7, 0.9, depth * 0.7), capMat);
+            cap.position.y = height + 0.45;
+            bldgGroup.add(cap);
+
+            // Rooftop water tank (common Indian skyline silhouette), antenna, or bare.
+            // Low-rise buildings get a water tank far more often — it's the
+            // defining rooftop silhouette of Indian residential/shop blocks.
+            const roofProp = this.prng.next();
+            const tankThreshold = isLowRise ? 0.3 : 0.66;
+            if (roofProp > tankThreshold) {
+              const tankMat = new THREE.MeshPhongMaterial({ color: 0x3f6b8a, flatShading: true });
+              const tank = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 1.6, 8), tankMat);
+              tank.position.set(width * 0.25, height + 1.7, depth * 0.2);
+              bldgGroup.add(tank);
+            } else if (roofProp > 0.33) {
+              const antennaMat = new THREE.MeshPhongMaterial({ color: 0x2a2e33, flatShading: true });
+              const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 6.0, 6), antennaMat);
+              antenna.position.set(0, height + 3.4, 0);
+              bldgGroup.add(antenna);
+            }
+
+            bldgGroup.position.copy(bldgPos);
+            bldgGroup.rotation.y = this.prng.range(-0.06, 0.06);
+            this.foliageGroup.add(bldgGroup);
+          }
 
           // Roadside Split-Rail Wooden Fences (every 18-20 nodes along road bends)
           if (i % 18 === 0 && this.prng.next() > 0.4) {
