@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Shiplyp: Last Mile — Indian Courier 3D Action Driving</title>
+  <meta name="description" content="Action-packed 3D Indian last-mile courier delivery driving game across Mumbai, Delhi, Kolkata, Pune & Bengaluru.">
+  
+  <!-- Modern Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  
+  <!-- Three.js 3D Library with Multi-CDN Fallback -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    if (typeof THREE === 'undefined') {
+      document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js"><\/script>');
+    }
+  </script>
+  
+  <script>
+    const l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = 'style.css?t=' + Date.now();
+    document.head.appendChild(l);
+  </script>
+</head>
+<body>
+  <div id="game-app">
+    <!-- WebGL Canvas Container -->
+    <div id="webgl-container"></div>
+
+    <!-- 1. SLOWROADS MINIMALIST HUD ARCHITECTURE -->
+    <div id="in-game-hud" class="hud-overlay">
+      <!-- Top-Left: Minimal Slowroads Objective Line -->
+      <div class="slowroads-obj-box">
+        <div class="slowroads-obj-tag">DISPATCH // TARGET</div>
+        <div class="slowroads-obj-title" id="order-target-name">Kulkarni Wada (Doorstep 4B)</div>
+        <div class="slowroads-obj-meta">
+          <span id="order-cargo-desc">2x Hot Dabba & Filter Coffee</span>
+          <span class="meta-sep">/</span>
+          <span id="waypoint-distance-text" class="meta-dist">180m</span>
+          <span class="meta-sep">/</span>
+          <span id="order-timer-clock" class="meta-timer">00:32.4</span>
+        </div>
+      </div>
+
+      <!-- Top-Right: Slowroads Minimal Audio Bar & System Controls -->
+      <div class="slowroads-top-bar">
+        <div class="slowroads-radio-pill" id="cassette-radio-card">
+          <span class="radio-label">RADIO</span>
+          <span class="radio-sep">/</span>
+          <span id="radio-track-title" class="slowroads-track-text">Dil Ne Yeh Kaha - Dhaba FM</span>
+          <div class="slowroads-radio-btns">
+            <button id="btn-radio-prev" class="slowroads-text-btn" title="Previous">PREV</button>
+            <button id="btn-radio-play" class="slowroads-text-btn play-btn" title="Play / Pause">PLAY</button>
+            <button id="btn-radio-next" class="slowroads-text-btn" title="Next">NEXT</button>
+          </div>
+          <!-- Hidden equalizer for headless sound engine -->
+          <div id="radio-eq" style="display:none;"><span></span><span></span><span></span><span></span></div>
+        </div>
+
+        <div class="slowroads-sys-btns">
+          <button id="btn-hud-tod" class="slowroads-icon-btn" title="Cycle Time of Day [T]">TOD</button>
+          <button id="btn-hud-camera" class="slowroads-icon-btn" title="Camera Mode [C]">CAM</button>
+          <button id="btn-hud-sound" class="slowroads-icon-btn" title="Mute Audio [M]">MUTE</button>
+        </div>
+      </div>
+
+      <!-- Speed Camera Flash Screen Overlay -->
+      <div id="speed-cam-flash" class="speed-cam-flash"></div>
+
+      <!-- Delivery Dropzone Reticle (Appears Only When Close < 35m) -->
+      <div id="toss-reticle-banner" class="slowroads-toss-banner">
+        <span class="toss-key-tag">SPACE</span>
+        <span class="toss-msg">DROP CARGO</span>
+      </div>
+
+      <!-- Bottom-Left: Minimalist Radar Minimap -->
+      <div class="slowroads-radar-box">
+        <div class="radar-header-row">
+          <span class="radar-tag">RADAR</span>
+          <span id="gps-next-dist" class="radar-dist">180m</span>
+        </div>
+        <div class="radar-canvas-housing">
+          <canvas id="gps-minimap-canvas" width="116" height="116"></canvas>
+        </div>
+      </div>
+
+      <!-- Bottom-Right: Slowroads Clean Telemetry Readout -->
+      <div class="slowroads-telemetry-box">
+        <div class="telemetry-controls-col">
+          <button id="btn-hud-autodrive" class="slowroads-pill-btn" title="Autopilot [F]">
+            <span class="slowroads-dot"></span>
+            <span id="autodrive-text">AUTOPILOT</span>
+          </button>
+          <button id="btn-hud-reset" class="slowroads-pill-btn" title="Recenter [R]">
+            <span>RECENTER</span>
+          </button>
+        </div>
+
+        <div class="telemetry-digits-box">
+          <div class="telemetry-speed-row">
+            <span id="telemetry-speed" class="telemetry-numeral">00</span>
+            <span class="telemetry-unit">KM/H</span>
+          </div>
+          <div class="telemetry-sub-row">
+            <span class="telemetry-gear">DRIVE</span>
+            <span class="meta-sep">/</span>
+            <span id="telemetry-distance" class="telemetry-trip">0.0 KM</span>
+          </div>
+          <!-- Hidden arc for telemetry loop -->
+          <svg style="display:none;"><circle id="speed-arc-fill" /></svg>
+        </div>
+      </div>
+
+      <!-- Hidden hook targets to keep game.js telemetry updates running cleanly -->
+      <div class="hud-headless-hooks" style="display:none !important;" aria-hidden="true">
+        <span id="order-id-label"></span>
+        <span id="order-difficulty-pill"></span>
+        <div id="order-timer-bar"></div>
+        <div id="hud-health-pill"><div id="hud-health-fill"></div><span id="hud-health-text"></span></div>
+        <div id="hud-climate-pill"><span id="climate-status"></span></div>
+        <span id="hud-earnings"></span>
+        <div id="hud-streak-pill"></div>
+        <span id="delivery-count"></span>
+        <div id="waypoint-hud-arrow"><span id="waypoint-target-text"></span></div>
+      </div>
+
+      <div id="score-popup-container" class="score-popup-container"></div>
+    </div>
+
+    <!-- Shiplyp Dispatch Dock (Clean Slowroads Minimalist Navigation Bar) -->
+    <div id="slowroads-dock" class="slowroads-dock" style="display: none;">
+      <!-- Dock Popup Panels -->
+      <div id="dock-panel" class="dock-panel-container" style="display: none;"></div>
+
+      <div class="dock-bar-glass">
+        <div class="dock-nav-items">
+          <button class="dock-tab-btn" data-panel="world">ROUTES</button>
+          <button class="dock-tab-btn" data-panel="style">ENVIRONMENT</button>
+          <button class="dock-tab-btn" data-panel="vehicle">VEHICLES</button>
+        </div>
+
+        <div class="dock-icons-right">
+          <button id="btn-dock-tod" class="dock-icon" title="Time of Day [T]">TOD</button>
+          <button id="btn-dock-camera" class="dock-icon" title="Switch Camera Mode [C]">CAM</button>
+          <button id="btn-dock-sound" class="dock-icon" title="Mute/Unmute Audio [M]">AUDIO</button>
+          <button id="btn-dock-settings" class="dock-icon" title="Dispatch Tuning">CONFIG</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modals (Dispatch Hub, Shift Completed Report, Settings) -->
+    <div id="modal-container"></div>
+  </div>
+
+  <!-- Main Game Engine Bundle with Absolute Cache Busting -->
+  <script>
+    const s = document.createElement('script');
+    s.src = 'game.js?t=' + Date.now();
+    document.body.appendChild(s);
+  </script>
+</body>
+</html>
