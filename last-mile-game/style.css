@@ -1895,17 +1895,6 @@ html, body {
     gap: 10px;
   }
 
-  /* Dock panel: horizontal scroll for options */
-  .dock-panel-container {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .dock-panel-container::-webkit-scrollbar {
-    display: none;
-  }
-
   /* Button sizing for tablet */
   .vehicle-card-btn, .city-pill-btn, .diff-card-btn {
     padding: 10px 8px;
