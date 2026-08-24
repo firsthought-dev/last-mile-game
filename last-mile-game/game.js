@@ -1759,7 +1759,7 @@
       this.mesh.position.copy(vehiclePos);
 
       // 4. Chassis Orientation & Steering (Headlights facing down the road +tangent)
-      const lookTarget = vehiclePos.clone().sub(tangent);
+      const lookTarget = vehiclePos.clone().add(tangent);
       this.mesh.lookAt(lookTarget);
 
       if (Math.abs(this.steerAngle) > 0.001) {
@@ -1916,7 +1916,7 @@
       const tangent = curve.getTangentAt(this.splineProgress).normalize();
       this.mesh.position.copy(pt);
       this.mesh.position.y += 0.25;
-      this.mesh.lookAt(pt.clone().sub(tangent));
+      this.mesh.lookAt(pt.clone().add(tangent));
       this.speed = 0;
       this.steerAngle = 0;
       this.health = Math.max(75, this.health);
@@ -1941,7 +1941,7 @@
       const tangent = curve.getTangentAt(bestU).normalize();
       this.mesh.position.copy(pt);
       this.mesh.position.y += 0.25;
-      this.mesh.lookAt(pt.clone().sub(tangent));
+      this.mesh.lookAt(pt.clone().add(tangent));
       this.speed = 0;
       this.steerAngle = 0;
     }
