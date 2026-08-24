@@ -1449,7 +1449,7 @@
         }
 
         // 5. Roadside Garage & Pitstop Repair Bay
-        if (i % 75 === 0 && i > 20) {
+        if (i % 45 === 0 && i > 20) {
           const baySide = 1;
           const bayDist = CONFIG.ROAD_WIDTH * 0.5 + 4.8;
           const bayPos = pt.clone().addScaledVector(normal, baySide * bayDist);
@@ -1510,6 +1510,13 @@
 
         // 6. Dense Multi-Tiered Pine & Broadleaf Forests, Rocks, Fences & Lanterns (Left and Right)
         [-1, 1].forEach(side => {
+          // Trees previously spawned unconditionally on every point/side —
+          // a 100% spawn rate that buried the urban props (shops, houses,
+          // skyscrapers) under a wall of forest, wrong for what's supposed
+          // to read as an Indian city. Gate to ~45% so greenery still lines
+          // the road without drowning out the buildings.
+          const spawnTree = this.prng.next() > 0.55;
+
           // Minimum offset kept clear of the vehicle's own max lateral
           // drift (±9m from centerline, see lateralOffset clamp in
           // VehicleController) plus the tree canopy's ~2.4m radius —
@@ -1519,6 +1526,7 @@
           const nearPos = pt.clone().addScaledVector(normal, side * nearDist);
           nearPos.y = calcTerrainY(nearPos, side * nearDist);
 
+          if (spawnTree) {
           // Winter forces evergreen-only canopy — broadleaf trees would be
           // bare in winter, and we don't model leafless geometry, so we
           // simply keep the forest all-pine rather than showing full green
@@ -1559,12 +1567,13 @@
           tree.position.copy(nearPos);
           this.foliageGroup.add(tree);
           this.obstacles.push({ pos: nearPos.clone(), radius: 1.3 * scale, type: 'tree' });
+          } // end spawnTree
 
           // City Skyline: procedural skyscrapers set well back beyond the
           // treeline so they read as a backdrop rather than roadside clutter.
           // Spaced out per side so towers don't visually collide with each
           // other at close draw distance.
-          if (i % 11 === (side > 0 ? 0 : 5) && this.prng.next() > 0.25) {
+          if (i % 7 === (side > 0 ? 0 : 3) && this.prng.next() > 0.15) {
             const bldgDist = side * this.prng.range(34.0, 78.0);
             const bldgPos = pt.clone().addScaledVector(normal, bldgDist);
             bldgPos.y = calcTerrainY(bldgPos, bldgDist);
@@ -1862,7 +1871,7 @@
           }
 
           // Roadside Dhaba / Chai Tapri with Customers drinking tea
-          if (i % 56 === 0 && side === -1) {
+          if (i % 34 === 0 && side === -1) {
             const tapriDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.2);
             const tapriPos = pt.clone().addScaledVector(normal, tapriDist);
             tapriPos.y = calcTerrainY(tapriPos, tapriDist);
@@ -1908,7 +1917,7 @@
           }
 
           // Roadside Kirana General Store (shutter, signboard, crates)
-          if (i % 62 === 0 && side === 1) {
+          if (i % 38 === 0 && side === 1) {
             const kiranaDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.4);
             const kiranaPos = pt.clone().addScaledVector(normal, kiranaDist);
             kiranaPos.y = calcTerrainY(kiranaPos, kiranaDist);
