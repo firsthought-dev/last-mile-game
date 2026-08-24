@@ -19,8 +19,8 @@
       if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
       this.loading = true;
       new THREE.GLTFLoader().load('assets/models/delivery.glb', (gltf) => {
-        const cabMat = new THREE.MeshPhongMaterial({ color: 0xf1f1f1, flatShading: true }); // white cab/door
-        const bodyMat = new THREE.MeshPhongMaterial({ color: 0x2a9d8f, flatShading: true }); // teal-green cargo body
+        const cabMat = new THREE.MeshStandardMaterial({ color: 0xf1f1f1, flatShading: true }); // white cab/door
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a9d8f, flatShading: true }); // teal-green cargo body
         const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
         gltf.scene.traverse((child) => {
           if (!child.isMesh) return;
@@ -53,7 +53,7 @@
       if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
       this.loading = true;
       new THREE.GLTFLoader().load('assets/models/sedan-sports.glb', (gltf) => {
-        const bodyMat = new THREE.MeshPhongMaterial({ color: 0xd90429, flatShading: true }); // Fiery Red
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xd90429, flatShading: true }); // Fiery Red
         const trimMat = new THREE.MeshLambertMaterial({ color: 0x0a0a0a }); // Gloss black spoiler/trim
         const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1e293b }); // Diamond-cut alloy
         gltf.scene.traverse((child) => {
@@ -90,7 +90,7 @@
       if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
       this.loading = true;
       new THREE.GLTFLoader().load('assets/models/truck.glb', (gltf) => {
-        const bodyMat = new THREE.MeshPhongMaterial({ color: 0x059669, flatShading: true }); // Indian Cargo Green
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x059669, flatShading: true }); // Indian Cargo Green
         const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
         gltf.scene.traverse((child) => {
           if (!child.isMesh) return;
@@ -658,6 +658,104 @@
   };
 
   // --------------------------------------------------------------------------
+  // 4B. PROCEDURAL GROUND TEXTURES
+  // No external texture files are bundled, so ground materials render as
+  // flat vertex-color triangles — fine up close but reads as "vector art"
+  // under the new PBR/bloom pipeline. These canvas-based tileable textures
+  // give grass/asphalt/rock a repeating micro-detail speckle; they're
+  // multiplied against the existing per-vertex terrain colors (map *
+  // vertexColors) rather than replacing them, so seasonal palettes still work.
+  const TextureFactory = {
+    _cache: {},
+
+    _canvas(size) {
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      return c;
+    },
+
+    grass(prng) {
+      if (this._cache.grass) return this._cache.grass;
+      const size = 256;
+      const c = this._canvas(size);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, size, size);
+      // Speckled blade/clump noise: light and dark flecks over neutral grey
+      // (grey so it multiplies cleanly against any season's grass color).
+      for (let i = 0; i < 5500; i++) {
+        const x = prng.next() * size;
+        const y = prng.next() * size;
+        const shade = 0.72 + prng.next() * 0.5;
+        const c8 = Math.floor(Math.min(255, 255 * shade));
+        ctx.fillStyle = `rgba(${c8},${c8},${c8},0.5)`;
+        const w = 0.6 + prng.next() * 1.6;
+        const h = 2 + prng.next() * 5;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(prng.next() * Math.PI);
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+        ctx.restore();
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      this._cache.grass = tex;
+      return tex;
+    },
+
+    asphalt(prng) {
+      if (this._cache.asphalt) return this._cache.asphalt;
+      const size = 256;
+      const c = this._canvas(size);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#a8a8a8';
+      ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < 9000; i++) {
+        const x = prng.next() * size;
+        const y = prng.next() * size;
+        const shade = 0.55 + prng.next() * 0.7;
+        const c8 = Math.floor(Math.min(255, 168 * shade));
+        ctx.fillStyle = `rgba(${c8},${c8},${c8},0.6)`;
+        const r = 0.5 + prng.next() * 1.3;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      this._cache.asphalt = tex;
+      return tex;
+    },
+
+    rock(prng) {
+      if (this._cache.rock) return this._cache.rock;
+      const size = 256;
+      const c = this._canvas(size);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#bdbdbd';
+      ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < 1400; i++) {
+        const x = prng.next() * size;
+        const y = prng.next() * size;
+        const shade = 0.5 + prng.next() * 0.85;
+        const c8 = Math.floor(Math.min(255, 189 * shade));
+        ctx.fillStyle = `rgba(${c8},${c8},${c8},0.55)`;
+        const w = 4 + prng.next() * 14;
+        const h = 3 + prng.next() * 10;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(prng.next() * Math.PI);
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+        ctx.restore();
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      this._cache.rock = tex;
+      return tex;
+    }
+  };
+
+  // --------------------------------------------------------------------------
   // 5. SLOW ROADS PROCEDURAL TERRAIN & DUAL-GRID ARCHITECTURE
   // --------------------------------------------------------------------------
   class ProceduralWorld {
@@ -673,6 +771,7 @@
       this.terrainMesh = null;
       this.skyMesh = null;
       this.foliageGroup = new THREE.Group();
+      this.windowMaterials = [];
       this.trafficVehicles = [];
       this.deliveryTargets = [];
       this.potholes = [];
@@ -973,6 +1072,7 @@
       const positions = [];
       const colors = [];
       const normals = [];
+      const uvs = [];
       const indices = [];
 
       const points = this.curve.getSpacedPoints(tubularSegments);
@@ -1029,6 +1129,7 @@
           p.addScaledVector(bankedUp, isVerge ? 0.04 : 0.12);
           positions.push(p.x, p.y, p.z);
           normals.push(bankedUp.x, bankedUp.y, bankedUp.z);
+          uvs.push(off * 0.5, i * 0.3);
 
           // Assign sharp vertex colors for asphalt and highway paint
           if (j === 0 || j === 6) {
@@ -1059,12 +1160,16 @@
       geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
       geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
       geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+      geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       geom.setIndex(indices);
       geom.computeVertexNormals();
 
-      const roadMaterial = new THREE.MeshLambertMaterial({
+      const roadMaterial = new THREE.MeshStandardMaterial({
         vertexColors: true,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
+        roughness: 0.85,
+        metalness: 0.05,
+        map: TextureFactory.asphalt(this.prng)
       });
 
       this.roadMesh = new THREE.Mesh(geom, roadMaterial);
@@ -1084,6 +1189,7 @@
       const positions = [];
       const colors = [];
       const normals = [];
+      const uvs = [];
       const indices = [];
 
       const grassCol = new THREE.Color(season.grassColor);
@@ -1153,6 +1259,7 @@
 
           positions.push(worldPos.x, finalY, worldPos.z);
           normals.push(0, 1, 0);
+          uvs.push(worldPos.x * 0.15, worldPos.z * 0.15);
 
           if (i < tubularSegments && j < sliceCount - 1) {
             const row1 = i * sliceCount + j;
@@ -1167,12 +1274,16 @@
       geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
       geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
       geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+      geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       geom.setIndex(indices);
       geom.computeVertexNormals();
 
-      const terrainMat = new THREE.MeshLambertMaterial({
+      const terrainMat = new THREE.MeshStandardMaterial({
         vertexColors: true,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
+        roughness: 0.95,
+        metalness: 0.0,
+        map: TextureFactory.grass(this.prng)
       });
 
       this.terrainMesh = new THREE.Mesh(geom, terrainMat);
@@ -1282,9 +1393,19 @@
       geom.computeVertexNormals();
       geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
-      const floorMat = new THREE.MeshLambertMaterial({
+      // Own clone of the shared grass texture so this mesh's repeat count
+      // (driven by its own, much larger, world-space size) doesn't fight
+      // with the terrain ribbon's repeat setting on the cached original.
+      const floorGrassTex = TextureFactory.grass(this.prng).clone();
+      floorGrassTex.needsUpdate = true;
+      floorGrassTex.repeat.set(size * 0.15, size * 0.15);
+
+      const floorMat = new THREE.MeshStandardMaterial({
         vertexColors: true,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
+        roughness: 0.95,
+        metalness: 0.0,
+        map: floorGrassTex
       });
 
       this.floorMesh = new THREE.Mesh(geom, floorMat);
@@ -1312,9 +1433,9 @@
       const poleGeom = new THREE.CylinderGeometry(0.1, 0.12, 6.5, 6);
       const crossbarGeom = new THREE.BoxGeometry(1.8, 0.12, 0.12);
 
-      const trunkMat = new THREE.MeshPhongMaterial({ color: 0x3d2b1f, flatShading: true });
-      const rockMat = new THREE.MeshPhongMaterial({ color: 0x5a6065, flatShading: true });
-      const poleMat = new THREE.MeshPhongMaterial({ color: 0x4a4e52, flatShading: true });
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, flatShading: true, roughness: 0.9 });
+      const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a6065, flatShading: true, roughness: 0.8, map: TextureFactory.rock(this.prng) });
+      const poleMat = new THREE.MeshStandardMaterial({ color: 0x4a4e52, flatShading: true, roughness: 0.6, metalness: 0.3 });
 
       const potholeGeom = new THREE.CircleGeometry(1.3, 12);
       potholeGeom.rotateX(-Math.PI / 2);
@@ -1610,7 +1731,7 @@
           // canopies that would look wrong for the season.
           const isPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
           const leafColHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
-          const leavesMat = new THREE.MeshPhongMaterial({ color: leafColHex, flatShading: true });
+          const leavesMat = new THREE.MeshStandardMaterial({ color: leafColHex, flatShading: true });
 
           const tree = new THREE.Group();
           const trunk = new THREE.Mesh(trunkGeom, trunkMat);
@@ -1619,9 +1740,9 @@
 
           if (isPine) {
             // Multi-Tiered Forest Pine Tree (3 stacked conical crowns)
-            const tierMat1 = new THREE.MeshPhongMaterial({ color: leafColHex, flatShading: true });
-            const tierMat2 = new THREE.MeshPhongMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.9), flatShading: true });
-            const tierMat3 = new THREE.MeshPhongMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.8), flatShading: true });
+            const tierMat1 = new THREE.MeshStandardMaterial({ color: leafColHex, flatShading: true });
+            const tierMat2 = new THREE.MeshStandardMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.9), flatShading: true });
+            const tierMat3 = new THREE.MeshStandardMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.8), flatShading: true });
 
             const crown1 = new THREE.Mesh(new THREE.ConeGeometry(2.4, 2.2, 7), tierMat1);
             crown1.position.y = 2.4;
@@ -1698,28 +1819,40 @@
               const tex = skyscraperWindowTex.clone();
               tex.repeat.set(Math.max(1, Math.round(w / 3.2)), Math.max(1, Math.round(h / 4.0)));
               tex.needsUpdate = true;
+              // Window glow only reads as lit windows once ambient light is
+              // low enough to need it (dusk/night) — left on at a fixed
+              // 0.85 intensity through daylight hours, every building in
+              // the skyline blows out under bloom since a near-white
+              // emissive surface always exceeds the bloom luminance
+              // threshold regardless of how bright the sun already is.
+              // Start dark; Game.applyWindowGlow (tied to time-of-day,
+              // same as vehicle headlights) sets the real intensity.
+              let mat;
               if (isGlass) {
                 // Shiny reflective glass curtain-wall look: high shininess/
                 // specular highlight, slight transparency, cool blue tint.
-                return new THREE.MeshPhongMaterial({
+                mat = new THREE.MeshStandardMaterial({
                   color,
                   flatShading: true,
                   emissiveMap: tex,
                   emissive: 0xffffff,
-                  emissiveIntensity: 0.85,
-                  specular: 0xffffff,
-                  shininess: 160,
+                  emissiveIntensity: 0.0,
+                  roughness: 0.15,
+                  metalness: 0.6,
                   transparent: true,
                   opacity: 0.92
                 });
+              } else {
+                mat = new THREE.MeshStandardMaterial({
+                  color,
+                  flatShading: true,
+                  emissiveMap: tex,
+                  emissive: 0xffffff,
+                  emissiveIntensity: 0.0
+                });
               }
-              return new THREE.MeshPhongMaterial({
-                color,
-                flatShading: true,
-                emissiveMap: tex,
-                emissive: 0xffffff,
-                emissiveIntensity: 0.85
-              });
+              this.windowMaterials.push(mat);
+              return mat;
             };
 
             // Four massing archetypes so the skyline doesn't read as one
@@ -1765,7 +1898,7 @@
             }
 
             // Parapet / rooftop cap
-            const capMat = new THREE.MeshPhongMaterial({ color: 0x6b7480, flatShading: true });
+            const capMat = new THREE.MeshStandardMaterial({ color: 0x6b7480, flatShading: true });
             const cap = new THREE.Mesh(new THREE.BoxGeometry(width * 0.7, 0.9, depth * 0.7), capMat);
             cap.position.y = height + 0.45;
             bldgGroup.add(cap);
@@ -1776,12 +1909,12 @@
             const roofProp = this.prng.next();
             const tankThreshold = isLowRise ? 0.3 : 0.66;
             if (roofProp > tankThreshold) {
-              const tankMat = new THREE.MeshPhongMaterial({ color: 0x3f6b8a, flatShading: true });
+              const tankMat = new THREE.MeshStandardMaterial({ color: 0x3f6b8a, flatShading: true });
               const tank = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 1.6, 8), tankMat);
               tank.position.set(width * 0.25, height + 1.7, depth * 0.2);
               bldgGroup.add(tank);
             } else if (roofProp > 0.33) {
-              const antennaMat = new THREE.MeshPhongMaterial({ color: 0x2a2e33, flatShading: true });
+              const antennaMat = new THREE.MeshStandardMaterial({ color: 0x2a2e33, flatShading: true });
               const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 6.0, 6), antennaMat);
               antenna.position.set(0, height + 3.4, 0);
               bldgGroup.add(antenna);
@@ -1793,7 +1926,7 @@
             // or leaves a visible gap under the uphill corner. A tall
             // foundation extending well underground fills that gap from
             // any slope angle without needing to sample the terrain footprint.
-            const foundationMat = new THREE.MeshPhongMaterial({ color: 0x5f5348, flatShading: true });
+            const foundationMat = new THREE.MeshStandardMaterial({ color: 0x5f5348, flatShading: true });
             const foundation = new THREE.Mesh(new THREE.BoxGeometry(width * 0.96, 16.0, depth * 0.96), foundationMat);
             foundation.position.y = -8.0;
             bldgGroup.add(foundation);
@@ -2348,7 +2481,7 @@
         if (isBus) {
           // BEST Red Double-Decker / Single Bus
           const busGeom = new THREE.BoxGeometry(2.4, 2.6, 6.5);
-          const busMat = new THREE.MeshPhongMaterial({ color: 0xd90429, flatShading: true });
+          const busMat = new THREE.MeshStandardMaterial({ color: 0xd90429, flatShading: true });
           const bus = new THREE.Mesh(busGeom, busMat);
           bus.position.y = 1.4;
           trafficGroup.add(bus);
@@ -2358,7 +2491,7 @@
         } else {
           // Bajaj Auto Rickshaw (Yellow & Green)
           const autoGeom = new THREE.BoxGeometry(1.4, 1.3, 2.4);
-          const autoMat = new THREE.MeshPhongMaterial({ color: 0xfca311, flatShading: true });
+          const autoMat = new THREE.MeshStandardMaterial({ color: 0xfca311, flatShading: true });
           const autoBody = new THREE.Mesh(autoGeom, autoMat);
           autoBody.position.y = 0.8;
           trafficGroup.add(autoBody);
@@ -2503,7 +2636,7 @@
         }
         // Sporty Dual-Tone Red Body with Floating Black Roof & Honeycomb Grille
         const bodyGeom = new THREE.BoxGeometry(1.85, 0.62, 3.8);
-        const bodyMat = new THREE.MeshPhongMaterial({ color: 0xd90429, flatShading: true }); // Fiery Red
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xd90429, flatShading: true }); // Fiery Red
         const body = new THREE.Mesh(bodyGeom, bodyMat);
         body.position.y = 0.58;
         body.castShadow = true;
@@ -2515,7 +2648,7 @@
 
         // Floating Gloss-Black Glass Cabin
         const cabinGeom = new THREE.BoxGeometry(1.55, 0.58, 2.0);
-        const cabinMat = new THREE.MeshPhongMaterial({ color: 0x111827, flatShading: true });
+        const cabinMat = new THREE.MeshStandardMaterial({ color: 0x111827, flatShading: true });
         const cabin = new THREE.Mesh(cabinGeom, cabinMat);
         cabin.position.set(0, 1.12, -0.25);
         cabin.castShadow = true;
@@ -2662,7 +2795,7 @@
         }
         // Front White/Yellow Driver Cabin
         const cabGeom = new THREE.BoxGeometry(1.65, 1.25, 1.2);
-        const cabMat = new THREE.MeshPhongMaterial({ color: 0xf8f9fa, flatShading: true });
+        const cabMat = new THREE.MeshStandardMaterial({ color: 0xf8f9fa, flatShading: true });
         const cab = new THREE.Mesh(cabGeom, cabMat);
         cab.position.set(0, 0.95, 0.85);
         cab.castShadow = true;
@@ -2689,7 +2822,7 @@
 
         // Open Turquoise/Green Cargo Dala Bed
         const bedGeom = new THREE.BoxGeometry(1.72, 0.65, 2.2);
-        const bedMat = new THREE.MeshPhongMaterial({ color: 0x059669, flatShading: true }); // Indian Cargo Green
+        const bedMat = new THREE.MeshStandardMaterial({ color: 0x059669, flatShading: true }); // Indian Cargo Green
         const bed = new THREE.Mesh(bedGeom, bedMat);
         bed.position.set(0, 0.65, -0.75);
         bed.castShadow = true;
@@ -2748,7 +2881,7 @@
         // ====================================================================
         // 3. VAYU VOLT SPORTS SCOOTER (Electric Courier Scooter)
         // ====================================================================
-        const apronMat = new THREE.MeshPhongMaterial({ color: 0x10b981, flatShading: true }); // Neon Mint Electric
+        const apronMat = new THREE.MeshStandardMaterial({ color: 0x10b981, flatShading: true }); // Neon Mint Electric
         const apronGeom = new THREE.BoxGeometry(0.52, 0.85, 0.42);
         const apron = new THREE.Mesh(apronGeom, apronMat);
         apron.position.set(0, 0.78, 0.42);
@@ -2805,7 +2938,7 @@
         // ====================================================================
         // 4. PAWAN PEDALER BICYCLE (Eco Zen Delivery MTB)
         // ====================================================================
-        const frameMat = new THREE.MeshPhongMaterial({ color: 0x0284c7, flatShading: true });
+        const frameMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, flatShading: true });
         const tubeGeom = new THREE.CylinderGeometry(0.035, 0.035, 1.1, 8);
 
         const topTube = new THREE.Mesh(tubeGeom, frameMat);
@@ -3269,6 +3402,92 @@
       this.sunLight.shadow.mapSize.width = 2048;
       this.sunLight.shadow.mapSize.height = 2048;
       this.scene.add(this.sunLight);
+
+      // Cheap procedural sky/ground gradient env map: gives PBR materials
+      // (MeshStandardMaterial) a plausible ambient reflection/fill instead
+      // of the flat, direction-less look they get with no envMap at all.
+      this.envMap = this.createEnvironmentMap();
+      this.scene.environment = this.envMap;
+
+      this.initPostProcessing();
+    }
+
+    // A tiny gradient "sky" scene captured with PMREM equirect rendering.
+    // Not a real HDRI, but enough of a lit backdrop that MeshStandardMaterial
+    // surfaces pick up soft directional-looking ambient instead of shading
+    // as if lit from nowhere.
+    createEnvironmentMap() {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      pmrem.compileEquirectangularShader();
+
+      const skyScene = new THREE.Scene();
+      const skyGeo = new THREE.SphereGeometry(50, 16, 16);
+      const skyCanvas = document.createElement('canvas');
+      skyCanvas.width = 2;
+      skyCanvas.height = 256;
+      const ctx = skyCanvas.getContext('2d');
+      const grad = ctx.createLinearGradient(0, 0, 0, 256);
+      grad.addColorStop(0.0, '#bfe3ff');
+      grad.addColorStop(0.45, '#e8f4ff');
+      grad.addColorStop(0.55, '#cbd8c2');
+      grad.addColorStop(1.0, '#5c6650');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 2, 256);
+      const skyTex = new THREE.CanvasTexture(skyCanvas);
+      skyTex.mapping = THREE.EquirectangularReflectionMapping;
+      const skyMat = new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide });
+      skyScene.add(new THREE.Mesh(skyGeo, skyMat));
+
+      const rt = pmrem.fromScene(skyScene, 0.04);
+      pmrem.dispose();
+      return rt.texture;
+    }
+
+    initPostProcessing() {
+      this.composer = new THREE.EffectComposer(this.renderer);
+      this.composer.addPass(new THREE.RenderPass(this.scene, this.camera));
+
+      const size = new THREE.Vector2(window.innerWidth, window.innerHeight);
+      const pixelRatio = this.renderer.getPixelRatio();
+
+      // threshold 0.94 (was 0.86): under strong daylight, ordinary bright
+      // albedo — white walls, saturated vehicle paint, light props — was
+      // already crossing a 0.86 luminance threshold post-ACES-tonemap and
+      // blowing out into full-screen bloom halos, not just true light
+      // sources (headlights, glowing windows). Raising it keeps bloom for
+      // actual emissive/specular highlights without flaring flat-lit color.
+      this.bloomPass = new THREE.UnrealBloomPass(size, 0.4, 0.4, 0.94);
+      this.composer.addPass(this.bloomPass);
+
+      const VignetteShader = {
+        uniforms: { tDiffuse: { value: null }, offset: { value: 1.15 }, darkness: { value: 1.1 } },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform float offset;
+          uniform float darkness;
+          varying vec2 vUv;
+          void main() {
+            vec4 texel = texture2D(tDiffuse, vUv);
+            vec2 uv = (vUv - 0.5) * vec2(offset);
+            float vig = 1.0 - dot(uv, uv);
+            texel.rgb *= clamp(pow(vig, darkness), 0.0, 1.0) * 0.35 + 0.65;
+            gl_FragColor = texel;
+          }
+        `
+      };
+      this.vignettePass = new THREE.ShaderPass(VignetteShader);
+      this.composer.addPass(this.vignettePass);
+
+      // The composer's render targets don't carry the renderer's built-in
+      // MSAA (that only smooths the final canvas blit, which post-processing
+      // bypasses), so without this pass every edge in the scene reads as
+      // grainy/aliased once bloom sharpens the contrast — FXAA restores the
+      // smoothing that antialias:true on the renderer used to provide.
+      this.fxaaPass = new THREE.ShaderPass(THREE.FXAAShader);
+      this.fxaaPass.material.uniforms['resolution'].value.set(1 / (size.x * pixelRatio), 1 / (size.y * pixelRatio));
+      this.fxaaPass.renderToScreen = true;
+      this.composer.addPass(this.fxaaPass);
     }
 
     buildWorldAndScene() {
@@ -3310,6 +3529,7 @@
       }
       this.vehicle.resetToSpline(this.world.curve);
       this.vehicle.setHeadlightsActive(tod.night || tod.id === 'dusk');
+      this.applyWindowGlow(tod);
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[this.selectedDifficulty];
       this.maxOrderTimer = diffCfg.timeLimit;
@@ -3388,6 +3608,12 @@
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        if (this.composer) this.composer.setSize(window.innerWidth, window.innerHeight);
+        if (this.bloomPass) this.bloomPass.setSize(window.innerWidth, window.innerHeight);
+        if (this.fxaaPass) {
+          const pr = this.renderer.getPixelRatio();
+          this.fxaaPass.material.uniforms['resolution'].value.set(1 / (window.innerWidth * pr), 1 / (window.innerHeight * pr));
+        }
       });
 
       const onKey = (e, val) => {
@@ -3449,7 +3675,7 @@
 
       if (cargoType === 0) {
         // 1. Mumbai Dabbawala Tiered Stainless Steel Tiffin
-        const steelMat = new THREE.MeshPhongMaterial({ color: 0xe2e8f0, specular: 0xffffff, shininess: 80, flatShading: true });
+        const steelMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.3, metalness: 0.8, flatShading: true });
         const brassMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
         // 3 stacked tiffin tins
         for (let t = 0; t < 3; t++) {
@@ -3894,6 +4120,14 @@
       sound.playTone(800, 'sine', 0.08);
     }
 
+    applyWindowGlow(tod) {
+      if (!this.world || !this.world.windowMaterials) return;
+      const intensity = (tod.night || tod.id === 'dusk') ? 0.85 : (tod.id === 'dawn' ? 0.15 : 0.0);
+      for (const mat of this.world.windowMaterials) {
+        mat.emissiveIntensity = intensity;
+      }
+    }
+
     setTimeOfDay(todKey) {
       this.selectedTimeOfDay = todKey;
       const tod = CONFIG.TIME_OF_DAY[todKey] || CONFIG.TIME_OF_DAY.day;
@@ -3925,6 +4159,7 @@
       if (this.vehicle) {
         this.vehicle.setHeadlightsActive(tod.night || tod.id === 'dusk');
       }
+      this.applyWindowGlow(tod);
 
       const hudTod = document.getElementById('btn-hud-tod');
       const dockTod = document.getElementById('btn-dock-tod');
@@ -4837,7 +5072,11 @@
         this.camera.lookAt(0, 2, 0);
       }
 
-      this.renderer.render(this.scene, this.camera);
+      if (this.composer) {
+        this.composer.render();
+      } else {
+        this.renderer.render(this.scene, this.camera);
+      }
       requestAnimationFrame(this.animate.bind(this));
     }
   }
