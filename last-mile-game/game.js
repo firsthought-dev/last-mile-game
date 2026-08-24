@@ -162,6 +162,8 @@
       this.audioEl.preload = 'auto';
       this.audioEl.volume = 0.70;
       this.synthRadioTimer = null;
+      // Radio only auto-resumes if the player has explicitly turned it on before
+      this.userWantsRadio = localStorage.getItem('shiplyp_radio_pref') === 'on';
 
       this.audioEl.addEventListener('ended', () => {
         const title = this.nextTrack();
@@ -282,6 +284,8 @@
     toggleRadio() {
       this.ensure();
       this.radioPlaying = !this.radioPlaying;
+      this.userWantsRadio = this.radioPlaying;
+      localStorage.setItem('shiplyp_radio_pref', this.radioPlaying ? 'on' : 'off');
       if (this.radioPlaying) {
         const trk = this.realTracks[this.currentTrackIndex];
         this.audioEl.src = trk.url;
@@ -929,9 +933,9 @@
       const poleGeom = new THREE.CylinderGeometry(0.1, 0.12, 6.5, 6);
       const crossbarGeom = new THREE.BoxGeometry(1.8, 0.12, 0.12);
 
-      const trunkMat = new THREE.MeshLambertMaterial({ color: 0x3d2b1f, flatShading: true });
-      const rockMat = new THREE.MeshLambertMaterial({ color: 0x5a6065, flatShading: true });
-      const poleMat = new THREE.MeshLambertMaterial({ color: 0x4a4e52, flatShading: true });
+      const trunkMat = new THREE.MeshPhongMaterial({ color: 0x3d2b1f, flatShading: true });
+      const rockMat = new THREE.MeshPhongMaterial({ color: 0x5a6065, flatShading: true });
+      const poleMat = new THREE.MeshPhongMaterial({ color: 0x4a4e52, flatShading: true });
 
       const potholeGeom = new THREE.CircleGeometry(1.3, 12);
       potholeGeom.rotateX(-Math.PI / 2);
@@ -1136,7 +1140,7 @@
 
           const isPine = (this.prng.next() > 0.45);
           const leafColHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
-          const leavesMat = new THREE.MeshLambertMaterial({ color: leafColHex, flatShading: true });
+          const leavesMat = new THREE.MeshPhongMaterial({ color: leafColHex, flatShading: true });
 
           const tree = new THREE.Group();
           const trunk = new THREE.Mesh(trunkGeom, trunkMat);
@@ -1158,7 +1162,7 @@
             const bushDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(1.5, 5.0));
             const bushPos = pt.clone().addScaledVector(normal, bushDist);
             bushPos.y = calcTerrainY(bushPos, bushDist) + 0.5;
-            const bushMat = new THREE.MeshLambertMaterial({ color: season.grassLight, flatShading: true });
+            const bushMat = new THREE.MeshPhongMaterial({ color: season.grassLight, flatShading: true });
             const bush = new THREE.Mesh(bushGeom, bushMat);
             bush.position.copy(bushPos);
             this.foliageGroup.add(bush);
@@ -1189,7 +1193,7 @@
 
           const houseGroup = new THREE.Group();
           const bodyGeom = new THREE.BoxGeometry(5.4, 4.2, 6.0);
-          const bodyMat = new THREE.MeshLambertMaterial({ color: (i % 48 === 0 ? 0xef8354 : 0x8ecae6), flatShading: true });
+          const bodyMat = new THREE.MeshPhongMaterial({ color: (i % 48 === 0 ? 0xef8354 : 0x8ecae6), flatShading: true });
           const body = new THREE.Mesh(bodyGeom, bodyMat);
           body.position.y = 2.1;
           body.castShadow = true;
@@ -1226,14 +1230,14 @@
         if (isBus) {
           // BEST Red Double-Decker / Single Bus
           const busGeom = new THREE.BoxGeometry(2.4, 2.6, 6.5);
-          const busMat = new THREE.MeshLambertMaterial({ color: 0xd90429, flatShading: true });
+          const busMat = new THREE.MeshPhongMaterial({ color: 0xd90429, flatShading: true });
           const bus = new THREE.Mesh(busGeom, busMat);
           bus.position.y = 1.4;
           trafficGroup.add(bus);
         } else {
           // Bajaj Auto Rickshaw (Yellow & Green)
           const autoGeom = new THREE.BoxGeometry(1.4, 1.3, 2.4);
-          const autoMat = new THREE.MeshLambertMaterial({ color: 0xfca311, flatShading: true });
+          const autoMat = new THREE.MeshPhongMaterial({ color: 0xfca311, flatShading: true });
           const autoBody = new THREE.Mesh(autoGeom, autoMat);
           autoBody.position.y = 0.8;
           trafficGroup.add(autoBody);
@@ -1315,14 +1319,16 @@
     }
 
     getCamOffsets() {
+      // Pulled back + raised (slowroads-style) so roadside props recede instead of
+      // smearing past the periphery, which destroyed the sense of forward motion.
       if (this.vehicleType === 'chotahathi') {
-        return { dist: -7.5, height: 3.8, lookAhead: 30.0, lookHeight: 0.8 };
+        return { dist: -12.5, height: 6.2, lookAhead: 15.0, lookHeight: 1.0 };
       } else if (this.vehicleType === 'scooter') {
-        return { dist: -5.8, height: 2.8, lookAhead: 26.0, lookHeight: 0.7 };
+        return { dist: -10.5, height: 5.0, lookAhead: 12.5, lookHeight: 0.85 };
       } else if (this.vehicleType === 'cycle') {
-        return { dist: -5.6, height: 2.7, lookAhead: 26.0, lookHeight: 0.7 };
+        return { dist: -10.0, height: 4.8, lookAhead: 12.5, lookHeight: 0.85 };
       } else {
-        return { dist: -6.8, height: 3.0, lookAhead: 28.0, lookHeight: 0.8 };
+        return { dist: -11.5, height: 5.4, lookAhead: 13.0, lookHeight: 0.9 };
       }
     }
 
@@ -1336,7 +1342,7 @@
         // ====================================================================
         // Sporty Dual-Tone Red Body with Floating Black Roof & Honeycomb Grille
         const bodyGeom = new THREE.BoxGeometry(1.85, 0.62, 3.8);
-        const bodyMat = new THREE.MeshLambertMaterial({ color: 0xd90429, flatShading: true }); // Fiery Red
+        const bodyMat = new THREE.MeshPhongMaterial({ color: 0xd90429, flatShading: true }); // Fiery Red
         const body = new THREE.Mesh(bodyGeom, bodyMat);
         body.position.y = 0.58;
         body.castShadow = true;
@@ -1348,7 +1354,7 @@
 
         // Floating Gloss-Black Glass Cabin
         const cabinGeom = new THREE.BoxGeometry(1.55, 0.58, 2.0);
-        const cabinMat = new THREE.MeshLambertMaterial({ color: 0x111827, flatShading: true });
+        const cabinMat = new THREE.MeshPhongMaterial({ color: 0x111827, flatShading: true });
         const cabin = new THREE.Mesh(cabinGeom, cabinMat);
         cabin.position.set(0, 1.12, -0.25);
         cabin.castShadow = true;
@@ -1424,7 +1430,7 @@
         // ====================================================================
         // Front White/Yellow Driver Cabin
         const cabGeom = new THREE.BoxGeometry(1.65, 1.25, 1.2);
-        const cabMat = new THREE.MeshLambertMaterial({ color: 0xf8f9fa, flatShading: true });
+        const cabMat = new THREE.MeshPhongMaterial({ color: 0xf8f9fa, flatShading: true });
         const cab = new THREE.Mesh(cabGeom, cabMat);
         cab.position.set(0, 0.95, 0.85);
         cab.castShadow = true;
@@ -1451,7 +1457,7 @@
 
         // Open Turquoise/Green Cargo Dala Bed
         const bedGeom = new THREE.BoxGeometry(1.72, 0.65, 2.2);
-        const bedMat = new THREE.MeshLambertMaterial({ color: 0x059669, flatShading: true }); // Indian Cargo Green
+        const bedMat = new THREE.MeshPhongMaterial({ color: 0x059669, flatShading: true }); // Indian Cargo Green
         const bed = new THREE.Mesh(bedGeom, bedMat);
         bed.position.set(0, 0.65, -0.75);
         bed.castShadow = true;
@@ -1509,7 +1515,7 @@
         // ====================================================================
         // 3. VAYU VOLT SPORTS SCOOTER (Electric Courier Scooter)
         // ====================================================================
-        const apronMat = new THREE.MeshLambertMaterial({ color: 0x10b981, flatShading: true }); // Neon Mint Electric
+        const apronMat = new THREE.MeshPhongMaterial({ color: 0x10b981, flatShading: true }); // Neon Mint Electric
         const apronGeom = new THREE.BoxGeometry(0.52, 0.85, 0.42);
         const apron = new THREE.Mesh(apronGeom, apronMat);
         apron.position.set(0, 0.78, 0.42);
@@ -1566,7 +1572,7 @@
         // ====================================================================
         // 4. PAWAN PEDALER BICYCLE (Eco Zen Delivery MTB)
         // ====================================================================
-        const frameMat = new THREE.MeshLambertMaterial({ color: 0x0284c7, flatShading: true });
+        const frameMat = new THREE.MeshPhongMaterial({ color: 0x0284c7, flatShading: true });
         const tubeGeom = new THREE.CylinderGeometry(0.035, 0.035, 1.1, 8);
 
         const topTube = new THREE.Mesh(tubeGeom, frameMat);
@@ -1683,7 +1689,9 @@
             this.speed += this.brake * dt * 2.0;
             if (this.speed > 0) this.speed = 0;
           } else {
-            this.speed += (effectiveMaxSpeed - this.speed) * (1 - Math.exp(-1.4 * dt));
+            // Softened from -1.4: the old curve hit ~157 km/h in ~2s from standstill,
+            // far too fast for the chase cam to read as forward motion.
+            this.speed += (effectiveMaxSpeed - this.speed) * (1 - Math.exp(-0.42 * dt));
           }
         } else if (keys.down || keys.s) {
           // DOWN / S: BRAKE WHEN MOVING FORWARD, REVERSE WHEN STOPPED
@@ -1874,21 +1882,26 @@
               this.lateralVelocity = pushSign * Math.max(4.0, Math.abs(this.lateralVelocity));
               this.steerAngle += (Math.random() - 0.5) * 0.4;
 
-              // Damage proportional to impact speed
-              const dmg = Math.min(35, Math.max(10, Math.round(Math.max(2.0, impactSpeed) * 0.8)));
-              this.health = Math.max(0, this.health - dmg);
-              sound.playCrash();
+              // Damage/toast/sound only once per impact — cooldown prevents spam while pinned against the obstacle
+              if (!obs.hitRecently) {
+                obs.hitRecently = true;
+                setTimeout(() => { obs.hitRecently = false; }, 800);
 
-              const app = document.getElementById('game-app');
-              if (app) {
-                app.classList.add('screen-shake');
-                setTimeout(() => app.classList.remove('screen-shake'), 400);
-              }
+                const dmg = Math.min(35, Math.max(10, Math.round(Math.max(2.0, impactSpeed) * 0.8)));
+                this.health = Math.max(0, this.health - dmg);
+                sound.playCrash();
 
-              if (window.game) {
-                const typeName = obs.type === 'tree' ? 'TREE' : (obs.type === 'rock' ? 'BOULDER' : (obs.type === 'building' ? 'BUILDING' : 'POLE'));
-                window.game.showScorePopup(-dmg, `COLLISION: ${typeName} (-${dmg}% Health)`);
-                window.game.updateHUDStats();
+                const app = document.getElementById('game-app');
+                if (app) {
+                  app.classList.add('screen-shake');
+                  setTimeout(() => app.classList.remove('screen-shake'), 400);
+                }
+
+                if (window.game) {
+                  const typeName = obs.type === 'tree' ? 'TREE' : (obs.type === 'rock' ? 'BOULDER' : (obs.type === 'building' ? 'BUILDING' : 'POLE'));
+                  window.game.showScorePopup(-dmg, `COLLISION: ${typeName} (-${dmg}% Health)`);
+                  window.game.updateHUDStats();
+                }
               }
             }
           }
@@ -2421,14 +2434,13 @@
 
     toggleMute() {
       const isMuted = sound.toggleMute();
-      const icon = isMuted ? '🔇' : '🔊';
       const hudBtn = document.getElementById('btn-hud-sound');
       const dockBtn = document.getElementById('btn-dock-sound');
       const hubBtn = document.getElementById('btn-hub-mute');
-      if (hudBtn) hudBtn.textContent = icon;
-      if (dockBtn) dockBtn.textContent = icon;
-      if (hubBtn) hubBtn.innerHTML = `<span>${icon}</span> <span>${isMuted ? 'UNMUTE [M]' : 'MUTE [M]'}</span>`;
-      this.showScorePopup(0, isMuted ? '🔇 AUDIO MUTED' : '🔊 SOUND UNMUTED');
+      if (hudBtn) hudBtn.textContent = isMuted ? 'UNMUTE' : 'MUTE';
+      if (dockBtn) dockBtn.textContent = isMuted ? 'UNMUTE' : 'AUDIO';
+      if (hubBtn) hubBtn.innerHTML = `<span>${isMuted ? 'UNMUTE [M]' : 'MUTE [M]'}</span>`;
+      this.showScorePopup(0, isMuted ? 'AUDIO MUTED' : 'SOUND UNMUTED');
     }
 
     updateClimateHUD() {
@@ -2731,8 +2743,8 @@
       sound.ensure();
       sound.playTone(523, 'sine', 0.2);
 
-      // Auto-start 90s Dhaba FM Cassette Radio
-      if (!sound.radioPlaying && !sound.muted) {
+      // Resume 90s Dhaba FM Cassette Radio only if the player previously opted in
+      if (!sound.radioPlaying && !sound.muted && sound.userWantsRadio) {
         sound.toggleRadio();
         const btnPlay = document.getElementById('btn-radio-play');
         const radioCard = document.getElementById('cassette-radio-card');
@@ -3131,16 +3143,25 @@
         this.camera.lookAt(this.camLookTarget);
       } else {
         // Slow Roads Elevated Third-Person Chase Cam
-        const camCfg = this.vehicle.getCamOffsets ? this.vehicle.getCamOffsets() : { dist: -6.8, height: 3.0, lookAhead: 28.0, lookHeight: 0.8 };
+        const camCfg = this.vehicle.getCamOffsets ? this.vehicle.getCamOffsets() : { dist: -11.5, height: 5.4, lookAhead: 13.0, lookHeight: 0.9 };
         const targetCamPos = carPos.clone().addScaledVector(carForward, camCfg.dist).add(new THREE.Vector3(0, camCfg.height, 0));
         this.camera.position.lerp(targetCamPos, 0.14);
+
+        // Never let the pulled-back camera sink into a hill behind the car.
+        if (this.world && this.world.getRawTerrainHeight) {
+          const groundY = this.world.getRawTerrainHeight(this.camera.position.x, this.camera.position.z);
+          const minY = Math.max(groundY, carPos.y) + 2.2;
+          if (this.camera.position.y < minY) this.camera.position.y = minY;
+        }
 
         const rawLookTarget = carPos.clone().addScaledVector(carForward, camCfg.lookAhead).add(new THREE.Vector3(0, camCfg.lookHeight, 0));
         this.camLookTarget.lerp(rawLookTarget, 0.2);
         this.camera.lookAt(this.camLookTarget);
 
+        // Gentler speed-FOV stretch: the old +14 widened the periphery exactly when
+        // it was already overwhelming, worsening the "world rushing at you" read.
         const speedRatio = Math.abs(this.vehicle.speed) / this.vehicle.maxSpeed;
-        const targetFOV = 58 + speedRatio * 14.0;
+        const targetFOV = 60 + speedRatio * 6.0;
         this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFOV, 0.08);
         this.camera.updateProjectionMatrix();
       }

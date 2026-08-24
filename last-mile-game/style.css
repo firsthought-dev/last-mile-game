@@ -819,28 +819,32 @@ html, body {
 .dock-icons-right {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .dock-icon {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 10px;
-  width: 32px;
-  height: 32px;
-  display: flex;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 5px 10px;
+  height: 26px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.0rem;
+  font-family: var(--font-mono);
+  font-size: 0.60rem;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.75);
   cursor: pointer;
-  opacity: 0.7;
-  transition: all 0.18s ease;
+  white-space: nowrap;
+  transition: all 0.15s ease;
 }
 
 .dock-icon:hover {
-  opacity: 1;
-  background: rgba(255,255,255,0.10);
-  border-color: rgba(255,255,255,0.16);
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.20);
+  color: #ffffff;
   transform: translateY(-1px);
 }
 
