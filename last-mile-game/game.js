@@ -1744,7 +1744,9 @@
       const tangent = world.curve.getTangentAt(this.splineProgress).normalize();
       const up = new THREE.Vector3(0, 1, 0);
       // Road right vector (points towards right shoulder)
-      const roadRight = new THREE.Vector3().crossVectors(tangent, up).negate().normalize();
+      // Right = Forward x Up in Three.js right-handed coords. The old .negate()
+      // made this point LEFT, so A/D and every lateral offset were mirrored.
+      const roadRight = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
       // Apply lateral displacement across road width
       const vehiclePos = currentPos.clone().addScaledVector(roadRight, this.lateralOffset);
@@ -1763,7 +1765,9 @@
       this.mesh.lookAt(lookTarget);
 
       if (Math.abs(this.steerAngle) > 0.001) {
-        this.mesh.rotateY(-this.steerAngle);
+        // +Y rotation swings +Z toward +X (the model's left), so a positive
+        // steerAngle (from A / left) must yaw positively to visually turn left.
+        this.mesh.rotateY(this.steerAngle);
       }
 
       // Dynamic Chassis Pitch (dive on braking, squat on acceleration)
@@ -2192,7 +2196,7 @@
       if (!this.vehicle || !this.world) return;
       const carPos = this.vehicle.mesh.position.clone();
       const carForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
-      const carRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
+      const carRight = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
 
       // Find nearest delivery target
       let nearestTarget = null;
@@ -3197,7 +3201,7 @@
 
       if (nextTarget) {
         const toTarget = nextTarget.pos.clone().sub(carPos);
-        const sideDot = new THREE.Vector3(1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion).dot(toTarget);
+        const sideDot = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion).dot(toTarget);
         const sideText = sideDot > 0 ? 'RIGHT' : 'LEFT';
         const distMeters = Math.round(minDistance);
 
@@ -3234,7 +3238,7 @@
       ctx.moveTo(6, h / 2); ctx.lineTo(w - 6, h / 2);
       ctx.stroke();
 
-      const carRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
+      const carRight = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
 
       // Draw Spline Road Ahead on Radar
       if (this.world.curve) {
