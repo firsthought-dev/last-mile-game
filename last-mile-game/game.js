@@ -489,16 +489,58 @@
       hard: { id: 'hard', name: 'Rush Hour Express', timeLimit: 22.0, minHouseDist: 10.0, maxHouseDist: 25.0, tossRadius: 3.6, payoutMult: 2.5 }
     },
 
-    ORDERS: [
-      { id: 101, name: 'Deshmukh Chawl (Doorstep 3A)', cargo: '2x Hot Dabbawala Lunch & Buttermilk', reward: 65 },
-      { id: 102, name: 'Bandra Seaside Bungalow', cargo: 'Irani Chai, Maska Bun & Pastries', reward: 85 },
-      { id: 103, name: 'Nariman Point Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
-      { id: 104, name: 'Kulkarni Wada (Behind Banyan Tree)', cargo: 'Festival Sweets & Kaju Katli Gift', reward: 75 },
-      { id: 105, name: 'Civil Lines Heritage Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 60 },
-      { id: 106, name: 'Howrah Riverfront Residency', cargo: 'Traditional Biryani & Rasgullas', reward: 95 },
-      { id: 107, name: 'Koramangala Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
-      { id: 108, name: 'Joshi Kaku Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
-    ]
+    ORDERS_BY_CITY: {
+      mumbai: [
+        { id: 101, name: 'Deshmukh Chawl (Doorstep 3A)', cargo: '2x Hot Dabbawala Lunch & Buttermilk', reward: 65 },
+        { id: 102, name: 'Bandra Seaside Bungalow', cargo: 'Irani Chai, Maska Bun & Pastries', reward: 85 },
+        { id: 103, name: 'Nariman Point Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
+        { id: 104, name: 'Kulkarni Wada (Behind Banyan Tree)', cargo: 'Festival Sweets & Kaju Katli Gift', reward: 75 },
+        { id: 105, name: 'Worli Sea Face Residency', cargo: 'Vada Pav & Cutting Chai Combo', reward: 60 },
+        { id: 106, name: 'Dadar Market Chawl', cargo: 'Traditional Thali & Modak Box', reward: 95 },
+        { id: 107, name: 'Powai Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
+        { id: 108, name: 'Matunga Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+      ],
+      delhi: [
+        { id: 201, name: 'Chandni Chowk Haveli', cargo: 'Hot Parathas & Lassi Kulhad', reward: 65 },
+        { id: 202, name: 'Hauz Khas Village Flat', cargo: 'Butter Chicken & Naan Tiffin', reward: 85 },
+        { id: 203, name: 'Connaught Place Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
+        { id: 204, name: 'Civil Lines Heritage Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 75 },
+        { id: 205, name: 'Karol Bagh Market Kothi', cargo: 'Festival Sweets & Kaju Katli Gift', reward: 60 },
+        { id: 206, name: 'Lodhi Colony Residency', cargo: 'Chole Bhature & Sweet Lassi', reward: 95 },
+        { id: 207, name: 'Vasant Vihar Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
+        { id: 208, name: 'Nizamuddin Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+      ],
+      kolkata: [
+        { id: 301, name: 'College Street Bonedi Bari', cargo: '2x Hot Kathi Rolls & Buttermilk', reward: 65 },
+        { id: 302, name: 'Howrah Riverfront Residency', cargo: 'Traditional Biryani & Rasgullas', reward: 95 },
+        { id: 303, name: 'Park Street Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
+        { id: 304, name: 'Shobhabazar Rajbari Courtyard', cargo: 'Festival Sweets & Sandesh Gift', reward: 75 },
+        { id: 305, name: 'Ballygunge Heritage Kothi', cargo: 'Morning Gazette & Darjeeling Tea', reward: 60 },
+        { id: 306, name: 'Salt Lake Sector Flat', cargo: 'Fish Curry & Steamed Rice Tiffin', reward: 85 },
+        { id: 307, name: 'Alipore Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
+        { id: 308, name: 'Kumartuli Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+      ],
+      pune: [
+        { id: 401, name: 'Sadashiv Peth Wada', cargo: '2x Hot Misal Pav & Buttermilk', reward: 65 },
+        { id: 402, name: 'Koregaon Park Bungalow', cargo: 'Irani Chai, Maska Bun & Pastries', reward: 85 },
+        { id: 403, name: 'Hinjewadi Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
+        { id: 404, name: 'Kulkarni Wada (Behind Banyan Tree)', cargo: 'Festival Sweets & Kaju Katli Gift', reward: 75 },
+        { id: 405, name: 'Deccan Gymkhana Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 60 },
+        { id: 406, name: 'Shaniwar Peth Residency', cargo: 'Puran Poli & Sol Kadhi Tiffin', reward: 95 },
+        { id: 407, name: 'Baner Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
+        { id: 408, name: 'Sadashiv Peth Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+      ],
+      bangalore: [
+        { id: 501, name: 'Malleswaram Doorstep', cargo: '2x Hot Masala Dosa & Buttermilk', reward: 65 },
+        { id: 502, name: 'Indiranagar Bungalow', cargo: 'Filter Kaapi & Bun Maska', reward: 85 },
+        { id: 503, name: 'Whitefield Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
+        { id: 504, name: 'Basavanagudi Wada Courtyard', cargo: 'Festival Sweets & Mysore Pak Gift', reward: 75 },
+        { id: 505, name: 'Jayanagar Heritage Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 60 },
+        { id: 506, name: 'HSR Layout Residency', cargo: 'Bisi Bele Bath & Rasam Tiffin', reward: 95 },
+        { id: 507, name: 'Koramangala Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
+        { id: 508, name: 'Basavanagudi Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+      ]
+    }
   };
 
   // --------------------------------------------------------------------------
@@ -1511,8 +1553,9 @@
 
         // 7. 3D Procedural Forest Cabins & Mountain Cottages (Delivery Drop Points)
         if (i % 24 === 0) {
-          const orderIdx = Math.floor(i / 24) % CONFIG.ORDERS.length;
-          const order = CONFIG.ORDERS[orderIdx];
+          const cityOrders = CONFIG.ORDERS_BY_CITY[this.cityKey] || CONFIG.ORDERS_BY_CITY.mumbai;
+          const orderIdx = Math.floor(i / 24) % cityOrders.length;
+          const order = cityOrders[orderIdx];
           const houseSide = (i % 48 === 0 ? 1 : -1);
           
           const houseDist = houseSide * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(diffCfg.minHouseDist, diffCfg.maxHouseDist));
@@ -2458,7 +2501,8 @@
     }
 
     updateActiveOrderCard() {
-      const order = CONFIG.ORDERS[this.activeOrderIndex % CONFIG.ORDERS.length];
+      const cityOrders = CONFIG.ORDERS_BY_CITY[this.selectedCity] || CONFIG.ORDERS_BY_CITY.mumbai;
+      const order = cityOrders[this.activeOrderIndex % cityOrders.length];
       const diffCfg = CONFIG.DIFFICULTY_TIERS[this.selectedDifficulty];
 
       const idEl = document.getElementById('order-id-label');
@@ -2582,7 +2626,8 @@
 
       // Differentiated 3D Cargo Models based on active order
       const parcelGroup = new THREE.Group();
-      const orderIdx = this.activeOrderIndex % CONFIG.ORDERS.length;
+      const cityOrdersForCargo = CONFIG.ORDERS_BY_CITY[this.selectedCity] || CONFIG.ORDERS_BY_CITY.mumbai;
+      const orderIdx = this.activeOrderIndex % cityOrdersForCargo.length;
       const cargoType = orderIdx % 4; // 0: Dabba, 1: Pizza Box, 2: Wooden Crate, 3: Express Parcel
 
       if (cargoType === 0) {
