@@ -1106,15 +1106,48 @@
       const grassLight = new THREE.Color(season.grassLight);
       const cliffCol = new THREE.Color(season.cliffColor);
 
+      // Coarse sample of the road's own elevation. The ribbon terrain
+      // explicitly carves an embankment cutting for the road (so raw
+      // terrain can be far above the actual road bed on hills), but this
+      // background floor has no such awareness — without a clamp against
+      // nearby road height, it can rise up and bury the road/camera on
+      // any hilly stretch. Sampling every 10th spline node keeps this
+      // cheap (a few dozen points) while still catching nearby hills.
+      const roadSamples = [];
+      for (let i = 0; i < this.splineNodes.length; i += 10) {
+        roadSamples.push(this.splineNodes[i]);
+      }
+
       const pos = geom.attributes.position;
       const colors = [];
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i);
         const z = pos.getZ(i);
-        // Sit a hair below the road-ribbon terrain so the two meshes
-        // never z-fight where they overlap near the road.
         const rawH = this.getRawTerrainHeight(x, z);
-        pos.setY(i, rawH - 0.3);
+
+        let nearestDistSq = Infinity;
+        let nearestRoadY = Infinity;
+        for (let s = 0; s < roadSamples.length; s++) {
+          const dx = x - roadSamples[s].x;
+          const dz = z - roadSamples[s].z;
+          const dSq = dx * dx + dz * dz;
+          if (dSq < nearestDistSq) {
+            nearestDistSq = dSq;
+            nearestRoadY = roadSamples[s].y;
+          }
+        }
+
+        // Sit a hair below the road-ribbon terrain so the two meshes
+        // never z-fight where they overlap near the road. Within 200m of
+        // any road sample, additionally clamp to never exceed that road's
+        // elevation (minus a safety margin) — beyond that, distance/fog
+        // hides any inaccuracy so raw terrain height alone is fine, and
+        // natural valleys are still allowed to dip below this clamp.
+        let finalY = rawH - 0.3;
+        if (nearestDistSq < 200.0 * 200.0) {
+          finalY = Math.min(finalY, nearestRoadY - 2.0);
+        }
+        pos.setY(i, finalY);
 
         if (rawH > 22.0) {
           colors.push(cliffCol.r, cliffCol.g, cliffCol.b);
