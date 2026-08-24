@@ -1801,3 +1801,148 @@ html, body {
   transform: translateY(-2px);
   box-shadow: 0 12px 30px rgba(255, 159, 28, 0.5);
 }
+
+/* ==========================================================================
+   RESPONSIVE DESIGN: Mobile, Tablet, Desktop Breakpoints
+   ========================================================================== */
+
+/* Mobile: < 640px */
+@media (max-width: 640px) {
+  /* Modal and dialog sizing */
+  .modal-content, .dispatch-hub {
+    max-width: 95vw;
+    margin: 20px auto;
+    padding: 16px;
+  }
+
+  /* Button grids: stack to 2 columns on mobile */
+  .hub-vehicle-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .hub-difficulty-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .hub-city-pills {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Reduce button sizes on mobile */
+  .vehicle-card-btn, .city-pill-btn, .diff-card-btn {
+    padding: 8px 6px;
+  }
+
+  .vehicle-card-title, .city-pill-name, .diff-card-title {
+    font-size: 0.65rem;
+  }
+
+  .vehicle-card-stat {
+    font-size: 0.55rem;
+  }
+
+  /* Road surface buttons: horizontal scroll on mobile */
+  .dock-sq-btn {
+    min-width: 70px;
+    font-size: 0.65rem;
+    padding: 6px 8px;
+  }
+
+  /* Section labels */
+  .hub-section-label {
+    font-size: 0.75rem;
+  }
+
+  /* Dock panel buttons */
+  .dock-tab-btn {
+    font-size: 0.65rem;
+    padding: 8px 10px;
+  }
+
+  /* Modal label text */
+  .dock-panel-label {
+    font-size: 0.70rem;
+    letter-spacing: 0.5px;
+  }
+}
+
+/* Tablet: 641px - 1024px */
+@media (min-width: 641px) and (max-width: 1024px) {
+  /* Modal sizing */
+  .modal-content, .dispatch-hub {
+    max-width: 90vw;
+    max-height: 85vh;
+  }
+
+  /* Button grids: 3 columns on tablet */
+  .hub-vehicle-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .hub-difficulty-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  /* Dock panel: horizontal scroll for options */
+  .dock-panel-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .dock-panel-container::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Button sizing for tablet */
+  .vehicle-card-btn, .city-pill-btn, .diff-card-btn {
+    padding: 10px 8px;
+  }
+
+  .vehicle-card-title, .city-pill-name {
+    font-size: 0.68rem;
+  }
+
+  .dock-sq-btn {
+    min-width: 75px;
+    font-size: 0.68rem;
+  }
+
+  .dock-tab-btn {
+    font-size: 0.70rem;
+    padding: 10px 12px;
+  }
+}
+
+/* Desktop: > 1024px */
+@media (min-width: 1025px) {
+  /* Default desktop layout (already optimized above) */
+  .hub-vehicle-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .hub-difficulty-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Ultra-wide: > 1400px (optional tweaks for very wide screens) */
+@media (min-width: 1400px) {
+  .dispatch-hub {
+    max-width: 1200px;
+  }
+
+  .hub-vehicle-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .dock-sq-btn {
+    min-width: 90px;
+    font-size: 0.75rem;
+  }
+}
