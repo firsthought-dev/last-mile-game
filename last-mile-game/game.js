@@ -1278,11 +1278,14 @@
         tex.colorSpace = THREE.SRGBColorSpace;
         return tex;
       })();
-      const SKYSCRAPER_PALETTE = [0xc9d2db, 0xb8c4d9, 0xd8cdb8, 0xa9b8c2, 0xcfd8c4, 0xe0dccf];
-      // Low/mid-rise shophouse & apartment colors — the vivid pastel washes
-      // (teal, mustard, terracotta) common on Indian street-level buildings,
-      // distinct from the muted glass/concrete high-rise palette above.
-      const LOWRISE_PALETTE = [0xe8b04b, 0xd97a5f, 0x6fa8a0, 0xd9c9a8, 0x8fb0c9, 0xc97b8f, 0xb8c98f];
+      // Single fixed glass tint for every skyscraper — previously a random
+      // pick from a 6-color palette, which occasionally read as an odd
+      // stray-colored blob poking through the treeline at a distance.
+      const SKYSCRAPER_GLASS_COLOR = 0x9fc4d8;
+      // Low/mid-rise shophouse & apartment colors, tightened to a small,
+      // cohesive sandstone/cream set (was 7 widely varied vivid hues —
+      // same "random blob through the trees" problem as the skyscrapers).
+      const LOWRISE_PALETTE = [0xd9c9a8, 0xe8b04b, 0xc9a876];
 
       const sampledPoints = this.curve.getSpacedPoints(800);
 
@@ -1574,21 +1577,24 @@
             // not a uniform wall of skyscrapers. Weight the roll heavily
             // toward short buildings so towers read as landmarks.
             const heightRoll = this.prng.next();
-            let height, palette;
+            let height, isGlass;
             if (heightRoll < 0.55) {
               height = this.prng.range(8.0, 20.0);
-              palette = LOWRISE_PALETTE;
+              isGlass = false;
             } else if (heightRoll < 0.85) {
               height = this.prng.range(20.0, 40.0);
-              palette = this.prng.next() > 0.5 ? LOWRISE_PALETTE : SKYSCRAPER_PALETTE;
+              isGlass = this.prng.next() > 0.5;
             } else {
               height = this.prng.range(40.0, 90.0);
-              palette = SKYSCRAPER_PALETTE;
+              isGlass = true;
             }
             const isLowRise = height < 20.0;
 
-            const bodyColor = palette[Math.floor(this.prng.range(0, palette.length))];
-            const accentColor = palette[Math.floor(this.prng.range(0, palette.length))];
+            // Skyscrapers all share one fixed glass tint (shiny/reflective
+            // via the material below); low-rise buildings still draw from
+            // a small cohesive palette for street-level variety.
+            const bodyColor = isGlass ? SKYSCRAPER_GLASS_COLOR : LOWRISE_PALETTE[Math.floor(this.prng.range(0, LOWRISE_PALETTE.length))];
+            const accentColor = isGlass ? SKYSCRAPER_GLASS_COLOR : LOWRISE_PALETTE[Math.floor(this.prng.range(0, LOWRISE_PALETTE.length))];
 
             const bldgGroup = new THREE.Group();
 
@@ -1600,6 +1606,21 @@
               const tex = skyscraperWindowTex.clone();
               tex.repeat.set(Math.max(1, Math.round(w / 3.2)), Math.max(1, Math.round(h / 4.0)));
               tex.needsUpdate = true;
+              if (isGlass) {
+                // Shiny reflective glass curtain-wall look: high shininess/
+                // specular highlight, slight transparency, cool blue tint.
+                return new THREE.MeshPhongMaterial({
+                  color,
+                  flatShading: true,
+                  emissiveMap: tex,
+                  emissive: 0xffffff,
+                  emissiveIntensity: 0.85,
+                  specular: 0xffffff,
+                  shininess: 160,
+                  transparent: true,
+                  opacity: 0.92
+                });
+              }
               return new THREE.MeshPhongMaterial({
                 color,
                 flatShading: true,
