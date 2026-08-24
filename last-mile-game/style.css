@@ -1030,18 +1030,24 @@ html, body {
 }
 
 .dock-sq-btn {
-  width: 42px;
-  height: 42px;
+  min-width: 80px;
+  padding: 8px 12px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-top-color: rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   color: var(--text-muted);
-  font-size: 1.2rem;
+  font-size: 0.70rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.5px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: all 0.2s ease;
 }
 
@@ -1278,6 +1284,10 @@ html, body {
   font-weight: 700;
   color: #fff;
   letter-spacing: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* Vehicle Fleet Grid */
@@ -1328,12 +1338,20 @@ html, body {
   font-size: 0.72rem;
   font-weight: 700;
   color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .vehicle-card-stat {
   font-family: var(--font-mono);
   font-size: 0.62rem;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* Difficulty Selector Grid */
@@ -1392,6 +1410,10 @@ html, body {
   font-size: 0.74rem;
   font-weight: 800;
   color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .diff-card-stat {
