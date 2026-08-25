@@ -616,7 +616,63 @@ measuring curvature/grade rather than by eye. All 17 pre-existing
 was proved rather than assumed — reintroducing the old +0.323 offset
 in-memory drove it to FAIL at 0.3309u, and restoring returned it to PASS.
 
-⚠️ **Pre-existing, unrelated failure found while verifying:**
+### B17. B16 was only half a fix — the seam came back as a ragged tear
+
+**B16 traded a gap for a z-fight, and its check couldn't see the
+difference.** After B16 the road no longer floated, but the seam still
+tore visibly — a sawtooth notching along the shoulder. B16's guard passed
+at 0.0084u throughout, because **it compared the road verge against the
+`groundHeightAt()` function rather than against the terrain mesh's actual
+rendered geometry.** Two meshes can both call the same formula and still
+not touch.
+
+**Root causes (three, all "same formula, different geometry"):**
+1. **Different longitudinal sampling.** `createRoadMesh` used
+   `getSpacedPoints(1200)`, `createTerrainMesh` used `getSpacedPoints(800)`.
+   The two ribbons evaluated the same height function at *different points
+   along the curve*, so they coincided only where samples happened to line
+   up and diverged in between. This is precisely the A14–A18 (`25f1950`)
+   lesson — "referenced against differently-spaced road samples" — which
+   B16 reintroduced in a new place.
+2. **No terrain vertex at the road's edge.** The road ribbon's outer edge
+   sits at `ROAD_WIDTH*0.5 + 1.8 = 5.5`, but the terrain's lateral slices
+   ran `… −9.0, −roadHalf, roadHalf, 9.0 …` with nothing at 5.5, so the
+   road edge landed mid-triangle on a 5.15m-wide span.
+3. **Banked vs unbanked offset direction.** The verge was offset along
+   `bankedNormal` while the terrain offsets along the plain `normal`, so on
+   every banked curve the two edges weren't even on the same 3D line.
+
+Measured against the rendered mesh (raycast, not formula): **94.6% of the
+verge sat within ±5mm of the terrain — inside the z-fighting band — and
+34 of 801 samples had terrain poking *above* the road.** That is the
+sawtooth.
+
+**Fix.** Made the two ribbons agree by construction, then lifted the road
+off the ground so it wins the depth test deterministically:
+- `CONFIG.ROAD_MESH_SEGMENTS` (1200) now drives **both** meshes.
+- `CONFIG.ROAD_SHOULDER_WIDTH` (1.8) is shared, and the terrain carries
+  lateral slices at exactly `±(ROAD_WIDTH*0.5 + ROAD_SHOULDER_WIDTH)`.
+- The verge offsets along the **unbanked** normal, matching the terrain.
+- `CONFIG.ROAD_VERGE_LIFT` (0.02) raises the verge 2cm. Coplanar is a bug,
+  not a goal: a road slab rests *on* the ground.
+
+**Verified:** terrain-above-road **0.0000u** and road-above-terrain exactly
+**0.0200u** across 344 raycast samples — the gap is now *precisely* the
+intended epsilon everywhere, which only happens if the meshes agree
+exactly. Same on Pune (steepest/most winding). Visually clean at grazing
+angles on the sharpest curve and steepest grade.
+
+**Lesson (added to Pattern 1):** verifying a geometry fix against the
+*formula* proves nothing about the *rendered surface*. Raycast the actual
+mesh. And when two meshes must meet, matching the formula is not enough —
+they must share sampling rate, share a vertex row at the seam, and share
+the offset basis.
+
+⚠️ **Pre-existing, unrelated failures found while verifying** (both
+reproduced identically against committed HEAD in an isolated copy, on the
+same city/seed, so neither is caused by B16/B17):
+- `rocks-clear-of-houses` on Pune: 2 overlaps, worst −5.13u.
+- 
 `crosser-height-matches-formula` reports a stable 0.232u drift. It is
 **not** the documented flaky false-positive (that varies run to run; this
 is bit-identical across 5 runs) and it is **not** caused by this fix —
@@ -657,6 +713,31 @@ just to prop placement. Any vertex that has to meet the ground — road
 verges especially — must take its height from `groundHeightAt()`, because
 a "reasonable-looking" constant offset silently disagrees with the terrain
 everywhere at once rather than failing loudly in one spot.
+
+**B17 sharpened it again, and this is the important half:** calling the
+same function is **not sufficient** for two meshes to meet. B16 did call
+the shared function and the seam still tore, because the road sampled the
+curve 1200× and the terrain 800×, had no terrain vertex at the road's edge
+lateral distance, and offset along a banked vs unbanked normal. For two
+surfaces to actually touch they must agree on **all four**:
+1. the height function (`groundHeightAt`),
+2. the longitudinal sampling rate (`CONFIG.ROAD_MESH_SEGMENTS`),
+3. a shared vertex row at the seam's lateral distance
+   (`CONFIG.ROAD_SHOULDER_WIDTH`),
+4. the offset basis (both unbanked at the seam).
+
+And **exactly coplanar is its own bug** — it z-fights and lets the lower
+surface poke through in a ragged sawtooth. Give the upper surface a small
+deterministic lift (`CONFIG.ROAD_VERGE_LIFT`).
+
+**Verification lesson:** B16's guard passed at 0.0084u while the seam was
+visibly torn, because it measured the verge against the height *function*
+instead of the terrain *mesh*. A geometry fix must be verified by
+raycasting the rendered geometry. (When you do raycast a ribbon that spans
+±40m laterally, take the hit **nearest** the sample, not the first/highest
+— at a hairpin the ribbon folds over itself and the top hit can be a
+different stretch of road 22u away, which briefly looked like a
+catastrophic regression on Pune until corrected.)
 
 ### Pattern 2: "vehicle sinks into / floats above the road" (3 occurrences, 3 different causes)
 - A25: vehicle Y ignored `lateralOffset` entirely, always used centerline

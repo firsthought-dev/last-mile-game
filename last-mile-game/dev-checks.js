@@ -93,24 +93,54 @@ function runWorldChecks() {
   // for its full length, showing a continuous strip of exposed terrain
   // down both shoulders. Sweeps the WHOLE road (both sides) because that
   // bug was global, not localized to any one section.
-  if (world.roadMesh && game.vehicle) {
+  // Measured by RAYCASTING onto the actual terrain mesh, not by calling
+  // groundHeightAt. An earlier version of this check compared the verge
+  // against the height *function*, which passed at 0.008u while the
+  // rendered seam was visibly torn — because the road and terrain meshes
+  // sampled the curve at different rates (1200 vs 800) and so disagreed
+  // between shared samples no matter how well the formula agreed. Only
+  // the rendered geometry tells the truth here.
+  //
+  // The road must sit slightly ABOVE the terrain (a road slab rests on the
+  // ground). Exactly coplanar is a failure too: it z-fights and lets
+  // terrain triangles poke through the edge as a ragged sawtooth.
+  if (world.roadMesh && world.terrainMesh) {
+    world.roadMesh.updateMatrixWorld(true);
+    world.terrainMesh.updateMatrixWorld(true);
     const pos = world.roadMesh.geometry.attributes.position;
     const SLICE = 7; // 7-point cross-section; index 0 and 6 are the verges
     const rows = pos.count / SLICE;
-    let worstGap = 0;
-    let checked = 0;
-    for (let r = 0; r < rows; r += 10) {
+    const rc = new THREE.Raycaster();
+    const down = new THREE.Vector3(0, -1, 0);
+    let worstSunken = 0;   // terrain above road (interpenetration)
+    let worstFloating = 0; // road far above terrain (visible gap)
+    let checked = 0, misses = 0;
+    for (let r = 0; r < rows; r += 7) {
       for (const j of [0, 6]) {
         const idx = r * SLICE + j;
         const v = new THREE.Vector3(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
-        const proj = game.vehicle.projectToRoad(v, world.curve, r / rows);
-        const terrainY = world.groundHeightAt(proj.pt, v, proj.latDist);
-        worstGap = Math.max(worstGap, Math.abs(v.y - terrainY));
+        rc.set(new THREE.Vector3(v.x, v.y + 50, v.z), down);
+        const hits = rc.intersectObject(world.terrainMesh, false);
+        if (!hits.length) { misses++; continue; }
+        // Take the hit CLOSEST to the verge, not the highest one. The
+        // terrain ribbon spans ±40m laterally, so at a hairpin it folds
+        // over itself and a downward ray can strike a completely different
+        // stretch of road tens of units above — which looked like a 22u
+        // "tear" on Pune's tight curves until this was corrected.
+        let best = hits[0];
+        for (const h of hits) {
+          if (Math.abs(h.point.y - v.y) < Math.abs(best.point.y - v.y)) best = h;
+        }
+        const gap = v.y - best.point.y; // +ve = road above terrain
+        if (gap < 0) worstSunken = Math.max(worstSunken, -gap);
+        worstFloating = Math.max(worstFloating, gap);
         checked++;
       }
     }
-    record('road-verge-flush-with-terrain', worstGap < 0.05,
-      `worst road-verge vs terrain gap: ${worstGap.toFixed(4)}u across ${checked} samples spanning the full road (expect <0.05; ~0.32 means the verge is back on a fixed offset instead of calling groundHeightAt)`);
+    // Road must never be below terrain, and never floating more than ~8cm.
+    const ok = worstSunken < 0.005 && worstFloating < 0.08;
+    record('road-verge-flush-with-terrain', ok,
+      `terrain-above-road (tearing): ${worstSunken.toFixed(4)}u (expect ~0) | road-above-terrain: ${worstFloating.toFixed(4)}u (expect <0.08, and >0 so it wins the depth test) | ${checked} raycast samples, ${misses} misses`);
   }
 
   // 4. Delivery targets: hit-test position must be the porch ring's actual

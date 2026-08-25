@@ -72,11 +72,28 @@ whether you're about to repeat one of these first:
    ground takes its Y from it:
    - **Road generation:** `createRoadMesh`'s outer verge vertices
      (cross-section indices 0 and 6) **must** call `groundHeightAt()`, and
-     must **not** apply banking to that Y — the terrain is unbanked, so a
-     banked verge cannot sit flush against it. Only the inner road surface
-     (indices 1–5) carries the banked `+0.12` slab offset. A fixed
-     vertical offset at the verge floats the *entire* road above the
-     terrain along its whole length, which is exactly the bug B16 fixed.
+     must **not** apply banking — to the Y *or* to the offset direction.
+     The terrain is unbanked, so a banked verge cannot sit flush against
+     it. Only the inner road surface (indices 1–5) carries the banked
+     `+0.12` slab offset. A fixed vertical offset at the verge floats the
+     *entire* road above the terrain along its whole length (bug B16).
+
+   **Calling the same height function is NOT enough for two meshes to
+   meet.** B16 did that and the seam still tore. Road and terrain must
+   also share:
+   - **`CONFIG.ROAD_MESH_SEGMENTS`** — the longitudinal sampling rate for
+     both `createRoadMesh` and `createTerrainMesh`. They were 1200 vs 800,
+     so the two ribbons evaluated the same formula at different points on
+     the curve and only touched where samples coincided.
+   - **`CONFIG.ROAD_SHOULDER_WIDTH`** — the terrain's `lateralSlices` must
+     contain a row at exactly `±(ROAD_WIDTH*0.5 + ROAD_SHOULDER_WIDTH)` so
+     the road's edge lands on a real terrain vertex, not mid-triangle.
+   - **`CONFIG.ROAD_VERGE_LIFT`** — a 2cm lift so the road slab wins the
+     depth test. **Exactly coplanar is a bug**, not the goal: it z-fights
+     and lets terrain poke through the edge as a ragged sawtooth.
+
+   If you change `ROAD_WIDTH`, `ROAD_SHOULDER_WIDTH`, or either segment
+   count, all of the above must move together.
    - **Prop placement:** use the `calcTerrainY` helper inside the
      world-gen loop, which now simply delegates to `groundHeightAt()`.
      Don't reintroduce a local copy of the formula.
@@ -87,8 +104,17 @@ whether you're about to repeat one of these first:
      `ROAD_WIDTH` or `shoulderWidth` is ever changed, re-check both.
 
    Guarded by `road-verge-flush-with-terrain` in `dev-checks.js`, which
-   sweeps both verges along the full road and fails if any sample drifts
-   more than 0.05u from the terrain surface.
+   **raycasts the actual terrain mesh** along the full road and fails if
+   terrain is above the road at all, or if the road floats more than 8cm.
+
+   ⚠️ **Verify geometry against geometry.** The first version of that
+   guard compared the verge to `groundHeightAt()` and passed at 0.008u
+   while the seam was visibly torn on screen — two meshes can both call
+   the same formula and still not touch. Raycast the rendered mesh. And
+   when raycasting a ribbon that spans ±40m laterally, take the hit
+   **nearest** the sample rather than the first/highest: at a hairpin the
+   ribbon folds over itself, and the top hit can be a different stretch of
+   road tens of units away.
 2. **"Vehicle sinks into / floats above the road"** has had 3 independent
    root causes so far (ignoring lateral offset, camera clamp using raw vs.
    carved terrain, ignoring road banking). If it happens again, check
