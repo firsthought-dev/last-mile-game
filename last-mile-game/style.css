@@ -339,9 +339,22 @@ html, body {
 
 /* --- Top-Left: Minimal Slowroads Objective Line --- */
 .slowroads-obj-box {
-  position: absolute;
-  top: 24px;
-  left: 28px;
+  /* Static + margin instead of absolute top/left: .wanted-meter-box
+     stacks directly below this in normal document flow (see its own
+     comment) — that only works if this box is also in flow, since an
+     absolutely-positioned element doesn't push static siblings down by
+     its height at all. */
+  position: static;
+  margin: 24px 0 0 28px;
+  width: fit-content;
+  /* This box and .slowroads-top-bar (opposite corner) never had any width
+     limit — each sized purely to its own content (a delivery name/cargo
+     description of arbitrary length on this side, a radio track title +
+     6 buttons on the other). Their natural widths regularly summed to
+     well over 1000px, so on anything narrower than a very wide desktop
+     window they simply overlapped mid-screen. Capped here + truncated
+     internally instead of letting content dictate box width. */
+  max-width: min(320px, 46vw);
   background: rgba(8, 12, 18, 0.75);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -371,6 +384,9 @@ html, body {
   font-weight: 700;
   color: #ffffff;
   letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .slowroads-obj-meta {
@@ -380,10 +396,88 @@ html, body {
   font-family: var(--font-mono);
   font-size: 0.66rem;
   color: rgba(255, 255, 255, 0.65);
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.slowroads-obj-meta #order-cargo-desc {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
 }
 
 .meta-sep {
   color: rgba(255, 255, 255, 0.20);
+}
+
+/* --- Wanted Meter: builds from hitting pedestrians/animals --- */
+.wanted-meter-box {
+  /* Was position:absolute + a hardcoded margin-top:78px guessing the
+     dispatch card's height — broke (overlapped the card) any time the
+     card grew taller than that guess, e.g. when a missed-delivery banner
+     or a longer order name wrapped it to more lines. Static + normal
+     flow stacks it directly under the card's real rendered height,
+     whatever that is, on every device — not just the mobile breakpoint
+     this same fix used to be limited to. */
+  position: static;
+  margin: 6px 0 0 28px;
+  width: fit-content;
+  background: rgba(8, 12, 18, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 2px solid #ef4444;
+  border-radius: 8px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 60;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.wanted-meter-box.wanted-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.wanted-meter-label {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  letter-spacing: 2.5px;
+  font-weight: 800;
+  color: #ef4444;
+}
+
+.wanted-meter-stars {
+  display: flex;
+  gap: 3px;
+}
+
+.wanted-star {
+  font-size: 1.05rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.2);
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.wanted-star.lit {
+  color: #ef4444;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+}
+
+.wanted-meter-box.wanted-pulse {
+  animation: wantedPulse 0.4s ease;
+}
+
+@keyframes wantedPulse {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(0) scale(1.08); }
 }
 
 .meta-dist {
@@ -401,8 +495,15 @@ html, body {
   position: absolute;
   top: 24px;
   right: 28px;
+  /* See .slowroads-obj-box for why this cap exists — this side and the
+     dispatch card were each unbounded and routinely summed past 1000px
+     combined. Wraps to a second row (radio pill, then system buttons)
+     instead of overlapping once it can't fit on one line. */
+  max-width: min(460px, 50vw);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   pointer-events: auto;
   z-index: 60;
@@ -418,6 +519,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
@@ -541,7 +643,15 @@ html, body {
 /* --- Bottom-Left: Minimalist Radar Minimap --- */
 .slowroads-radar-box {
   position: absolute;
-  bottom: 28px;
+  /* Was 28px — the dock bar (.slowroads-dock) is bottom-anchored and
+     horizontally centered independently of this box, with no shared
+     awareness of each other. On any viewport narrow enough for the
+     centered dock to reach this corner (which is most non-desktop-wide
+     windows, portrait phones especially), the dock's 20-70px band sat
+     entirely inside this box's vertical span, rendering through/over it.
+     Raised enough to clear the dock's height + margin unconditionally
+     rather than only in a mobile-specific media query. */
+  bottom: 86px;
   left: 28px;
   background: rgba(8, 12, 18, 0.75);
   backdrop-filter: blur(24px);
@@ -682,7 +792,11 @@ html, body {
 
 .slowroads-telemetry-box {
   position: absolute;
-  bottom: 28px;
+  /* Same dock-clearance reasoning as .slowroads-radar-box above — this
+     box's content is short enough that it usually cleared the dock by
+     luck, but nothing guaranteed it as button labels changed. Matched to
+     the same clearance for consistency. */
+  bottom: 86px;
   right: 28px;
   display: flex;
   align-items: flex-end;
@@ -808,7 +922,13 @@ html, body {
   left: 50%;
   transform: translateX(-50%);
   width: auto;
-  max-width: 680px;
+  /* Was 680px, tuned for 4 icon buttons (TOD/CAM/AUDIO/CONFIG) — the added
+     STATUS button pushed content past that cap, and since .dock-icon has
+     no fixed width, the flex row silently shrank the last button's box
+     below its own text width, clipping "CONFIG" to "CONF" instead of
+     wrapping or overflowing visibly. Also capped by viewport width so it
+     doesn't overflow the other way on narrower windows. */
+  max-width: min(920px, 94vw);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -836,7 +956,7 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 32px;
-  padding: 0 28px;
+  padding: 0 32px;
   box-shadow: var(--shadow-dock);
   position: relative;
   overflow: hidden;
@@ -929,6 +1049,7 @@ html, body {
   color: rgba(255, 255, 255, 0.75);
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0; /* never silently truncate text by shrinking below content width — overflow should be visible/fixed, not hidden */
   transition: all 0.15s ease;
 }
 
@@ -1132,6 +1253,17 @@ html, body {
   height: 100vh;
   pointer-events: auto;
   z-index: 100;
+  /* The dispatch hub card (.shiplyp-hub-card) has no margin:auto or
+     self-centering of its own — it relied on this container centering it,
+     which this container never actually did (default block layout), so
+     it rendered flush at the top-left instead. Other modals (recovery
+     card, settings) work around this with their own full-viewport
+     .modal-backdrop flex wrapper; centering it here too is harmless for
+     those (a 100vw/100vh flex child just centers itself same as before)
+     and fixes the one that had no wrapper at all. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 #modal-container:empty {
@@ -1813,6 +1945,179 @@ html, body {
    RESPONSIVE DESIGN: Mobile, Tablet, Desktop Breakpoints
    ========================================================================== */
 
+/* In-game HUD (dispatch card / radio+controls bar / wanted meter): below
+   this width, capping each box's max-width in vw isn't enough on its own
+   — a long delivery name or a missed-order banner can still make the
+   dispatch card grow to 2-3 lines tall, and since it and the top-bar are
+   two independently bottom-of-nowhere-anchored absolute boxes (each only
+   constrained horizontally), nothing stops the now-taller card from
+   running into the top-bar vertically. Stack them in normal document flow
+   instead of two independent absolute corner boxes — DOM order in
+   index.html is dispatch card, then wanted meter, then radio/controls
+   bar, so switching all three to position:static stacks them in exactly
+   that (sensible) top-to-bottom order without touching the HTML. */
+@media (max-width: 700px) {
+  .slowroads-obj-box,
+  .wanted-meter-box,
+  .slowroads-top-bar {
+    position: static;
+    max-width: none;
+    width: calc(100% - 24px);
+    margin: 8px auto 0 auto;
+    box-sizing: border-box;
+  }
+
+  .slowroads-top-bar {
+    justify-content: flex-start;
+  }
+
+  .wanted-meter-box {
+    /* Was a hardcoded margin-top assuming a fixed dispatch-card height —
+       meaningless once these are stacked in normal flow instead of both
+       being absolutely positioned from the same top-left origin. */
+    margin-top: 8px;
+    transform: none; /* the show/hide transform no longer makes sense stacked; opacity alone still handles visibility */
+  }
+
+  .wanted-meter-box.wanted-active {
+    transform: none;
+  }
+
+  /* Same unshared-corner problem as the top boxes, just bottom-left
+     (.slowroads-radar-box) vs bottom-right (.slowroads-telemetry-box) —
+     neither had a width limit, so on narrow viewports they collided in
+     the middle, on top of each other and the car. */
+  .slowroads-radar-box {
+    max-width: 46vw;
+  }
+
+  .slowroads-telemetry-box {
+    max-width: 50vw;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  /* Dock bar: at this width the nav tabs + 5 icon buttons don't fit on
+     one line even at the min(860px, 94vw) cap, and .dock-bar-glass's
+     overflow:hidden was silently deleting the icon row instead of
+     wrapping or scrolling it into view. Wrap onto a second row instead —
+     still all reachable, just two rows instead of a hidden one. */
+  .dock-bar-glass {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 50px;
+    padding: 8px 16px;
+    row-gap: 6px;
+  }
+
+  .dock-nav-items {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+}
+
+/* True phone widths: the fixes above stop HUD elements from overlapping,
+   but stacking every box at its normal desktop size still eats most of a
+   phone screen's height, leaving almost nothing of the actual game
+   viewport visible. Compact every HUD element's own footprint here rather
+   than just their positioning. */
+@media (max-width: 480px) {
+  .slowroads-obj-box {
+    padding: 6px 10px;
+    gap: 1px;
+  }
+
+  .slowroads-obj-title {
+    font-size: 0.82rem;
+  }
+
+  .slowroads-obj-tag {
+    font-size: 0.5rem;
+  }
+
+  .slowroads-obj-meta {
+    font-size: 0.58rem;
+    gap: 5px;
+  }
+
+  /* Radio track title + PREV/NEXT aren't needed to play — collapsing them
+     to just PLAY turns a 2-line control cluster into a single compact
+     row, matching the height of one HUD row instead of two. */
+  .slowroads-radio-btns #btn-radio-prev,
+  .slowroads-radio-btns #btn-radio-next {
+    display: none;
+  }
+
+  .slowroads-track-text {
+    max-width: 84px;
+  }
+
+  .slowroads-radio-pill {
+    padding: 4px 8px;
+  }
+
+  .slowroads-sys-btns .slowroads-icon-btn {
+    padding: 4px 8px;
+    font-size: 0.55rem;
+  }
+
+  /* Radar: shrink the canvas itself, not just its housing, so the box's
+     real footprint shrinks instead of leaving dead padding. */
+  #gps-minimap-canvas {
+    width: 76px;
+    height: 76px;
+  }
+
+  .slowroads-radar-box {
+    padding: 6px 8px;
+    max-width: 40vw;
+  }
+
+  .radar-tag, .radar-dist {
+    font-size: 0.48rem;
+  }
+
+  .slowroads-telemetry-box {
+    max-width: 46vw;
+    gap: 6px;
+  }
+
+  .slowroads-pill-btn {
+    padding: 4px 8px;
+    font-size: 0.55rem;
+  }
+
+  .telemetry-speed-row .telemetry-numeral {
+    font-size: 1.4rem;
+  }
+
+  /* Dock: wrapping to 2 rows (the >700px fix) still costs real vertical
+     space on a phone. Scroll horizontally in a single row instead — every
+     control stays reachable with a swipe, at roughly half the height. */
+  .dock-bar-glass {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start;
+    height: 44px;
+    padding: 0 14px;
+  }
+
+  .dock-nav-items {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+  }
+
+  .dock-icons-right {
+    flex-shrink: 0;
+    margin-left: 12px;
+  }
+
+  .dock-tab-btn {
+    white-space: nowrap;
+  }
+}
+
 /* Mobile: < 640px */
 @media (max-width: 640px) {
   /* Modal and dialog sizing */
@@ -1940,5 +2245,248 @@ html, body {
   .dock-sq-btn {
     min-width: 90px;
     font-size: 0.75rem;
+  }
+}
+
+/* ==========================================================================
+   DELIVERY STATUS PANEL — toggleable, non-blocking, matches HUD glass system
+   ========================================================================== */
+.delivery-status-panel {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  width: 320px;
+  max-height: min(72vh, 620px);
+  background: var(--glass-panel);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  border-right: 2px solid var(--brand-teal);
+  border-radius: 12px;
+  box-shadow: var(--shadow-panel);
+  z-index: 90;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(16px) scale(0.98);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.delivery-status-panel.open {
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateX(0) scale(1);
+}
+
+.status-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.status-panel-title {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 2.5px;
+  font-weight: 800;
+  color: var(--brand-teal);
+}
+
+.status-panel-close {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.status-panel-close:hover {
+  background: rgba(255, 45, 78, 0.2);
+  border-color: var(--brand-red);
+  color: #fff;
+}
+
+.status-panel-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.status-panel-section.status-panel-history {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  border-bottom: none;
+}
+
+.status-section-tag {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  letter-spacing: 2px;
+  font-weight: 800;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+.status-current-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.status-current-name {
+  font-family: var(--font-primary);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.status-current-cargo {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text-muted);
+}
+
+.status-upcoming-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.status-upcoming-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
+.status-upcoming-idx {
+  color: var(--brand-saffron);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.status-upcoming-name {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-upcoming-reward {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.status-panel-totals {
+  display: flex;
+  gap: 8px;
+}
+
+.status-total-pill {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+
+.status-total-pill span {
+  font-size: 0.9rem;
+  font-family: var(--font-primary);
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.status-total-pill.delivered span { color: var(--brand-teal); }
+.status-total-pill.missed span { color: var(--brand-red); }
+.status-total-pill.earnings span { color: var(--brand-saffron); }
+
+.status-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-history-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+}
+
+.status-history-row.missed {
+  background: rgba(255, 45, 78, 0.08);
+}
+
+.status-history-icon {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+}
+
+.status-history-name {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-history-amount {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.status-history-amount.delivered { color: var(--brand-teal); }
+.status-history-amount.missed { color: var(--brand-red); }
+
+.status-history-empty {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text-faint);
+  text-align: center;
+  padding: 12px 0;
+}
+
+.status-panel-history::-webkit-scrollbar {
+  width: 5px;
+}
+
+.status-panel-history::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+@media (max-width: 640px) {
+  .delivery-status-panel {
+    width: calc(100vw - 24px);
+    right: 12px;
+    top: 12px;
   }
 }
