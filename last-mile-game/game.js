@@ -441,6 +441,24 @@
   // --------------------------------------------------------------------------
   const CONFIG = {
     ROAD_WIDTH: 7.4,
+    // Paved verge width either side of the painted road edge. The road
+    // ribbon's outer edge therefore sits at ROAD_WIDTH*0.5 + this. The
+    // terrain mesh MUST carry a lateral slice at exactly that distance
+    // (see createTerrainMesh) or the two surfaces only touch at whatever
+    // points they happen to share, and tear apart in between.
+    ROAD_SHOULDER_WIDTH: 1.8,
+    // Longitudinal sampling for BOTH the road ribbon and the terrain
+    // ribbon. These must stay equal: same count => same getSpacedPoints()
+    // positions => the two meshes are continuous by construction rather
+    // than by two samplings happening to agree. (They were 1200 vs 800,
+    // which is what tore the seam open between shared samples.)
+    ROAD_MESH_SEGMENTS: 1200,
+    // Tiny upward lift on the road ribbon's outer verge so the road slab
+    // deterministically wins the depth test against the terrain it rests
+    // on. Landing the verge exactly ON the terrain surface is coplanar,
+    // and coplanar means z-fighting plus terrain triangles poking through
+    // the road edge in a ragged sawtooth. 2cm reads as flush.
+    ROAD_VERGE_LIFT: 0.02,
     ROAD_POINTS_COUNT: 500,
     POINT_SPACING: 45.0,
     TERRAIN_SIZE: 1600.0,
@@ -1121,9 +1139,9 @@
     }
 
     createRoadMesh(roadTerrainKey = 'asphalt') {
-      const tubularSegments = 1200;
+      const tubularSegments = CONFIG.ROAD_MESH_SEGMENTS;
       const roadWidth = CONFIG.ROAD_WIDTH;
-      const shoulderWidth = 1.8;
+      const shoulderWidth = CONFIG.ROAD_SHOULDER_WIDTH;
       const geom = new THREE.BufferGeometry();
 
       const positions = [];
@@ -1179,20 +1197,26 @@
         for (let j = 0; j < offsets.length; j++) {
           const off = offsets[j];
           const isVerge = (j === 0 || j === 6);
-          const p = pt.clone().addScaledVector(bankedNormal, off);
+          // The verge is offset along the UNBANKED normal, matching how the
+          // terrain ribbon offsets its own slices. Using bankedNormal here
+          // put the road's outer edge on a slightly different 3D line than
+          // the terrain's matching slice on every banked curve, so the two
+          // edges crossed each other instead of meeting.
+          const p = pt.clone().addScaledVector(isVerge ? normal : bankedNormal, off);
           if (isVerge) {
             // The ribbon's outer verge used to sit at a fixed pt.y + 0.04,
             // while the terrain at that same lateral distance is a shoulder
             // slope ending ~0.28 lower — so the whole road floated ~0.32u
             // above the ground along its entire length, showing a continuous
-            // dark sliver of exposed terrain down both shoulders. Land the
-            // outer edge on the terrain's own surface instead, via the
-            // shared height function (never a second copy of the formula —
-            // see BUGFIX_LOG.md Recurring Pattern 1) so road and terrain
-            // meet flush by construction on straights, curves and grades.
-            // Banking is deliberately not applied here: the terrain is
-            // unbanked, so the edge must meet it at unbanked height.
-            p.y = this.groundHeightAt(pt, p, off);
+            // dark sliver of exposed terrain down both shoulders. Take the
+            // height from the shared ground function instead (never a second
+            // copy of the formula — see BUGFIX_LOG.md Recurring Pattern 1),
+            // plus a 2cm lift so the road slab wins the depth test rather
+            // than sitting coplanar with the terrain and z-fighting into a
+            // ragged sawtooth edge. Banking is deliberately not applied to
+            // this Y: the terrain is unbanked, so the edge must meet it at
+            // unbanked height.
+            p.y = this.groundHeightAt(pt, p, off) + CONFIG.ROAD_VERGE_LIFT;
           } else {
             p.addScaledVector(bankedUp, 0.12);
           }
@@ -1248,11 +1272,19 @@
     }
 
     createTerrainMesh(season) {
-      const tubularSegments = 800;
-      const roadHalf = CONFIG.ROAD_WIDTH * 0.52; // ~4.16m
+      // Must match createRoadMesh's segment count exactly — see
+      // CONFIG.ROAD_MESH_SEGMENTS. At 800 vs the road's 1200 the two
+      // ribbons sampled the curve at different positions, so they only
+      // lined up where samples coincided and tore apart in between.
+      const tubularSegments = CONFIG.ROAD_MESH_SEGMENTS;
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.52; // ~3.85m
+      // Lateral distance of the road ribbon's outer edge. The terrain needs
+      // a vertex row at exactly this distance so the road edge lands on a
+      // real terrain vertex rather than somewhere across a wide triangle.
+      const vergeLat = CONFIG.ROAD_WIDTH * 0.5 + CONFIG.ROAD_SHOULDER_WIDTH;
       const lateralSlices = [
-        -40.0, -20.0, -9.0, -roadHalf,
-         roadHalf, 9.0, 20.0, 40.0
+        -40.0, -20.0, -9.0, -vergeLat, -roadHalf,
+         roadHalf, vergeLat, 9.0, 20.0, 40.0
       ];
       const sliceCount = lateralSlices.length;
 
