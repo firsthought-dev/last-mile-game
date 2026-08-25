@@ -1180,7 +1180,22 @@
           const off = offsets[j];
           const isVerge = (j === 0 || j === 6);
           const p = pt.clone().addScaledVector(bankedNormal, off);
-          p.addScaledVector(bankedUp, isVerge ? 0.04 : 0.12);
+          if (isVerge) {
+            // The ribbon's outer verge used to sit at a fixed pt.y + 0.04,
+            // while the terrain at that same lateral distance is a shoulder
+            // slope ending ~0.28 lower — so the whole road floated ~0.32u
+            // above the ground along its entire length, showing a continuous
+            // dark sliver of exposed terrain down both shoulders. Land the
+            // outer edge on the terrain's own surface instead, via the
+            // shared height function (never a second copy of the formula —
+            // see BUGFIX_LOG.md Recurring Pattern 1) so road and terrain
+            // meet flush by construction on straights, curves and grades.
+            // Banking is deliberately not applied here: the terrain is
+            // unbanked, so the edge must meet it at unbanked height.
+            p.y = this.groundHeightAt(pt, p, off);
+          } else {
+            p.addScaledVector(bankedUp, 0.12);
+          }
           positions.push(p.x, p.y, p.z);
           normals.push(bankedUp.x, bankedUp.y, bankedUp.z);
           uvs.push(off * 0.5, i * 0.3);
@@ -1644,38 +1659,14 @@
         const up = new THREE.Vector3(0, 1, 0);
         const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
-        // Terrain height calculator — mirrors createTerrainMesh's embankment
-        // carving formula exactly so props sit flush with the ground instead
-        // of floating above or sinking below it.
-        const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
-        const SHOULDER_TRANSITION = 9.0;
-        const EMBANKMENT_BLEND = 45.0;
-        const calcTerrainY = (pos, latDist) => {
-          const absDist = Math.abs(latDist);
-          if (absDist <= roadHalf) {
-            return pt.y - 0.18;
-          } else if (absDist <= SHOULDER_TRANSITION) {
-            const t = (absDist - roadHalf) / (SHOULDER_TRANSITION - roadHalf);
-            return pt.y - 0.18 - t * 0.32;
-          } else if (absDist <= EMBANKMENT_BLEND) {
-            const rawH = this.getRawTerrainHeight(pos.x, pos.z);
-            const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
-            const shoulderDrop = pt.y - 0.5;
-            // No ceiling — matches createTerrainMesh/createWorldFloor (see
-            // their comments): capping this let a prop's "ground" sit well
-            // below the actual hillside surface it was meant to be flush
-            // with, which is what buried skyscrapers into hills earlier.
-            return THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
-          } else {
-            // Beyond the embankment blend, mirror createWorldFloor's
-            // unclamped branch exactly: the rendered hill mesh out here
-            // just follows raw noise height with no road-relative cap, so
-            // props placed here (skyscrapers set back on hillsides) must
-            // use the same unclamped height or they end up buried in
-            // terrain that legitimately rises above road level.
-            return this.getRawTerrainHeight(pos.x, pos.z) - 0.3;
-          }
-        };
+        // Terrain height for prop placement. This was a hand-written copy of
+        // the embankment formula that happened to match groundHeightAt
+        // branch-for-branch — precisely the duplication that BUGFIX_LOG.md
+        // calls the project's single most-repeated bug (Recurring Pattern 1:
+        // copies drift apart the moment one side is tuned). Delegated to the
+        // one shared function so props derive their height from the same
+        // surface the terrain mesh and road verge use, by construction.
+        const calcTerrainY = (pos, latDist) => this.groundHeightAt(pt, pos, latDist);
 
         // 1. Potholes & Rumble Strips on Road
         if (i % 26 === 0) {

@@ -86,6 +86,33 @@ function runWorldChecks() {
       `worst 2m-span jump across the 45m seam: ${worstJump.toFixed(2)}u (expect <3.0, natural noise only)`);
   }
 
+  // 3b. The road ribbon's outer verge must land ON the terrain surface,
+  // not float above it. The road mesh used to place its verge at a fixed
+  // pt.y + 0.04 while the terrain shoulder at that same lateral distance
+  // sits ~0.28 lower, so the entire road floated ~0.32u above the ground
+  // for its full length, showing a continuous strip of exposed terrain
+  // down both shoulders. Sweeps the WHOLE road (both sides) because that
+  // bug was global, not localized to any one section.
+  if (world.roadMesh && game.vehicle) {
+    const pos = world.roadMesh.geometry.attributes.position;
+    const SLICE = 7; // 7-point cross-section; index 0 and 6 are the verges
+    const rows = pos.count / SLICE;
+    let worstGap = 0;
+    let checked = 0;
+    for (let r = 0; r < rows; r += 10) {
+      for (const j of [0, 6]) {
+        const idx = r * SLICE + j;
+        const v = new THREE.Vector3(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
+        const proj = game.vehicle.projectToRoad(v, world.curve, r / rows);
+        const terrainY = world.groundHeightAt(proj.pt, v, proj.latDist);
+        worstGap = Math.max(worstGap, Math.abs(v.y - terrainY));
+        checked++;
+      }
+    }
+    record('road-verge-flush-with-terrain', worstGap < 0.05,
+      `worst road-verge vs terrain gap: ${worstGap.toFixed(4)}u across ${checked} samples spanning the full road (expect <0.05; ~0.32 means the verge is back on a fixed offset instead of calling groundHeightAt)`);
+  }
+
   // 4. Delivery targets: hit-test position must be the porch ring's actual
   // world position, not the house pivot (regression: hit-test used
   // housePos while the visible ring sits ~3m off-pivot).
