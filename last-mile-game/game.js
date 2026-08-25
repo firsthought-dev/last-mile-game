@@ -775,6 +775,7 @@
       this.trafficVehicles = [];
       this.deliveryTargets = [];
       this.potholes = [];
+      this.crossers = [];
 
       this.generateSpline();
     }
@@ -794,6 +795,33 @@
       h += this.simplex.noise2D(wx * 0.018, wz * 0.018) * 5.5;
       h += this.simplex.noise2D(wx * 0.045, wz * 0.045) * 1.5;
       return h;
+    }
+
+    // Shared ground-height formula (road surface / shoulder / embankment
+    // blend to raw hillside), used both for prop placement during world
+    // gen (calcTerrainY closure below mirrors this) and for repositioning
+    // dynamic actors like road crossers every frame. `pt` is the road
+    // curve point this offset is measured from; `worldPos` is the actual
+    // x/z being evaluated (pt + normal*latDist); `latDist` is the signed
+    // lateral offset from the road centerline.
+    groundHeightAt(pt, worldPos, latDist) {
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
+      const SHOULDER_TRANSITION = 9.0;
+      const EMBANKMENT_BLEND = 45.0;
+      const absDist = Math.abs(latDist);
+      if (absDist <= roadHalf) {
+        return pt.y - 0.18;
+      } else if (absDist <= SHOULDER_TRANSITION) {
+        const t = (absDist - roadHalf) / (SHOULDER_TRANSITION - roadHalf);
+        return pt.y - 0.18 - t * 0.32;
+      } else if (absDist <= EMBANKMENT_BLEND) {
+        const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
+        const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
+        const shoulderDrop = pt.y - 0.5;
+        return THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
+      } else {
+        return this.getRawTerrainHeight(worldPos.x, worldPos.z) - 0.3;
+      }
     }
 
     generateSpline() {
@@ -1080,7 +1108,6 @@
       const baseTarmac = new THREE.Color(tCfg.color);
       const vergeColor = new THREE.Color(tCfg.color).multiplyScalar(0.72);
       const whiteLine = new THREE.Color(0xf8fafc);
-      const yellowLine = new THREE.Color(0xfacc15);
 
       // 7-Point Cross-Section with Painted Road Stripes
       const offsets = [
@@ -1120,8 +1147,6 @@
         const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
         const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
 
-        const isDashedGap = (i % 8 >= 4); // Dashed center lane pattern
-
         for (let j = 0; j < offsets.length; j++) {
           const off = offsets[j];
           const isVerge = (j === 0 || j === 6);
@@ -1137,11 +1162,12 @@
           } else if (j === 1 || j === 5) {
             colors.push(whiteLine.r, whiteLine.g, whiteLine.b);
           } else if (j === 3) {
-            if (isDashedGap) {
-              colors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
-            } else {
-              colors.push(yellowLine.r, yellowLine.g, yellowLine.b);
-            }
+            // Was a bright yellow dashed center line — under strong
+            // daylight + ACES tonemapping it crossed the bloom threshold
+            // and blew out into large soft glowing blobs across the road
+            // instead of reading as a crisp lane marking, defeating its
+            // own purpose. Removed rather than just dimmed, per request.
+            colors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
           } else {
             colors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
           }
@@ -1244,10 +1270,14 @@
 
             // Embankment starts at road-level minus a shoulder drop, blends to raw terrain
             const shoulderDrop = pt.y - 0.5;  // 50cm down from road surface
-            const embankmentHeight = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
-
-            // Clamp to ensure road is never buried; terrain can rise up to road level
-            finalY = Math.min(pt.y + 0.2, embankmentHeight);
+            // No ceiling here — the shoulder zone above already guarantees
+            // clearance right at the road edge, and hillside terrain 10-40m
+            // out is legitimately much taller than the road (that's what a
+            // hillside is). Clamping this to "road height + 0.2" used to
+            // flatten the ribbon near the road while the world floor plane
+            // (unclamped past 45m) shot up to true height right past the
+            // seam — a hard cliff appearing to erupt beside/over the road.
+            finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
 
             if (rawH > 22.0) {
               colors.push(cliffCol.r, cliffCol.g, cliffCol.b);
@@ -1335,8 +1365,22 @@
       const roadSamples = this.curve.getSpacedPoints(260);
 
       const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
-      const SHOULDER_TRANSITION = 9.0;
-      const EMBANKMENT_BLEND = 45.0;
+      // createTerrainMesh (the close-up "ribbon" that actually renders the
+      // ground right around the road) draws real terrain out to exactly
+      // ±40m (its own lateralSlices array caps there). This floor plane
+      // used to separately replicate the ribbon's embankment-blend formula
+      // out to a nominal 45m using its OWN coarser road sampling (260
+      // points here vs the ribbon's exact per-point `pt`) — two
+      // independent formulas computing "the same" height were never
+      // guaranteed to agree, and after removing their shared clamp (see
+      // the commit that fixed buildings/props sinking into hillsides) the
+      // small disagreement became large enough that this floor could
+      // render ABOVE the ribbon+road, burying the road and vehicle under
+      // floor terrain that was only ever meant to be hidden underneath it.
+      // Simplest fix that can't diverge again: stay hidden everywhere the
+      // ribbon actually draws (0-40m), and only surface true terrain
+      // height past that, where the ribbon has nothing to conflict with.
+      const RIBBON_COVERAGE = 40.0;
 
       const pos = geom.attributes.position;
       const colors = [];
@@ -1360,25 +1404,10 @@
         const naturalY = rawH - 0.3;
         let finalY = naturalY;
         const dist = Math.sqrt(nearestDistSq);
-        if (dist <= EMBANKMENT_BLEND) {
-          if (dist <= SHOULDER_TRANSITION) {
-            // Always hidden under the ribbon here — just keep it far
-            // enough below that the camera can never clip through it.
-            finalY = nearestRoadY - 25.0;
-          } else {
-            // Exact replica of createTerrainMesh's embankment formula
-            // (same shoulderDrop/lerp/clamp), using the nearest sampled
-            // curve point in place of that formula's own `pt`. At
-            // dist === EMBANKMENT_BLEND this reduces to exactly naturalY
-            // (blendFactor=1 → embankmentHeight=rawH → ribbonY≈rawH),
-            // matching the >45m branch by construction — continuous at
-            // the seam, not just approximately close.
-            const blendFactor = THREE.MathUtils.smoothstep(dist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
-            const shoulderDrop = nearestRoadY - 0.5;
-            const embankmentHeight = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
-            const ribbonY = Math.min(nearestRoadY + 0.2, embankmentHeight);
-            finalY = ribbonY - 0.3;
-          }
+        if (dist <= RIBBON_COVERAGE) {
+          // Always hidden under the ribbon here — just keep it far
+          // enough below that the camera can never clip through it.
+          finalY = nearestRoadY - 25.0;
         }
         pos.setY(i, finalY);
 
@@ -1421,6 +1450,7 @@
       this.speedCameras = [];
       this.repairBays = [];
       this.obstacles = [];
+      this.crossers = [];
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
 
@@ -1443,6 +1473,59 @@
 
       const rumbleGeom = new THREE.BoxGeometry(CONFIG.ROAD_WIDTH * 0.82, 0.08, 0.45);
       const rumbleMat = new THREE.MeshLambertMaterial({ color: 0xfca311 });
+
+      // Low-poly pedestrian/animal road-crosser builder — same flat-shaded
+      // block-figure style as the porch resident so crossers read as part
+      // of the world rather than a mismatched asset dropped in.
+      const CROSSER_PALETTE = [0xef4444, 0x3b82f6, 0x22c55e, 0xf59e0b, 0x8b5cf6, 0xec4899];
+      const buildCrosserMesh = (kind) => {
+        const group = new THREE.Group();
+        if (kind === 'pedestrian') {
+          const skinMat = new THREE.MeshLambertMaterial({ color: 0xd4a373 });
+          const shirtMat = new THREE.MeshLambertMaterial({ color: CROSSER_PALETTE[Math.floor(this.prng.range(0, CROSSER_PALETTE.length))] });
+          const legMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+          const torso = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.62, 0.22), shirtMat);
+          torso.position.y = 0.95;
+          const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.15, 0), skinMat);
+          head.position.y = 1.42;
+          const legL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.62, 0.16), legMat);
+          legL.position.set(-0.1, 0.32, 0);
+          const legR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.62, 0.16), legMat);
+          legR.position.set(0.1, 0.32, 0);
+          group.add(torso, head, legL, legR);
+          group.userData.legs = [legL, legR];
+          group.userData.hitRadius = 1.1;
+          group.userData.walkSpeed = this.prng.range(1.0, 1.8);
+        } else {
+          // Dog / cat — same low quadruped rig, cat sized down.
+          const isCat = kind === 'cat';
+          const furMat = new THREE.MeshLambertMaterial({ color: isCat ? 0x374151 : CROSSER_PALETTE[Math.floor(this.prng.range(0, CROSSER_PALETTE.length))] });
+          // Dogs were reading as barely-visible specks next to the
+          // pedestrian rig (whose torso alone is 0.62 tall) — scaled up to
+          // an actual stray-dog size instead of a toy-sized silhouette.
+          const scale = isCat ? 0.62 : 1.7;
+          const body = new THREE.Mesh(new THREE.BoxGeometry(0.7 * scale, 0.3 * scale, 0.32 * scale), furMat);
+          body.position.y = 0.32 * scale;
+          const head = new THREE.Mesh(new THREE.BoxGeometry(0.24 * scale, 0.22 * scale, 0.24 * scale), furMat);
+          head.position.set(0.42 * scale, 0.38 * scale, 0);
+          const tail = new THREE.Mesh(new THREE.BoxGeometry(0.32 * scale, 0.08 * scale, 0.08 * scale), furMat);
+          tail.position.set(-0.42 * scale, 0.42 * scale, 0);
+          tail.rotateZ(0.6);
+          const legGeom = new THREE.BoxGeometry(0.09 * scale, 0.26 * scale, 0.09 * scale);
+          const legs = [];
+          [[-0.24, -0.1], [-0.24, 0.1], [0.24, -0.1], [0.24, 0.1]].forEach(([lx, lz]) => {
+            const leg = new THREE.Mesh(legGeom, furMat);
+            leg.position.set(lx * scale, 0.14 * scale, lz * scale);
+            group.add(leg);
+            legs.push(leg);
+          });
+          group.add(body, head, tail);
+          group.userData.legs = legs;
+          group.userData.hitRadius = isCat ? 0.65 : 1.1;
+          group.userData.walkSpeed = this.prng.range(1.6, 2.6);
+        }
+        return group;
+      };
 
       // Skyscraper window-grid texture, generated once on a canvas and
       // reused (tinted per-building via material color) across every tower
@@ -1480,12 +1563,50 @@
       const LOWRISE_PALETTE = [0xd9c9a8, 0xe8b04b, 0xc9a876];
 
       const sampledPoints = this.curve.getSpacedPoints(800);
+      // getSpacedPoints divides the curve into equal-arc-length segments,
+      // so this spacing is exact (not an approximation) — used to size
+      // fence segments so they tile edge-to-edge without gaps.
+      const avgSegStep = this.curve.getLength() / sampledPoints.length;
+      // Each fence segment is a single rigid flat plank, leveled only at
+      // its center point — it doesn't bend to follow the road. At
+      // FENCE_STEP=4 a segment spans ~25m, long enough to visibly chord
+      // straight across curves (crossing diagonally over sharp bends) and
+      // to drift off the true ground height on slopes (floating at one
+      // end, buried at the other). FENCE_STEP=1 keeps each plank to a
+      // single sample step (~avgSegStep, matching the road/terrain mesh's
+      // own resolution) so it hugs the curve and terrain closely.
+      const FENCE_STEP = 1; // sampled-point indices between fence segments
+
+      // Skyscrapers are offset from a single road point (pt) along that
+      // point's normal — safe on a straight stretch, but on a winding
+      // mountain road the curve can loop back and pass much closer to
+      // that same world-space offset elsewhere (hairpins, switchbacks).
+      // A "safe" 34-78m offset measured from one point can land the
+      // building right on top of a different stretch of road. Check
+      // against the whole sampled curve (strided for speed — this runs
+      // per-candidate during world gen) before committing to a spot.
+      const clearsRoad = (pos, minClearance) => {
+        const minClearanceSq = minClearance * minClearance;
+        for (let s = 0; s < sampledPoints.length; s += 3) {
+          const dx = pos.x - sampledPoints[s].x;
+          const dz = pos.z - sampledPoints[s].z;
+          if (dx * dx + dz * dz < minClearanceSq) return false;
+        }
+        return true;
+      };
 
       // Trees are built during the main loop below but not added to the
       // scene immediately — see the deferred-resolution pass after the
       // loop for why (buildings placed later in the same iteration would
       // otherwise be invisible to the overlap check).
       const pendingTrees = [];
+      // Same deferral, same reason, for fences — the house-checkpoint gap
+      // below only opens a gap near delivery houses, but fences also
+      // clipped through bus shelters/chai tapris/kirana stores/skyscrapers
+      // (registered as 'building' obstacles at various points later in
+      // the same iteration, or in different iterations entirely). Resolve
+      // against the FULL obstacle list once everything is placed instead.
+      const pendingFences = [];
 
       for (let i = 2; i < sampledPoints.length - 2; i++) {
         const pt = sampledPoints[i];
@@ -1507,12 +1628,23 @@
           } else if (absDist <= SHOULDER_TRANSITION) {
             const t = (absDist - roadHalf) / (SHOULDER_TRANSITION - roadHalf);
             return pt.y - 0.18 - t * 0.32;
-          } else {
+          } else if (absDist <= EMBANKMENT_BLEND) {
             const rawH = this.getRawTerrainHeight(pos.x, pos.z);
             const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
             const shoulderDrop = pt.y - 0.5;
-            const embankmentHeight = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
-            return Math.min(pt.y + 0.2, embankmentHeight);
+            // No ceiling — matches createTerrainMesh/createWorldFloor (see
+            // their comments): capping this let a prop's "ground" sit well
+            // below the actual hillside surface it was meant to be flush
+            // with, which is what buried skyscrapers into hills earlier.
+            return THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
+          } else {
+            // Beyond the embankment blend, mirror createWorldFloor's
+            // unclamped branch exactly: the rendered hill mesh out here
+            // just follows raw noise height with no road-relative cap, so
+            // props placed here (skyscrapers set back on hillsides) must
+            // use the same unclamped height or they end up buried in
+            // terrain that legitimately rises above road level.
+            return this.getRawTerrainHeight(pos.x, pos.z) - 0.3;
           }
         };
 
@@ -1521,10 +1653,18 @@
           const potOffset = (this.prng.next() - 0.5) * (CONFIG.ROAD_WIDTH * 0.62);
           const potPos = pt.clone().addScaledVector(normal, potOffset);
           potPos.y += 0.17;
+          // Every pothole used to share one fixed-size geometry — visually
+          // identical and identical -14% damage regardless of how big the
+          // hole actually looked. Scaling the shared unit geometry per
+          // instance (cheap — no new geometry allocation) gives real size
+          // variety, and both the hit radius and damage now scale with it
+          // so a small crack barely matters while a real crater hurts.
+          const potSize = this.prng.range(0.55, 2.0);
           const potMesh = new THREE.Mesh(potholeGeom, potholeMat);
           potMesh.position.copy(potPos);
+          potMesh.scale.set(potSize, potSize, 1);
           this.foliageGroup.add(potMesh);
-          this.potholes.push({ pos: potPos, radius: 1.6, hitRecently: false });
+          this.potholes.push({ pos: potPos, radius: 1.6 * potSize, hitRecently: false, sizeFactor: potSize });
         }
 
         if (i % 65 === 0) {
@@ -1535,6 +1675,51 @@
           rumbleMesh.lookAt(rumblePos.clone().add(normal));
           this.foliageGroup.add(rumbleMesh);
           this.potholes.push({ pos: rumblePos, radius: 2.2, isRumble: true, hitRecently: false });
+        }
+
+        // 1b. Pedestrians and stray dogs/cats crossing the road. Spawned
+        // as a start/end pair straddling the road on this point's normal
+        // so updateCrossers can walk them straight across; sparsity (the
+        // prng roll) keeps crossings occasional rather than a wall of NPCs.
+        if (i % 33 === 0 && this.prng.next() > 0.45) {
+          const kindRoll = this.prng.next();
+          const kind = kindRoll < 0.55 ? 'pedestrian' : (kindRoll < 0.8 ? 'dog' : 'cat');
+          const crossHalf = CONFIG.ROAD_WIDTH * 0.62 + 3.0;
+          const side = this.prng.next() > 0.5 ? 1 : -1;
+          const latStart = side * crossHalf;
+          const latEnd = -side * crossHalf;
+          const startPos = pt.clone().addScaledVector(normal, latStart);
+          const endPos = pt.clone().addScaledVector(normal, latEnd);
+          startPos.y = this.groundHeightAt(pt, startPos, latStart) + 0.15;
+          endPos.y = this.groundHeightAt(pt, endPos, latEnd) + 0.15;
+
+          const mesh = buildCrosserMesh(kind);
+          mesh.position.copy(startPos);
+          mesh.lookAt(endPos);
+          this.foliageGroup.add(mesh);
+
+          this.crossers.push({
+            mesh,
+            kind,
+            start: startPos,
+            end: endPos,
+            // Fixed reference point + normal so updateCrossers can recompute
+            // ground height at the crosser's *current* lateral position each
+            // frame (via groundHeightAt) instead of linearly interpolating
+            // between the start/end heights — a straight Y lerp cut through
+            // the actual road surface mid-crossing wherever the road profile
+            // between those two points isn't flat (banked/curved sections),
+            // which is why crossers were sinking through the road.
+            pt: pt.clone(),
+            normal: normal.clone(),
+            latStart,
+            latEnd,
+            progress: this.prng.next() * 0.3, // stagger so they don't all step off in lockstep
+            speed: mesh.userData.walkSpeed,
+            hitRadius: mesh.userData.hitRadius,
+            struck: false,
+            legPhase: this.prng.next() * Math.PI * 2
+          });
         }
 
         // 2. Roadside Chevron Turn Warning Signs (Yellow/Black <<< >>> on metal poles)
@@ -1780,10 +1965,17 @@
           if (i % 7 === (side > 0 ? 0 : 3) && this.prng.next() > 0.15) {
             const bldgDist = side * this.prng.range(34.0, 78.0);
             const bldgPos = pt.clone().addScaledVector(normal, bldgDist);
-            bldgPos.y = calcTerrainY(bldgPos, bldgDist);
 
             const width = this.prng.range(7.0, 13.0);
             const depth = this.prng.range(7.0, 13.0);
+
+            // Skip this spawn if the curve loops back near this world-space
+            // spot elsewhere (see clearsRoad above) — better to drop an
+            // occasional skyscraper than plant one in the roadway.
+            const footprintRadius = Math.max(width, depth) * 0.5;
+            if (!clearsRoad(bldgPos, CONFIG.ROAD_WIDTH * 0.6 + footprintRadius + 4.0)) return;
+
+            bldgPos.y = calcTerrainY(bldgPos, bldgDist);
 
             // Real Indian streetscapes are mostly low/mid-rise shophouses
             // and apartment blocks with the occasional tower punching up —
@@ -1934,34 +2126,72 @@
             bldgGroup.position.copy(bldgPos);
             bldgGroup.rotation.y = this.prng.range(-0.06, 0.06);
             this.foliageGroup.add(bldgGroup);
+
+            // Register so later shops/trees (which do check this.obstacles)
+            // don't get placed clipping into the skyscraper's footprint —
+            // skyscrapers previously weren't registered at all.
+            this.obstacles.push({ pos: bldgPos.clone(), radius: footprintRadius + 1.5, type: 'building' });
           }
 
-          // Roadside Split-Rail Wooden Fences (every 18-20 nodes along road bends)
-          if (i % 18 === 0 && this.prng.next() > 0.4) {
-            const fenceDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.4);
-            const fencePos = pt.clone().addScaledVector(normal, fenceDist);
-            fencePos.y = calcTerrainY(fencePos, fenceDist);
+          // Roadside Split-Rail Wooden Fences — continuous guardrail along
+          // both shoulders, broken only right where a delivery house sits
+          // so the gap itself reads as "turn in here" (houses always spawn
+          // at i % 24 === 0, alternating sides via i % 48 — see the cabin
+          // block below).
+          if (i % FENCE_STEP === 0) {
+            const nearestHouseCheckpoint = Math.round(i / 24) * 24;
+            const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
+            const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
+            const FENCE_GAP_RADIUS = 18.0; // meters either side of a house's checkpoint
+            const blockedByHouse = (side === houseCheckpointSide) && (distToHouse < FENCE_GAP_RADIUS);
 
-            const fenceGroup = new THREE.Group();
-            const fPostMat = new THREE.MeshLambertMaterial({ color: 0x54361e });
-            const fRailMat = new THREE.MeshLambertMaterial({ color: 0x6e472a });
+            if (!blockedByHouse) {
+              // createRoadMesh's paved shoulder verge extends to
+              // ROAD_WIDTH*0.5 + 1.8 (its own shoulderWidth). This used to
+              // sit at +1.4 — INSIDE that paved verge — so the fence's
+              // height came from the terrain ribbon's shoulder formula
+              // while the ground directly under it was actually a
+              // different mesh (the road's own verge geometry, with its
+              // own banking/offset math) that formula was never computing
+              // for. The two didn't reliably agree, reading as posts
+              // sinking into the pavement. Placed clear past the verge
+              // edge instead, plus a small explicit lift, so the fence
+              // only ever needs to agree with the terrain it's actually
+              // planted in.
+              const fenceDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 2.2);
+              const fencePos = pt.clone().addScaledVector(normal, fenceDist);
+              fencePos.y = calcTerrainY(fencePos, fenceDist) + 0.05;
 
-            // 2 vertical posts
-            [-1.4, 1.4].forEach(px => {
-              const fPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6), fPostMat);
-              fPost.position.set(px, 0.6, 0);
-              fenceGroup.add(fPost);
-            });
-            // 2 horizontal split rails
-            [0.45, 0.85].forEach(ry => {
-              const fRail = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.08, 0.08), fRailMat);
-              fRail.position.set(0, ry, 0);
-              fenceGroup.add(fRail);
-            });
+              const railLen = FENCE_STEP * avgSegStep + 0.6; // slight overlap so segments tile without gaps
+              const fenceGroup = new THREE.Group();
+              const fPostMat = new THREE.MeshLambertMaterial({ color: 0x54361e });
+              const fRailMat = new THREE.MeshLambertMaterial({ color: 0x6e472a });
 
-            fenceGroup.position.copy(fencePos);
-            fenceGroup.lookAt(fencePos.clone().add(tangent));
-            this.foliageGroup.add(fenceGroup);
+              // 2 vertical posts
+              [-railLen / 2, railLen / 2].forEach(px => {
+                const fPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6), fPostMat);
+                fPost.position.set(px, 0.6, 0);
+                fenceGroup.add(fPost);
+              });
+              // 2 horizontal split rails
+              [0.45, 0.85].forEach(ry => {
+                const fRail = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.08, 0.08), fRailMat);
+                fRail.position.set(0, ry, 0);
+                fenceGroup.add(fRail);
+              });
+
+              fenceGroup.position.copy(fencePos);
+              // The rail spans the group's local X axis. lookAt(pos+tangent)
+              // points local -Z at the tangent, which — by how Object3D's
+              // lookAt derives its axes — puts local X along the road
+              // NORMAL instead, sending the rail straight across the road.
+              // Targeting along the normal instead puts local X along the
+              // tangent, running the rail alongside the road as intended.
+              fenceGroup.lookAt(fencePos.clone().add(normal));
+              fenceGroup.userData.isFence = true;
+              fenceGroup.userData.railLen = railLen;
+              pendingFences.push({ fenceGroup, pos: fencePos.clone(), radius: railLen / 2 });
+            }
           }
 
           // Indian Highway Milestone Markers (National Highway Standard: Yellow Dome + White Base)
@@ -2048,6 +2278,12 @@
           if (i % 72 === 0 && side === 1) {
             const shelterDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 3.8);
             const shelterPos = pt.clone().addScaledVector(normal, shelterDist);
+
+            // Roadside props never checked existing obstacles before placing
+            // themselves (only after, for trees to avoid) — skip if this
+            // spot already has a building/shop/skyscraper sitting on it.
+            if (this.obstacles.some(o => o.pos.distanceTo(shelterPos) < (o.radius + 2.8))) return;
+
             shelterPos.y = calcTerrainY(shelterPos, shelterDist);
 
             const shelterGroup = new THREE.Group();
@@ -2101,6 +2337,9 @@
           if (i % 34 === 0 && side === -1) {
             const tapriDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.2);
             const tapriPos = pt.clone().addScaledVector(normal, tapriDist);
+
+            if (this.obstacles.some(o => o.pos.distanceTo(tapriPos) < (o.radius + 2.6))) return;
+
             tapriPos.y = calcTerrainY(tapriPos, tapriDist);
 
             const tapriGroup = new THREE.Group();
@@ -2147,6 +2386,9 @@
           if (i % 38 === 0 && side === 1) {
             const kiranaDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.4);
             const kiranaPos = pt.clone().addScaledVector(normal, kiranaDist);
+
+            if (this.obstacles.some(o => o.pos.distanceTo(kiranaPos) < (o.radius + 2.4))) return;
+
             kiranaPos.y = calcTerrainY(kiranaPos, kiranaDist);
 
             const kiranaGroup = new THREE.Group();
@@ -2320,16 +2562,33 @@
             this.foliageGroup.add(logGroup);
           }
 
-          // Boulders & Rocks
+          // Boulders & Rocks. Runs on every point (unlike most props, which
+          // are gated to specific i%N checkpoints), so it was never checked
+          // against delivery houses at all — including the SAME i%24
+          // checkpoint a house spawns on later in this same iteration, so
+          // even an this.obstacles overlap check alone wouldn't catch it
+          // (the house isn't registered yet when the rock runs first).
+          // Skip via the same house-checkpoint math the fence gap uses
+          // instead, which doesn't depend on placement order.
           if (this.prng.next() > 0.65) {
+            const nearestHouseCheckpoint = Math.round(i / 24) * 24;
+            const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
+            const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
+            const ROCK_HOUSE_GAP = 10.0; // meters — house obstacle radius (3.5) plus porch approach clearance
+            const blockedByHouse = (side === houseCheckpointSide) && (distToHouse < ROCK_HOUSE_GAP);
+
             const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(2.0, 24.0));
             const rockPos = pt.clone().addScaledVector(normal, rockDist);
-            rockPos.y = calcTerrainY(rockPos, rockDist) + 0.8;
-            const rock = new THREE.Mesh(rockGeom, rockMat);
-            rock.position.copy(rockPos);
-            rock.rotation.set(this.prng.next() * 3, this.prng.next() * 3, 0);
-            this.foliageGroup.add(rock);
-            this.obstacles.push({ pos: rockPos.clone(), radius: 1.6, type: 'rock' });
+            const overlapsExisting = this.obstacles.some(o => o.pos.distanceTo(rockPos) < (o.radius + 1.6));
+
+            if (!blockedByHouse && !overlapsExisting) {
+              rockPos.y = calcTerrainY(rockPos, rockDist) + 0.8;
+              const rock = new THREE.Mesh(rockGeom, rockMat);
+              rock.position.copy(rockPos);
+              rock.rotation.set(this.prng.next() * 3, this.prng.next() * 3, 0);
+              this.foliageGroup.add(rock);
+              this.obstacles.push({ pos: rockPos.clone(), radius: 1.6, type: 'rock' });
+            }
           }
         });
 
@@ -2446,11 +2705,18 @@
           this.obstacles.push({ pos: housePos.clone(), radius: 3.5, type: 'building' });
           cabinGroup.position.copy(housePos);
           cabinGroup.lookAt(pt);
+          cabinGroup.updateMatrixWorld(true);
+
+          // Hit detection targets the porch ring's actual world position,
+          // not the house pivot — the ring is offset from housePos and the
+          // offset direction changes with each house's lookAt() rotation.
+          const ringWorldPos = new THREE.Vector3();
+          ring.getWorldPosition(ringWorldPos);
 
           this.foliageGroup.add(cabinGroup);
           this.deliveryTargets.push({
             order: order,
-            pos: housePos,
+            pos: ringWorldPos,
             ring: ring,
             delivered: false,
             splineU: u,
@@ -2468,11 +2734,28 @@
           o.type === 'building' && o.pos.distanceTo(pos) < (o.radius + radius + 1.0)
         );
         if (overlapsBuilding) return;
+        // Same hairpin/switchback risk as skyscrapers, just at a shorter
+        // offset — the curve can loop back near a tree's local placement.
+        if (!clearsRoad(pos, CONFIG.ROAD_WIDTH * 0.55 + radius)) return;
         this.foliageGroup.add(tree);
         this.obstacles.push({ pos, radius, type: 'tree' });
       });
 
+      // Resolve fence overlaps against the now-complete obstacle list
+      // (buildings/shops/skyscrapers/rocks/trees). The house-checkpoint
+      // gap above already opens a wide, intentional gap right at delivery
+      // houses — this pass is a tight clearance check against everything
+      // else, so fences stop clipping through bus shelters, chai tapris,
+      // kirana stores, skyscrapers, and rocks without diluting the "gap
+      // means delivery house" visual cue with gaps at every other prop.
+      pendingFences.forEach(({ fenceGroup, pos, radius }) => {
+        const overlaps = this.obstacles.some(o => o.pos.distanceTo(pos) < (o.radius + radius));
+        if (overlaps) return;
+        this.foliageGroup.add(fenceGroup);
+      });
+
       // Add Real-Time Road Traffic (Rickshaws, BEST Buses, Mini-Trucks, Kaali-Peeli Cabs)
+      let trafficSpawnIndex = 0;
       for (let i = 8; i < sampledPoints.length - 8; i += 30) {
         const trafficGroup = new THREE.Group();
         const isBus = (i % 60 === 0);
@@ -2498,12 +2781,25 @@
         }
 
         const u = i / sampledPoints.length;
-        const laneOffset = (i % 2 === 0 ? 1.8 : -1.8);
+        // Was `i % 2` — but i starts at 8 and steps by 30 (both even), so
+        // i%2 was 0 on every single iteration; every "alternating" lane
+        // assignment was actually always the same lane. Alternates on an
+        // independent counter instead, which actually increments by 1
+        // each spawn regardless of i's step size.
+        const laneOffset = (trafficSpawnIndex % 2 === 0 ? 1.8 : -1.8);
+        trafficSpawnIndex++;
+        // Both lanes previously only ever incremented splineU forward —
+        // laneOffset put them visually on either side of the centerline,
+        // but every vehicle traveled the same direction along the route
+        // regardless of lane, so there was never any oncoming traffic.
+        // The opposite lane now travels splineU backward instead.
+        const direction = laneOffset > 0 ? 1 : -1;
         this.trafficVehicles.push({
           mesh: trafficGroup,
           splineU: u,
           speed: 12.0 + (i % 5) * 2.0,
-          laneOffset: laneOffset
+          laneOffset: laneOffset,
+          direction: direction
         });
 
         this.foliageGroup.add(trafficGroup);
@@ -2529,6 +2825,68 @@
         tv.mesh.position.copy(pos);
         tv.mesh.lookAt(pos.clone().add(tangent));
       });
+    }
+
+    // How far off the road centerline the vehicle may legally drift at
+    // this point on the route, on the given side (+1/-1, matching the
+    // same normal-direction convention `side` uses during fence
+    // placement in createFoliageAndProps). Mirrors that exact placement
+    // logic — same i%24/i%48 house-checkpoint math, same FENCE_GAP_RADIUS
+    // — so the clamp only opens where a fence gap actually was left open,
+    // and stays tight to the fence line everywhere else. The fences exist
+    // specifically to mark "you can't get through here except at a
+    // delivery house," so the vehicle needs to actually be stopped by
+    // them, not just visually pass through.
+    getLateralClamp(splineProgress, side) {
+      const TOTAL_POINTS = 800; // matches createFoliageAndProps' getSpacedPoints(800)
+      const i = Math.round(splineProgress * TOTAL_POINTS);
+      const avgSegStep = this.curve.getLength() / TOTAL_POINTS;
+      const nearestHouseCheckpoint = Math.round(i / 24) * 24;
+      const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
+      const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
+      const FENCE_GAP_RADIUS = 18.0;
+      const hasGap = (side === houseCheckpointSide) && (distToHouse < FENCE_GAP_RADIUS);
+      if (hasGap) return 9.0; // full shoulder range through the open gate to the house
+      const FENCE_LATERAL_DIST = CONFIG.ROAD_WIDTH * 0.5 + 2.2; // matches the fence's own placement distance
+      return FENCE_LATERAL_DIST - 0.4; // small margin so the car stops short of the posts, not visually inside them
+    }
+
+    updateCrossers(dt) {
+      for (let i = this.crossers.length - 1; i >= 0; i--) {
+        const c = this.crossers[i];
+        if (c.struck) continue; // frozen at impact position until cleanup below
+
+        c.progress += (c.speed * dt) / c.start.distanceTo(c.end);
+        if (c.progress >= 1.0) {
+          // Reached the far side — walk back the other way so the same
+          // crosser keeps patrolling instead of despawning mid-street.
+          c.progress = 0;
+          const tmp = c.start;
+          c.start = c.end;
+          c.end = tmp;
+          const tmpLat = c.latStart;
+          c.latStart = c.latEnd;
+          c.latEnd = tmpLat;
+          c.mesh.lookAt(c.end);
+        }
+
+        // X/Z still lerp in a straight line (fine — that's genuinely
+        // straight in world space), but Y is recomputed from the current
+        // lateral offset via the shared ground formula rather than lerped
+        // between the two endpoint heights, which cut through the road
+        // surface whenever the true profile between them isn't flat.
+        const curLat = THREE.MathUtils.lerp(c.latStart, c.latEnd, c.progress);
+        c.mesh.position.x = THREE.MathUtils.lerp(c.start.x, c.end.x, c.progress);
+        c.mesh.position.z = THREE.MathUtils.lerp(c.start.z, c.end.z, c.progress);
+        c.mesh.position.y = this.groundHeightAt(c.pt, c.mesh.position, curLat) + 0.15;
+        c.legPhase += dt * 9.0;
+        const swing = Math.sin(c.legPhase) * 0.35;
+        if (c.mesh.userData.legs) {
+          c.mesh.userData.legs.forEach((leg, idx) => {
+            leg.rotation.x = (idx % 2 === 0 ? swing : -swing);
+          });
+        }
+      }
     }
   }
 
@@ -3043,6 +3401,15 @@
         }
         this.lateralOffset = THREE.MathUtils.lerp(this.lateralOffset, 0, 0.06);
         this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, 0, 0.16);
+        // lateralVelocity drives manual steering's lateralOffset update
+        // below (in the else branch) but was never touched here — it sat
+        // frozen at whatever value it had the instant autodrive engaged
+        // (e.g. mid-turn, cornering hard). The moment autodrive toggles
+        // back off, manual steering's very first frame applies that stale
+        // velocity unconditionally, dragging the car sideways with no
+        // input until it decays — read by the player as "the car keeps
+        // drifting on its own" right after taking back manual control.
+        this.lateralVelocity = THREE.MathUtils.lerp(this.lateralVelocity, 0, 0.16);
       } else {
         if (this.health <= 0) {
           // Engine breakdown stall
@@ -3094,7 +3461,14 @@
 
         // Update player's lateral road lane offset
         this.lateralOffset += this.lateralVelocity * dt * driftGripMult;
-        this.lateralOffset = Math.max(-9.0, Math.min(9.0, this.lateralOffset));
+        // Clamped to the fence line (world.getLateralClamp), not a flat
+        // shoulder boundary — full range only opens at the same gap the
+        // fences themselves leave for a delivery house, so the fences
+        // actually stop the car everywhere else instead of just being
+        // scenery the car can drive straight through.
+        const side = this.lateralOffset >= 0 ? 1 : -1;
+        const clampDist = world.getLateralClamp ? world.getLateralClamp(this.splineProgress, side) : 9.0;
+        this.lateralOffset = Math.max(-clampDist, Math.min(clampDist, this.lateralOffset));
       }
 
       // 3. Longitudinal Progress along Spline
@@ -3132,7 +3506,27 @@
         const t = (absLat - roadHalfW) / (9.0 - roadHalfW);
         groundY = currentPos.y - 0.18 - t * 0.32;
       }
-      vehiclePos.y = groundY + 0.25;
+
+      // createRoadMesh banks the road surface on curves (tilts it up to
+      // ±0.14rad), but this only ever used the flat, unbanked centerline
+      // height above — fine dead-center, but at any real lateral offset on
+      // a sharp bend the true (banked) surface can be well over a meter
+      // higher or lower than that, reading as the car sinking into or
+      // floating above the road on turns. Replicate the same banking calc
+      // (same curvature sample spacing as createRoadMesh's 1200 segments)
+      // and apply its vertical contribution at the car's actual offset.
+      const BANK_SEGMENTS = 1200;
+      const bankDeltaU = 2 / BANK_SEGMENTS;
+      const uAhead = Math.min(0.999, this.splineProgress + bankDeltaU);
+      const tangentAhead = world.curve.getTangentAt(uAhead).normalize();
+      const curvatureY = (tangentAhead.x - tangent.x) * 10.0;
+      const bankingAngle = THREE.MathUtils.clamp(curvatureY * 0.25, -0.14, 0.14);
+      const binormal = new THREE.Vector3().crossVectors(roadRight, tangent).normalize();
+      // roadRight (createRoadMesh's "normal") is always horizontal by
+      // construction, so only binormal's tilt contributes vertically here.
+      const bankedYOffset = this.lateralOffset * binormal.y * Math.sin(bankingAngle);
+
+      vehiclePos.y = groundY + bankedYOffset + 0.25;
 
       // Surface elevation bump on gravel / mud
       if (roadTerrainKey === 'gravel' || roadTerrainKey === 'mud') {
@@ -3192,7 +3586,27 @@
               // reading as a giant close-up terrain fill with the car
               // rendering as a flattened silhouette.
               this.steerAngle = THREE.MathUtils.clamp(this.steerAngle + (Math.random() - 0.5) * 0.45, -0.9, 0.9);
-              this.health = Math.max(0, this.health - 14); // Pothole damage
+
+              // Two-wheelers have no suspension/cage to absorb a pothole at
+              // speed — a fast hit throws the rider off outright instead of
+              // just chipping health like a car's shock absorbers would.
+              // Bigger holes are more dangerous both ways: they knock a
+              // two-wheeler off at a lower speed, and they chip more
+              // health off a car. sizeFactor spans ~0.55-2.0.
+              const sizeFactor = p.sizeFactor || 1.0;
+              const isTwoWheeler = this.vehicleType === 'scooter' || this.vehicleType === 'cycle';
+              const baseSpillThreshold = this.vehicleType === 'scooter' ? 14.0 : 10.0; // m/s
+              const spillSpeedThreshold = baseSpillThreshold / Math.max(0.6, sizeFactor);
+              const isSpill = isTwoWheeler && Math.abs(this.speed) > spillSpeedThreshold;
+              const damage = Math.round(14 * sizeFactor);
+
+              if (isSpill) {
+                this.health = 0;
+                this.speed = 0;
+                if (window.game) window.game.crashReason = `${this.vehicleType === 'scooter' ? 'SCOOTER' : 'BICYCLE'} SPILL: Thrown off at speed hitting a pothole`;
+              } else {
+                this.health = Math.max(0, this.health - damage);
+              }
               sound.playPothole();
 
               const app = document.getElementById('game-app');
@@ -3201,8 +3615,12 @@
                 setTimeout(() => app.classList.remove('screen-shake'), 350);
               }
               if (window.game) {
-                window.game.spawnPotholeSplash(carPos, 16);
-                window.game.addNotification('⚠️ POTHOLE HIT! Health -14%', 'warning', 3500);
+                window.game.spawnPotholeSplash(carPos, Math.round(16 * sizeFactor));
+                window.game.addNotification(
+                  isSpill ? '💥 THROWN OFF! Pothole ended your run' : `⚠️ POTHOLE HIT! Health -${damage}%`,
+                  isSpill ? 'danger' : 'warning',
+                  3500
+                );
                 window.game.updateHUDStats();
               }
               setTimeout(() => { p.hitRecently = false; }, 1500);
@@ -3340,16 +3758,27 @@
 
       this.earnings = 280;
       this.deliveriesMade = 0;
+      this.missedCount = 0;
       this.streakCount = 1;
       this.activeOrderIndex = 0;
       this.orderTimer = 36.0;
       this.maxOrderTimer = 36.0;
+      this.deliveryHistory = [];
+      this.isStatusPanelOpen = false;
 
       this.resumeCount = 0;
       this.maxResumes = 3;
       this.savedProgressCheckpoint = null;
       this.isStuckModalOpen = false;
       this.stuckTimer = 0;
+
+      // Wanted meter: builds up from hitting pedestrians/animals, decays
+      // when clean. Hitting max sends the player to jail instead of an
+      // instant fail on the first hit — see checkCrosserCollisions.
+      this.wantedLevel = 0;
+      this.maxWantedLevel = 3;
+      this.wantedDecayTimer = 0;
+      this.isJailed = false;
 
       this.parcels = []; // 3D In-flight projectiles
       this.particles = []; // 3D Procedural Particle FX System
@@ -3558,6 +3987,79 @@
       if (cargoEl) cargoEl.textContent = order.cargo;
     }
 
+    toggleStatusPanel() {
+      this.isStatusPanelOpen = !this.isStatusPanelOpen;
+      const panel = document.getElementById('delivery-status-panel');
+      if (!panel) return;
+      panel.classList.toggle('open', this.isStatusPanelOpen);
+      if (this.isStatusPanelOpen) this.renderStatusPanel();
+    }
+
+    refreshStatusPanel() {
+      if (this.isStatusPanelOpen) this.renderStatusPanel();
+    }
+
+    renderStatusPanel() {
+      const panel = document.getElementById('delivery-status-panel');
+      if (!panel) return;
+
+      const cityOrders = CONFIG.ORDERS_BY_CITY[this.selectedCity] || CONFIG.ORDERS_BY_CITY.mumbai;
+      const current = cityOrders[this.activeOrderIndex % cityOrders.length];
+      const upcoming = [1, 2, 3].map(off => cityOrders[(this.activeOrderIndex + off) % cityOrders.length]);
+
+      const delivered = this.deliveryHistory.filter(h => h.status === 'delivered').length;
+      const missed = this.deliveryHistory.filter(h => h.status === 'missed').length;
+
+      const historyRows = this.deliveryHistory.length
+        ? this.deliveryHistory.slice(0, 25).map(h => `
+            <div class="status-history-row ${h.status}">
+              <span class="status-history-icon">${h.status === 'delivered' ? '✅' : '❌'}</span>
+              <span class="status-history-name">${h.name}</span>
+              <span class="status-history-amount ${h.status}">${h.amount >= 0 ? '+' : ''}₹${h.amount}</span>
+            </div>`).join('')
+        : `<div class="status-history-empty">No deliveries yet — get rolling!</div>`;
+
+      panel.innerHTML = `
+        <div class="status-panel-header">
+          <span class="status-panel-title">DELIVERY STATUS</span>
+          <button id="btn-status-close" class="status-panel-close" title="Close [V]">✕</button>
+        </div>
+
+        <div class="status-panel-section">
+          <div class="status-section-tag">CURRENT DISPATCH</div>
+          <div class="status-current-card">
+            <span class="status-current-name">${current ? current.name : '—'}</span>
+            <span class="status-current-cargo">${current ? current.cargo : ''}</span>
+          </div>
+        </div>
+
+        <div class="status-panel-section">
+          <div class="status-section-tag">UPCOMING</div>
+          <div class="status-upcoming-list">
+            ${upcoming.map((o, i) => `
+              <div class="status-upcoming-row">
+                <span class="status-upcoming-idx">#${i + 2}</span>
+                <span class="status-upcoming-name">${o ? o.name : '—'}</span>
+                <span class="status-upcoming-reward">₹${o ? o.reward : 0}</span>
+              </div>`).join('')}
+          </div>
+        </div>
+
+        <div class="status-panel-section status-panel-totals">
+          <div class="status-total-pill delivered"><span>${delivered}</span> DELIVERED</div>
+          <div class="status-total-pill missed"><span>${missed}</span> MISSED</div>
+          <div class="status-total-pill earnings"><span>₹${this.earnings}</span> EARNED</div>
+        </div>
+
+        <div class="status-panel-section status-panel-history">
+          <div class="status-section-tag">HISTORY</div>
+          <div class="status-history-list">${historyRows}</div>
+        </div>
+      `;
+
+      document.getElementById('btn-status-close')?.addEventListener('click', () => this.toggleStatusPanel());
+    }
+
     updateOrderTimer(dt) {
       if (this.gameState !== 'playing') return;
 
@@ -3567,17 +4069,42 @@
 
       if (this.orderTimer <= 0) {
         // Order Timed Out (Late Delivery Penalty)
+        const cityOrdersForMiss = CONFIG.ORDERS_BY_CITY[this.selectedCity] || CONFIG.ORDERS_BY_CITY.mumbai;
+        const missedOrder = cityOrdersForMiss[this.activeOrderIndex % cityOrdersForMiss.length];
+
         this.orderTimer = this.maxOrderTimer;
         this.streakCount = 1;
         this.earnings = Math.max(0, this.earnings - 25);
+        this.missedCount = (this.missedCount || 0) + 1;
         sound.playTone(220, 'sawtooth', 0.3, 0.35);
 
         this.showScoreBanner(`⚠️ TIME EXPIRED! (LATE)`, `Penalty -₹25 • Customer Rating 1★`);
         this.addNotification('❌ DELIVERY MISSED! Time expired (-₹25)', 'danger', 3500);
 
+        this.deliveryHistory.unshift({
+          name: missedOrder?.name || 'Delivery',
+          status: 'missed',
+          amount: -25,
+          orderIndex: this.activeOrderIndex
+        });
+
+        // Retire this order's house so it stops being a candidate for the
+        // "nearest undelivered target" search (used by both the HUD arrow
+        // and the actual cargo-toss hit test). Left unmarked, a missed
+        // house stays live forever — on a winding/looping road it can end
+        // up geometrically closer than the player's real current target,
+        // silently stealing every toss aimed at the house they're actually
+        // standing next to.
+        const missedTarget = this.world?.deliveryTargets?.[this.activeOrderIndex];
+        if (missedTarget) {
+          missedTarget.delivered = true;
+          if (missedTarget.ring) missedTarget.ring.material.color.setHex(0x64748b);
+        }
+
         this.activeOrderIndex++;
         this.updateActiveOrderCard();
         this.updateHUDStats();
+        this.refreshStatusPanel();
       } else {
         const mins = Math.floor(this.orderTimer / 60);
         const secs = Math.floor(this.orderTimer % 60);
@@ -3635,6 +4162,7 @@
         if (k === 'c') this.toggleCameraMode();
         if (k === 't') this.cycleTimeOfDay();
         if (k === 'm') this.toggleMute();
+        if (k === 'v') this.toggleStatusPanel();
         if (k === 'escape') this.openSettingsModal('gameplay');
         if (k === ' ' && this.gameState === 'playing') this.tossParcel3D();
         if ((k === 'enter' || k === ' ') && this.gameState === 'menu') this.startDrive();
@@ -3772,9 +4300,17 @@
             this.showScoreBanner(`${bonusMsg} +₹${earnedBonus}`, `🔥 ${this.streakCount}x STREAK • +${timeBonus} TIME BONUS`);
             this.addNotification(`✅ DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
 
+            this.deliveryHistory.unshift({
+              name: p.nearestTarget.order?.name || 'Delivery',
+              status: 'delivered',
+              amount: earnedBonus,
+              orderIndex: this.activeOrderIndex
+            });
+
             this.activeOrderIndex++;
             this.updateActiveOrderCard();
             this.updateHUDStats();
+            this.refreshStatusPanel();
 
             this.scene.remove(p.mesh);
             this.parcels.splice(i, 1);
@@ -3927,6 +4463,104 @@
       }
     }
 
+    updateWantedHUD() {
+      const box = document.getElementById('wanted-meter');
+      if (!box) return;
+      box.classList.toggle('wanted-active', this.wantedLevel > 0);
+      const stars = box.querySelectorAll('.wanted-star');
+      stars.forEach((s, i) => s.classList.toggle('lit', i < this.wantedLevel));
+    }
+
+    // Checks the player's vehicle against every road crosser (pedestrian/
+    // dog/cat) each frame. A hit removes that crosser, bumps the wanted
+    // meter instead of an instant fail, and decays back down when clean —
+    // so a couple of unlucky hits doesn't end the run outright, but a
+    // reckless streak eventually lands you in jail.
+    checkCrosserCollisions() {
+      if (!this.vehicle || !this.world || !this.world.crossers || this.isJailed) return;
+      const carPos = this.vehicle.mesh.position;
+
+      for (let i = this.world.crossers.length - 1; i >= 0; i--) {
+        const c = this.world.crossers[i];
+        if (c.struck) continue;
+        const d = carPos.distanceTo(c.mesh.position);
+        if (d < (c.hitRadius + 1.0) && Math.abs(this.vehicle.speed) > 1.5) {
+          c.struck = true;
+          this.world.foliageGroup.remove(c.mesh);
+          this.world.crossers.splice(i, 1);
+
+          this.wantedLevel = Math.min(this.maxWantedLevel, this.wantedLevel + 1);
+          this.wantedDecayTimer = 0;
+          this.updateWantedHUD();
+
+          const box = document.getElementById('wanted-meter');
+          if (box) {
+            box.classList.remove('wanted-pulse');
+            void box.offsetWidth;
+            box.classList.add('wanted-pulse');
+          }
+
+          const label = c.kind === 'pedestrian' ? 'PEDESTRIAN' : (c.kind === 'dog' ? 'DOG' : 'CAT');
+          this.addNotification(`🚨 HIT A ${label}! Wanted level ${this.wantedLevel}/${this.maxWantedLevel}`, 'danger', 3000);
+          sound.playCrash();
+
+          if (this.wantedLevel >= this.maxWantedLevel) {
+            this.triggerJail();
+          }
+          break; // one hit per frame is plenty
+        }
+      }
+
+      // Clean-driving decay: wanted level drops one star after a stretch
+      // of no new hits, so a single early mistake doesn't dog the whole run.
+      if (this.wantedLevel > 0) {
+        this.wantedDecayTimer += 1 / 60;
+        if (this.wantedDecayTimer > 12.0) {
+          this.wantedLevel = Math.max(0, this.wantedLevel - 1);
+          this.wantedDecayTimer = 0;
+          this.updateWantedHUD();
+        }
+      }
+    }
+
+    triggerJail() {
+      if (this.isJailed) return;
+      this.isJailed = true;
+      this.gameState = 'jailed';
+      sound.playCrash();
+
+      const fine = 120;
+      this.earnings = Math.max(0, this.earnings - fine);
+      this.updateHUDStats();
+
+      this.modalContainer.innerHTML = `
+        <div class="modal-backdrop">
+          <div class="recovery-card">
+            <div class="recovery-badge failed">🚔 ARRESTED</div>
+            <h2 class="recovery-title">TOO MANY HIT-AND-RUNS</h2>
+            <p class="recovery-desc">
+              Traffic police pulled you over after repeated collisions with pedestrians and animals.
+              <br><br>
+              <strong>Fine Paid:</strong> -₹${fine}
+            </p>
+            <button id="btn-jail-release" class="btn-resume-drive">
+              <span>⚡ PAY FINE & RESUME DISPATCH</span>
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('btn-jail-release')?.addEventListener('click', () => {
+        this.isJailed = false;
+        this.wantedLevel = 0;
+        this.wantedDecayTimer = 0;
+        this.updateWantedHUD();
+        this.modalContainer.innerHTML = '';
+        this.gameState = 'playing';
+        if (this.vehicle) this.vehicle.speed = 0;
+      });
+    }
+
     initHUD() {
       // Cinematic Intro Screen Dismiss Handler
       const introScreen = document.getElementById('intro-screen');
@@ -4005,6 +4639,8 @@
       document.getElementById('btn-dock-camera')?.addEventListener('click', () => this.toggleCameraMode());
       document.getElementById('btn-hud-sound')?.addEventListener('click', () => this.toggleMute());
       document.getElementById('btn-dock-sound')?.addEventListener('click', () => this.toggleMute());
+      document.getElementById('btn-hud-status')?.addEventListener('click', () => this.toggleStatusPanel());
+      document.getElementById('btn-dock-status')?.addEventListener('click', () => this.toggleStatusPanel());
       document.getElementById('btn-dock-settings')?.addEventListener('click', () => this.openSettingsModal('gameplay'));
       document.getElementById('btn-dock-home')?.addEventListener('click', () => this.renderDispatchHub());
 
@@ -4098,6 +4734,12 @@
 
     toggleAutodrive() {
       this.vehicle.isAutodrive = !this.vehicle.isAutodrive;
+      // Belt-and-suspenders on top of the per-frame decay in update():
+      // toggling autodrive off and back on within the same frame/second
+      // (decay hasn't caught up yet) could still hand manual steering a
+      // stale lateralVelocity the instant control returns — zero it here
+      // so there's no timing window at all, not just a fast one.
+      if (!this.vehicle.isAutodrive) this.vehicle.lateralVelocity = 0;
       const pill = document.getElementById('btn-hud-autodrive');
       const text = document.getElementById('autodrive-text');
       if (pill && text) {
@@ -4191,6 +4833,18 @@
           this.deliveriesMade = this.savedProgressCheckpoint.deliveriesMade;
           this.streakCount = this.savedProgressCheckpoint.streakCount;
           this.activeOrderIndex = this.savedProgressCheckpoint.activeOrderIndex;
+          // Restore which houses were actually delivered at checkpoint time
+          // too — activeOrderIndex alone isn't enough, since delivered
+          // flags on deliveryTargets are never unset elsewhere. Without
+          // this, houses resolved after the checkpoint stayed permanently
+          // marked delivered even though activeOrderIndex rewound past
+          // them, leaving the HUD's order card pointed at a dead slot.
+          const snapshot = this.savedProgressCheckpoint.deliveredSnapshot;
+          if (snapshot && this.world?.deliveryTargets) {
+            this.world.deliveryTargets.forEach((t, idx) => {
+              if (idx < snapshot.length) t.delivered = snapshot[idx];
+            });
+          }
           this.updateHUDStats();
           this.updateActiveOrderCard();
         }
@@ -4234,7 +4888,13 @@
           earnings: this.earnings,
           deliveriesMade: this.deliveriesMade,
           streakCount: this.streakCount,
-          activeOrderIndex: this.activeOrderIndex
+          activeOrderIndex: this.activeOrderIndex,
+          // deliveryTargets[].delivered is permanent (never unset elsewhere),
+          // so restoring activeOrderIndex alone left already-resolved houses
+          // stuck marked delivered after a rollback — the HUD's order card
+          // (keyed off activeOrderIndex) would show a name/cargo for a slot
+          // whose actual house was no longer a live target.
+          deliveredSnapshot: this.world?.deliveryTargets?.map(t => t.delivered) || []
         };
       }
 
@@ -4358,13 +5018,18 @@
       this.dockEl.style.display = 'flex';
       this.isStuckModalOpen = false;
       this.stuckTimer = 0;
+      this.wantedLevel = 0;
+      this.wantedDecayTimer = 0;
+      this.isJailed = false;
+      this.updateWantedHUD();
 
       if (this.savedProgressCheckpoint === null) {
         this.savedProgressCheckpoint = {
           earnings: this.earnings,
           deliveriesMade: this.deliveriesMade,
           streakCount: this.streakCount,
-          activeOrderIndex: this.activeOrderIndex
+          activeOrderIndex: this.activeOrderIndex,
+          deliveredSnapshot: this.world?.deliveryTargets?.map(t => t.delivered) || []
         };
       }
 
@@ -4877,9 +5542,15 @@
         const sideDot = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion).dot(toTarget);
         const sideText = sideDot > 0 ? 'RIGHT' : 'LEFT';
         const distMeters = Math.round(minDistance);
+        // "AHEAD" was hardcoded regardless of actual position — once a
+        // house has been driven past (still undelivered while its timer
+        // runs out), it's the nearest target again geometrically, but it's
+        // behind the car, not ahead of it. Same forward vector already
+        // computed above, just previously unused for this.
+        const aheadText = carForward.dot(toTarget) > 0 ? 'AHEAD' : 'BEHIND';
 
         if (wpTargetEl) wpTargetEl.textContent = nextTarget.order.name;
-        if (wpDistEl) wpDistEl.textContent = `${distMeters}m AHEAD [${sideText}]`;
+        if (wpDistEl) wpDistEl.textContent = `${distMeters}m ${aheadText} [${sideText}]`;
         if (gpsDistEl) gpsDistEl.textContent = `${distMeters}m`;
       } else {
         if (wpTargetEl) wpTargetEl.textContent = 'ALL ORDERS DELIVERED!';
@@ -4998,6 +5669,8 @@
       if (this.gameState === 'playing') {
         this.vehicle.update(dt, this.keys, this.world, this.selectedSeason, this.selectedRoadTerrain);
         this.world.updateTraffic(dt);
+        this.world.updateCrossers(dt);
+        this.checkCrosserCollisions();
         if (this.world.updateClouds) this.world.updateClouds(dt);
         this.updateParcels(dt);
         this.updateParticles(dt);
@@ -5016,7 +5689,8 @@
 
         // Automatic Breakdown & Stuck Recovery Detection
         if (this.vehicle.health <= 0) {
-          this.showStuckRecoveryModal('VEHICLE BREAKDOWN: Suspension & Engine Failure');
+          this.showStuckRecoveryModal(this.crashReason || 'VEHICLE BREAKDOWN: Suspension & Engine Failure');
+          this.crashReason = null;
         } else if ((this.keys.w || this.keys.up || this.keys.s || this.keys.down) && Math.abs(this.vehicle.speed) < 0.45 && Math.abs(this.vehicle.lateralOffset) > (CONFIG.ROAD_WIDTH * 0.45)) {
           this.stuckTimer += dt;
           if (this.stuckTimer > 2.4) {

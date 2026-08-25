@@ -61,6 +61,16 @@
         </div>
       </div>
 
+      <!-- Wanted Meter: fills as pedestrians/animals get hit; hits max = jail -->
+      <div id="wanted-meter" class="wanted-meter-box">
+        <span class="wanted-meter-label">WANTED</span>
+        <div class="wanted-meter-stars">
+          <span class="wanted-star" data-i="0">★</span>
+          <span class="wanted-star" data-i="1">★</span>
+          <span class="wanted-star" data-i="2">★</span>
+        </div>
+      </div>
+
       <!-- Top-Right: Slowroads Minimal Audio Bar & System Controls -->
       <div class="slowroads-top-bar">
         <div class="slowroads-radio-pill" id="cassette-radio-card">
@@ -80,8 +90,12 @@
           <button id="btn-hud-tod" class="slowroads-icon-btn" title="Cycle Time of Day [T]">TOD</button>
           <button id="btn-hud-camera" class="slowroads-icon-btn" title="Camera Mode [C]">CAM</button>
           <button id="btn-hud-sound" class="slowroads-icon-btn" title="Mute Audio [M]">MUTE</button>
+          <button id="btn-hud-status" class="slowroads-icon-btn" title="Delivery Status [V]">STATUS</button>
         </div>
       </div>
+
+      <!-- Delivery Status Panel (toggleable, non-blocking) -->
+      <div id="delivery-status-panel" class="delivery-status-panel"></div>
 
       <!-- Speed Camera Flash Screen Overlay -->
       <div id="speed-cam-flash" class="speed-cam-flash"></div>
@@ -167,6 +181,7 @@
           <button id="btn-dock-tod" class="dock-icon" title="Time of Day [T]">TOD</button>
           <button id="btn-dock-camera" class="dock-icon" title="Switch Camera Mode [C]">CAM</button>
           <button id="btn-dock-sound" class="dock-icon" title="Mute/Unmute Audio [M]">AUDIO</button>
+          <button id="btn-dock-status" class="dock-icon" title="Delivery Status [V]">STATUS</button>
           <button id="btn-dock-settings" class="dock-icon" title="Dispatch Tuning">CONFIG</button>
         </div>
       </div>
