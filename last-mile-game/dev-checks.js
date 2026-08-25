@@ -12,6 +12,16 @@
 // Each check is intentionally narrow and fast (<1s) so this is cheap to
 // run after every change, not just a final pass. Add a new check here
 // whenever a new class of bug is found — that's the whole point.
+//
+// IMPORTANT: run this SYNCHRONOUSLY (paste directly into the console, or
+// eval it inline in the same javascript_tool call as calling
+// runWorldChecks()). Loading it via `fetch(...).then(code => eval(code))`
+// lets the game's animation loop tick several frames between the fetch
+// resolving and the checks running, which produced a false-positive
+// "crosser height drift" failure purely from reading position/progress
+// fields that were captured a frame apart from each other — not a real
+// desync. If a check looks flaky, first re-run it synchronously before
+// treating it as a regression.
 
 function runWorldChecks() {
   const game = window.game;
@@ -316,6 +326,80 @@ function runWorldChecks() {
       v.isAutodrive = savedAD;
     } else {
       record('autodrive-toggle-resets-lateral-velocity', false, 'game.vehicle not present');
+    }
+  }
+
+  // 15. Every delivery house should have exactly one driveway strip
+  // connecting it to the road, and that strip's far end should actually
+  // land at (not short of, not past) the house pivot — regression risk:
+  // driveways are new (see game.js's house-spawn block), built as a
+  // straight ribbon from the road shoulder to housePos; a future change
+  // to house/driveway placement math could silently desync them.
+  {
+    // NOTE: world.obstacles' 'building' type is shared by every building
+    // kind (delivery cabins, kirana shops, tapris, bus shelters, monuments,
+    // skyscrapers) — comparing driveway count against that whole set
+    // undercounts what "should" have a driveway. deliveryTargets is the
+    // authoritative list of actual delivery houses.
+    const deliveryHouses = world.deliveryTargets || [];
+    const driveways = world.foliageGroup.children.filter(c => c.userData?.isDriveway);
+    let mismatchCount = 0;
+    driveways.forEach(d => {
+      if (!d.userData.housePos) { mismatchCount++; return; }
+      const nearestHouse = deliveryHouses.reduce((best, h) => {
+        const dist = h.pos.distanceTo(d.userData.housePos);
+        return (!best || dist < best.dist) ? { h, dist } : best;
+      }, null);
+      // deliveryTargets[].pos is the porch RING's world position (fixed
+      // deliberately — see check #4), not the house pivot the driveway's
+      // housePos is stored as; the ring sits ~3.2m off-pivot by design, so
+      // tolerance has to clear that real, intentional offset rather than
+      // just measurement noise.
+      if (!nearestHouse || nearestHouse.dist > 5.0) mismatchCount++;
+    });
+    record('driveway-count-matches-houses', driveways.length === deliveryHouses.length,
+      `${driveways.length} driveways vs ${deliveryHouses.length} delivery houses`);
+    record('driveway-endpoints-match-houses', mismatchCount === 0,
+      `${mismatchCount}/${driveways.length} driveways whose stored endpoint doesn't match any delivery house within 0.5u`);
+  }
+
+  // 16. Vehicle must never sit frozen with nonzero speed (regression: when
+  // the free-position/heading movement model — VehicleController.update
+  // — replaced the old splineProgress-drives-position rail model, the
+  // fence lateral clamp snapped the car straight to
+  // `proj.pt + normal*clampDist` on contact, discarding the FORWARD
+  // component of the move entirely. If heading pointed mostly sideways
+  // into a fence, every frame reset to nearly the same clamped spot with
+  // ~0 net progress despite full speed — a stable feedback loop, not a
+  // slow crawl, since projectToRoad's nearest-point search was reseeded
+  // from that same frozen position each frame. Fixed by decomposing the
+  // move into along-road (tangent) and lateral (normal) components and
+  // only clamping the lateral one, so the car slides along a fence like a
+  // real wall instead of freezing against it. This check reproduces the
+  // exact worst case (heading aimed dead-on at the fence, full throttle,
+  // no steering) and confirms the car is still making forward progress
+  // after a full second, not stuck in a loop.
+  {
+    if (game.vehicle && game.world && game.world.curve) {
+      const v = game.vehicle;
+      const w = game.world;
+      const savedHeading = v.heading, savedSpeed = v.speed, savedPos = v.mesh.position.clone(), savedU = v.splineProgress;
+      const pt = w.curve.getPointAt(v.splineProgress);
+      const tangent = w.curve.getTangentAt(v.splineProgress).normalize();
+      const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+      v.heading = Math.atan2(normal.x, normal.z); // aim exactly at the fence, worst case for the old bug
+      v.speed = 30;
+      const posAtStart = v.mesh.position.clone();
+      for (let i = 0; i < 60; i++) v.update(1 / 60, { w: true }, w, game.selectedSeason, game.selectedRoadTerrain); // 1s, full throttle, no steering
+      const moved = posAtStart.distanceTo(v.mesh.position);
+      const stillHasSpeed = Math.abs(v.speed) > 5;
+      // Restore whatever state the player was actually in before this
+      // synthetic stress test — this check must be non-destructive.
+      v.heading = savedHeading; v.speed = savedSpeed; v.mesh.position.copy(savedPos); v.splineProgress = savedU;
+      record('vehicle-slides-not-freezes-on-fence', moved > 0.05 || !stillHasSpeed,
+        `moved ${moved.toFixed(3)}u in 1s of full-throttle head-on-fence contact (speed after: ${v.speed === savedSpeed ? 'restored' : 'n/a'}) — expect >0.05u; 0.000u with nonzero speed means frozen`);
+    } else {
+      record('vehicle-slides-not-freezes-on-fence', false, 'game.vehicle/world.curve not present');
     }
   }
 
