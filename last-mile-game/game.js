@@ -776,6 +776,11 @@
       this.deliveryTargets = [];
       this.potholes = [];
       this.crossers = [];
+      // Thin roadside props (poles, lampposts) the camera can end up
+      // staring straight through when the on-foot courier walks up close
+      // to one — tracked separately from `obstacles` (which only stores a
+      // position/radius, not the mesh) so the camera can fade them out.
+      this.occluderMeshes = [];
 
       this.generateSpline();
     }
@@ -956,30 +961,54 @@
 
     createSkyDome(season, todKey = 'day') {
       const tod = CONFIG.TIME_OF_DAY[todKey] || CONFIG.TIME_OF_DAY.day;
+      // Sky color used to be Gouraud-interpolated per-VERTEX, baked onto a
+      // coarse sphere — every ring boundary was a visible kink where the
+      // interpolation slope changed (the vertical blend uses a non-linear
+      // easing, pow(normY,0.75), that a polygonal mesh can only ever
+      // approximate piecewise). Raising the ring count (24→64) reduced but
+      // did not eliminate it for high-range gradients like Dawn's
+      // purple→orange→yellow sweep — the banding is fundamentally a
+      // property of vertex-based color interpolation, not something you
+      // can subdivide your way out of for an arbitrarily wide color range.
+      // Computing the exact same gradient per-PIXEL in a fragment shader
+      // removes the mechanism entirely, at any geometry resolution — this
+      // is the real fix, not a bigger version of the band-aid.
       const geom = new THREE.SphereGeometry(1100, 32, 24);
 
-      // Vertex-colored atmospheric gradient from zenith to nadir
-      const topCol = new THREE.Color(tod.skyTop);
-      const horizCol = new THREE.Color(tod.skyHorizon);
-      const botCol = new THREE.Color(tod.skyBottom);
-
-      const pos = geom.attributes.position;
-      const colors = [];
-      for (let i = 0; i < pos.count; i++) {
-        const y = pos.getY(i);
-        const normY = y / 1100; // -1 to +1
-        const vertexCol = new THREE.Color();
-        if (normY > 0) {
-          vertexCol.lerpColors(horizCol, topCol, Math.pow(normY, 0.75));
-        } else {
-          vertexCol.lerpColors(horizCol, botCol, Math.min(1.0, -normY * 1.5));
-        }
-        colors.push(vertexCol.r, vertexCol.g, vertexCol.b);
-      }
-      geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-
-      const skyMat = new THREE.MeshBasicMaterial({
-        vertexColors: true,
+      const skyMat = new THREE.ShaderMaterial({
+        uniforms: {
+          topCol: { value: new THREE.Color(tod.skyTop) },
+          horizCol: { value: new THREE.Color(tod.skyHorizon) },
+          botCol: { value: new THREE.Color(tod.skyBottom) }
+        },
+        vertexShader: `
+          varying vec3 vPos;
+          void main() {
+            vPos = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 topCol;
+          uniform vec3 horizCol;
+          uniform vec3 botCol;
+          varying vec3 vPos;
+          void main() {
+            float normY = vPos.y / 1100.0;
+            vec3 col;
+            if (normY > 0.0) {
+              col = mix(horizCol, topCol, pow(normY, 0.75));
+            } else {
+              col = mix(horizCol, botCol, min(1.0, -normY * 1.5));
+            }
+            // Even an exactly-computed gradient still quantizes to 8 bits
+            // per channel on write — a per-pixel hash dither breaks that
+            // final quantization step into imperceptible grain instead of
+            // visible bands (same technique as the post-process vignette).
+            float dither = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 128.0;
+            gl_FragColor = vec4(col + dither, 1.0);
+          }
+        `,
         side: THREE.BackSide,
         depthWrite: false
       });
@@ -1767,15 +1796,20 @@
           const latDist = CONFIG.ROAD_WIDTH * 0.5 + 2.2;
           const polePos = pt.clone().addScaledVector(normal, latDist);
           polePos.y = calcTerrainY(polePos, latDist);
-          const pole = new THREE.Mesh(poleGeom, poleMat);
+          // Per-instance material clone (not the shared `poleMat`) so the
+          // camera occlusion fade can dim this one pole without dimming
+          // every utility pole in the world at once.
+          const poleInstMat = poleMat.clone();
+          const pole = new THREE.Mesh(poleGeom, poleInstMat);
           pole.position.copy(polePos);
           pole.position.y += 3.2;
 
-          const crossbar = new THREE.Mesh(crossbarGeom, poleMat);
+          const crossbar = new THREE.Mesh(crossbarGeom, poleInstMat);
           crossbar.position.set(0, 2.6, 0);
           pole.add(crossbar);
           this.foliageGroup.add(pole);
           this.obstacles.push({ pos: polePos.clone(), radius: 0.9, type: 'pole' });
+          this.occluderMeshes.push(pole);
         }
 
         // 4. Overhead Traffic Police Speed Radar Gantries
@@ -1881,7 +1915,7 @@
           garageGroup.add(pad);
 
           garageGroup.position.copy(bayPos);
-          garageGroup.lookAt(pt);
+          garageGroup.lookAt(pt.x, bayPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
           this.foliageGroup.add(garageGroup);
 
           this.repairBays.push({
@@ -2226,7 +2260,7 @@
             stoneGroup.add(band);
 
             stoneGroup.position.copy(stonePos);
-            stoneGroup.lookAt(pt);
+            stoneGroup.lookAt(pt.x, stonePos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
             this.foliageGroup.add(stoneGroup);
           }
 
@@ -2269,9 +2303,15 @@
             lampGroup.add(lightLens);
 
             lampGroup.position.copy(lampPos);
-            lampGroup.lookAt(pt);
+            // Same lookAt-tilt bug as the delivery cabin (see BUGFIX_LOG.md
+            // Recurring pattern list): lampPos and pt differ in Y on sloped
+            // terrain, so an un-flattened lookAt() pitches/rolls the whole
+            // lamp+boom+lantern assembly instead of only yawing it toward
+            // the road. Flatten to the lamp's own height first.
+            lampGroup.lookAt(pt.x, lampPos.y, pt.z);
             this.foliageGroup.add(lampGroup);
             this.obstacles.push({ pos: lampPos.clone(), radius: 0.8, type: 'pole' });
+            this.occluderMeshes.push(lampGroup);
           }
 
           // Roadside Bus Shelter & Waiting Passengers
@@ -2328,7 +2368,7 @@
             shelterGroup.add(humanGroup);
 
             shelterGroup.position.copy(shelterPos);
-            shelterGroup.lookAt(pt);
+            shelterGroup.lookAt(pt.x, shelterPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
             this.foliageGroup.add(shelterGroup);
             this.obstacles.push({ pos: shelterPos.clone(), radius: 2.8, type: 'building' });
           }
@@ -2377,7 +2417,7 @@
             tapriGroup.add(patron);
 
             tapriGroup.position.copy(tapriPos);
-            tapriGroup.lookAt(pt);
+            tapriGroup.lookAt(pt.x, tapriPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
             this.foliageGroup.add(tapriGroup);
             this.obstacles.push({ pos: tapriPos.clone(), radius: 2.6, type: 'building' });
           }
@@ -2434,7 +2474,7 @@
             });
 
             kiranaGroup.position.copy(kiranaPos);
-            kiranaGroup.lookAt(pt);
+            kiranaGroup.lookAt(pt.x, kiranaPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
             this.foliageGroup.add(kiranaGroup);
             this.obstacles.push({ pos: kiranaPos.clone(), radius: 2.4, type: 'building' });
           }
@@ -2535,7 +2575,7 @@
             }
 
             monGroup.position.copy(monPos);
-            monGroup.lookAt(pt);
+            monGroup.lookAt(pt.x, monPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
             this.foliageGroup.add(monGroup);
             this.obstacles.push({ pos: monPos.clone(), radius: 4.0, type: 'building' });
           }
@@ -2602,6 +2642,50 @@
           const houseDist = houseSide * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(diffCfg.minHouseDist, diffCfg.maxHouseDist));
           const housePos = pt.clone().addScaledVector(normal, houseDist);
           housePos.y = calcTerrainY(housePos, houseDist);
+
+          // Dirt driveway strip connecting the road shoulder to the house —
+          // previously houses just sat stranded off the road with nothing
+          // linking them to it, which is part of why they read as floating/
+          // dropped-in-place. A short straight ribbon along the same normal
+          // used to offset the house (so it's guaranteed to end exactly at
+          // the porch) sampled at several points so it follows the terrain
+          // instead of being one rigid flat plank (see the fence-chording
+          // bug fixed earlier for why that matters).
+          {
+            const driveWidth = 2.4;
+            const startT = houseSide * (CONFIG.ROAD_WIDTH * 0.5 - 0.3); // slight overlap into the shoulder for a seamless join
+            const segments = Math.max(3, Math.round(Math.abs(houseDist - startT) / 3.0));
+            const driveDirt = new THREE.Color(0x9c7b52);
+            const driveDirtLight = new THREE.Color(0xb2916a);
+            const positions = [];
+            const colors = [];
+            const indices = [];
+            for (let s = 0; s <= segments; s++) {
+              const t = THREE.MathUtils.lerp(startT, houseDist, s / segments);
+              const centerPos = pt.clone().addScaledVector(normal, t);
+              centerPos.y = calcTerrainY(centerPos, t) + 0.06;
+              const left = centerPos.clone().addScaledVector(tangent, -driveWidth / 2);
+              const right = centerPos.clone().addScaledVector(tangent, driveWidth / 2);
+              positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
+              const c = driveDirt.clone().lerp(driveDirtLight, this.prng.next());
+              colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+            }
+            for (let s = 0; s < segments; s++) {
+              const a = s * 2, b = a + 1, c = a + 2, d = a + 3;
+              indices.push(a, b, c, b, d, c);
+            }
+            const driveGeom = new THREE.BufferGeometry();
+            driveGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            driveGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            driveGeom.setIndex(indices);
+            driveGeom.computeVertexNormals();
+            const driveMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0.0, side: THREE.DoubleSide });
+            const driveMesh = new THREE.Mesh(driveGeom, driveMat);
+            driveMesh.receiveShadow = true;
+            driveMesh.userData.isDriveway = true;
+            driveMesh.userData.housePos = housePos.clone();
+            this.foliageGroup.add(driveMesh);
+          }
 
           const cabinGroup = new THREE.Group();
 
@@ -2704,7 +2788,12 @@
 
           this.obstacles.push({ pos: housePos.clone(), radius: 3.5, type: 'building' });
           cabinGroup.position.copy(housePos);
-          cabinGroup.lookAt(pt);
+          // lookAt() rotates on X/Z too whenever the target's Y differs from
+          // housePos's Y (always true on sloped hillside terrain), tilting
+          // the whole cabin's roof/walls off-vertical. Flatten the look
+          // target to the cabin's own height so only yaw (facing the road)
+          // is applied.
+          cabinGroup.lookAt(pt.x, housePos.y, pt.z);
           cabinGroup.updateMatrixWorld(true);
 
           // Hit detection targets the porch ring's actual world position,
@@ -2901,9 +2990,20 @@
       this.wheels = [];
 
       this.speed = 0;
-      this.steerAngle = 0;
-      this.lateralOffset = 0; // Lateral position across road lanes (-6m to +6m)
-      this.lateralVelocity = 0;
+      this.steerAngle = 0; // now purely cosmetic (wheel turn + body roll), not orientation
+      // Free position + heading movement (replaces the old rail model of
+      // splineProgress-drives-position + lateralOffset-drives-sideways-
+      // drift). `heading` is the car's true world-space yaw — the vehicle
+      // can now actually turn, reverse, and maneuver off the road, not
+      // just drift sideways within a lane band. splineProgress is kept,
+      // but is now a DERIVED value (nearest point on the road curve to the
+      // car's actual free position, refreshed each frame by projectToRoad)
+      // rather than the thing driving position — every external system
+      // that reads it (camera, GPS, autopilot, fence clamp, off-road-lost
+      // detection) still gets a meaningful road-relative value.
+      this.heading = 0;
+      this.lateralOffset = 0; // still maintained (derived) for banking/ground-height/fence-clamp math
+      this.lateralVelocity = 0; // unused by movement now; kept only so any external reset code touching it doesn't throw
       this.grip = 1.0;
       this.health = 100; // Vehicle condition (100% down to 0%)
       this.distanceTraveled = 0;
@@ -3368,6 +3468,61 @@
       this.scene.add(this.mesh);
     }
 
+    // Finds the nearest point on the road curve to `pos`, seeded from the
+    // last known splineProgress so this is a cheap local search (a window
+    // around where the car already was) rather than a full scan every
+    // frame — except when the car has moved far off-route (parked off-
+    // road, or just spawned), where it widens to a full scan so it can
+    // never get stuck locked onto a wrong, distant segment. This is what
+    // lets every road-relative system (ground height/banking via
+    // World.groundHeightAt, the fence lateral clamp, GPS nearest-target
+    // math) keep working correctly now that position is free instead of
+    // driven directly by splineProgress.
+    projectToRoad(pos, curve, seedU) {
+      const totalLen = curve.getLength();
+      const search = (uMin, uMax, steps) => {
+        let bestU = seedU, bestDistSq = Infinity;
+        for (let k = 0; k <= steps; k++) {
+          const u = THREE.MathUtils.clamp(uMin + (uMax - uMin) * (k / steps), 0, 1);
+          const d = pos.distanceToSquared(curve.getPointAt(u));
+          if (d < bestDistSq) { bestDistSq = d; bestU = u; }
+        }
+        return { bestU, bestDistSq };
+      };
+
+      // Local window first: ±40m of road length around the last position.
+      const windowU = Math.min(0.06, 40 / totalLen);
+      let { bestU, bestDistSq } = search(seedU - windowU, seedU + windowU, 24);
+
+      // If nothing in the local window is remotely close (car drove far
+      // off-road, or this is the very first frame), fall back to a full
+      // coarse scan of the whole route.
+      if (Math.sqrt(bestDistSq) > 55) {
+        ({ bestU, bestDistSq } = search(0, 1, 200));
+      }
+
+      // The coarse 24-step scan only resolves u to ~1/12th of an 80m
+      // window (~3m of road length per step). Ground height is sampled
+      // straight off pt.y at whatever u this function returns, and pt.y
+      // changes with u on any graded slope — so without refinement, the
+      // car's height snaps between coarse samples as it moves rather than
+      // varying continuously, which reads as visible up-down bouncing even
+      // on a perfectly smooth road surface. Narrow in on the true nearest
+      // point with a few rounds of shrinking local search around bestU.
+      let refineWindow = (windowU * 2) / 24;
+      for (let pass = 0; pass < 4; pass++) {
+        ({ bestU, bestDistSq } = search(bestU - refineWindow, bestU + refineWindow, 10));
+        refineWindow *= 0.3;
+      }
+
+      const u = bestU;
+      const pt = curve.getPointAt(u);
+      const tangent = curve.getTangentAt(u).normalize();
+      const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+      const latDist = pos.clone().sub(pt).dot(normal);
+      return { u, pt, tangent, normal, latDist, distFromRoad: Math.sqrt(bestDistSq) };
+    }
+
     update(dt, keys, world, seasonKey = 'autumn', roadTerrainKey = 'asphalt') {
       const isRain = (seasonKey === 'autumn' || seasonKey === 'summer');
       const isWind = (seasonKey === 'winter' || seasonKey === 'summer');
@@ -3395,21 +3550,26 @@
       const driftGripMult = isDrifting ? 0.40 : 1.0; // 60% friction reduction during power-slide drift
 
       if (this.isAutodrive) {
-        // PID Autodrive targeting lookahead distance
+        // Simple pure-pursuit autopilot: aim heading at a lookahead point
+        // further along the road curve (from wherever the car actually is
+        // right now — see projectToRoad below) and steer toward it. This
+        // replaces the old "zero out lateralOffset" approach, which made
+        // no sense once the car has a real, free heading to steer.
         if (this.speed < effectiveMaxSpeed * 0.72) {
           this.speed += this.accel * dt;
         }
-        this.lateralOffset = THREE.MathUtils.lerp(this.lateralOffset, 0, 0.06);
+        const lookaheadU = THREE.MathUtils.clamp(this.splineProgress + 0.012, 0, 0.999);
+        const lookaheadPt = world.curve.getPointAt(lookaheadU);
+        const toTarget = lookaheadPt.clone().sub(this.mesh.position);
+        toTarget.y = 0;
+        if (toTarget.lengthSq() > 0.01) {
+          const desiredHeading = Math.atan2(toTarget.x, toTarget.z);
+          let headingDiff = desiredHeading - this.heading;
+          headingDiff = Math.atan2(Math.sin(headingDiff), Math.cos(headingDiff)); // wrap to [-pi, pi]
+          const autopilotTurnRate = 2.2; // rad/s — brisk enough to track normal curves, not a snap-to
+          this.heading += THREE.MathUtils.clamp(headingDiff, -autopilotTurnRate * dt, autopilotTurnRate * dt);
+        }
         this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, 0, 0.16);
-        // lateralVelocity drives manual steering's lateralOffset update
-        // below (in the else branch) but was never touched here — it sat
-        // frozen at whatever value it had the instant autodrive engaged
-        // (e.g. mid-turn, cornering hard). The moment autodrive toggles
-        // back off, manual steering's very first frame applies that stale
-        // velocity unconditionally, dragging the car sideways with no
-        // input until it decays — read by the player as "the car keeps
-        // drifting on its own" right after taking back manual control.
-        this.lateralVelocity = THREE.MathUtils.lerp(this.lateralVelocity, 0, 0.16);
       } else {
         if (this.health <= 0) {
           // Engine breakdown stall
@@ -3442,54 +3602,86 @@
           if (Math.abs(this.speed) < 0.08) this.speed = 0;
         }
 
-        // 2. MANUAL STEERING & LANE DYNAMICS (Natural Left / Right)
+        // 2. FREE STEERING — turns the car's actual heading, not a lateral
+        // lane-offset. Turn rate scales with speed (can't spin in place at
+        // a dead stop, but still gets enough at a crawl for tight parking
+        // maneuvers) and flips direction in reverse, matching how a real
+        // car's steering behaves backing up.
+        const baseTurnRate = 1.55; // rad/s at full effect
+        const turnRateLimit = baseTurnRate * (isDrifting ? 1.4 : 1.0) * climateGrip;
+        const speedScale = THREE.MathUtils.clamp(Math.abs(this.speed) / 6.0, 0.22, 1.0);
+        const reverseFlip = this.speed < -0.05 ? -1 : 1;
+        const turnRate = turnRateLimit * speedScale * reverseFlip;
+
         const steerResponse = isDrifting ? 0.24 : 0.18;
         const steerLimit = (isDrifting ? 0.65 : 0.42) * climateGrip;
-        const latSpeedFactor = isDrifting ? 13.5 : 8.5;
-        const speedScale = Math.min(1.0, Math.abs(this.speed) / (this.maxSpeed * 0.3) + 0.2);
-
         if (keys.left || keys.a) {
+          this.heading += turnRate * dt;
           this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, steerLimit, steerResponse);
-          this.lateralVelocity = THREE.MathUtils.lerp(this.lateralVelocity, -latSpeedFactor * speedScale, 0.18);
         } else if (keys.right || keys.d) {
+          this.heading -= turnRate * dt;
           this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, -steerLimit, steerResponse);
-          this.lateralVelocity = THREE.MathUtils.lerp(this.lateralVelocity, latSpeedFactor * speedScale, 0.18);
         } else {
           this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, 0, 0.14);
-          this.lateralVelocity = THREE.MathUtils.lerp(this.lateralVelocity, 0, 0.14);
         }
-
-        // Update player's lateral road lane offset
-        this.lateralOffset += this.lateralVelocity * dt * driftGripMult;
-        // Clamped to the fence line (world.getLateralClamp), not a flat
-        // shoulder boundary — full range only opens at the same gap the
-        // fences themselves leave for a delivery house, so the fences
-        // actually stop the car everywhere else instead of just being
-        // scenery the car can drive straight through.
-        const side = this.lateralOffset >= 0 ? 1 : -1;
-        const clampDist = world.getLateralClamp ? world.getLateralClamp(this.splineProgress, side) : 9.0;
-        this.lateralOffset = Math.max(-clampDist, Math.min(clampDist, this.lateralOffset));
       }
 
-      // 3. Longitudinal Progress along Spline
+      // 3. Move freely along the car's own heading (position + orientation
+      // are now true, independent state — not derived from a spline
+      // parameter — so the car can actually turn, reverse, and maneuver
+      // off the road instead of only drifting sideways within a lane).
       const moveDist = this.speed * dt;
       this.distanceTraveled += Math.abs(moveDist) * 0.001;
+      const forward = new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
+      const proposedPos = this.mesh.position.clone().addScaledVector(forward, moveDist);
 
-      const totalLen = world.curve.getLength();
-      this.splineProgress += (moveDist / totalLen);
-      if (this.splineProgress >= 0.98) this.splineProgress = 0.005;
-      if (this.splineProgress < 0) this.splineProgress = 0.005;
+      // Everything below (ground height, banking, the fence lateral clamp)
+      // is inherently road-relative, so project the free position onto the
+      // nearest point on the road curve — same technique the on-foot
+      // walker's height uses, reusing World.groundHeightAt rather than a
+      // second hand-rolled formula (see BUGFIX_LOG.md Recurring Pattern 1).
+      const proj = this.projectToRoad(proposedPos, world.curve, this.splineProgress);
+      this.splineProgress = proj.u;
 
-      const currentPos = world.curve.getPointAt(this.splineProgress);
-      const tangent = world.curve.getTangentAt(this.splineProgress).normalize();
-      const up = new THREE.Vector3(0, 1, 0);
-      // Road right vector (points towards right shoulder)
-      // Right = Forward x Up in Three.js right-handed coords. The old .negate()
-      // made this point LEFT, so A/D and every lateral offset were mirrored.
-      const roadRight = new THREE.Vector3().crossVectors(tangent, up).normalize();
+      // Fences are a real physical barrier now that movement is free, not
+      // just a soft cap on an accumulating offset — clip the proposed
+      // position back to the clamp boundary along the road normal instead
+      // of just preventing the offset from growing.
+      //
+      // Bug fixed here: clamping used to snap straight to
+      // `proj.pt + normal*clampDist`, discarding the FORWARD (along-road)
+      // component of the move entirely. If the car's heading pointed
+      // mostly sideways into the fence (e.g. autopilot correcting hard, or
+      // just cornering tight against the shoulder), every frame reset to
+      // nearly the same clamped spot with ~0 net forward progress despite
+      // nonzero speed — the car froze dead in place, permanently pinned,
+      // heading and speed never recovering since projectToRoad's nearest-
+      // point search was seeded from that same frozen position each frame
+      // (a stable feedback loop, not just a slow crawl). Verified this
+      // exact freeze happening under sustained autopilot steering.
+      // Fix: decompose the proposed move into along-road (tangent) and
+      // lateral (normal) components relative to the nearest point, and
+      // only clamp the lateral one — the car now slides along the fence
+      // like a real wall instead of stopping dead against it.
+      const side = proj.latDist >= 0 ? 1 : -1;
+      const clampDist = world.getLateralClamp ? world.getLateralClamp(proj.u, side) : 9.0;
+      let vehiclePos = proposedPos;
+      let latDist = proj.latDist;
+      if (Math.abs(latDist) > clampDist) {
+        const toProposed = proposedPos.clone().sub(proj.pt);
+        const fwdComponent = toProposed.dot(proj.tangent);
+        latDist = clampDist * side;
+        vehiclePos = proj.pt.clone().addScaledVector(proj.tangent, fwdComponent).addScaledVector(proj.normal, latDist);
+        // Re-project after clamping so pt/tangent/normal reflect the
+        // actual (clamped) resting position, not the pre-clamp attempt.
+        const reproj = this.projectToRoad(vehiclePos, world.curve, proj.u);
+        Object.assign(proj, reproj);
+        this.splineProgress = proj.u;
+      }
+      this.lateralOffset = latDist; // kept for the stuck-detection check in Game.animate() and any other reader
 
-      // Apply lateral displacement across road width
-      const vehiclePos = currentPos.clone().addScaledVector(roadRight, this.lateralOffset);
+      const tangent = proj.tangent;
+      const roadRight = proj.normal;
 
       // Follow the actual carved road/shoulder surface, not the spline
       // centerline height — lateralOffset can reach ±9m (the shoulder
@@ -3497,15 +3689,7 @@
       // (see createTerrainMesh's roadHalf/shoulder formula). Using
       // currentPos.y unconditionally let the car clip into or float above
       // the ground the moment it drifted off-center.
-      const roadHalfW = CONFIG.ROAD_WIDTH * 0.52;
-      const absLat = Math.abs(this.lateralOffset);
-      let groundY;
-      if (absLat <= roadHalfW) {
-        groundY = currentPos.y - 0.18;
-      } else {
-        const t = (absLat - roadHalfW) / (9.0 - roadHalfW);
-        groundY = currentPos.y - 0.18 - t * 0.32;
-      }
+      const groundY = world.groundHeightAt(proj.pt, vehiclePos, latDist);
 
       // createRoadMesh banks the road surface on curves (tilts it up to
       // ±0.14rad), but this only ever used the flat, unbanked centerline
@@ -3517,14 +3701,14 @@
       // and apply its vertical contribution at the car's actual offset.
       const BANK_SEGMENTS = 1200;
       const bankDeltaU = 2 / BANK_SEGMENTS;
-      const uAhead = Math.min(0.999, this.splineProgress + bankDeltaU);
+      const uAhead = Math.min(0.999, proj.u + bankDeltaU);
       const tangentAhead = world.curve.getTangentAt(uAhead).normalize();
       const curvatureY = (tangentAhead.x - tangent.x) * 10.0;
       const bankingAngle = THREE.MathUtils.clamp(curvatureY * 0.25, -0.14, 0.14);
       const binormal = new THREE.Vector3().crossVectors(roadRight, tangent).normalize();
       // roadRight (createRoadMesh's "normal") is always horizontal by
       // construction, so only binormal's tilt contributes vertically here.
-      const bankedYOffset = this.lateralOffset * binormal.y * Math.sin(bankingAngle);
+      const bankedYOffset = latDist * binormal.y * Math.sin(bankingAngle);
 
       vehiclePos.y = groundY + bankedYOffset + 0.25;
 
@@ -3536,22 +3720,11 @@
 
       this.mesh.position.copy(vehiclePos);
 
-      // 4. Chassis Orientation & Steering (Headlights facing down the road +tangent)
-      const lookTarget = vehiclePos.clone().add(tangent);
-      this.mesh.lookAt(lookTarget);
-
-      // Hard safety ceiling — this mesh's quaternion is read directly by
-      // the camera as its forward direction every frame, so any unbounded
-      // steerAngle (from any current or future code path) would swing the
-      // camera to point at the ground at a steep angle instead of just
-      // producing a bigger visual wobble.
-      this.steerAngle = THREE.MathUtils.clamp(this.steerAngle, -1.2, 1.2);
-
-      if (Math.abs(this.steerAngle) > 0.001) {
-        // +Y rotation swings +Z toward +X (the model's left), so a positive
-        // steerAngle (from A / left) must yaw positively to visually turn left.
-        this.mesh.rotateY(this.steerAngle);
-      }
+      // 4. Chassis orientation now comes directly from `heading` (the
+      // car's own true state) instead of being derived from the road
+      // tangent via lookAt — this is precisely what lets it point anywhere,
+      // not just along the curve.
+      this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
 
       // Dynamic Chassis Pitch (dive on braking, squat on acceleration)
       const accelRatio = (this.speed - (this.lastSpeed || this.speed)) / Math.max(0.01, dt);
@@ -3559,7 +3732,8 @@
       const targetPitch = THREE.MathUtils.clamp(-accelRatio * 0.004, -0.06, 0.06);
       this.mesh.rotateX(targetPitch);
 
-      // Dynamic Chassis Roll (centrifugal roll against turn + bank)
+      // Dynamic Chassis Roll (centrifugal roll against turn + bank) — now
+      // purely cosmetic since steerAngle no longer drives orientation.
       const turnRoll = -this.steerAngle * (this.speed / this.maxSpeed) * 0.35;
       this.mesh.rotateZ(turnRoll);
 
@@ -3692,7 +3866,11 @@
       // update() (pt.y - 0.18 + 0.25) — using the old flat +0.25 here made
       // the car visibly pop up 0.18m on every crash/checkpoint reset.
       this.mesh.position.y += 0.07;
-      this.mesh.lookAt(pt.clone().add(tangent));
+      // Orientation now comes from `heading` (see update()'s free-movement
+      // rewrite), not mesh.lookAt — set it to match the tangent so a reset
+      // still faces down the road.
+      this.heading = Math.atan2(tangent.x, tangent.z);
+      this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
       this.speed = 0;
       this.steerAngle = 0;
       this.health = Math.max(75, this.health);
@@ -3718,7 +3896,8 @@
       this.mesh.position.copy(pt);
       // See resetToSpline — matches the on-road ground-following formula.
       this.mesh.position.y += 0.07;
-      this.mesh.lookAt(pt.clone().add(tangent));
+      this.heading = Math.atan2(tangent.x, tangent.z);
+      this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
       this.speed = 0;
       this.steerAngle = 0;
     }
@@ -3779,6 +3958,17 @@
       this.maxWantedLevel = 3;
       this.wantedDecayTimer = 0;
       this.isJailed = false;
+
+      // Get-out-and-walk delivery (car/truck only — two-wheelers always
+      // toss from the saddle, see toggleOnFoot). WALK_TIME_BONUS
+      // compensates for the extra time walking costs vs. a drive-by toss;
+      // granted once per order (walkBonusOrderIndex) so re-toggling E
+      // can't be farmed for free time.
+      this.onFoot = false;
+      this.walkerMesh = null;
+      this.walkerParkedVehiclePos = null;
+      this.walkBonusOrderIndex = -1;
+      this.WALK_TIME_BONUS = 22.0;
 
       this.parcels = []; // 3D In-flight projectiles
       this.particles = []; // 3D Procedural Particle FX System
@@ -3899,8 +4089,28 @@
           void main() {
             vec4 texel = texture2D(tDiffuse, vUv);
             vec2 uv = (vUv - 0.5) * vec2(offset);
+            // Deliberately NOT aspect-corrected: making this a true
+            // physical circle (scaling uv.x by the real aspect ratio) was
+            // tried and reverted — on an ultra-wide window the circle has
+            // to anchor to the shorter height dimension, so the left/right
+            // thirds of the screen fall way outside it and get hit with
+            // much heavier darkening than before. That's more "correct"
+            // geometrically but reads as a much worse, more aggressive
+            // vignette on wide viewports than the original uncorrected
+            // version, which nobody had actually complained about.
             float vig = 1.0 - dot(uv, uv);
             texel.rgb *= clamp(pow(vig, darkness), 0.0, 1.0) * 0.35 + 0.65;
+            // The vignette factor above varies smoothly across the screen,
+            // but the composer's render target only has 8 bits per channel
+            // — on a flat, pale sky color that smooth multiply collapses
+            // into visible stepped rings ("layers") once quantized. This is
+            // a math/precision artifact, not a driver quirk, so it
+            // reproduces identically on every device. A tiny per-pixel
+            // hash-noise dither breaks the steps up into imperceptible
+            // grain instead of visible contour bands — the standard fix
+            // for gradient banding.
+            float dither = (fract(sin(dot(vUv, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 128.0;
+            texel.rgb += dither;
             gl_FragColor = texel;
           }
         `
@@ -4163,8 +4373,12 @@
         if (k === 't') this.cycleTimeOfDay();
         if (k === 'm') this.toggleMute();
         if (k === 'v') this.toggleStatusPanel();
+        if (k === 'e') this.toggleOnFoot();
         if (k === 'escape') this.openSettingsModal('gameplay');
-        if (k === ' ' && this.gameState === 'playing') this.tossParcel3D();
+        if (k === ' ' && this.gameState === 'playing') {
+          if (this.onFoot) this.tryWalkDelivery();
+          else this.tossParcel3D();
+        }
         if ((k === 'enter' || k === ' ') && this.gameState === 'menu') this.startDrive();
       });
 
@@ -4173,9 +4387,162 @@
       window.addEventListener('mousedown', e => {
         this.resetInactivity();
         if (this.gameState === 'playing' && e.target.tagName === 'CANVAS') {
-          this.tossParcel3D();
+          if (this.onFoot) this.tryWalkDelivery();
+          else this.tossParcel3D();
         }
       });
+    }
+
+    // Low-poly courier avatar for on-foot delivery, matching the crosser
+    // pedestrian rig's style (World.buildCrosserMesh) so it reads as part
+    // of the same world rather than a mismatched import.
+    createWalkerMesh() {
+      const group = new THREE.Group();
+      const skinMat = new THREE.MeshLambertMaterial({ color: 0xd4a373 });
+      const uniformMat = new THREE.MeshLambertMaterial({ color: 0xff2d4e });
+      const pantsMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.64, 0.26), uniformMat);
+      torso.position.y = 0.98;
+      const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.17, 0), skinMat);
+      head.position.y = 1.48;
+      const legL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.64, 0.17), pantsMat);
+      legL.position.set(-0.11, 0.33, 0);
+      const legR = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.64, 0.17), pantsMat);
+      legR.position.set(0.11, 0.33, 0);
+      group.add(torso, head, legL, legR);
+      group.userData.legs = [legL, legR];
+      group.userData.legPhase = 0;
+      return group;
+    }
+
+    // Toggle between driving and walking a car/truck delivery up to the
+    // door. Two-wheelers never get out — per the queued design decision,
+    // they always toss from the saddle (aimed-throw risk mechanic covers
+    // them instead; that's a separate follow-up feature).
+    toggleOnFoot() {
+      if (!this.vehicle || !this.world || this.gameState !== 'playing') return;
+      const isCarOrTruck = this.selectedVehicle === 'swift' || this.selectedVehicle === 'chotahathi';
+      if (!isCarOrTruck) {
+        this.addNotification('🛵 Two-wheelers stay mounted — toss from the saddle instead', 'neutral', 2500);
+        return;
+      }
+
+      if (this.onFoot) {
+        // Return to vehicle — warp back rather than requiring the player
+        // to walk all the way back, which wouldn't add anything fun, just
+        // travel time.
+        this.onFoot = false;
+        if (this.walkerMesh) {
+          this.scene.remove(this.walkerMesh);
+          this.walkerMesh = null;
+        }
+        if (this.walkerParkedVehiclePos) {
+          this.vehicle.mesh.position.copy(this.walkerParkedVehiclePos);
+        }
+        this.vehicle.speed = 0;
+        this.addNotification('🚗 BACK IN VEHICLE', 'neutral', 2000);
+        return;
+      }
+
+      if (Math.abs(this.vehicle.speed) > 1.5) {
+        this.addNotification('⚠️ STOP THE VEHICLE FIRST', 'warning', 2200);
+        return;
+      }
+
+      this.onFoot = true;
+      this.walkerParkedVehiclePos = this.vehicle.mesh.position.clone();
+      this.walkerMesh = this.createWalkerMesh();
+      this.walkerMesh.quaternion.copy(this.vehicle.mesh.quaternion);
+
+      // Spawning the walker mesh at the car's own origin planted its feet
+      // at car-body height (the walker's local origin is ground-level, the
+      // car's is roughly seat height), so the torso/head clipped straight
+      // through the roof. Step out to the driver's side instead, like
+      // exiting through the door, and snap to actual ground height the
+      // same way updateWalking() does every frame.
+      const doorSide = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion);
+      const exitPos = this.vehicle.mesh.position.clone().addScaledVector(doorSide, 1.7);
+      if (this.world && this.world.curve) {
+        const u = THREE.MathUtils.clamp(this.vehicle.splineProgress, 0, 1);
+        const pt = this.world.curve.getPointAt(u);
+        const tangent = this.world.curve.getTangentAt(u).normalize();
+        const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+        const latDist = exitPos.clone().sub(pt).dot(normal);
+        exitPos.y = this.world.groundHeightAt(pt, exitPos, latDist) + 0.05;
+      }
+      this.walkerMesh.position.copy(exitPos);
+      this.scene.add(this.walkerMesh);
+
+      // One-time timer bonus per order — walking to the door and back
+      // costs real time a drive-by toss doesn't, so the clock needs to
+      // absorb that instead of just punishing the choice to walk.
+      if (this.walkBonusOrderIndex !== this.activeOrderIndex) {
+        this.walkBonusOrderIndex = this.activeOrderIndex;
+        this.orderTimer += this.WALK_TIME_BONUS;
+        this.maxOrderTimer += this.WALK_TIME_BONUS;
+        this.addNotification(`🚶 ON FOOT — +${this.WALK_TIME_BONUS}s DELIVERY WINDOW`, 'success', 3000);
+      } else {
+        this.addNotification('🚶 ON FOOT', 'neutral', 1800);
+      }
+    }
+
+    updateWalking(dt) {
+      if (!this.walkerMesh || !this.world || !this.world.curve) return;
+
+      const turnSpeed = 2.6;
+      if (this.keys.a || this.keys.left) this.walkerMesh.rotation.y += turnSpeed * dt;
+      if (this.keys.d || this.keys.right) this.walkerMesh.rotation.y -= turnSpeed * dt;
+
+      let moveDir = 0;
+      if (this.keys.w || this.keys.up) moveDir = 1;
+      else if (this.keys.s || this.keys.down) moveDir = -0.6;
+
+      const walkSpeed = 4.5;
+      if (moveDir !== 0) {
+        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.walkerMesh.quaternion);
+        const newPos = this.walkerMesh.position.clone().addScaledVector(forward, moveDir * walkSpeed * dt);
+
+        // Ground height via the shared formula (BUGFIX_LOG.md Recurring
+        // Pattern 1) — never hand-roll a new height approximation here.
+        // The walker stays close to where the vehicle parked, so the
+        // vehicle's own splineProgress is a good-enough nearest-point
+        // reference without re-searching the whole curve every frame.
+        const u = THREE.MathUtils.clamp(this.vehicle.splineProgress, 0, 1);
+        const pt = this.world.curve.getPointAt(u);
+        const tangent = this.world.curve.getTangentAt(u).normalize();
+        const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+        const latDist = newPos.clone().sub(pt).dot(normal);
+        newPos.y = this.world.groundHeightAt(pt, newPos, latDist) + 0.05;
+
+        this.walkerMesh.position.copy(newPos);
+
+        const legs = this.walkerMesh.userData.legs;
+        this.walkerMesh.userData.legPhase += dt * 10.0;
+        const swing = Math.sin(this.walkerMesh.userData.legPhase) * 0.4;
+        legs[0].rotation.x = swing;
+        legs[1].rotation.x = -swing;
+      }
+    }
+
+    // On-foot equivalent of tossParcel3D's hit-test: walking within the
+    // difficulty's tossRadius of the current target's porch ring completes
+    // the delivery directly (SPACE), instead of needing a physics toss.
+    tryWalkDelivery() {
+      if (!this.onFoot || !this.walkerMesh || !this.world) return;
+      let nearestTarget = null;
+      let minD = 40.0;
+      this.world.deliveryTargets.forEach(t => {
+        if (t.delivered) return;
+        const d = this.walkerMesh.position.distanceTo(t.pos);
+        if (d < minD) { minD = d; nearestTarget = t; }
+      });
+      if (!nearestTarget) return;
+      const hitRadius = nearestTarget.tossRadius || 5.0;
+      if (minD < hitRadius) {
+        this.fulfillDelivery(nearestTarget);
+      } else {
+        this.addNotification(`🚶 Get closer to the door to deliver (${Math.round(minD)}m away)`, 'warning', 2000);
+      }
     }
 
     tossParcel3D() {
@@ -4265,6 +4632,44 @@
       sound.playTone(440, 'triangle', 0.12, 0.3);
     }
 
+    // Shared reward/notification/history logic for completing a delivery,
+    // whichever way it happened (tossed parcel landing in range, or
+    // walking a car/truck delivery up to the door on foot). Factored out
+    // so both paths can't silently drift apart (see BUGFIX_LOG.md
+    // Recurring Pattern 1 — duplicated logic that diverges over time).
+    fulfillDelivery(target) {
+      target.delivered = true;
+      target.ring.material.color.setHex(0xff9f1c);
+
+      this.deliveriesMade++;
+      this.streakCount++;
+
+      const diffCfg = CONFIG.DIFFICULTY_TIERS[this.selectedDifficulty];
+      const timeBonus = Math.max(0, Math.round(this.orderTimer * 1.8));
+      const earnedBonus = Math.round((target.order.reward + timeBonus) * diffCfg.payoutMult * (1 + this.streakCount * 0.2));
+      this.earnings += earnedBonus;
+
+      this.orderTimer = this.maxOrderTimer; // Reset clock for next order
+
+      sound.playCombo();
+      const bonusMsg = (this.orderTimer > this.maxOrderTimer * 0.5 ? `⚡ EXPRESS SPEED BONUS!` : `🎯 ON-TIME BULLSEYE!`);
+      this.spawnConfetti(target.pos, 36);
+      this.showScoreBanner(`${bonusMsg} +₹${earnedBonus}`, `🔥 ${this.streakCount}x STREAK • +${timeBonus} TIME BONUS`);
+      this.addNotification(`✅ DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
+
+      this.deliveryHistory.unshift({
+        name: target.order?.name || 'Delivery',
+        status: 'delivered',
+        amount: earnedBonus,
+        orderIndex: this.activeOrderIndex
+      });
+
+      this.activeOrderIndex++;
+      this.updateActiveOrderCard();
+      this.updateHUDStats();
+      this.refreshStatusPanel();
+    }
+
     updateParcels(dt) {
       for (let i = this.parcels.length - 1; i >= 0; i--) {
         const p = this.parcels[i];
@@ -4281,37 +4686,7 @@
           const hitRadius = p.nearestTarget.tossRadius || 5.0;
 
           if (d < hitRadius) {
-            p.nearestTarget.delivered = true;
-            p.nearestTarget.ring.material.color.setHex(0xff9f1c);
-
-            this.deliveriesMade++;
-            this.streakCount++;
-
-            const diffCfg = CONFIG.DIFFICULTY_TIERS[this.selectedDifficulty];
-            const timeBonus = Math.max(0, Math.round(this.orderTimer * 1.8));
-            const earnedBonus = Math.round((p.nearestTarget.order.reward + timeBonus) * diffCfg.payoutMult * (1 + this.streakCount * 0.2));
-            this.earnings += earnedBonus;
-
-            this.orderTimer = this.maxOrderTimer; // Reset clock for next order
-
-            sound.playCombo();
-            const bonusMsg = (this.orderTimer > this.maxOrderTimer * 0.5 ? `⚡ EXPRESS SPEED BONUS!` : `🎯 ON-TIME BULLSEYE!`);
-            this.spawnConfetti(p.nearestTarget.pos, 36);
-            this.showScoreBanner(`${bonusMsg} +₹${earnedBonus}`, `🔥 ${this.streakCount}x STREAK • +${timeBonus} TIME BONUS`);
-            this.addNotification(`✅ DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
-
-            this.deliveryHistory.unshift({
-              name: p.nearestTarget.order?.name || 'Delivery',
-              status: 'delivered',
-              amount: earnedBonus,
-              orderIndex: this.activeOrderIndex
-            });
-
-            this.activeOrderIndex++;
-            this.updateActiveOrderCard();
-            this.updateHUDStats();
-            this.refreshStatusPanel();
-
+            this.fulfillDelivery(p.nearestTarget);
             this.scene.remove(p.mesh);
             this.parcels.splice(i, 1);
             continue;
@@ -5432,7 +5807,81 @@
       };
     }
 
+    // Fades out thin roadside props (poles, lampposts) when they sit
+    // directly between the on-foot follow camera and the courier — a pole
+    // right next to a house the camera lingers close to otherwise reads as
+    // clipping straight through the character. Raycasts camera->subject,
+    // fades anything hit down to translucent, and restores anything no
+    // longer hit back to opaque.
+    updateOccluderFade(dt, subjectPos) {
+      if (!this.world || !this.world.occluderMeshes || !this.world.occluderMeshes.length) return;
+      if (!this._occluderRaycaster) this._occluderRaycaster = new THREE.Raycaster();
+      if (!this._fadedOccluders) this._fadedOccluders = new Set();
+
+      const camPos = this.camera.position;
+      const toSubject = subjectPos.clone().sub(camPos);
+      const dist = toSubject.length();
+      if (dist < 0.01) return;
+      toSubject.normalize();
+
+      this._occluderRaycaster.set(camPos, toSubject);
+      this._occluderRaycaster.far = dist - 0.3; // stop short of the subject itself
+      this._occluderRaycaster.near = 0.1;
+
+      const hits = this._occluderRaycaster.intersectObjects(this.world.occluderMeshes, true);
+      const hitRoots = new Set();
+      hits.forEach(h => {
+        let o = h.object;
+        while (o.parent && !this.world.occluderMeshes.includes(o)) o = o.parent;
+        hitRoots.add(o);
+      });
+
+      const FADE_TARGET = 0.18;
+      const fadeLerp = Math.min(1.0, 1.0 - Math.exp(-10.0 * dt));
+
+      hitRoots.forEach(root => {
+        this._fadedOccluders.add(root);
+        root.traverse(n => {
+          if (n.isMesh && n.material) {
+            n.material.transparent = true;
+            n.material.opacity = THREE.MathUtils.lerp(n.material.opacity ?? 1, FADE_TARGET, fadeLerp);
+          }
+        });
+      });
+
+      // Restore anything that was faded last frame but isn't hit anymore.
+      this._fadedOccluders.forEach(root => {
+        if (hitRoots.has(root)) return;
+        let done = true;
+        root.traverse(n => {
+          if (n.isMesh && n.material) {
+            n.material.opacity = THREE.MathUtils.lerp(n.material.opacity ?? 1, 1.0, fadeLerp);
+            if (n.material.opacity < 0.98) done = false;
+            else { n.material.opacity = 1.0; n.material.transparent = false; }
+          }
+        });
+        if (done) this._fadedOccluders.delete(root);
+      });
+    }
+
     updateCamera(dt) {
+      if (this.onFoot && this.walkerMesh) {
+        // Simple third-person follow cam for the on-foot courier — reuses
+        // the same spring-lerp feel as the chase cam, just closer/lower
+        // since the subject is a person, not a vehicle.
+        const walkerPos = this.walkerMesh.position;
+        const walkerForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.walkerMesh.quaternion).normalize();
+        const targetCamPos = walkerPos.clone()
+          .addScaledVector(walkerForward, -3.4)
+          .add(new THREE.Vector3(0, 1.9, 0));
+        const posLerp = Math.min(1.0, 1.0 - Math.exp(-16.0 * dt));
+        this.camera.position.lerp(targetCamPos, posLerp);
+        const lookTarget = walkerPos.clone().add(new THREE.Vector3(0, 1.1, 0));
+        this.camera.lookAt(lookTarget);
+        this.updateOccluderFade(dt, lookTarget);
+        return;
+      }
+
       if (!this.vehicle || !this.vehicle.mesh) return;
 
       const carPos = this.vehicle.mesh.position;
@@ -5667,7 +6116,11 @@
       const dt = Math.min(this.clock.getDelta(), 0.1);
 
       if (this.gameState === 'playing') {
-        this.vehicle.update(dt, this.keys, this.world, this.selectedSeason, this.selectedRoadTerrain);
+        if (this.onFoot) {
+          this.updateWalking(dt);
+        } else {
+          this.vehicle.update(dt, this.keys, this.world, this.selectedSeason, this.selectedRoadTerrain);
+        }
         this.world.updateTraffic(dt);
         this.world.updateCrossers(dt);
         this.checkCrosserCollisions();
@@ -5687,8 +6140,13 @@
         this.updateClimateHUD();
         this.updateHealthHUD();
 
-        // Automatic Breakdown & Stuck Recovery Detection
-        if (this.vehicle.health <= 0) {
+        // Automatic Breakdown & Stuck Recovery Detection — skipped while on
+        // foot: the vehicle is deliberately parked and stationary, so the
+        // same conditions that mean "stuck" while driving are just normal
+        // here.
+        if (this.onFoot) {
+          this.stuckTimer = 0;
+        } else if (this.vehicle.health <= 0) {
           this.showStuckRecoveryModal(this.crashReason || 'VEHICLE BREAKDOWN: Suspension & Engine Failure');
           this.crashReason = null;
         } else if ((this.keys.w || this.keys.up || this.keys.s || this.keys.down) && Math.abs(this.vehicle.speed) < 0.45 && Math.abs(this.vehicle.lateralOffset) > (CONFIG.ROAD_WIDTH * 0.45)) {
@@ -5700,8 +6158,9 @@
           this.stuckTimer = Math.max(0, this.stuckTimer - dt * 2.0);
         }
 
-        // Off-Road Lost Detection — show Return to Road banner
-        if (this.world && this.world.curve && this.vehicle) {
+        // Off-Road Lost Detection — show Return to Road banner (skipped on
+        // foot for the same reason as above)
+        if (!this.onFoot && this.world && this.world.curve && this.vehicle) {
           const vp = this.vehicle.mesh.position;
           const nearU = this.vehicle.splineProgress;
           const nearPt = this.world.curve.getPointAt(Math.max(0, Math.min(1, nearU)));
