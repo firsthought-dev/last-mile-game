@@ -156,6 +156,13 @@ whether you're about to repeat one of these first:
    deliberately want pitch/roll toward the target (rare — orient with
    tangent/normal vectors directly instead if you do, as the fence/walker
    code in this project already does).
+10. **Local cross-section normal offsets (`pt + normal*dist`) do not
+    guarantee clearance on hairpin switchbacks.** When the road curve
+    loops back nearby, props and buildings offset locally along the
+    cross-section normal can collide with adjacent road segments. Always
+    check `clearsRoad(pos, clearanceRadius)` on roadside buildings and
+    use speed-scaled lookahead arcs (`10m + speed * 0.7`) rather than fixed
+    spline fractions for path following/autopilot.
 
 The vehicle moves with **free position + heading** (added turning,
 reversing, real maneuvering — not a rail/lateral-drift model). Ground

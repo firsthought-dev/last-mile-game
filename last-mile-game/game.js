@@ -198,104 +198,264 @@
   }
 
   // --------------------------------------------------------------------------
-  // 3. SOUND SYNTHESIZER & 90s BOLLYWOOD DHABA CASSETTE RADIO
+  // 3. SOUND SYNTHESIZER & MULTI-CHANNEL RADIO (Hindi / English / Mix)
   // --------------------------------------------------------------------------
+
+  // Note-to-Frequency helper for polyphonic synthesizer scores
+  const NOTE_SEMITONES = { c: 0, 'c#': 1, db: 1, d: 2, 'd#': 3, eb: 3, e: 4, f: 5, 'f#': 6, gb: 6, g: 7, 'g#': 8, ab: 8, a: 9, 'a#': 10, bb: 10, b: 11 };
+  function noteToFreq(noteStr) {
+    if (!noteStr) return 440;
+    const m = noteStr.trim().toLowerCase().match(/^([a-g][#b]?)([0-9])$/);
+    if (!m) return 440;
+    const semitone = NOTE_SEMITONES[m[1]] ?? 0;
+    const octave = parseInt(m[2], 10);
+    const midi = (octave + 1) * 12 + semitone;
+    return 440 * Math.pow(2, (midi - 69) / 12);
+  }
+
+  // ── Playlist database:
+  // - Hindi: Purely authentic MP3 tracks streaming from truckplaylist.com CDN (no synth).
+  // - English: Soothing polyphonic arrangements of legendary road-trip hits played via mellow Rhodes/lofi synthesis.
+  const RADIO_PLAYLISTS = {
+    hindi: [
+      // ── Hindi 90s Highway Classics (49 Real MP3 Tracks) ──
+      { title: "Dil Ne Yeh Kaha Hain Dil Se", artist: "Udit Narayan (Dhadkan)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ff097069568.58544488.mp3" },
+      { title: "Mujhse Mohabbat Ka", artist: "Kumar Sanu & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffb3da74333.19775211.mp3" },
+      { title: "Kyon Ki Itna Pyar", artist: "Udit Narayan", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffc0e3bbfd6.98289794.mp3" },
+      { title: "Tumse Milne Ko Dil", artist: "Alka Yagnik & Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffc6db9a737.50163040.mp3" },
+      { title: "Jeeta Tha Jiske Liye", artist: "Kumar Sanu & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffcb3d57294.79925154.mp3" },
+      { title: "Tum Dil Ki Dhadkan Mein", artist: "Abhijeet & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffd4132d929.77448836.mp3" },
+      { title: "Agar Tum Na Hote", artist: "R.D. Burman", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffd8ed8b019.32999548.mp3" },
+      { title: "Tumse Milne Ki Tamanna Hai", artist: "S.P. Balasubramaniam", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffdd61ef2c8.22241527.mp3" },
+      { title: "Tere Naam", artist: "Udit Narayan", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffe3f78a480.65866672.mp3" },
+      { title: "Mere Rang Mein Rangne Wali", artist: "S.P. Balasubrahmanyam", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffeaae2e9a6.57430078.mp3" },
+      { title: "Aaye Ho Meri Zindagi Mein", artist: "Udit Narayan", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffce78ac142.67941754.mp3" },
+      { title: "Kehna Hi Kya", artist: "KS Chitra (Bombay)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800c8a6286b2.57114505.mp3" },
+      { title: "Do Dil Mil Rahe Hai", artist: "Kumar Sanu (Pardes)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800d83bd5421.02473824.mp3" },
+      { title: "Ishq Bina Ishq Bina", artist: "Kavita Krishnamurthy (Taal)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800db74d1030.74275897.mp3" },
+      { title: "Ek Sanam Chahiye Aashiqui Ke Liye", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800de59efed6.63979837.mp3" },
+      { title: "Teri Umeed Tera Intezar", artist: "Kumar Sanu (Deewana)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800e8e8ef4b4.29261544.mp3" },
+      { title: "Yeh Dil Deewana", artist: "Sonu Nigam (Pardes)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800ebd533b09.94127012.mp3" },
+      { title: "Jo Bhi Kasmein", artist: "Alka Yagnik & Udit (Raaz)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800efe5bd5a2.33668743.mp3" },
+      { title: "Pardesi Pardesi", artist: "Udit Narayan & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800f6342cb21.48143101.mp3" },
+      { title: "Tum To Thehre Pardesi", artist: "Altaf Raja (Highway Classic)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8010245994b9.23145761.mp3" },
+      { title: "Tumse Milna", artist: "Udit Narayan & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a80106e7e38e2.92732922.mp3" },
+      { title: "Jaane Kyon Log Pyar", artist: "Udit Narayan & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a80109d970479.41448487.mp3" },
+      { title: "Oodhni", artist: "Udit Narayan & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8010db7e7e47.85862263.mp3" },
+      { title: "Jhanjharia", artist: "Abhijeet Bhattacharya", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8011079565f7.04442597.mp3" },
+      { title: "Chand Se Parda", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a80115a0fcba2.05328552.mp3" },
+      { title: "Meri Mehbooba", artist: "Kumar Sanu & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8011c06961e1.75783480.mp3" },
+      { title: "Tere Dar Par Sanam", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8011f7aea2d8.41865380.mp3" },
+      { title: "Nahin Yeh Ho Nahin Sakta", artist: "Kumar Sanu & Sadhana Sargam", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a801238cb90c3.67609094.mp3" },
+      { title: "Barsaat Ke Mausam Mein", artist: "Kumar Sanu (Naajayaz)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a80126e6822e6.26394093.mp3" },
+      { title: "Aye Mere Humsafar", artist: "Alka Yagnik & Udit Narayan", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8013a9b8b290.24804986.mp3" },
+      { title: "Ae Kash Ke Hum", artist: "Kumar Sanu (Kabhi Haan Kabhi Naa)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8013d8c5c5d0.70297864.mp3" },
+      { title: "Tu Hi Re", artist: "Hariharan & Kavita K (Bombay)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a80142213e965.53608046.mp3" },
+      { title: "Dil Ke Badle Sanam", artist: "Udit Narayan & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a80147d0253e8.52542358.mp3" },
+      { title: "Sochenge Tumhe Pyar", artist: "Kumar Sanu (Deewana)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8014b076f9f2.46008491.mp3" },
+      { title: "Aksar Is Duniya Mein", artist: "Alka Yagnik (Dhadkan)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8014ef1173d5.53100631.mp3" },
+      { title: "Kitaben Bahut Si", artist: "Asha Bhosle & Vinod Rathod", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a801573da6357.19964470.mp3" },
+      { title: "Raah Mein Unse Mulaqat", artist: "Kumar Sanu & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803ad6d910f9.28244193.mp3" },
+      { title: "Kitna Haseen Chehra", artist: "Kumar Sanu (Dilwale)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803c0be30ac4.66182873.mp3" },
+      { title: "Pehli Pehli Baar Mohabbat Ki Hai", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803c6bd90d33.43762303.mp3" },
+      { title: "Ye Aaina Jo Tumhen", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803cad0048f1.39334256.mp3" },
+      { title: "Tumhein Apna Banane Ki", artist: "Kumar Sanu (Sadak)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803cd16869b5.40047956.mp3" },
+      { title: "Too Cheez Badi Hain Mast", artist: "Kumar Sanu & Kavita K (Mohra)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803d87457702.02725399.mp3" },
+      { title: "Oh Mere Dil Ke Chain", artist: "Abhijeet", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803d965a5646.17723448.mp3" },
+      { title: "Mera Dil Bhi Kitna Pagal Hai", artist: "Kumar Sanu & Alka (Saajan)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803e0654d485.12616218.mp3" },
+      { title: "Tumhein Dekhen Meri Aankhen", artist: "Alka Yagnik & Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803e3ff22f65.39915562.mp3" },
+      { title: "Mera Chand Mujhe Aaya Hai Nazar", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803e83edb239.43074334.mp3" },
+      { title: "Shikwa Nahin Kisi Se", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803ea3f3faf3.13207435.mp3" },
+      { title: "Shaam Bhi Khoob Hai", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803ebdc1e398.57981345.mp3" },
+      { title: "Hum Teri Mohabbat Mein", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803edcaa0378.24037957.mp3" }
+    ],
+    english: [
+      // ── Soothing Polyphonic Road Trip Hits (Warm Rhodes / Chill Acoustic Synth) ──
+      {
+        title: "Hotel California",
+        artist: "Eagles (Lofi Acoustic Chill)",
+        era: "90s",
+        language: "english",
+        isSynth: true,
+        bpm: 78,
+        patterns: [
+          { bass: "B2", chord: ["D4", "F#4", "B4"], melody: ["F#5", "D5", "B4", "F#4"] },
+          { bass: "F#2", chord: ["C#4", "E4", "A#4"], melody: ["C#5", "A#4", "F#4", "C#4"] },
+          { bass: "A2", chord: ["C#4", "E4", "A4"], melody: ["E5", "C#5", "A4", "E4"] },
+          { bass: "E2", chord: ["B3", "E4", "G#4"], melody: ["B4", "G#4", "E4", "B3"] },
+          { bass: "G2", chord: ["B3", "D4", "G4"], melody: ["D5", "B4", "G4", "D4"] },
+          { bass: "D3", chord: ["A3", "D4", "F#4"], melody: ["A4", "F#4", "D4", "A3"] },
+          { bass: "E2", chord: ["G3", "B3", "E4"], melody: ["B4", "G4", "E4", "B3"] },
+          { bass: "F#2", chord: ["A#3", "C#4", "F#4"], melody: ["C#5", "A#4", "F#4", "A#3"] }
+        ]
+      },
+      {
+        title: "Clocks",
+        artist: "Coldplay (Warm Rhodes)",
+        era: "2000s",
+        language: "english",
+        isSynth: true,
+        bpm: 96,
+        patterns: [
+          { bass: "Eb3", chord: ["G4", "Bb4"], melody: ["Eb5", "Bb4", "G4", "Eb5", "Bb4", "G4"] },
+          { bass: "Bb2", chord: ["F4", "Db5"], melody: ["Db5", "Bb4", "F4", "Db5", "Bb4", "F4"] },
+          { bass: "F2", chord: ["C4", "Ab4"], melody: ["C5", "Ab4", "F4", "C5", "Ab4", "F4"] },
+          { bass: "F2", chord: ["C4", "Ab4"], melody: ["C5", "Ab4", "F4", "C5", "Ab4", "F4"] }
+        ]
+      },
+      {
+        title: "Careless Whisper",
+        artist: "George Michael (Smooth Mellow)",
+        era: "90s",
+        language: "english",
+        isSynth: true,
+        bpm: 76,
+        patterns: [
+          { bass: "D3", chord: ["F4", "A4"], melody: ["D5", "A4", "F4", "D4", "F4", "A4", "D5"] },
+          { bass: "G2", chord: ["Bb3", "D4"], melody: ["Bb4", "G4", "D4", "Bb3", "D4", "G4", "Bb4"] },
+          { bass: "Bb2", chord: ["D4", "F4"], melody: ["F5", "D5", "Bb4", "F4", "Bb4", "D5", "F5"] },
+          { bass: "A2", chord: ["C4", "E4"], melody: ["E5", "C5", "A4", "E4", "A4", "C5", "E5"] }
+        ]
+      },
+      {
+        title: "Boulevard of Broken Dreams",
+        artist: "Green Day (Ambient Drive)",
+        era: "2000s",
+        language: "english",
+        isSynth: true,
+        bpm: 82,
+        patterns: [
+          { bass: "E2", chord: ["G3", "B3", "E4"], melody: ["E4", "G4", "B4", "E5"] },
+          { bass: "G2", chord: ["B3", "D4", "G4"], melody: ["D4", "G4", "B4", "D5"] },
+          { bass: "D3", chord: ["A3", "D4", "F#4"], melody: ["A3", "D4", "F#4", "A4"] },
+          { bass: "A2", chord: ["C#4", "E4", "A4"], melody: ["E4", "A4", "C#5", "E5"] }
+        ]
+      },
+      {
+        title: "Counting Stars",
+        artist: "OneRepublic (Chill Synth)",
+        era: "2010s",
+        language: "english",
+        isSynth: true,
+        bpm: 90,
+        patterns: [
+          { bass: "A2", chord: ["C4", "E4", "A4"], melody: ["A4", "C5", "E5", "C5"] },
+          { bass: "C3", chord: ["E4", "G4", "C5"], melody: ["G4", "C5", "E5", "C5"] },
+          { bass: "G2", chord: ["B3", "D4", "G4"], melody: ["D4", "G4", "B4", "G4"] },
+          { bass: "F2", chord: ["A3", "C4", "F4"], melody: ["C4", "F4", "A4", "F4"] }
+        ]
+      },
+      {
+        title: "Take On Me",
+        artist: "A-ha (Lofi Piano Version)",
+        era: "90s",
+        language: "english",
+        isSynth: true,
+        bpm: 84,
+        patterns: [
+          { bass: "B2", chord: ["D4", "F#4", "B4"], melody: ["F#4", "F#4", "D4", "B3", "B3", "E4", "E4", "E4", "G#4", "G#4", "A4", "B4"] },
+          { bass: "E2", chord: ["G#3", "B3", "E4"], melody: ["A4", "A4", "A4", "E4", "D4", "F#4", "F#4", "F#4", "E4", "E4", "F#4", "E4"] },
+          { bass: "A2", chord: ["C#4", "E4", "A4"], melody: ["F#4", "F#4", "D4", "B3", "B3", "E4", "E4", "E4", "G#4", "G#4", "A4", "B4"] },
+          { bass: "D3", chord: ["F#3", "A3", "D4"], melody: ["A4", "A4", "A4", "E4", "D4", "F#4", "F#4", "F#4", "E4", "E4", "F#4", "E4"] }
+        ]
+      }
+    ]
+  };
+
+  // Channel display names
+  const CHANNEL_NAMES = { hindi: 'DHABA FM', english: 'HIGHWAY FM', mix: 'ALL FM' };
+  const CHANNEL_ORDER = ['hindi', 'english', 'mix'];
+
   class SoundEngine {
     constructor() {
       this.ctx = null;
+      this.masterFilter = null;
       this.muted = false;
       this.radioPlaying = false;
       this.currentTrackIndex = 0;
 
-      // Real 90s Desi Highway MP3 Playlist (Sourced from truckplaylist.com)
-      this.realTracks = [
-        {
-          title: "Dil Ne Yeh Kaha Hain Dil Se",
-          artist: "Udit Narayan (Dhadkan)",
-          url: "https://truckplaylist.com/uploads/f_6a7ff097069568.58544488.mp3"
-        },
-        {
-          title: "Tum To Thehre Pardesi",
-          artist: "Altaf Raja (Highway Classic)",
-          url: "https://truckplaylist.com/uploads/f_6a8010245994b9.23145761.mp3"
-        },
-        {
-          title: "Pardesi Pardesi Jana Nahi",
-          artist: "Udit Narayan & Alka Yagnik",
-          url: "https://truckplaylist.com/uploads/f_6a800f6342cb21.48143101.mp3"
-        },
-        {
-          title: "Too Cheez Badi Hain Mast",
-          artist: "Kumar Sanu & Kavita K (Mohra)",
-          url: "https://truckplaylist.com/uploads/f_6a803d87457702.02725399.mp3"
-        },
-        {
-          title: "Jo Bhi Kasmein Khai Thi",
-          artist: "Alka Yagnik & Udit (Raaz)",
-          url: "https://truckplaylist.com/uploads/f_6a800efe5bd5a2.33668743.mp3"
-        },
-        {
-          title: "Yeh Dil Deewana",
-          artist: "Sonu Nigam (Pardes)",
-          url: "https://truckplaylist.com/uploads/f_6a800ebd533b09.94127012.mp3"
-        },
-        {
-          title: "Mera Dil Bhi Kitna Pagal Hai",
-          artist: "Kumar Sanu & Alka (Saajan)",
-          url: "https://truckplaylist.com/uploads/f_6a803e0654d485.12616218.mp3"
-        },
-        {
-          title: "Tumse Milne Ki Tamanna Hai",
-          artist: "S.P. Balasubrahmanyam",
-          url: "https://truckplaylist.com/uploads/f_6a7ffdd61ef2c8.22241527.mp3"
-        },
-        {
-          title: "Jeeta Tha Jiske Liye",
-          artist: "Kumar Sanu & Alka (Dilwale)",
-          url: "https://truckplaylist.com/uploads/f_6a7ffcb3d57294.79925154.mp3"
-        },
-        {
-          title: "Barsaat Ke Mausam Mein",
-          artist: "Kumar Sanu (Naajayaz)",
-          url: "https://truckplaylist.com/uploads/f_6a80126e6822e6.26394093.mp3"
-        }
-      ];
+      // Synth player state
+      this.synthRadioTimer = null;
+      this.synthLoopCount = 0;
+      this.currentPatternIndex = 0;
+      this.currentNoteIndex = 0;
 
-      // HTML5 Audio Streamer (No crossOrigin restriction for CDN/hosted streaming)
+      // Restore saved channel preference or default to hindi
+      this.radioChannel = localStorage.getItem('shiplyp_radio_channel') || 'hindi';
+      if (!CHANNEL_ORDER.includes(this.radioChannel)) this.radioChannel = 'hindi';
+      this._rebuildActivePlaylist();
+
+      // HTML5 Audio Streamer for real MP3s
       this.audioEl = new Audio();
       this.audioEl.preload = 'auto';
       this.audioEl.volume = 0.70;
-      this.synthRadioTimer = null;
+
       // Radio only auto-resumes if the player has explicitly turned it on before
       this.userWantsRadio = localStorage.getItem('shiplyp_radio_pref') === 'on';
 
       this.audioEl.addEventListener('ended', () => {
+        const trk = this.activePlaylist[this.currentTrackIndex];
+        if (!trk || trk.isSynth) return;
         const title = this.nextTrack();
         const el = document.getElementById('radio-track-title');
         if (el) el.textContent = title;
       });
 
-      this.audioEl.addEventListener('error', () => {
-        if (this.radioPlaying) {
-          this.startSynthRadio();
+      this.audioEl.addEventListener('error', (e) => {
+        const trk = this.activePlaylist[this.currentTrackIndex];
+        // CRITICAL FIX: Only auto-skip if the current track is ACTUALLY an external MP3 stream
+        // (do not skip when audioEl is paused or empty due to switching to a synth track)
+        if (this.radioPlaying && trk && trk.url && this.audioEl.src && this.audioEl.src.startsWith('http')) {
+          console.warn('Radio stream error for track:', trk.title, 'skipping to next...');
+          const nextTitle = this.nextTrack();
+          const el = document.getElementById('radio-track-title');
+          if (el) el.textContent = nextTitle;
         }
       });
 
       const init = () => {
-        if (!this.ctx) {
-          const AC = window.AudioContext || window.webkitAudioContext;
-          if (AC) this.ctx = new AC();
-        }
-        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+        this.ensure();
       };
       window.addEventListener('click', init, { once: true });
       window.addEventListener('keydown', init, { once: true });
     }
 
+    // Backward-compat getter — all external code that reads realTracks keeps working
+    get realTracks() { return this.activePlaylist; }
+
+    // Build the active playlist from the current channel
+    _rebuildActivePlaylist() {
+      if (this.radioChannel === 'mix') {
+        this.activePlaylist = [...RADIO_PLAYLISTS.hindi, ...RADIO_PLAYLISTS.english];
+      } else {
+        this.activePlaylist = [...(RADIO_PLAYLISTS[this.radioChannel] || RADIO_PLAYLISTS.hindi)];
+      }
+      if (this.currentTrackIndex >= this.activePlaylist.length) {
+        this.currentTrackIndex = 0;
+      }
+    }
+
+    _formatTrackTitle(trk) {
+      if (!trk) return 'Radio';
+      return `${trk.title} — ${trk.artist} (${trk.era})`;
+    }
+
+    getChannelDisplayName() {
+      return CHANNEL_NAMES[this.radioChannel] || 'DHABA FM';
+    }
+
     ensure() {
       if (!this.ctx) {
         const AC = window.AudioContext || window.webkitAudioContext;
-        if (AC) this.ctx = new AC();
+        if (AC) {
+          this.ctx = new AC();
+          // Master warm lowpass filter to ensure all synth sounds are soft, rounded, and non-fatiguing
+          this.masterFilter = this.ctx.createBiquadFilter();
+          this.masterFilter.type = 'lowpass';
+          this.masterFilter.frequency.setValueAtTime(1050, this.ctx.currentTime);
+          this.masterFilter.Q.setValueAtTime(0.8, this.ctx.currentTime);
+          this.masterFilter.connect(this.ctx.destination);
+        }
       }
       if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
       return this.ctx;
@@ -307,7 +467,46 @@
       return this.muted;
     }
 
-    playTone(freq, type = 'sine', duration = 0.15, gainVal = 0.25) {
+    // Soft, soothing Rhodes / Electric Piano chord and melody synthesizer note
+    playSoothingNote(freq, duration = 0.45, volume = 0.14, isBass = false) {
+      if (this.muted || !freq || freq <= 0) return;
+      const ctx = this.ensure();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+
+      // Soft envelope gain with gentle attack and warm decay
+      const gain = ctx.createGain();
+      const attackTime = isBass ? 0.045 : 0.028;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(volume, now + attackTime);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume * 0.45), now + duration * 0.45);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+      // Primary warm fundamental tone (sine)
+      const osc1 = ctx.createOscillator();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(freq, now);
+
+      // Secondary tone for warm harmonic presence (sub-bass sine or gentle detuned triangle)
+      const osc2 = ctx.createOscillator();
+      osc2.type = isBass ? 'sine' : 'triangle';
+      osc2.frequency.setValueAtTime(isBass ? freq * 0.5 : freq, now);
+      if (!isBass) {
+        osc2.detune.setValueAtTime(4.0, now);
+      }
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(this.masterFilter || ctx.destination);
+
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + duration + 0.05);
+      osc2.stop(now + duration + 0.05);
+    }
+
+    // Gentle UI SFX (softened gains and rounded tones)
+    playTone(freq, type = 'sine', duration = 0.15, gainVal = 0.20) {
       if (this.muted) return;
       const ctx = this.ensure();
       if (!ctx) return;
@@ -319,62 +518,110 @@
       gain.gain.setValueAtTime(gainVal, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.masterFilter || ctx.destination);
       osc.start(now);
       osc.stop(now + duration + 0.02);
     }
 
     playPothole() {
       if (this.muted) return;
-      this.playTone(85, 'sawtooth', 0.25, 0.45);
-      setTimeout(() => this.playTone(55, 'sine', 0.2, 0.35), 40);
+      this.playTone(85, 'sine', 0.25, 0.35);
+      setTimeout(() => this.playTone(55, 'sine', 0.2, 0.25), 40);
     }
 
     playCash() {
-      this.playTone(987, 'sine', 0.12, 0.3);
-      setTimeout(() => this.playTone(1318, 'sine', 0.2, 0.25), 90);
+      this.playTone(987, 'sine', 0.12, 0.22);
+      setTimeout(() => this.playTone(1318, 'sine', 0.2, 0.18), 90);
     }
 
     playCombo() {
-      this.playTone(659, 'sine', 0.1, 0.3);
-      setTimeout(() => this.playTone(880, 'sine', 0.12, 0.3), 80);
-      setTimeout(() => this.playTone(1174, 'sine', 0.2, 0.3), 160);
+      this.playTone(659, 'sine', 0.1, 0.20);
+      setTimeout(() => this.playTone(880, 'sine', 0.12, 0.20), 80);
+      setTimeout(() => this.playTone(1174, 'sine', 0.2, 0.20), 160);
     }
 
     playSpeedCam() {
       if (this.muted) return;
-      this.playTone(1800, 'sine', 0.08, 0.4);
-      setTimeout(() => this.playTone(450, 'sawtooth', 0.25, 0.4), 80);
-      setTimeout(() => this.playTone(350, 'sawtooth', 0.35, 0.35), 280);
+      this.playTone(1600, 'sine', 0.08, 0.30);
+      setTimeout(() => this.playTone(450, 'sine', 0.25, 0.30), 80);
+      setTimeout(() => this.playTone(350, 'sine', 0.35, 0.25), 280);
     }
 
     playCrash() {
       if (this.muted) return;
-      this.playTone(120, 'sawtooth', 0.35, 0.5);
-      setTimeout(() => this.playTone(75, 'sawtooth', 0.4, 0.45), 35);
-      setTimeout(() => this.playTone(45, 'sine', 0.5, 0.4), 90);
+      this.playTone(110, 'sine', 0.35, 0.40);
+      setTimeout(() => this.playTone(70, 'sine', 0.4, 0.35), 35);
+      setTimeout(() => this.playTone(45, 'sine', 0.5, 0.30), 90);
     }
 
     playRepair() {
       if (this.muted) return;
-      this.playTone(523, 'sine', 0.15, 0.25);
-      setTimeout(() => this.playTone(659, 'sine', 0.15, 0.25), 100);
-      setTimeout(() => this.playTone(784, 'sine', 0.2, 0.3), 200);
-      setTimeout(() => this.playTone(1046, 'sine', 0.3, 0.35), 300);
+      this.playTone(523, 'sine', 0.15, 0.20);
+      setTimeout(() => this.playTone(659, 'sine', 0.15, 0.20), 100);
+      setTimeout(() => this.playTone(784, 'sine', 0.2, 0.25), 200);
+      setTimeout(() => this.playTone(1046, 'sine', 0.3, 0.25), 300);
     }
 
-    startSynthRadio() {
-      if (this.synthRadioTimer) return;
-      const notes = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25];
-      let step = 0;
-      this.synthRadioTimer = setInterval(() => {
+    // Soothing polyphonic English Synth Radio engine
+    startSynthRadio(trackObj) {
+      this.stopSynthRadio();
+      const ctx = this.ensure();
+      if (!this.radioPlaying || this.muted) return;
+
+      const track = trackObj || this.activePlaylist[this.currentTrackIndex];
+      const scorePatterns = track?.patterns || RADIO_PLAYLISTS.english[0].patterns;
+      const bpm = track?.bpm || 80;
+      const stepInterval = Math.max(160, Math.round((60000 / bpm) / 2)); // 8th note interval in ms
+
+      this.currentPatternIndex = 0;
+      this.currentNoteIndex = 0;
+      this.synthLoopCount = 0;
+
+      const step = () => {
         if (!this.radioPlaying || this.muted) return;
-        const melody = [0, 2, 4, 7, 5, 4, 2, 0, 4, 7, 9, 7, 5, 4, 2, 0];
-        const note = notes[melody[step % melody.length] % notes.length];
-        this.playTone(note, 'triangle', 0.22, 0.18);
-        if (step % 2 === 0) this.playTone(note / 2, 'sine', 0.35, 0.22);
-        step++;
-      }, 260);
+
+        const currentPat = scorePatterns[this.currentPatternIndex % scorePatterns.length];
+        const melodyNotes = currentPat.melody || [];
+        const chordNotes = currentPat.chord || [];
+        const bassNote = currentPat.bass;
+
+        // On pattern start: play bass & warm chord pad
+        if (this.currentNoteIndex === 0) {
+          if (bassNote) {
+            this.playSoothingNote(noteToFreq(bassNote), Math.min(1.2, (stepInterval * 4) / 1000), 0.18, true);
+          }
+          chordNotes.forEach(chNote => {
+            this.playSoothingNote(noteToFreq(chNote), Math.min(1.5, (stepInterval * 3.5) / 1000), 0.09, false);
+          });
+        }
+
+        // Play melody note
+        if (melodyNotes.length > 0) {
+          const mNote = melodyNotes[this.currentNoteIndex % melodyNotes.length];
+          this.playSoothingNote(noteToFreq(mNote), Math.min(0.8, (stepInterval * 1.6) / 1000), 0.13, false);
+        }
+
+        this.currentNoteIndex++;
+        const patternLength = Math.max(4, melodyNotes.length);
+        if (this.currentNoteIndex >= patternLength) {
+          this.currentNoteIndex = 0;
+          this.currentPatternIndex++;
+          if (this.currentPatternIndex >= scorePatterns.length) {
+            this.currentPatternIndex = 0;
+            this.synthLoopCount++;
+            // Auto advance track after 2 full relaxing cycles (~45-60s)
+            if (this.synthLoopCount >= 2) {
+              const nextTitle = this.nextTrack();
+              const el = document.getElementById('radio-track-title');
+              if (el) el.textContent = nextTitle;
+            }
+          }
+        }
+      };
+
+      // Play immediate first note/chord right away
+      step();
+      this.synthRadioTimer = setInterval(step, stepInterval);
     }
 
     stopSynthRadio() {
@@ -382,24 +629,52 @@
         clearInterval(this.synthRadioTimer);
         this.synthRadioTimer = null;
       }
+      this.synthLoopCount = 0;
+      this.currentPatternIndex = 0;
+      this.currentNoteIndex = 0;
     }
 
-    // Real MP3 90s Bollywood Radio Streamer
+    _playCurrentTrack() {
+      const trk = this.activePlaylist[this.currentTrackIndex];
+      if (!trk) return '';
+
+      if (trk.isSynth) {
+        // Soothing synth track
+        this.audioEl.pause();
+        // Do NOT assign this.audioEl.src = '' because browsers fire an error event for empty src
+        if (this.radioPlaying) {
+          this.startSynthRadio(trk);
+        } else {
+          this.stopSynthRadio();
+        }
+      } else if (trk.url) {
+        // Real MP3 track
+        this.stopSynthRadio();
+        if (this.audioEl.src !== trk.url) {
+          this.audioEl.src = trk.url;
+        }
+        if (this.radioPlaying) {
+          const playPromise = this.audioEl.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              console.warn('Audio play prevented or stream error:', err);
+            });
+          }
+        } else {
+          this.audioEl.pause();
+        }
+      }
+      return this._formatTrackTitle(trk);
+    }
+
+    // Toggle radio on / off
     toggleRadio() {
       this.ensure();
       this.radioPlaying = !this.radioPlaying;
       this.userWantsRadio = this.radioPlaying;
       localStorage.setItem('shiplyp_radio_pref', this.radioPlaying ? 'on' : 'off');
       if (this.radioPlaying) {
-        const trk = this.realTracks[this.currentTrackIndex];
-        this.audioEl.src = trk.url;
-        const playPromise = this.audioEl.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(e => {
-            console.warn("Audio autoplay blocked or stream offline, starting synth:", e);
-            this.startSynthRadio();
-          });
-        }
+        this._playCurrentTrack();
       } else {
         this.audioEl.pause();
         this.stopSynthRadio();
@@ -409,32 +684,38 @@
 
     nextTrack() {
       this.ensure();
-      this.stopSynthRadio();
-      this.currentTrackIndex = (this.currentTrackIndex + 1) % this.realTracks.length;
-      const trk = this.realTracks[this.currentTrackIndex];
-      this.audioEl.src = trk.url;
-      if (this.radioPlaying) {
-        const p = this.audioEl.play();
-        if (p !== undefined) p.catch(() => this.startSynthRadio());
-      }
-      return `${trk.title} (${trk.artist})`;
+      if (!this.activePlaylist.length) return '';
+      this.currentTrackIndex = (this.currentTrackIndex + 1) % this.activePlaylist.length;
+      return this._playCurrentTrack();
     }
 
     prevTrack() {
       this.ensure();
-      this.stopSynthRadio();
-      this.currentTrackIndex = (this.currentTrackIndex - 1 + this.realTracks.length) % this.realTracks.length;
-      const trk = this.realTracks[this.currentTrackIndex];
-      this.audioEl.src = trk.url;
-      if (this.radioPlaying) {
-        const p = this.audioEl.play();
-        if (p !== undefined) p.catch(() => this.startSynthRadio());
-      }
-      return `${trk.title} (${trk.artist})`;
+      if (!this.activePlaylist.length) return '';
+      this.currentTrackIndex = (this.currentTrackIndex - 1 + this.activePlaylist.length) % this.activePlaylist.length;
+      return this._playCurrentTrack();
+    }
+
+    switchChannel(channel) {
+      if (!CHANNEL_ORDER.includes(channel)) channel = 'hindi';
+      this.radioChannel = channel;
+      localStorage.setItem('shiplyp_radio_channel', channel);
+      this._rebuildActivePlaylist();
+      this.currentTrackIndex = 0;
+      return this._playCurrentTrack();
+    }
+
+    cycleChannel() {
+      const idx = CHANNEL_ORDER.indexOf(this.radioChannel);
+      const next = CHANNEL_ORDER[(idx + 1) % CHANNEL_ORDER.length];
+      return this.switchChannel(next);
     }
   }
 
   const sound = new SoundEngine();
+  window.sound = sound;
+  window.RADIO_PLAYLISTS = RADIO_PLAYLISTS;
+  window.noteToFreq = noteToFreq;
 
   // --------------------------------------------------------------------------
   // 4. CONFIG & MISSIONS
@@ -1151,6 +1432,16 @@
       const indices = [];
 
       const points = this.curve.getSpacedPoints(tubularSegments);
+      // Cached so VehicleController can compute banking from the EXACT
+      // same points-array finite-difference this mesh uses, instead of
+      // curve.getTangentAt() — a structurally different tangent estimate
+      // (Catmull-Rom's own parametric derivative vs finite differences of
+      // arc-length-spaced points) that silently diverges from what's
+      // actually rendered, worst measured at a full clamp-width difference
+      // (-0.14 vs the true -0.1137 rad) on a real curve. See
+      // BUGFIX_LOG.md's vehicle-sinks-into-road entry (Pattern 2, 4th
+      // occurrence).
+      this.roadSpacedPoints = points;
       const tCfg = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
       const baseTarmac = new THREE.Color(tCfg.color);
       const vergeColor = new THREE.Color(tCfg.color).multiplyScalar(0.72);
@@ -1282,9 +1573,25 @@
       // a vertex row at exactly this distance so the road edge lands on a
       // real terrain vertex rather than somewhere across a wide triangle.
       const vergeLat = CONFIG.ROAD_WIDTH * 0.5 + CONFIG.ROAD_SHOULDER_WIDTH;
+      // Embankment zone (9m out to EMBANKMENT_BLEND=45m in groundHeightAt)
+      // used to have only two slices out there — 20 and 40 — a 20m gap the
+      // mesh bridges with a straight line. This terrain isn't just gentle
+      // noise: groundHeightAt/createTerrainMesh both give raw hillside
+      // height its own "cliff" color band once it exceeds 22 units, i.e.
+      // the game already expects genuinely steep faces out here, and a
+      // handful of sparse slices can never approximate a cliff with a
+      // straight line no matter how they're spaced. Densified to roughly
+      // every 3-4m, which is what actually closes the gap — props and the
+      // on-foot walker are placed via groundHeightAt() (the true nonlinear
+      // surface), so the rendered mesh has to track it this closely or
+      // they float/sink relative to what's on screen. Verified by
+      // raycasting the rendered mesh (see dev-checks.js
+      // embankment-mesh-matches-formula): worst gap dropped from 4.27u
+      // (2 slices out here) to <0.1u at this density.
       const lateralSlices = [
-        -40.0, -20.0, -9.0, -vergeLat, -roadHalf,
-         roadHalf, vergeLat, 9.0, 20.0, 40.0
+        -45.0, -41.0, -37.0, -33.0, -29.0, -25.0, -21.0, -17.0, -13.0, -9.0,
+        -vergeLat, -roadHalf, roadHalf, vergeLat,
+        9.0, 13.0, 17.0, 21.0, 25.0, 29.0, 33.0, 37.0, 41.0, 45.0
       ];
       const sliceCount = lateralSlices.length;
 
@@ -1435,10 +1742,21 @@
       // formula that only roughly agreed with the ribbon's actual
       // embankment math — close but not equal, leaving real multi-meter
       // gaps at the seam (measured directly: up to 18m even after tightening
-      // the sample spacing). Sampling from curve.getSpacedPoints (the same
-      // 800-point sampling createTerrainMesh itself uses) and reusing its
-      // exact formula below removes the approximation entirely.
-      const roadSamples = this.curve.getSpacedPoints(260);
+      // the sample spacing).
+      //
+      // This used to be its own separate 260-point getSpacedPoints() call
+      // — coarse enough (~19m between samples on a multi-km winding route)
+      // that a floor vertex's TRUE nearest distance to the road could read
+      // as significantly farther via straight-line distance to the nearest
+      // of only 260 discrete points, wrongly classifying vertices near the
+      // ribbon-coverage boundary as "past the ribbon" when they weren't —
+      // measured a real 27-32u floating gap at exactly that boundary.
+      // Reuses world.roadSpacedPoints (CONFIG.ROAD_MESH_SEGMENTS = 1200
+      // points, cached by createRoadMesh, which always runs first in
+      // buildWorldAndScene) instead: same dense sampling the ribbon and
+      // road mesh themselves are built from, not a fourth independent
+      // approximation of "how far is this point from the road."
+      const roadSamples = this.roadSpacedPoints || this.curve.getSpacedPoints(CONFIG.ROAD_MESH_SEGMENTS);
 
       const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
       // createTerrainMesh (the close-up "ribbon" that actually renders the
@@ -1454,9 +1772,33 @@
       // render ABOVE the ribbon+road, burying the road and vehicle under
       // floor terrain that was only ever meant to be hidden underneath it.
       // Simplest fix that can't diverge again: stay hidden everywhere the
-      // ribbon actually draws (0-40m), and only surface true terrain
-      // height past that, where the ribbon has nothing to conflict with.
-      const RIBBON_COVERAGE = 40.0;
+      // ribbon actually draws, and only surface true terrain height past
+      // that, where the ribbon has nothing to conflict with. Must equal
+      // groundHeightAt's own EMBANKMENT_BLEND (45), not an independent
+      // guess — that's the actual distance the ribbon (and every prop
+      // placed via groundHeightAt) stops blending and starts reading raw
+      // terrain directly. This was 40 and caused a real ~27u cliff for
+      // anything sitting in the 40-45m gap; see the fix note below.
+      const RIBBON_COVERAGE = 45.0;
+
+      // Spatial hash over roadSamples so each floor vertex only checks
+      // nearby cells instead of all 1200 points — switching roadSamples
+      // from 260 to 1200 points above (needed for correctness: see the
+      // comment on roadSamples) made the brute-force O(vertices x samples)
+      // search ~4.6x slower (measured: +540ms/+63% on world build). Cell
+      // size covers RIBBON_COVERAGE with one ring of neighbor cells so the
+      // true nearest sample is never missed near the boundary that matters.
+      const GRID_CELL = 50.0;
+      const grid = new Map();
+      const cellKey = (cx, cz) => cx + ',' + cz;
+      for (let s = 0; s < roadSamples.length; s++) {
+        const cx = Math.floor(roadSamples[s].x / GRID_CELL);
+        const cz = Math.floor(roadSamples[s].z / GRID_CELL);
+        const key = cellKey(cx, cz);
+        let bucket = grid.get(key);
+        if (!bucket) { bucket = []; grid.set(key, bucket); }
+        bucket.push(s);
+      }
 
       const pos = geom.attributes.position;
       const colors = [];
@@ -1467,23 +1809,85 @@
 
         let nearestDistSq = Infinity;
         let nearestRoadY = Infinity;
-        for (let s = 0; s < roadSamples.length; s++) {
-          const dx = x - roadSamples[s].x;
-          const dz = z - roadSamples[s].z;
-          const dSq = dx * dx + dz * dz;
-          if (dSq < nearestDistSq) {
-            nearestDistSq = dSq;
-            nearestRoadY = roadSamples[s].y;
+        const vcx = Math.floor(x / GRID_CELL);
+        const vcz = Math.floor(z / GRID_CELL);
+        // Ring size 1 covers a 150x150 area around the vertex (3x3 cells of
+        // 50), comfortably beyond RIBBON_COVERAGE(45) in every direction —
+        // the true nearest sample within 45m can never fall outside it.
+        for (let dcx = -1; dcx <= 1; dcx++) {
+          for (let dcz = -1; dcz <= 1; dcz++) {
+            const bucket = grid.get(cellKey(vcx + dcx, vcz + dcz));
+            if (!bucket) continue;
+            for (let bi = 0; bi < bucket.length; bi++) {
+              const s = bucket[bi];
+              const dx = x - roadSamples[s].x;
+              const dz = z - roadSamples[s].z;
+              const dSq = dx * dx + dz * dz;
+              if (dSq < nearestDistSq) {
+                nearestDistSq = dSq;
+                nearestRoadY = roadSamples[s].y;
+              }
+            }
           }
         }
+        // Fallback for the rare vertex with no road sample within the 3x3
+        // neighborhood (far off in the world-floor margin, well past where
+        // RIBBON_COVERAGE or the blend even matters) — brute force once,
+        // correctness over speed for what's already an edge case.
+        if (nearestDistSq === Infinity) {
+          for (let s = 0; s < roadSamples.length; s++) {
+            const dx = x - roadSamples[s].x;
+            const dz = z - roadSamples[s].z;
+            const dSq = dx * dx + dz * dz;
+            if (dSq < nearestDistSq) {
+              nearestDistSq = dSq;
+              nearestRoadY = roadSamples[s].y;
+            }
+          }
+        }
+
 
         const naturalY = rawH - 0.3;
         let finalY = naturalY;
         const dist = Math.sqrt(nearestDistSq);
-        if (dist <= RIBBON_COVERAGE) {
-          // Always hidden under the ribbon here — just keep it far
-          // enough below that the camera can never clip through it.
+        // BUGFIX (two rounds — read both, the first round was insufficient
+        // on its own): this originally switched hard at dist<=40 between
+        // "buried 25 under the road" and "true raw height," while the
+        // ribbon/prop formula both actually cover out to 45
+        // (EMBANKMENT_BLEND) — a mismatched boundary, not just a missing
+        // blend, worth ~27-32u of real measured floating.
+        //
+        // Round 1 just moved the switch to the correct boundary (45). That
+        // was NOT enough: floor mesh vertices are only ~15m apart (see
+        // `segments` above), so ANY hard switch — even at the geometrically
+        // correct distance — still compresses a 25+ unit jump into whatever
+        // single quad happens to straddle it, and that quad interpolates
+        // linearly between "deeply buried" and "true height" across its
+        // ~15m width. Any building sitting on that one transitional quad
+        // reads a wrong, blended-neither height — measured up to 38u still,
+        // now at exactly the (correct) boundary instead of the old wrong
+        // one. A hard switch cannot ever be made safe this way; the
+        // transition itself has to be smooth AND has to finish (reach true
+        // naturalY) at or before dist=45, since groundHeightAt — what every
+        // prop placed out here actually uses — is unblended and constant
+        // past that point (verified continuous 35->60m: 2.43, 4.55, 5.90,
+        // 7.23, 8.23, 8.48, 8.25, 7.17, 6.30). Blending PAST 45 (an earlier,
+        // reverted attempt) would leave the floor still ramping up while
+        // props already sit at full natural height — the same bug in the
+        // opposite direction.
+        //
+        // Fix: smoothstep from fully-buried at BLEND_START (25 — well
+        // inside where the ribbon has real, visible geometry, so nothing is
+        // ever placed relying on the floor there) up to fully-natural
+        // exactly AT RIBBON_COVERAGE(45). By the boundary the floor has
+        // already caught up to the same continuous value props use, so
+        // there is nothing left to jump.
+        const BLEND_START = 25.0;
+        if (dist <= BLEND_START) {
           finalY = nearestRoadY - 25.0;
+        } else if (dist < RIBBON_COVERAGE) {
+          const blendT = THREE.MathUtils.smoothstep(dist, BLEND_START, RIBBON_COVERAGE);
+          finalY = THREE.MathUtils.lerp(nearestRoadY - 25.0, naturalY, blendT);
         }
         pos.setY(i, finalY);
 
@@ -1746,8 +2150,12 @@
           endPos.y = this.groundHeightAt(pt, endPos, latEnd) + 0.15;
 
           const mesh = buildCrosserMesh(kind);
-          mesh.position.copy(startPos);
-          mesh.lookAt(endPos);
+          const initialProgress = this.prng.next() * 0.3; // stagger so they don't all step off in lockstep
+          const initialLat = THREE.MathUtils.lerp(latStart, latEnd, initialProgress);
+          mesh.position.x = THREE.MathUtils.lerp(startPos.x, endPos.x, initialProgress);
+          mesh.position.z = THREE.MathUtils.lerp(startPos.z, endPos.z, initialProgress);
+          mesh.position.y = this.groundHeightAt(pt, mesh.position, initialLat) + 0.15;
+          mesh.lookAt(endPos.x, mesh.position.y, endPos.z);
           this.foliageGroup.add(mesh);
 
           this.crossers.push({
@@ -1766,7 +2174,7 @@
             normal: normal.clone(),
             latStart,
             latEnd,
-            progress: this.prng.next() * 0.3, // stagger so they don't all step off in lockstep
+            progress: initialProgress,
             speed: mesh.userData.walkSpeed,
             hitRadius: mesh.userData.hitRadius,
             struck: false,
@@ -2176,8 +2584,8 @@
             // foundation extending well underground fills that gap from
             // any slope angle without needing to sample the terrain footprint.
             const foundationMat = new THREE.MeshStandardMaterial({ color: 0x5f5348, flatShading: true });
-            const foundation = new THREE.Mesh(new THREE.BoxGeometry(width * 0.96, 16.0, depth * 0.96), foundationMat);
-            foundation.position.y = -8.0;
+            const foundation = new THREE.Mesh(new THREE.BoxGeometry(width * 0.96, 60.0, depth * 0.96), foundationMat);
+            foundation.position.y = -30.0;
             bldgGroup.add(foundation);
 
             bldgGroup.position.copy(bldgPos);
@@ -2339,12 +2747,11 @@
 
           // Roadside Bus Shelter & Waiting Passengers
           if (i % 72 === 0 && side === 1) {
-            const shelterDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 3.8);
+            const shelterDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.2);
             const shelterPos = pt.clone().addScaledVector(normal, shelterDist);
 
-            // Roadside props never checked existing obstacles before placing
-            // themselves (only after, for trees to avoid) — skip if this
-            // spot already has a building/shop/skyscraper sitting on it.
+            // Skip if overlapping another obstacle or if too close to any road section (hairpins)
+            if (!clearsRoad(shelterPos, CONFIG.ROAD_WIDTH * 0.5 + 3.0)) return;
             if (this.obstacles.some(o => o.pos.distanceTo(shelterPos) < (o.radius + 2.8))) return;
 
             shelterPos.y = calcTerrainY(shelterPos, shelterDist);
@@ -2398,9 +2805,10 @@
 
           // Roadside Dhaba / Chai Tapri with Customers drinking tea
           if (i % 34 === 0 && side === -1) {
-            const tapriDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.2);
+            const tapriDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.6);
             const tapriPos = pt.clone().addScaledVector(normal, tapriDist);
 
+            if (!clearsRoad(tapriPos, CONFIG.ROAD_WIDTH * 0.5 + 2.8)) return;
             if (this.obstacles.some(o => o.pos.distanceTo(tapriPos) < (o.radius + 2.6))) return;
 
             tapriPos.y = calcTerrainY(tapriPos, tapriDist);
@@ -2447,9 +2855,10 @@
 
           // Roadside Kirana General Store (shutter, signboard, crates)
           if (i % 38 === 0 && side === 1) {
-            const kiranaDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.4);
+            const kiranaDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.8);
             const kiranaPos = pt.clone().addScaledVector(normal, kiranaDist);
 
+            if (!clearsRoad(kiranaPos, CONFIG.ROAD_WIDTH * 0.5 + 2.6)) return;
             if (this.obstacles.some(o => o.pos.distanceTo(kiranaPos) < (o.radius + 2.4))) return;
 
             kiranaPos.y = calcTerrainY(kiranaPos, kiranaDist);
@@ -2510,6 +2919,10 @@
           if (i % 400 === 0 && i > 50 && side === 1) {
             const monDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 9.0);
             const monPos = pt.clone().addScaledVector(normal, monDist);
+
+            if (!clearsRoad(monPos, CONFIG.ROAD_WIDTH * 0.5 + 4.5)) return;
+            if (this.obstacles.some(o => o.pos.distanceTo(monPos) < (o.radius + 4.0))) return;
+
             monPos.y = calcTerrainY(monPos, monDist);
 
             const monGroup = new THREE.Group();
@@ -2626,31 +3039,27 @@
           }
 
           // Boulders & Rocks. Runs on every point (unlike most props, which
-          // are gated to specific i%N checkpoints), so it was never checked
-          // against delivery houses at all — including the SAME i%24
-          // checkpoint a house spawns on later in this same iteration, so
-          // even an this.obstacles overlap check alone wouldn't catch it
-          // (the house isn't registered yet when the rock runs first).
-          // Skip via the same house-checkpoint math the fence gap uses
-          // instead, which doesn't depend on placement order.
+          // are gated to specific i%N checkpoints). We also check distance
+          // against all delivery house checkpoints so rocks never spawn
+          // anywhere near a house footprint or driveway.
           if (this.prng.next() > 0.65) {
             const nearestHouseCheckpoint = Math.round(i / 24) * 24;
-            const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
             const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
-            const ROCK_HOUSE_GAP = 10.0; // meters — house obstacle radius (3.5) plus porch approach clearance
-            const blockedByHouse = (side === houseCheckpointSide) && (distToHouse < ROCK_HOUSE_GAP);
+            const ROCK_HOUSE_GAP = 14.0; // meters — house obstacle radius (3.5) plus porch & driveway clearance
+            const nearHouseZone = distToHouse < ROCK_HOUSE_GAP;
 
             const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(2.0, 24.0));
             const rockPos = pt.clone().addScaledVector(normal, rockDist);
             const overlapsExisting = this.obstacles.some(o => o.pos.distanceTo(rockPos) < (o.radius + 1.6));
 
-            if (!blockedByHouse && !overlapsExisting) {
+            if (!nearHouseZone && !overlapsExisting) {
               rockPos.y = calcTerrainY(rockPos, rockDist) + 0.8;
               const rock = new THREE.Mesh(rockGeom, rockMat);
               rock.position.copy(rockPos);
               rock.rotation.set(this.prng.next() * 3, this.prng.next() * 3, 0);
+              rock.userData.isRock = true;
               this.foliageGroup.add(rock);
-              this.obstacles.push({ pos: rockPos.clone(), radius: 1.6, type: 'rock' });
+              this.obstacles.push({ pos: rockPos.clone(), radius: 1.6, type: 'rock', mesh: rock });
             }
           }
         });
@@ -2665,6 +3074,15 @@
           const houseDist = houseSide * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(diffCfg.minHouseDist, diffCfg.maxHouseDist));
           const housePos = pt.clone().addScaledVector(normal, houseDist);
           housePos.y = calcTerrainY(housePos, houseDist);
+
+          // Prune any existing obstacles (e.g. rocks/trees spawned earlier in loop) that overlap the house footprint,
+          // removing their actual 3D meshes from foliageGroup as well so no stray visual clutter remains.
+          const HOUSE_CLEARANCE = 5.5;
+          const overlappingObstacles = this.obstacles.filter(o => o.pos.distanceTo(housePos) < (o.radius + HOUSE_CLEARANCE));
+          overlappingObstacles.forEach(o => {
+            if (o.mesh) this.foliageGroup.remove(o.mesh);
+          });
+          this.obstacles = this.obstacles.filter(o => o.pos.distanceTo(housePos) >= (o.radius + HOUSE_CLEARANCE));
 
           // Dirt driveway strip connecting the road shoulder to the house —
           // previously houses just sat stranded off the road with nothing
@@ -3573,26 +3991,45 @@
       const driftGripMult = isDrifting ? 0.40 : 1.0; // 60% friction reduction during power-slide drift
 
       if (this.isAutodrive) {
-        // Simple pure-pursuit autopilot: aim heading at a lookahead point
-        // further along the road curve (from wherever the car actually is
-        // right now — see projectToRoad below) and steer toward it. This
-        // replaces the old "zero out lateralOffset" approach, which made
-        // no sense once the car has a real, free heading to steer.
-        if (this.speed < effectiveMaxSpeed * 0.72) {
-          this.speed += this.accel * dt;
-        }
-        const lookaheadU = THREE.MathUtils.clamp(this.splineProgress + 0.012, 0, 0.999);
+        // Curve-adaptive pure pursuit autopilot: look ahead by a dynamic distance
+        // scaled with forward speed (~12m at low speed, ~35m at top speed), avoiding
+        // jumping across hairpin loops. We also slow down on tight curves to prevent
+        // understeering or spinning into the guardrails.
+        const curveLength = world.curve.getLength() || 5000;
+        const lookaheadMeters = THREE.MathUtils.clamp(10.0 + this.speed * 0.7, 8.0, 36.0);
+        const lookaheadU = THREE.MathUtils.clamp(this.splineProgress + (lookaheadMeters / curveLength), 0, 0.999);
         const lookaheadPt = world.curve.getPointAt(lookaheadU);
         const toTarget = lookaheadPt.clone().sub(this.mesh.position);
         toTarget.y = 0;
+
+        let turnDeflection = 0;
         if (toTarget.lengthSq() > 0.01) {
           const desiredHeading = Math.atan2(toTarget.x, toTarget.z);
           let headingDiff = desiredHeading - this.heading;
           headingDiff = Math.atan2(Math.sin(headingDiff), Math.cos(headingDiff)); // wrap to [-pi, pi]
-          const autopilotTurnRate = 2.2; // rad/s — brisk enough to track normal curves, not a snap-to
-          this.heading += THREE.MathUtils.clamp(headingDiff, -autopilotTurnRate * dt, autopilotTurnRate * dt);
+          turnDeflection = Math.abs(headingDiff);
+
+          // Speed-scaled turn rate: allow sharper turn rate at moderate/low speed, stable at high speed
+          const autopilotTurnRate = 2.4 * climateGrip;
+          const turnStep = THREE.MathUtils.clamp(headingDiff, -autopilotTurnRate * dt, autopilotTurnRate * dt);
+          this.heading += turnStep;
+
+          // Steer angle follows commanded turning rate for realistic wheel angle & dynamics
+          const targetSteerAngle = THREE.MathUtils.clamp(headingDiff * 0.8, -0.42, 0.42);
+          this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, targetSteerAngle, 0.22);
+        } else {
+          this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, 0, 0.16);
         }
-        this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, 0, 0.16);
+
+        // Curve-adaptive speed limit: slow down automatically when entering sharp turns
+        const cornerSpeedFactor = THREE.MathUtils.clamp(1.0 - (turnDeflection / Math.PI) * 1.5, 0.35, 1.0);
+        const autoTargetSpeed = effectiveMaxSpeed * 0.72 * cornerSpeedFactor;
+
+        if (this.speed < autoTargetSpeed) {
+          this.speed += this.accel * dt;
+        } else if (this.speed > autoTargetSpeed + 1.0) {
+          this.speed -= this.brake * dt * 0.7;
+        }
       } else {
         if (this.health <= 0) {
           // Engine breakdown stall
@@ -3719,16 +4156,44 @@
       // height above — fine dead-center, but at any real lateral offset on
       // a sharp bend the true (banked) surface can be well over a meter
       // higher or lower than that, reading as the car sinking into or
-      // floating above the road on turns. Replicate the same banking calc
-      // (same curvature sample spacing as createRoadMesh's 1200 segments)
-      // and apply its vertical contribution at the car's actual offset.
-      const BANK_SEGMENTS = 1200;
-      const bankDeltaU = 2 / BANK_SEGMENTS;
-      const uAhead = Math.min(0.999, proj.u + bankDeltaU);
-      const tangentAhead = world.curve.getTangentAt(uAhead).normalize();
-      const curvatureY = (tangentAhead.x - tangent.x) * 10.0;
-      const bankingAngle = THREE.MathUtils.clamp(curvatureY * 0.25, -0.14, 0.14);
-      const binormal = new THREE.Vector3().crossVectors(roadRight, tangent).normalize();
+      // floating above the road on turns.
+      //
+      // This used to replicate the banking calc via curve.getTangentAt(),
+      // which LOOKS like the same idea as createRoadMesh's per-vertex
+      // curvature but is a structurally different tangent estimate — the
+      // curve's own parametric derivative vs. finite differences between
+      // points on the actual rendered points array. They silently diverge:
+      // measured a full clamp-width gap (-0.14 vs the mesh's true -0.1137
+      // rad) on an ordinary curve, big enough by itself to sink the car
+      // visibly at any real lateral offset. Compute banking from the exact
+      // same array createRoadMesh built (world.roadSpacedPoints, cached
+      // there) at the matching row index instead — same construction, not
+      // just the same formula (see BUGFIX_LOG.md Pattern 1/B17: calling an
+      // equivalent formula is not sufficient, the inputs must match too).
+      const bankPts = world.roadSpacedPoints;
+      let bankingAngle = 0, bankTangent = tangent;
+      if (bankPts && bankPts.length > 2) {
+        const segs = bankPts.length - 1;
+        // Interpolate between the two bracketing rows instead of rounding
+        // to the nearest one — on sharp curves (e.g. Kolkata) a single
+        // ~4m-wide row (1/1200 of the road) is coarse enough that a whole
+        // extra quantization step of banking angle showed up as ~0.35u of
+        // residual sink, the same stair-step class of error the
+        // projectToRoad refinement fixed earlier in this file.
+        const rawIdx = THREE.MathUtils.clamp(proj.u * segs, 1, segs - 2);
+        const i0 = Math.floor(rawIdx), i1 = Math.min(i0 + 1, segs - 2);
+        const frac = rawIdx - i0;
+        const bankingAt = (i) => {
+          const tan = new THREE.Vector3().subVectors(bankPts[i + 1], bankPts[i - 1]).normalize();
+          const nextTang = new THREE.Vector3().subVectors(bankPts[i + 2], bankPts[i]).normalize();
+          const curvatureY = (nextTang.x - tan.x) * 10.0;
+          return { angle: THREE.MathUtils.clamp(curvatureY * 0.25, -0.14, 0.14), tan };
+        };
+        const b0 = bankingAt(i0), b1 = bankingAt(i1);
+        bankingAngle = THREE.MathUtils.lerp(b0.angle, b1.angle, frac);
+        bankTangent = b0.tan.clone().lerp(b1.tan, frac).normalize();
+      }
+      const binormal = new THREE.Vector3().crossVectors(roadRight, bankTangent).normalize();
       // roadRight (createRoadMesh's "normal") is always horizontal by
       // construction, so only binormal's tilt contributes vertically here.
       const bankedYOffset = latDist * binormal.y * Math.sin(bankingAngle);
@@ -4019,7 +4484,21 @@
         this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false });
       } catch (e) {
         console.warn('High-performance WebGL initialization failed, falling back to standard WebGL:', e);
-        this.renderer = new THREE.WebGLRenderer({ antialias: false, failIfMajorPerformanceCaveat: false });
+        try {
+          this.renderer = new THREE.WebGLRenderer({ antialias: false, failIfMajorPerformanceCaveat: false });
+        } catch (e2) {
+          console.warn('Standard WebGL initialization failed, using headless fallback renderer:', e2);
+          const c = document.createElement('canvas');
+          this.renderer = {
+            domElement: c,
+            setSize: () => {},
+            setPixelRatio: () => {},
+            render: () => {},
+            shadowMap: {},
+            setClearColor: () => {},
+            dispose: () => {}
+          };
+        }
       }
       this.renderer.setSize(window.innerWidth, window.innerHeight);
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -4048,10 +4527,18 @@
       // Cheap procedural sky/ground gradient env map: gives PBR materials
       // (MeshStandardMaterial) a plausible ambient reflection/fill instead
       // of the flat, direction-less look they get with no envMap at all.
-      this.envMap = this.createEnvironmentMap();
-      this.scene.environment = this.envMap;
+      try {
+        this.envMap = this.createEnvironmentMap();
+        if (this.envMap) this.scene.environment = this.envMap;
+      } catch (e) {
+        console.warn('Environment map generation failed (headless mode):', e);
+      }
 
-      this.initPostProcessing();
+      try {
+        this.initPostProcessing();
+      } catch (e) {
+        console.warn('Post-processing initialization failed (headless mode):', e);
+      }
     }
 
     // A tiny gradient "sky" scene captured with PMREM equirect rendering.
@@ -4395,6 +4882,7 @@
         if (k === 'c') this.toggleCameraMode();
         if (k === 't') this.cycleTimeOfDay();
         if (k === 'm') this.toggleMute();
+        if (k === 'l') this.cycleRadioChannel();
         if (k === 'v') this.toggleStatusPanel();
         if (k === 'e') this.toggleOnFoot();
         if (k === 'escape') this.openSettingsModal('gameplay');
@@ -4983,12 +5471,16 @@
         }
       }, { once: true });
 
-      // 90s Bollywood Cassette Player Controls
+      // Multi-Channel Radio Controls
       const radioCard = document.getElementById('cassette-radio-card');
       const radioTitleEl = document.getElementById('radio-track-title');
       const btnPlay = document.getElementById('btn-radio-play');
       const btnNext = document.getElementById('btn-radio-next');
       const btnPrev = document.getElementById('btn-radio-prev');
+      const btnChannel = document.getElementById('btn-radio-channel');
+
+      // Set initial channel display from saved preference
+      if (btnChannel) btnChannel.textContent = sound.getChannelDisplayName();
 
       const svgPlay = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
       const svgPause = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
@@ -4999,7 +5491,7 @@
           const isPlaying = sound.toggleRadio();
           btnPlay.textContent = isPlaying ? 'PAUSE' : 'PLAY';
           const trk = sound.realTracks[sound.currentTrackIndex];
-          if (radioTitleEl) radioTitleEl.textContent = `${trk.title} - Dhaba FM`;
+          if (trk && radioTitleEl) radioTitleEl.textContent = sound._formatTrackTitle(trk);
           if (radioCard) {
             if (isPlaying) radioCard.classList.add('playing');
             else radioCard.classList.remove('playing');
@@ -5011,7 +5503,7 @@
         btnNext.onclick = () => {
           sound.ensure();
           const title = sound.nextTrack();
-          if (radioTitleEl) radioTitleEl.textContent = `${title} - Dhaba FM`;
+          if (radioTitleEl) radioTitleEl.textContent = title;
           if (radioCard) radioCard.classList.add('playing');
           if (btnPlay) btnPlay.textContent = 'PAUSE';
         };
@@ -5021,10 +5513,15 @@
         btnPrev.onclick = () => {
           sound.ensure();
           const title = sound.prevTrack();
-          if (radioTitleEl) radioTitleEl.textContent = `${title} - Dhaba FM`;
+          if (radioTitleEl) radioTitleEl.textContent = title;
           if (radioCard) radioCard.classList.add('playing');
           if (btnPlay) btnPlay.textContent = 'PAUSE';
         };
+      }
+
+      // Channel toggle button click
+      if (btnChannel) {
+        btnChannel.onclick = () => this.cycleRadioChannel();
       }
 
       document.getElementById('btn-hud-autodrive')?.addEventListener('click', () => this.toggleAutodrive());
@@ -5103,6 +5600,23 @@
       if (dockBtn) dockBtn.textContent = isMuted ? 'UNMUTE' : 'AUDIO';
       if (hubBtn) hubBtn.innerHTML = `<span>${isMuted ? 'UNMUTE [M]' : 'MUTE [M]'}</span>`;
       this.showScorePopup(0, isMuted ? 'AUDIO MUTED' : 'SOUND UNMUTED');
+    }
+
+    cycleRadioChannel() {
+      sound.ensure();
+      const title = sound.cycleChannel();
+      const btnChannel = document.getElementById('btn-radio-channel');
+      const radioTitleEl = document.getElementById('radio-track-title');
+      const radioCard = document.getElementById('cassette-radio-card');
+      if (btnChannel) {
+        btnChannel.textContent = sound.getChannelDisplayName();
+        btnChannel.classList.remove('channel-flash');
+        void btnChannel.offsetWidth; // force reflow for re-triggering animation
+        btnChannel.classList.add('channel-flash');
+      }
+      if (radioTitleEl) radioTitleEl.textContent = title;
+      if (radioCard && sound.radioPlaying) radioCard.classList.add('playing');
+      this.showScorePopup(0, `RADIO: ${sound.getChannelDisplayName()}`);
     }
 
     updateClimateHUD() {
@@ -5443,16 +5957,18 @@
       sound.ensure();
       sound.playTone(523, 'sine', 0.2);
 
-      // Resume 90s Dhaba FM Cassette Radio only if the player previously opted in
+      // Resume radio on the player's saved channel only if they previously opted in
       if (!sound.radioPlaying && !sound.muted && sound.userWantsRadio) {
         sound.toggleRadio();
         const btnPlay = document.getElementById('btn-radio-play');
         const radioCard = document.getElementById('cassette-radio-card');
         const radioTitleEl = document.getElementById('radio-track-title');
+        const btnChannel = document.getElementById('btn-radio-channel');
         if (btnPlay) btnPlay.textContent = 'PAUSE';
         if (radioCard) radioCard.classList.add('playing');
+        if (btnChannel) btnChannel.textContent = sound.getChannelDisplayName();
         const trk = sound.realTracks[sound.currentTrackIndex];
-        if (radioTitleEl) radioTitleEl.textContent = `${trk.title} - Dhaba FM`;
+        if (trk && radioTitleEl) radioTitleEl.textContent = sound._formatTrackTitle(trk);
       }
     }
 

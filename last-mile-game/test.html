@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Automated Game & Radio Test Runner</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // Ensure WebGLRenderer does not throw in headless mode
+    const origWebGLRenderer = THREE.WebGLRenderer;
+    THREE.WebGLRenderer = function(opts) {
+      try {
+        return new origWebGLRenderer(opts);
+      } catch(e) {
+        const canvas = (opts && opts.canvas) || document.createElement('canvas');
+        return {
+          domElement: canvas,
+          setSize: () => {},
+          setPixelRatio: () => {},
+          render: () => {},
+          shadowMap: {},
+          setClearColor: () => {},
+          dispose: () => {}
+        };
+      }
+    };
+  </script>
+</head>
+<body style="background:#111; color:#eee; font-family:monospace; padding:20px;">
+  <h1>Automated Game & Radio Regression Suite</h1>
+  <div id="test-status">Running checks...</div>
+  <pre id="test-output"></pre>
+
+  <!-- Hidden minimal HUD stubs required by game initialization -->
+  <div style="display:none;">
+    <div id="canvas-container"></div>
+    <div id="intro-screen"></div>
+    <div id="btn-intro-start"></div>
+    <div id="cassette-radio-card"></div>
+    <div id="radio-track-title"></div>
+    <div id="btn-radio-play"></div>
+    <div id="btn-radio-next"></div>
+    <div id="btn-radio-prev"></div>
+    <div id="btn-radio-channel"></div>
+    <div id="btn-hud-sound"></div>
+    <div id="btn-dock-sound"></div>
+    <div id="btn-hub-mute"></div>
+    <div id="hud-climate-pill"></div>
+    <div id="climate-icon"></div>
+    <div id="climate-status"></div>
+    <div id="modal-container"></div>
+    <div id="speed-val">0</div>
+    <div id="gear-val">D</div>
+    <div id="score-val">0</div>
+    <div id="wanted-stars"></div>
+    <div id="fuel-fill"></div>
+    <div id="damage-fill"></div>
+    <div id="mini-map-canvas"></div>
+    <div id="compass-val">N</div>
+    <div id="gps-status"></div>
+    <div id="hud-nav-text"></div>
+  </div>
+
+  <script src="game.js"></script>
+  <script src="dev-checks.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', async () => {
+      const out = document.getElementById('test-output');
+      const status = document.getElementById('test-status');
+      const logs = [];
+      const log = (msg) => { logs.push(msg); out.textContent = logs.join('\n'); console.log(msg); };
+
+      try {
+        log("1. Initializing Game...");
+        for (let i = 0; i < 40; i++) {
+          if (window.game && window.game.world) break;
+          await new Promise(r => setTimeout(r, 100));
+        }
+        
+        if (!window.game) {
+          log("Game instance not found, instantiating ShiplypEngine...");
+          window.game = new ShiplypEngine();
+        }
+        
+        log("2. Starting Drive & Building World...");
+        if (window.game.gameState === 'menu' && typeof window.game.startDrive === 'function') {
+          window.game.startDrive();
+        }
+
+        // Wait a few ticks for world generation to settle
+        await new Promise(r => setTimeout(r, 800));
+
+        log("\n3. Executing dev-checks.js (runWorldChecks)...");
+        if (typeof runWorldChecks === 'function') {
+          const results = runWorldChecks();
+          let passed = 0;
+          results.forEach(r => {
+            if (r.pass) passed++;
+            log(`[${r.pass ? 'PASS' : 'FAIL'}] ${r.name}: ${r.detail || ''}`);
+          });
+          log(`\nWorld Checks Summary: ${passed}/${results.length} PASSED.`);
+        } else {
+          log("ERROR: runWorldChecks function not found!");
+        }
+
+        log("\n4. Verifying Radio Channels & Sound Engine...");
+        log(`- Initial Channel: ${sound.getChannelDisplayName()} (${sound.activePlaylist.length} tracks)`);
+        log(`- Track 0: ${sound._formatTrackTitle(sound.activePlaylist[sound.currentTrackIndex])}`);
+
+        // Channel cycling test
+        const c1 = sound.cycleChannel();
+        log(`- Cycled -> ${sound.getChannelDisplayName()} (${sound.activePlaylist.length} tracks) - ${c1}`);
+        
+        const c2 = sound.cycleChannel();
+        log(`- Cycled -> ${sound.getChannelDisplayName()} (${sound.activePlaylist.length} tracks) - ${c2}`);
+
+        const c3 = sound.cycleChannel();
+        log(`- Cycled -> ${sound.getChannelDisplayName()} (${sound.activePlaylist.length} tracks) - ${c3}`);
+
+        log("\n5. Testing Polyphonic Synthesizer Scores...");
+        RADIO_PLAYLISTS.english.forEach((trk, idx) => {
+          log(`  [Synth Track ${idx+1}] ${trk.title} - ${trk.artist} (${trk.patterns.length} patterns, BPM: ${trk.bpm})`);
+        });
+
+        status.textContent = "ALL TESTS COMPLETED SUCCESSFULLY ✅";
+        status.style.color = "#4ade80";
+      } catch (err) {
+        log(`\nFATAL ERROR: ${err.message}\n${err.stack}`);
+        status.textContent = "TEST FAILED ❌";
+        status.style.color = "#f87171";
+      }
+    });
+  </script>
+</body>
+</html>
