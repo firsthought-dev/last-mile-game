@@ -4574,7 +4574,8 @@
       // Tree, rock, pole, and building collisions removed per design.
     }
 
-    resetToSpline(curve, startU = 0.008) {
+    resetToSpline(curve, startU = 0.008, preserveSpeed = false) {
+      const prevSpeed = this.speed;
       this.splineProgress = (startU !== undefined && startU !== null) ? startU : 0.008;
       this.lateralOffset = 0;
       this.lateralVelocity = 0;
@@ -4590,7 +4591,7 @@
       // still faces down the road.
       this.heading = Math.atan2(tangent.x, tangent.z);
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
-      this.speed = 0;
+      this.speed = preserveSpeed ? prevSpeed : 0;
       this.steerAngle = 0;
       this.health = Math.max(75, this.health);
     }
@@ -6969,6 +6970,35 @@
         this.updateGPSNavigation();
         this.updateClimateHUD();
         this.updateHealthHUD();
+
+        // Infinite Highway District Transition (Option B)
+        // When vehicle reaches the end of the scenic 5km route corridor (u >= 0.96),
+        // smoothly transition to the next highway district with fresh orders and bonus cash!
+        if (!this.onFoot && this.vehicle.splineProgress >= 0.96 && !this.districtTransitioning) {
+          this.districtTransitioning = true;
+          this.currentDistrict = (this.currentDistrict || 1) + 1;
+          const bonus = 150;
+          this.earnings += bonus;
+          sound.playRepair();
+          this.addNotification(`🏙️ ENTERED DISTRICT ${this.currentDistrict}! Highway Bonus +₹${bonus}`, 'success', 4000);
+          this.showScorePopup(bonus, `DISTRICT ${this.currentDistrict} REACHED!`);
+
+          // Smoothly reset vehicle to route start preserving speed & momentum
+          this.vehicle.resetToSpline(this.world.curve, 0.008, true);
+
+          // Reset order targets for continuous delivery gameplay
+          if (this.world.deliveryTargets) {
+            this.world.deliveryTargets.forEach(t => {
+              t.delivered = false;
+              t.missed = false;
+              if (t.mesh) t.mesh.visible = true;
+            });
+            this.activeOrderIndex = 0;
+            this.loadNextOrder();
+          }
+
+          setTimeout(() => { this.districtTransitioning = false; }, 3500);
+        }
 
         // Automatic Breakdown & Stuck Recovery Detection — skipped while on
         // foot: the vehicle is deliberately parked and stationary, so the
