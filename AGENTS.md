@@ -201,6 +201,32 @@ whether you're about to repeat one of these first:
     regression rigor.** This exact area has regressed three separate
     times (A31, A32, and the B14-adjacent vignette-banding chase). A
     "quick tweak" here has a track record of not staying quick.
+14. **"Build time improved" and "render/FPS improved" are different
+    budgets — verifying one says nothing about the other.** Raising the
+    world floor's mesh resolution to fix a placement-accuracy gap was
+    checked against one-time world-build time only, which genuinely did
+    improve; it silently made the mesh 89% of the scene's per-frame
+    triangle budget and cost ~17fps in real gameplay (B25). Any geometry/
+    resolution change must be checked against actual per-frame cost
+    (`renderer.info.render.triangles`/`.calls`, or a real FPS measurement
+    over a few seconds of driving) — not just how long generation took.
+15. **A per-obstacle-type overlap-prevention check must run against
+    every type sharing that check's category, not just the one it was
+    written for.** Delivery houses and skyscrapers both register as
+    `type: 'building'`, but only delivery-house placement pruned nearby
+    rocks/trees — skyscrapers (larger radius, up to ~8u) had no
+    equivalent, so rocks could overlap them freely (B25). When adding a
+    new prop that shares an existing `type`, check whether that type
+    already has bespoke overlap-prevention logic elsewhere, and if so
+    whether the new prop needs the same treatment.
+16. **When placement order between two independently-scheduled loops
+    (e.g. `[-1,1].forEach(side)`, where one side runs to completion
+    before the other starts) makes a per-placement "prune what came
+    before me" fix incomplete, don't keep chasing the exact sequencing —
+    add one unconditional final sweep after everything is placed.**
+    Correct by construction regardless of order, and cheap at world-gen
+    time (B25's rock/skyscraper fix needed this after a placement-time
+    prune closed 19/20 cases but missed a same-index cross-`side` one).
 
 The vehicle moves with **free position + heading** (added turning,
 reversing, real maneuvering — not a rail/lateral-drift model). Ground
