@@ -2668,6 +2668,29 @@
             // don't get placed clipping into the skyscraper's footprint —
             // skyscrapers previously weren't registered at all.
             this.obstacles.push({ pos: bldgPos.clone(), radius: footprintRadius + 1.5, type: 'building' });
+
+            // Registering only protects obstacles placed AFTER this point —
+            // it does nothing for rocks/trees already placed at an EARLIER
+            // sampled point that this skyscraper's own footprint (up to
+            // ~10+ units) can still reach backward into, since bldgDist
+            // ranges widely (34-78) and isn't tied to the same index a
+            // nearby rock used. This is the delivery-house prune pattern
+            // (see the `if (i % 24 === 0)` house block) applied to
+            // skyscrapers too — measured via dev-checks.js
+            // `rocks-clear-of-houses`: every city with a skyscraper
+            // (`type==='building'`) failed this the same way, since only
+            // delivery houses (also `type==='building'`, radius 3.5) were
+            // ever pruned against, never the larger skyscraper footprints.
+            const SKYSCRAPER_CLEARANCE = 2.0;
+            const overlappingNearSkyscraper = this.obstacles.filter(o =>
+              o !== this.obstacles[this.obstacles.length - 1] &&
+              (o.type === 'rock' || o.type === 'tree') &&
+              o.pos.distanceTo(bldgPos) < (o.radius + footprintRadius + 1.5 + SKYSCRAPER_CLEARANCE)
+            );
+            overlappingNearSkyscraper.forEach(o => { if (o.mesh) this.foliageGroup.remove(o.mesh); });
+            if (overlappingNearSkyscraper.length) {
+              this.obstacles = this.obstacles.filter(o => !overlappingNearSkyscraper.includes(o));
+            }
           }
 
           // Roadside Split-Rail Wooden Fences — continuous guardrail along
@@ -3375,6 +3398,31 @@
       // else, so fences stop clipping through bus shelters, chai tapris,
       // kirana stores, skyscrapers, and rocks without diluting the "gap
       // means delivery house" visual cue with gaps at every other prop.
+      // Final rock/tree-vs-building overlap sweep. The per-placement-site
+      // pruning above (skyscraper block, delivery-house block) only
+      // removes obstacles placed BEFORE that building in loop order — a
+      // rock and building can still both spawn on the same iteration's
+      // OTHER `side` (side=-1 runs to completion, including its own
+      // rocks, before side=1 even starts, so a side=1 skyscraper's prune
+      // pass can miss a side=-1 rock at the same i if the specific
+      // ordering/margin doesn't line up) or via some other ordering this
+      // session didn't fully trace. Rather than keep chasing the exact
+      // sequencing, sweep once, unconditionally, after every prop for the
+      // whole route has been placed — this is correct regardless of
+      // placement order, at the cost of one O(rocks x buildings) pass
+      // (a few hundred x a few hundred, trivial at world-gen time).
+      {
+        const buildings = this.obstacles.filter(o => o.type === 'building');
+        const stillOverlapping = this.obstacles.filter(o =>
+          (o.type === 'rock' || o.type === 'tree') &&
+          buildings.some(b => o.pos.distanceTo(b.pos) < (o.radius + b.radius))
+        );
+        stillOverlapping.forEach(o => { if (o.mesh) this.foliageGroup.remove(o.mesh); });
+        if (stillOverlapping.length) {
+          this.obstacles = this.obstacles.filter(o => !stillOverlapping.includes(o));
+        }
+      }
+
       pendingFences.forEach(({ fenceGroup, pos, radius }) => {
         const overlaps = this.obstacles.some(o => o.pos.distanceTo(pos) < (o.radius + radius));
         if (overlaps) return;
