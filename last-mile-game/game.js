@@ -2264,8 +2264,10 @@
         }
 
         // 2. Roadside Chevron Turn Warning Signs (Yellow/Black <<< >>> on metal poles)
-        if (i % 14 === 0 && i < sampledPoints.length - 4) {
-          const nextTang = new THREE.Vector3().subVectors(sampledPoints[i + 3], sampledPoints[i - 1]).normalize();
+        if (i > 0 && i % 14 === 0 && i < sampledPoints.length - 4) {
+          const prevPt = sampledPoints[Math.max(0, i - 1)];
+          const nextPt = sampledPoints[Math.min(sampledPoints.length - 1, i + 3)];
+          const nextTang = new THREE.Vector3().subVectors(nextPt, prevPt).normalize();
           const turnCurvature = tangent.x * nextTang.z - tangent.z * nextTang.x;
 
           if (Math.abs(turnCurvature) > 0.015) {
