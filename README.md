@@ -7,7 +7,7 @@
 ## 🎮 Play Online
 
 Play directly in your browser with zero installs or downloads:
-👉 **[Play Shiplyp: Last Mile Live](https://firstthought-dev.github.io/last-mile-game/)**
+👉 **[Play Shiplyp: Last Mile Live](https://firsthought-dev.github.io/last-mile-game/)**
 
 ---
 
