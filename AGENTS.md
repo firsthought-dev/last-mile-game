@@ -115,6 +115,21 @@ whether you're about to repeat one of these first:
    **nearest** the sample rather than the first/highest: at a hairpin the
    ribbon folds over itself, and the top hit can be a different stretch of
    road tens of units away.
+
+   **A hard switch at the geometrically correct boundary is still not
+   enough — the transition itself must be smooth.** `createWorldFloor`
+   moving its buried/natural switch from the wrong distance (40) to the
+   right one (45, matching `RIBBON_COVERAGE`/`EMBANKMENT_BLEND`) fixed the
+   *location* of the bug but not the bug: floor mesh vertices are ~15m
+   apart, so a dozens-of-units jump still compresses into whatever single
+   quad straddles the switch, and anything sitting on that one quad reads
+   a wrong, blended-neither height. Blend with `smoothstep`, and make the
+   blend **finish exactly at the boundary the unblended formula begins
+   from** — don't blend past it (props already show pure formula output
+   there, so a floor still ramping up past the boundary floats/sinks in
+   the opposite direction) and don't blend too far before it either if
+   another invariant (e.g. "floor must stay >10u below road within 40m")
+   caps how early the ramp can start.
 2. **"Vehicle sinks into / floats above the road"** has had 3 independent
    root causes so far (ignoring lateral offset, camera clamp using raw vs.
    carved terrain, ignoring road banking). If it happens again, check
@@ -163,6 +178,29 @@ whether you're about to repeat one of these first:
     check `clearsRoad(pos, clearanceRadius)` on roadside buildings and
     use speed-scaled lookahead arcs (`10m + speed * 0.7`) rather than fixed
     spline fractions for path following/autopilot.
+11. **Rendering/performance: nothing in this project uses `THREE.LOD`,
+    `THREE.InstancedMesh`, or any explicit culling — verified by grep, not
+    assumed.** `createFoliageAndProps` eagerly builds one full mesh per
+    prop for the *entire* route at world-gen; the only culling active is
+    Three.js's default per-object frustum culling (skips draw calls, does
+    nothing for CPU/memory). If prop density keeps increasing (background
+    trees added for exactly this reason — see BUGFIX_LOG B24), the next
+    lever is `THREE.InstancedMesh` for repeated tree/rock/pole geometry —
+    native, high-leverage, low-risk — before anything custom. Don't build
+    a custom streaming/culling system without first checking what the
+    actual engine (confirm from `index.html`'s script tags — this project
+    is plain Three.js r128, no bundler, not Roblox/Unity/Godot) already
+    provides.
+12. **Per-prop unique material instances (used for color variation) fight
+    `InstancedMesh`'s shared-material model.** If Part 3/4-style
+    instancing or material-unification work ever lands, decide how
+    per-instance color works (instance color attributes, not one material
+    per mesh) before migrating material types — these two changes are
+    coupled, not independent.
+13. **Don't touch the bloom/post-processing pipeline without full
+    regression rigor.** This exact area has regressed three separate
+    times (A31, A32, and the B14-adjacent vignette-banding chase). A
+    "quick tweak" here has a track record of not staying quick.
 
 The vehicle moves with **free position + heading** (added turning,
 reversing, real maneuvering — not a rail/lateral-drift model). Ground

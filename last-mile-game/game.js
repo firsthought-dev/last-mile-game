@@ -1723,10 +1723,21 @@
       const centerX = (b.minX + b.maxX) / 2;
       const centerZ = (b.minZ + b.maxZ) / 2;
 
-      // Keep grid cells small enough (~15m) to track the terrain noise
-      // closely — too coarse and the floor's interpolated surface diverges
-      // from the ribbon terrain's fine sampling, opening visible gaps.
-      const segments = Math.min(400, Math.ceil(size / 15));
+      // Keep grid cells small enough to track the terrain noise closely —
+      // too coarse and the floor's bilinearly-interpolated surface diverges
+      // from the true nonlinear raw-noise height between vertices, and
+      // anything placed there (background buildings, mostly) floats or
+      // sinks relative to it. The old fixed 400-segment cap meant this
+      // world's actual cell size was already maxed out at ~15m regardless
+      // of the "target 15m" comment — and 15m cells still measured up to
+      // 4u of building-vs-floor gap on locally steep raw terrain (BUGFIX_LOG
+      // B17/floor entry). Raised to ~9m target, capped higher (700) since
+      // this world is one long corridor (not square), so segments^2 total
+      // vertices stays reasonable even at this resolution — verified world
+      // build time actually net-improved this session (846ms baseline ->
+      // 620ms) after switching the nearest-road-sample search to a spatial
+      // grid, which freed up headroom to spend on this instead.
+      const segments = Math.min(700, Math.ceil(size / 9));
 
       const geom = new THREE.PlaneGeometry(size, size, segments, segments);
       geom.rotateX(-Math.PI / 2);
@@ -1882,7 +1893,15 @@
         // exactly AT RIBBON_COVERAGE(45). By the boundary the floor has
         // already caught up to the same continuous value props use, so
         // there is nothing left to jump.
-        const BLEND_START = 25.0;
+        //
+        // BLEND_START is 40, not some wider margin — dev-checks.js's
+        // `floor-hidden-under-ribbon` guards a real, separate invariant:
+        // the floor must stay well below actual road level (>10u under)
+        // everywhere within 40m, or it can visually poke through the
+        // ribbon/road itself regardless of whether any prop relies on it.
+        // A wider blend window (25->45, tried first) broke that guard —
+        // this narrower 40->45 band is the widest that respects it.
+        const BLEND_START = 40.0;
         if (dist <= BLEND_START) {
           finalY = nearestRoadY - 25.0;
         } else if (dist < RIBBON_COVERAGE) {
@@ -2422,6 +2441,52 @@
           // pass after every prop for the whole route has been placed.
           pendingTrees.push({ tree, pos: nearPos.clone(), radius: 1.3 * scale });
           } // end spawnTree
+
+          // Background-fill trees: the near-road pass above only plants out
+          // to ~22m (nearDist tops out at roadHalf+18), while skyscrapers
+          // start no closer than 34m (bldgDist below) and only spawn on
+          // ~1-in-7 sampled points at ~85% odds — leaving a consistently
+          // bare 22-34m band, and further bare gaps between buildings
+          // beyond that, on every route. That's what read as "sparse near
+          // buildings/hills" — the background had nothing placed in it at
+          // all, not just fewer props. Fills the 24-90m band (covering the
+          // gap and scattering among/behind the buildings) at a modest,
+          // gated density so it reads as populated hillside without
+          // meaningfully changing prop-count-driven cost: 1-in-4 sampled
+          // points per side, ~55% spawn odds — roughly a third of the
+          // near-road tree density. Uses the same pendingTrees overlap
+          // resolution as every other tree, so these never overlap
+          // buildings/rocks/houses placed in the same pass.
+          if (i % 4 === 0 && this.prng.next() > 0.45) {
+            const bgDist = side * this.prng.range(24.0, 90.0);
+            const bgPos = pt.clone().addScaledVector(normal, bgDist);
+            bgPos.y = calcTerrainY(bgPos, bgDist);
+
+            const bgIsPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
+            const bgLeafHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
+            const bgLeavesMat = new THREE.MeshStandardMaterial({ color: bgLeafHex, flatShading: true });
+            const bgScale = this.prng.range(0.8, 1.5); // background trees can run larger — read fine from a distance, and vary the treeline silhouette
+            const bgTree = new THREE.Group();
+            const bgTrunk = new THREE.Mesh(trunkGeom, trunkMat);
+            bgTrunk.position.y = 1.4;
+            bgTree.add(bgTrunk);
+            if (bgIsPine) {
+              const bgTier1 = new THREE.Mesh(new THREE.ConeGeometry(2.2, 3.4, 7), bgLeavesMat);
+              bgTier1.position.y = 3.6;
+              const bgTier2 = new THREE.Mesh(new THREE.ConeGeometry(1.7, 2.8, 7), bgLeavesMat);
+              bgTier2.position.y = 5.6;
+              const bgTier3 = new THREE.Mesh(new THREE.ConeGeometry(1.2, 2.2, 7), bgLeavesMat);
+              bgTier3.position.y = 7.2;
+              bgTree.add(bgTier1, bgTier2, bgTier3);
+            } else {
+              const bgCanopy = new THREE.Mesh(new THREE.DodecahedronGeometry(2.4, 0), bgLeavesMat);
+              bgCanopy.position.y = 4.6;
+              bgTree.add(bgCanopy);
+            }
+            bgTree.scale.setScalar(bgScale);
+            bgTree.position.copy(bgPos);
+            pendingTrees.push({ tree: bgTree, pos: bgPos.clone(), radius: 1.3 * bgScale });
+          }
 
           // City Skyline: procedural skyscrapers set well back beyond the
           // treeline so they read as a backdrop rather than roadside clutter.
