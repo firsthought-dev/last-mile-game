@@ -370,7 +370,20 @@
     constructor() {
       this.ctx = null;
       this.masterFilter = null;
-      this.muted = false;
+      // Radio (the Hindi/English playlist, via audioEl or the synth radio
+      // interval) and SFX (in-game event tones — potholes, e-challans,
+      // delivery chimes) used to share one `muted` flag with no way to
+      // silence one without the other. Split so each is independently
+      // mutable, and persisted the same way the channel preference already
+      // is so a mute choice survives a reload.
+      this.radioMuted = localStorage.getItem('shiplyp_radio_muted') === '1';
+      this.sfxMuted = localStorage.getItem('shiplyp_sfx_muted') === '1';
+      // `muted` kept as a read-only OR of both, for any external code that
+      // still reads it (display strings etc.) — never write to it directly.
+      // Whenever gameState isn't 'playing' (menu, dispatch hub, restart),
+      // ALL audio — radio and SFX alike — is fully suspended regardless of
+      // the two mute flags above, not just paused-but-still-schedulable.
+      this.suspended = false;
       this.radioPlaying = false;
       this.currentTrackIndex = 0;
 
@@ -461,15 +474,62 @@
       return this.ctx;
     }
 
+    get muted() { return this.radioMuted && this.sfxMuted; }
+
+    toggleRadioMute() {
+      this.radioMuted = !this.radioMuted;
+      localStorage.setItem('shiplyp_radio_muted', this.radioMuted ? '1' : '0');
+      if (this.audioEl) this.audioEl.muted = this.radioMuted;
+      return this.radioMuted;
+    }
+
+    toggleSfxMute() {
+      this.sfxMuted = !this.sfxMuted;
+      localStorage.setItem('shiplyp_sfx_muted', this.sfxMuted ? '1' : '0');
+      return this.sfxMuted;
+    }
+
+    // Kept for any leftover call site — now toggles both together, matching
+    // the old single-mute behavior exactly (radioMuted and sfxMuted end up
+    // equal, since both start from whatever `muted` was: true only when
+    // both were already muted).
     toggleMute() {
-      this.muted = !this.muted;
-      if (this.audioEl) this.audioEl.muted = this.muted;
-      return this.muted;
+      const goingMuted = !this.muted;
+      this.radioMuted = goingMuted;
+      this.sfxMuted = goingMuted;
+      localStorage.setItem('shiplyp_radio_muted', goingMuted ? '1' : '0');
+      localStorage.setItem('shiplyp_sfx_muted', goingMuted ? '1' : '0');
+      if (this.audioEl) this.audioEl.muted = goingMuted;
+      return goingMuted;
+    }
+
+    // Fully suspends ALL audio (radio + SFX) regardless of the mute flags
+    // above — called whenever the player isn't actively in a driving run
+    // (menu, dispatch hub, restart) so nothing plays behind a menu screen.
+    // Distinct from muting: muting is a per-channel user preference that
+    // should survive a reload; suspension is a per-screen state that
+    // shouldn't leak the mute flags (a muted-radio player who un-mutes
+    // mid-menu shouldn't suddenly hear radio before they've started a run).
+    suspendForMenu() {
+      if (this.suspended) return;
+      this.suspended = true;
+      if (this.audioEl) this.audioEl.pause();
+      if (this.synthRadioTimer) {
+        clearInterval(this.synthRadioTimer);
+        this.synthRadioTimer = null;
+      }
+    }
+
+    resumeForGameplay() {
+      this.suspended = false;
+      // Deliberately does NOT auto-resume playback here — the existing
+      // "radio only plays if the player explicitly turned it on" logic
+      // (userWantsRadio) still governs whether anything actually starts.
     }
 
     // Soft, soothing Rhodes / Electric Piano chord and melody synthesizer note
     playSoothingNote(freq, duration = 0.45, volume = 0.14, isBass = false) {
-      if (this.muted || !freq || freq <= 0) return;
+      if (this.suspended || this.radioMuted || !freq || freq <= 0) return;
       const ctx = this.ensure();
       if (!ctx) return;
       const now = ctx.currentTime;
@@ -507,7 +567,7 @@
 
     // Gentle UI SFX (softened gains and rounded tones)
     playTone(freq, type = 'sine', duration = 0.15, gainVal = 0.20) {
-      if (this.muted) return;
+      if (this.suspended || this.sfxMuted) return;
       const ctx = this.ensure();
       if (!ctx) return;
       const osc = ctx.createOscillator();
@@ -524,38 +584,40 @@
     }
 
     playPothole() {
-      if (this.muted) return;
+      if (this.suspended || this.sfxMuted) return;
       this.playTone(85, 'sine', 0.25, 0.35);
       setTimeout(() => this.playTone(55, 'sine', 0.2, 0.25), 40);
     }
 
     playCash() {
+      if (this.suspended || this.sfxMuted) return;
       this.playTone(987, 'sine', 0.12, 0.22);
       setTimeout(() => this.playTone(1318, 'sine', 0.2, 0.18), 90);
     }
 
     playCombo() {
+      if (this.suspended || this.sfxMuted) return;
       this.playTone(659, 'sine', 0.1, 0.20);
       setTimeout(() => this.playTone(880, 'sine', 0.12, 0.20), 80);
       setTimeout(() => this.playTone(1174, 'sine', 0.2, 0.20), 160);
     }
 
     playSpeedCam() {
-      if (this.muted) return;
+      if (this.suspended || this.sfxMuted) return;
       this.playTone(1600, 'sine', 0.08, 0.30);
       setTimeout(() => this.playTone(450, 'sine', 0.25, 0.30), 80);
       setTimeout(() => this.playTone(350, 'sine', 0.35, 0.25), 280);
     }
 
     playCrash() {
-      if (this.muted) return;
+      if (this.suspended || this.sfxMuted) return;
       this.playTone(110, 'sine', 0.35, 0.40);
       setTimeout(() => this.playTone(70, 'sine', 0.4, 0.35), 35);
       setTimeout(() => this.playTone(45, 'sine', 0.5, 0.30), 90);
     }
 
     playRepair() {
-      if (this.muted) return;
+      if (this.suspended || this.sfxMuted) return;
       this.playTone(523, 'sine', 0.15, 0.20);
       setTimeout(() => this.playTone(659, 'sine', 0.15, 0.20), 100);
       setTimeout(() => this.playTone(784, 'sine', 0.2, 0.25), 200);
@@ -566,7 +628,7 @@
     startSynthRadio(trackObj) {
       this.stopSynthRadio();
       const ctx = this.ensure();
-      if (!this.radioPlaying || this.muted) return;
+      if (!this.radioPlaying || this.suspended || this.radioMuted) return;
 
       const track = trackObj || this.activePlaylist[this.currentTrackIndex];
       const scorePatterns = track?.patterns || RADIO_PLAYLISTS.english[0].patterns;
@@ -578,7 +640,7 @@
       this.synthLoopCount = 0;
 
       const step = () => {
-        if (!this.radioPlaying || this.muted) return;
+        if (!this.radioPlaying || this.suspended || this.radioMuted) return;
 
         const currentPat = scorePatterns[this.currentPatternIndex % scorePatterns.length];
         const melodyNotes = currentPat.melody || [];
@@ -642,7 +704,7 @@
         // Soothing synth track
         this.audioEl.pause();
         // Do NOT assign this.audioEl.src = '' because browsers fire an error event for empty src
-        if (this.radioPlaying) {
+        if (this.radioPlaying && !this.suspended) {
           this.startSynthRadio(trk);
         } else {
           this.stopSynthRadio();
@@ -653,7 +715,7 @@
         if (this.audioEl.src !== trk.url) {
           this.audioEl.src = trk.url;
         }
-        if (this.radioPlaying) {
+        if (this.radioPlaying && !this.suspended) {
           const playPromise = this.audioEl.play();
           if (playPromise !== undefined) {
             playPromise.catch((err) => {
@@ -6070,6 +6132,7 @@
 
     startDrive() {
       this.gameState = 'playing';
+      sound.resumeForGameplay();
       this.modalContainer.innerHTML = '';
       this.hudOverlay.style.display = 'block';
       this.dockEl.style.display = 'flex';
@@ -6119,6 +6182,7 @@
 
     renderDispatchHub() {
       this.gameState = 'menu';
+      sound.suspendForMenu();
       this.hudOverlay.style.display = 'none';
       this.dockEl.style.display = 'none';
       if (this.dockPanelEl) this.dockPanelEl.style.display = 'none';

@@ -925,6 +925,15 @@ evidence, not an aggregate claim. Three distinct, confirmed bugs.
     cities — 0 failures across every combination. FPS re-confirmed at
     60.8 on a clean reload after the Symptom 1 fix.
 
+### B26. Independent radio & SFX mute separation and menu audio suspension
+
+- **Symptom 1 (All-or-nothing audio muting):** Players had no way to silence background radio without also muting essential gameplay SFX (potholes, e-challans, delivery drop chimes, engine warnings) or vice versa.
+  * **Root cause:** The sound engine maintained a single boolean `muted` property that indiscriminately gated all Web Audio synth calls and HTML5 audio element playback.
+  * **Fix:** Split `muted` into independent `radioMuted` and `sfxMuted` preferences persisted via `localStorage` (`shiplyp_radio_muted`, `shiplyp_sfx_muted`), with `toggleRadioMute()`, `toggleSfxMute()`, and backwards-compatible `toggleMute()` fallback.
+- **Symptom 2 (Audio leaking during menu and dispatch hub states):** Synth notes or media audio could continue scheduling or playing during non-gameplay states (dispatch hub menu, game over/arrest modals).
+  * **Root cause:** Sound playback did not distinguish between user-configured muting preferences and active driving game states.
+  * **Fix:** Added `suspendForMenu()` and `resumeForGameplay()`, ensuring all radio tracks and sound effects immediately halt when returning to the dispatch hub or menus without clearing user mute preferences.
+
 ---
 
 ## Recurring bug patterns — read before touching these areas again
