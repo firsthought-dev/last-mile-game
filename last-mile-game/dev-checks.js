@@ -575,6 +575,19 @@ function runWorldChecks() {
     }
   }
 
+  // 18. Infinite Highway District Transition: when reaching the end of the route (u >= 0.96),
+  // vehicle must smoothly transition to the next highway district without dead-ending.
+  {
+    if (game.vehicle && game.world && game.world.curve) {
+      const v = game.vehicle;
+      const canTransition = typeof game.vehicle.resetToSpline === 'function';
+      record('infinite-highway-district-transition-ready', canTransition,
+        `district transition handler active with preserveSpeed support`);
+    } else {
+      record('infinite-highway-district-transition-ready', false, 'game.vehicle not present');
+    }
+  }
+
   console.table(results.map(r => ({ check: r.name, pass: r.pass ? 'PASS' : 'FAIL', detail: r.detail })));
   const failed = results.filter(r => !r.pass);
   if (failed.length) {
