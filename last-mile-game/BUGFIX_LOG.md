@@ -750,6 +750,106 @@ confirmed by running the same check against committed HEAD in an isolated
   * Verified all 6 English synth arrangements play notes cleanly without error events.
   * Re-verified `runWorldChecks()` in `dev-checks.js` with **20/20 world regression checks passing**.
 
+### B24. B19's floor fix was incomplete — round 2, plus background tree density and a Part 3/4 rendering investigation
+
+Triggered by a user report of floating props/pavement persisting after B19,
+with an explicit request to determine whether it was **the same root cause
+as B19 (incomplete fix) or a genuinely new one** before touching anything.
+Finding: **same root cause family, B19's fix was correct but insufficient
+in two distinct ways it didn't address.**
+
+- **Symptom 1 (floor still floats/buries near the 40-45m boundary, up to
+  ~38u even after B19):** B19 moved `createWorldFloor`'s hard buried/natural
+  switch from `dist<=40` to the geometrically correct `dist<=45`, but a
+  *hard switch at any boundary* is insufficient on its own — floor mesh
+  vertices are only ~15m apart, so a dozens-of-units jump compressed into
+  one quad's width still produces a steep, wrong, linearly-interpolated
+  ramp across that single face, and anything sitting on that one
+  transitional quad reads a blended-neither height regardless of where the
+  switch point is.
+  * **Fix:** Replaced the hard switch with a `smoothstep` blend from fully
+    buried to fully natural, timed to *finish exactly at* `RIBBON_COVERAGE`
+    (45) rather than straddle it — matching `groundHeightAt()`, which is
+    unblended and constant past 45, so nothing is left ramping once props
+    start using the "far" branch. First attempt blended from 25→45 and
+    broke a real, separate existing safety check
+    (`floor-hidden-under-ribbon`, which requires the floor stay >10u below
+    road level within 40m to avoid visually poking through the ribbon/road)
+    — narrowed to 40→45 to respect both constraints simultaneously.
+- **Symptom 2 (residual ~4u gap on distant background buildings after the
+  blend fix):** Pure floor mesh resolution — bilinear interpolation across
+  ~15m quads still misses several units of real height variation on
+  locally steep raw noise terrain, independent of the boundary/blend issue.
+  * **Fix:** Raised `createWorldFloor`'s segment cap from a hard 400 (which
+    was already maxing out well above the "target 15m cell" the code
+    commented, since world routes span kilometers) to 700 with a ~9m target
+    cell size. Verified the residual (~4.36u worst case) sits comfortably
+    inside the existing 60-unit building foundation slab (B21), so it isn't
+    expected to be visible in practice even though it isn't mathematically
+    zero.
+  * **Performance:** also replaced the floor's road-proximity search — a
+    260-point-vs-117k-vertices brute force, upgraded to 1200 points for
+    correctness (needed a denser source than 260 to even measure the real
+    boundary distance accurately) — with a 50m spatial hash grid (3x3
+    neighbor-cell search, brute-force fallback for the rare unmatched
+    vertex). Net result across both the resolution increase AND the search
+    optimization: world build time went from an 846ms baseline down to
+    ~620ms-1.4s depending on how much resolution headroom was spent — see
+    `createWorldFloor`'s inline comments for the exact tradeoff reasoning.
+  * **New regression guard:** none added beyond what B19 already has
+    (`embankment-mesh-matches-formula`) — the existing
+    `floor-hidden-under-ribbon` check already caught the round-1 regression
+    directly, which is itself worth noting: it's possible to fix a bug and
+    break an existing, unrelated invariant in the same edit, and the only
+    reason that was caught immediately was that a check for it already
+    existed. If you touch `createWorldFloor` again, run the full suite, not
+    just a targeted new check.
+
+- **Part 2 (background tree/prop density near buildings/hills):** Found via
+  direct code read, not guessing: near-road trees only spawn out to ~22m
+  (`nearDist` tops out at `roadHalf+18`), while background skyscrapers start
+  no closer than 34m and only spawn on ~1-in-7 sampled points at ~85% odds
+  — leaving a consistently bare 22-34m band, and further bare gaps between
+  buildings past that, on every route regardless of city/season (this loop
+  runs identically for all 5 cities x 4 seasons; road surface has zero
+  effect on world-gen, confirmed by grep — it only touches paint
+  color/grip in `VehicleController.update`). Added a second,
+  independently-gated tree pass filling the 24-90m band at roughly a third
+  of near-road density (1-in-4 sampled points, ~55% odds), reusing the
+  existing `pendingTrees` overlap-resolution queue so these never collide
+  with buildings/rocks/houses. Verified: 20/20 checks pass, tree count
+  666->901 (+35%), zero new clear-of-road/overlap violations, confirmed
+  visually.
+
+- **Part 3 (rendering optimization) — investigated, explicitly NOT built:**
+  Confirmed via `grep` across the whole codebase: zero uses of
+  `THREE.LOD`, `THREE.InstancedMesh`, or any `frustumCulled` configuration
+  anywhere. The only culling active is Three.js's unconfigured default
+  per-object frustum culling, which skips draw calls but does nothing for
+  CPU/memory cost. `createFoliageAndProps` eagerly builds a full individual
+  mesh for every prop across the entire route in one pass at world-gen —
+  everything for the whole map is resident simultaneously. Proposed (not
+  built): (1) `THREE.InstancedMesh` for repeated tree/rock/pole geometry —
+  native Three.js, highest leverage, lowest risk, doesn't touch placement
+  logic; (2) distance-based `mesh.visible` toggling checked every few
+  frames as a cheap streaming approximation, since the world is static
+  after generation rather than actually loaded/unloaded on demand; (3)
+  explicitly skipped LOD (needs authored detail levels, real asset work)
+  and occlusion culling (no off-the-shelf r128 answer, not worth a custom
+  BVH for this art style) for now.
+
+- **Part 4 (graphics polish) — scoped, sequenced after Part 3, not built:**
+  Proposed (1) unifying the remaining `MeshLambertMaterial` props onto the
+  `MeshStandardMaterial` PBR pipeline established in A31, but flagged an
+  explicit tension: today's per-prop color variation uses unique material
+  *instances*, which actively fights `InstancedMesh`'s shared-material
+  model — Part 3's instancing approach needs to decide how per-instance
+  color works before this migrates; (2) cheap non-shadow-map contact
+  decals under props, same instancing caveat; (3) explicitly do NOT touch
+  bloom/post-processing thresholds without the same regression rigor as
+  everything else here — this exact area has already regressed three
+  separate times (A31, A32, and the B14-adjacent vignette chase).
+
 ---
 
 ## Recurring bug patterns — read before touching these areas again
