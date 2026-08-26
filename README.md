@@ -29,9 +29,8 @@ Play directly in your browser with zero installs or downloads:
 
 ---
 
-## 📚 Key Documentation
+## 📚 Documentation & Credits
 
-- **[Shiplyp GDD v3.0](last-mile-game/SHIPLYP_GDD_V2.md)** — Complete Game Design Document.
 - **[Credits, References & Attributions](last-mile-game/CREDITS_AND_REFERENCES.md)** — Attributions for creators, AI models (Claude & Antigravity), open-source libraries, CC0 assets, and music.
 
 ---
@@ -46,7 +45,6 @@ Play directly in your browser with zero installs or downloads:
     ├── game.js                          ← Main game engine (Three.js r128)
     ├── style.css                        ← Glassmorphic HUD & telemetry styling
     ├── dev-checks.js                    ← Automated regression verification suite
-    ├── SHIPLYP_GDD_V2.md
     ├── CREDITS_AND_REFERENCES.md
     └── assets/                          ← CC0 3D models and backdrops
 ```
