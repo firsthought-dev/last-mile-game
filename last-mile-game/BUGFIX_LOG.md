@@ -934,6 +934,21 @@ evidence, not an aggregate claim. Three distinct, confirmed bugs.
   * **Root cause:** Sound playback did not distinguish between user-configured muting preferences and active driving game states.
   * **Fix:** Added `suspendForMenu()` and `resumeForGameplay()`, ensuring all radio tracks and sound effects immediately halt when returning to the dispatch hub or menus without clearing user mute preferences.
 
+### B27. Menu Audio Total Suspension, MeshLambertMaterial flatShading Warning Fix & Parcel Trail FX
+
+- **Symptom 1 (flatShading console warning on load):** Console logged `THREE.MeshLambertMaterial: 'flatShading' is not a property of this material` repeatedly during world-generation.
+  * **Root cause:** Pitstop repair bay shed roof material used `MeshLambertMaterial` with `flatShading: true`, which is only valid on `MeshStandardMaterial` or `MeshPhongMaterial`.
+  * **Fix:** Converted repair bay shed roof material to `MeshStandardMaterial({ color: 0x1e3a5f, flatShading: true })`.
+- **Symptom 2 (Sound playback on initial page load before driving):** If user clicked anywhere on the dispatch hub/menu, Web Audio synth notes or audio elements could play before a driving shift was started.
+  * **Root cause:** `SoundEngine.suspended` initialized to `false` on initial construct.
+  * **Fix:** Initialized `this.suspended = true` on construct, ensuring complete silence during initial boot, dispatch hub menus, stuck recovery modals, and police arrests until `startDrive()` or recovery is triggered.
+- **Symptom 3 (Traffic vehicles floating/sinking on road slopes):** Traffic cars along curved and banked slopes did not track actual road ribbon elevation.
+  * **Root cause:** `updateTraffic()` updated positions along `pt + normal*offset` without sampling `World.groundHeightAt()`.
+  * **Fix:** Applied `pos.y = this.groundHeightAt(pt, pos, tv.laneOffset) + 0.15` and aligned forward heading with travel direction in `updateTraffic()`.
+- **Enhancement (HUD Dual Audio Controls & Parcel Trajectory FX):**
+  * Added independent HUD buttons `#btn-hud-radio-mute` and `#btn-hud-sfx-mute` and keyboard shortcuts (`M` for Radio, `N` for SFX).
+  * Added dynamic aerodynamic particle trails (`spawnParcelTrail`) during 3D parcel tosses arcing toward delivery targets.
+
 ---
 
 ## Recurring bug patterns — read before touching these areas again

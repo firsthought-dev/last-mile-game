@@ -383,7 +383,9 @@
       // Whenever gameState isn't 'playing' (menu, dispatch hub, restart),
       // ALL audio — radio and SFX alike — is fully suspended regardless of
       // the two mute flags above, not just paused-but-still-schedulable.
-      this.suspended = false;
+      // Initialized to TRUE so all audio is completely suspended until the
+      // player actually starts driving.
+      this.suspended = true;
       this.radioPlaying = false;
       this.currentTrackIndex = 0;
 
@@ -402,6 +404,7 @@
       this.audioEl = new Audio();
       this.audioEl.preload = 'auto';
       this.audioEl.volume = 0.70;
+      this.audioEl.muted = this.radioMuted;
 
       // Radio only auto-resumes if the player has explicitly turned it on before
       this.userWantsRadio = localStorage.getItem('shiplyp_radio_pref') === 'on';
@@ -480,6 +483,14 @@
       this.radioMuted = !this.radioMuted;
       localStorage.setItem('shiplyp_radio_muted', this.radioMuted ? '1' : '0');
       if (this.audioEl) this.audioEl.muted = this.radioMuted;
+      if (this.radioPlaying && !this.suspended) {
+        if (this.radioMuted) {
+          this.stopSynthRadio();
+          if (this.audioEl) this.audioEl.pause();
+        } else {
+          this._playCurrentTrack();
+        }
+      }
       return this.radioMuted;
     }
 
@@ -500,6 +511,14 @@
       localStorage.setItem('shiplyp_radio_muted', goingMuted ? '1' : '0');
       localStorage.setItem('shiplyp_sfx_muted', goingMuted ? '1' : '0');
       if (this.audioEl) this.audioEl.muted = goingMuted;
+      if (this.radioPlaying && !this.suspended) {
+        if (goingMuted) {
+          this.stopSynthRadio();
+          if (this.audioEl) this.audioEl.pause();
+        } else {
+          this._playCurrentTrack();
+        }
+      }
       return goingMuted;
     }
 
@@ -522,9 +541,9 @@
 
     resumeForGameplay() {
       this.suspended = false;
-      // Deliberately does NOT auto-resume playback here — the existing
-      // "radio only plays if the player explicitly turned it on" logic
-      // (userWantsRadio) still governs whether anything actually starts.
+      if (this.radioPlaying && !this.radioMuted) {
+        this._playCurrentTrack();
+      }
     }
 
     // Soft, soothing Rhodes / Electric Piano chord and melody synthesizer note
@@ -704,7 +723,7 @@
         // Soothing synth track
         this.audioEl.pause();
         // Do NOT assign this.audioEl.src = '' because browsers fire an error event for empty src
-        if (this.radioPlaying && !this.suspended) {
+        if (this.radioPlaying && !this.suspended && !this.radioMuted) {
           this.startSynthRadio(trk);
         } else {
           this.stopSynthRadio();
@@ -715,7 +734,7 @@
         if (this.audioEl.src !== trk.url) {
           this.audioEl.src = trk.url;
         }
-        if (this.radioPlaying && !this.suspended) {
+        if (this.radioPlaying && !this.suspended && !this.radioMuted) {
           const playPromise = this.audioEl.play();
           if (playPromise !== undefined) {
             playPromise.catch((err) => {
@@ -2403,7 +2422,7 @@
           // used elsewhere so it doesn't read as a bare box.
           const shedRoof = new THREE.Mesh(
             new THREE.ConeGeometry(4.3, 1.4, 4),
-            new THREE.MeshLambertMaterial({ color: 0x1e3a5f, flatShading: true })
+            new THREE.MeshStandardMaterial({ color: 0x1e3a5f, flatShading: true })
           );
           shedRoof.position.set(0, 3.5 + 0.7, 0);
           shedRoof.rotateY(Math.PI / 4);
@@ -3550,8 +3569,10 @@
       const totalLen = this.curve.getLength();
 
       this.trafficVehicles.forEach(tv => {
-        tv.splineU += (tv.speed * dt) / totalLen;
-        if (tv.splineU >= 0.98) tv.splineU = 0.01;
+        const dir = tv.direction || 1;
+        tv.splineU += (dir * tv.speed * dt) / totalLen;
+        if (tv.splineU >= 0.98) tv.splineU = 0.02;
+        if (tv.splineU <= 0.02) tv.splineU = 0.98;
 
         const pt = this.curve.getPointAt(tv.splineU);
         const tangent = this.curve.getTangentAt(tv.splineU).normalize();
@@ -3559,8 +3580,10 @@
         const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
         const pos = pt.clone().addScaledVector(normal, tv.laneOffset);
+        pos.y = this.groundHeightAt(pt, pos, tv.laneOffset) + 0.15;
         tv.mesh.position.copy(pos);
-        tv.mesh.lookAt(pos.clone().add(tangent));
+        const fwdHeading = tangent.clone().multiplyScalar(dir);
+        tv.mesh.lookAt(pos.clone().add(fwdHeading));
       });
     }
 
@@ -5088,7 +5111,8 @@
         if (k === 'r') this.returnToRoad();
         if (k === 'c') this.toggleCameraMode();
         if (k === 't') this.cycleTimeOfDay();
-        if (k === 'm') this.toggleMute();
+        if (k === 'm') this.toggleRadioMute();
+        if (k === 'n') this.toggleSfxMute();
         if (k === 'l') this.cycleRadioChannel();
         if (k === 'v') this.toggleStatusPanel();
         if (k === 'e') this.toggleOnFoot();
@@ -5388,6 +5412,23 @@
       this.refreshStatusPanel();
     }
 
+    spawnParcelTrail(pos) {
+      if (!this.scene) return;
+      const geom = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+      const colors = [0xffd166, 0x06d6a0, 0x118ab2, 0xff9f1c, 0xffffff];
+      const mat = new THREE.MeshBasicMaterial({ color: colors[Math.floor(Math.random() * colors.length)] });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.position.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 0.25, (Math.random() - 0.5) * 0.25, (Math.random() - 0.5) * 0.25));
+      this.scene.add(mesh);
+      this.particles.push({
+        mesh: mesh,
+        vel: new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.6 + Math.random() * 1.2, (Math.random() - 0.5) * 1.5),
+        rotVel: new THREE.Vector3(Math.random() * 6 - 3, Math.random() * 6 - 3, Math.random() * 6 - 3),
+        life: 0.45,
+        maxLife: 0.45
+      });
+    }
+
     updateParcels(dt) {
       for (let i = this.parcels.length - 1; i >= 0; i--) {
         const p = this.parcels[i];
@@ -5397,6 +5438,11 @@
         p.mesh.rotation.x += 4.0 * dt;
         p.mesh.rotation.y += 3.0 * dt;
         p.life -= dt;
+
+        // Aerodynamic trailing particle ribbon
+        if (Math.random() > 0.35) {
+          this.spawnParcelTrail(p.pos);
+        }
 
         // Hit Detection with Porch Ring
         if (p.nearestTarget && !p.nearestTarget.delivered) {
@@ -5621,6 +5667,7 @@
       this.isJailed = true;
       this.gameState = 'jailed';
       sound.playCrash();
+      sound.suspendForMenu();
 
       const fine = 120;
       this.earnings = Math.max(0, this.earnings - fine);
@@ -5651,6 +5698,7 @@
         this.modalContainer.innerHTML = '';
         this.gameState = 'playing';
         if (this.vehicle) this.vehicle.speed = 0;
+        sound.resumeForGameplay();
       });
     }
 
@@ -5741,6 +5789,8 @@
       document.getElementById('btn-dock-camera')?.addEventListener('click', () => this.toggleCameraMode());
       document.getElementById('btn-hud-sound')?.addEventListener('click', () => this.toggleMute());
       document.getElementById('btn-dock-sound')?.addEventListener('click', () => this.toggleMute());
+      document.getElementById('btn-hud-radio-mute')?.addEventListener('click', () => this.toggleRadioMute());
+      document.getElementById('btn-hud-sfx-mute')?.addEventListener('click', () => this.toggleSfxMute());
       document.getElementById('btn-hud-status')?.addEventListener('click', () => this.toggleStatusPanel());
       document.getElementById('btn-dock-status')?.addEventListener('click', () => this.toggleStatusPanel());
       document.getElementById('btn-dock-settings')?.addEventListener('click', () => this.openSettingsModal('gameplay'));
@@ -5798,14 +5848,41 @@
       }
     }
 
-    toggleMute() {
-      const isMuted = sound.toggleMute();
+    toggleRadioMute() {
+      const isMuted = sound.toggleRadioMute();
+      this.updateAudioHUDButtons();
+      this.showScorePopup(0, isMuted ? 'RADIO MUTED [M]' : 'RADIO ON [M]');
+    }
+
+    toggleSfxMute() {
+      const isMuted = sound.toggleSfxMute();
+      this.updateAudioHUDButtons();
+      this.showScorePopup(0, isMuted ? 'SFX MUTED [N]' : 'SFX ON [N]');
+    }
+
+    updateAudioHUDButtons() {
+      const radioHudBtn = document.getElementById('btn-hud-radio-mute');
+      const sfxHudBtn = document.getElementById('btn-hud-sfx-mute');
       const hudBtn = document.getElementById('btn-hud-sound');
       const dockBtn = document.getElementById('btn-dock-sound');
       const hubBtn = document.getElementById('btn-hub-mute');
-      if (hudBtn) hudBtn.textContent = isMuted ? 'UNMUTE' : 'MUTE';
-      if (dockBtn) dockBtn.textContent = isMuted ? 'UNMUTE' : 'AUDIO';
-      if (hubBtn) hubBtn.innerHTML = `<span>${isMuted ? 'UNMUTE [M]' : 'MUTE [M]'}</span>`;
+
+      if (radioHudBtn) {
+        radioHudBtn.classList.toggle('muted', sound.radioMuted);
+        radioHudBtn.textContent = sound.radioMuted ? 'RADIO OFF' : 'RADIO';
+      }
+      if (sfxHudBtn) {
+        sfxHudBtn.classList.toggle('muted', sound.sfxMuted);
+        sfxHudBtn.textContent = sound.sfxMuted ? 'SFX OFF' : 'SFX';
+      }
+      if (hudBtn) hudBtn.textContent = (sound.radioMuted && sound.sfxMuted) ? 'UNMUTE' : 'MUTE';
+      if (dockBtn) dockBtn.textContent = (sound.radioMuted && sound.sfxMuted) ? 'UNMUTE' : 'AUDIO';
+      if (hubBtn) hubBtn.innerHTML = `<span>${(sound.radioMuted && sound.sfxMuted) ? 'UNMUTE [M]' : 'MUTE [M]'}</span>`;
+    }
+
+    toggleMute() {
+      const isMuted = sound.toggleMute();
+      this.updateAudioHUDButtons();
       this.showScorePopup(0, isMuted ? 'AUDIO MUTED' : 'SOUND UNMUTED');
     }
 
@@ -5941,6 +6018,7 @@
     showStuckRecoveryModal(reason = 'Vehicle Immobilized') {
       if (this.isStuckModalOpen || this.gameState !== 'playing') return;
       this.isStuckModalOpen = true;
+      sound.suspendForMenu();
 
       if (this.resumeCount >= this.maxResumes) {
         // Shift Failed - 3 Resumes Exhausted! Restore baseline checkpoint saved before resume #1
@@ -6064,6 +6142,7 @@
 
       this.updateHUDStats();
       this.updateHealthHUD();
+      sound.resumeForGameplay();
       sound.playRepair();
       this.showScorePopup(0, `🛟 RESUME #${this.resumeCount}/3 USED! Vehicle Serviced`);
     }
@@ -6076,6 +6155,7 @@
       this.lostFromRoad = false;
       this.hideReturnToRoadBanner();
       this.vehicle.snapToNearestRoadPoint(this.world.curve);
+      sound.resumeForGameplay();
       this.showScorePopup(0, '🗺️ RETURNED TO ROAD — DRIVE SAFELY!');
       sound.playRepair && sound.playRepair();
     }
@@ -6164,9 +6244,10 @@
       }
       sound.ensure();
       sound.playTone(523, 'sine', 0.2);
+      this.updateAudioHUDButtons();
 
       // Resume radio on the player's saved channel only if they previously opted in
-      if (!sound.radioPlaying && !sound.muted && sound.userWantsRadio) {
+      if (!sound.radioPlaying && !sound.radioMuted && sound.userWantsRadio) {
         sound.toggleRadio();
         const btnPlay = document.getElementById('btn-radio-play');
         const radioCard = document.getElementById('cassette-radio-card');

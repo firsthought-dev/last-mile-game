@@ -634,6 +634,13 @@ html, body {
   color: #ffffff;
 }
 
+.slowroads-icon-btn.muted,
+.slowroads-icon-btn.off {
+  color: rgba(255, 255, 255, 0.4);
+  border-color: rgba(239, 35, 60, 0.35);
+  background: rgba(239, 35, 60, 0.15);
+}
+
 /* --- Floating Toss Directive Reticle (< 35m from Doorstep) --- */
 .slowroads-toss-banner {
   position: absolute;
