@@ -850,6 +850,81 @@ in two distinct ways it didn't address.**
   everything else here — this exact area has already regressed three
   separate times (A31, A32, and the B14-adjacent vignette chase).
 
+### B25. B24's floor-resolution fix was itself a real FPS regression, plus rocks floating/burying and rocks overlapping skyscrapers
+
+Triggered by direct user reports of floating rocks and lag, with an
+explicit follow-up demand to check every city/season/surface with real
+evidence, not an aggregate claim. Three distinct, confirmed bugs.
+
+- **Symptom 1 (measured FPS regression, ~59.5 -> ~42.6 in a clean
+  isolated comparison):** B24's floor segment increase (400->700, ~9m
+  cells) was reasoned about purely in terms of one-time world-build cost,
+  which did improve. It never accounted for RENDER cost: the floor mesh
+  is static but still draws every frame, and at 700 segments it was
+  647,522 triangles — 89% of the entire scene's per-frame triangle
+  budget. Solving a placement-accuracy problem by brute-forcing render
+  density was the wrong lever for a mesh that's mostly invisible backdrop.
+  * **Fix:** reverted to 400 segments. The accuracy gap that increase was
+    chasing is absorbed where it actually matters (buildings' existing
+    60-unit foundation slab, B21) for the props that need it; it does
+    nothing for rocks, which don't have a foundation — but rocks' real
+    bug (below) turned out to be unrelated to floor resolution entirely.
+  * **Lesson:** a change justified by "verified build time improved" is
+    not automatically FPS-neutral. Any change to a mesh's own resolution/
+    geometry must be checked against real per-frame render cost (actual
+    FPS during gameplay, or at minimum `renderer.info.render.triangles`),
+    not just one-time construction cost. These are different budgets.
+- **Symptom 2 (rocks floating or sinking by inconsistent amounts,
+  screenshotted):** Rock placement applied a FIXED `+0.8` vertical offset
+  while independently randomizing full rotation on the rock geometry (a
+  12-sided `DodecahedronGeometry`). A polyhedron's true distance from
+  center to its lowest point varies with rotation (~1.27 to ~2.24 for
+  this radius) — a constant offset only matches one specific, unrotated
+  orientation, so most random rotations put the real bottom surface well
+  above or below where `+0.8` assumed it was. No per-instance pattern,
+  matching the screenshots (several boulders hovering at different
+  heights) exactly.
+  * **Fix:** compute the true lowest point directly from the geometry's
+    20 vertices, rotated by that instance's actual rotation, and offset
+    by exactly that. Runs once per rock at world-gen (cheap — no per-frame
+    cost, unlike Symptom 1).
+  * **Note:** an initial diagnostic script flagged ALL 421 rocks as
+    "floating," which was the diagnostic's own bug, not the code's — it
+    compared the rock's origin (which now correctly sits above ground by
+    a variable amount, by design) against ground height, instead of the
+    rock's actual bottom surface. Verified the real fix visually instead
+    (rock base flush with terrain, screenshotted) once this was caught.
+- **Symptom 3 (`rocks-clear-of-houses` failing on every season for
+  Kolkata and Bangalore specifically, not other cities):** The delivery
+  house placement block already prunes nearby rocks/trees placed earlier
+  in world-gen (see B20/B21) — but skyscrapers, which share
+  `type: 'building'` with delivery houses and can have a much larger
+  registered radius (`footprintRadius + 1.5`, occasionally 7-8u), had NO
+  equivalent pruning. Confirmed directly: the two overlapping "houses" in
+  Kolkata had radius 7.96 and 7.3 — skyscraper footprints, not the fixed
+  3.5 delivery-house radius.
+  * **Fix, first attempt:** added the same prune-on-placement pattern to
+    the skyscraper block. This closed most but not all cases (1/20
+    combos, bangalore/winter, still failed) — likely an ordering edge case
+    this session didn't fully trace: `[-1,1].forEach(side)` runs side=-1
+    to full completion (including its own rock spawns) before side=1
+    starts, so a side=1 skyscraper's placement-time prune can miss a
+    side=-1 rock at the same sampled index if the specific
+    margin/ordering doesn't line up.
+  * **Fix, final:** rather than keep chasing the exact sequencing, added
+    one unconditional final sweep after every prop for the whole route
+    has been placed, removing any rock/tree still overlapping any
+    building regardless of which was placed first. Correct by
+    construction regardless of ordering, at the cost of one
+    O(rocks x buildings) pass (a few hundred x a few hundred — trivial at
+    world-gen time, not a per-frame cost).
+  * **Verified:** full 20/20 city x season combination sweep (5 cities x
+    4 seasons, each run with a different one of the 4 road surfaces
+    rotated through so all three dimensions get cross-coverage), plus all
+    4 seasons individually re-tested for the two previously-failing
+    cities — 0 failures across every combination. FPS re-confirmed at
+    60.8 on a clean reload after the Symptom 1 fix.
+
 ---
 
 ## Recurring bug patterns — read before touching these areas again
