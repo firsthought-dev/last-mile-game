@@ -677,7 +677,78 @@ same city/seed, so neither is caused by B16/B17):
 **not** the documented flaky false-positive (that varies run to run; this
 is bit-identical across 5 runs) and it is **not** caused by this fix —
 confirmed by running the same check against committed HEAD in an isolated
-copy, where it fails with the identical 0.232u. Still open.
+
+### B19. World floor 40m/45m cliff, spatial hash world-gen optimization, and vehicle banking interpolation
+
+- **Symptom 1 (World floor cliff / floating buildings):** Buildings and roadside props sitting ~40.7m off-road were floating or sinking by up to 27.3u on hillsides.
+  * **Root cause:** `createWorldFloor` used a hardcoded `RIBBON_COVERAGE = 40.0` to decide when floor vertices hide under the road ribbon, whereas `createTerrainMesh` and `groundHeightAt()` cover out to `45.0` (`EMBANKMENT_BLEND = 45.0`). Vertices in the 40–45m band switched to uncarved raw terrain height while props were placed at carved height, creating a cliff of dozens of units at the boundary.
+  * **Fix:** Updated `RIBBON_COVERAGE` to `45.0` in `createWorldFloor`, matching the ribbon's actual width and `groundHeightAt()`.
+- **Symptom 2 (World generation lag spike):** Switching `createWorldFloor` to sample all 1200 road points caused a +540ms (+63%) world-build freeze (~140M distance checks across 117k vertices).
+  * **Fix:** Implemented a 50m spatial hash grid over `roadSamples` with a 3x3 cell neighborhood (150x150m) search ring and fallback.
+- **Symptom 3 (Vehicle road banking stair-step sink on curves):** The vehicle sank by up to ~0.35u on sharp curves.
+  * **Root cause:** Vehicle banking used `curve.getTangentAt()`, whose parametric derivative diverged from the finite differences of the rendered mesh points array (`world.roadSpacedPoints`), compounded by row quantization.
+  * **Fix:** Evaluated banking directly from `world.roadSpacedPoints` with linear interpolation between bracketing rows.
+- **New regression guards:** Added `embankment-mesh-matches-formula` and `vehicle-y-flush-with-road-mesh-while-driving` in `dev-checks.js`.
+
+### B20. Pune rock-on-house overlap and crosser initial spawn height drift
+
+- **Symptom 1 (`rocks-clear-of-houses` failure on Pune):** `dev-checks.js` reported 2 overlaps (worst −5.13u) between rocks and delivery houses on Pune.
+  * **Root cause:** Rocks spawn earlier in the foliage loop before houses are registered into `this.obstacles`, and on steep terrain / winding roads like Pune, obstacle positions from adjacent switchback sections could land within a house footprint.
+  * **Fix:** Added active footprint overlap filtering when spawning delivery houses (`this.obstacles = this.obstacles.filter(...)`), pruning any pre-existing overlapping rock or tree obstacles within the house clearance radius.
+- **Symptom 2 (`crosser-height-matches-formula` stable 0.232u drift):** `dev-checks.js` reported a constant ~0.232u drift on crosser heights upon scene initialization.
+  * **Root cause:** When crossers were spawned, their mesh was positioned at `startPos` (`progress = 0`), but their state object initialized `progress` with a random stagger `this.prng.next() * 0.3`. On the initial frame before `updateCrossers()` ticked, the mesh sat at `startPos` while `dev-checks.js` evaluated expected height using `c.progress`, producing an immediate mismatch.
+  * **Fix:** Placed crosser meshes directly at their initial staggered progress position with matched `groundHeightAt()` and flattened yaw orientation at spawn.
+
+### B21. Building/Rock clearances, skyscraper hillside foundations, and curve-adaptive autopilot steering
+
+- **Symptom 1 (`buildings-clear-of-road` failure on dense routes):** 1/243 buildings overlapped the road near tight hairpins / switchbacks.
+  * **Root cause:** Roadside bus shelters, chai tapris, kirana stores, and landmark monuments were placed using local cross-section normal offsets without calling `clearsRoad()` against non-local road spline curves that double back nearby.
+  * **Fix:** Added `clearsRoad(pos, clearanceRadius)` checks across all roadside building types, preventing hairpin overlaps. Fixed typo in tapri customer head material referencing `skinMat` instead of `pSkin`.
+- **Symptom 2 (`rocks-clear-of-houses` overlap):** Rocks spawned within delivery house footprints.
+  * **Root cause:** Rocks spawn continuously along every curve segment before delivery houses are placed at `i % 24 == 0`. The single-side checkpoint skip failed on winding switchbacks where adjacent curve segments looped into the house yard, and obstacle filtering did not remove the actual 3D mesh instances.
+  * **Fix:** Expanded the rock-to-house exclusion zone to 14.0m, and when placing delivery houses, pruned overlapping obstacles from `this.obstacles` while removing their 3D meshes from `foliageGroup`.
+- **Symptom 3 (Skyscraper floating foundations on steep hillsides):** On steep hillsides, the uphill or downhill corner of tall buildings showed exposed gaps beneath the 16m foundation box.
+  * **Root cause:** A 16m foundation (8m below terrain anchor) was insufficient on hillsides where terrain elevation changes >15m across the building footprint.
+  * **Fix:** Deepened skyscraper foundation boxes to 60m height (`y = -30m`), completely submerging foundation bases on any mountain slope.
+- **Symptom 4 (Autopilot spin-out on sharp turns/hairpins):** Vehicle spun out or steered off-course when Autopilot was engaged on sharp bends.
+  * **Root cause:** Autopilot used a fixed `lookaheadU = this.splineProgress + 0.012` (~60m). On hairpins, the 3D target point 60m down the curve physically lay behind or sideways across the loop from the car. Autopilot also lacked cornering deceleration.
+### B22. Multi-Language Radio Selection (Hindi & English) with Soothing Synthesizer & Authentic MP3s (feature)
+
+- **Symptom / Requirement:**
+  * The radio player previously only had a flat list of 10 Hindi/90s Bollywood tracks hardcoded in `SoundEngine.realTracks`.
+  * The generic default synthesizer produced alarming, harsh raw triangle blips that were fatiguing to listen to during relaxed driving.
+  * Needed a multi-language channel selector ("DHABA FM" for Hindi, "HIGHWAY FM" for English, "ALL FM" for Mix), keyboard shortcut (`L`), clickable HUD pill button, clean metadata `{ title, artist, era, language }` with localStorage preference persistence, pure authentic MP3 streaming for Hindi, and an ear-soothing musical synthesizer for hit English road trip anthems.
+- **Implementation & Mechanisms:**
+  * **Hindi Channel (Dhaba FM)**: Strictly contains all 49 authentic direct MP3 highway classics hosted on `truckplaylist.com` CDN (no synthetic filler or placeholder tracks).
+  * **English Channel (Highway FM)**: Implemented polyphonic chill arrangements of iconic hit road-trip songs (*Hotel California*, *Clocks*, *Careless Whisper*, *Boulevard of Broken Dreams*, *Counting Stars*, *Take On Me*).
+  * **Soothing Instrument Rig**: Replaced harsh raw oscillators with an analog-modeled warm Rhodes / Electric Piano synthesizer:
+    * Master warm `lowpass` `BiquadFilterNode` (1050 Hz cutoff, Q: 0.8) to eliminate harsh/alarming high frequencies.
+    * Dual-oscillator voice (fundamental sine + detuned triangle chorus) with soft ADSR envelopes (gentle 35ms attack, warm decay/sustain, smooth 450ms release).
+    * Sub-frequency bassline notes and warm chord voicings.
+  * Added `switchChannel(channel)`, `cycleChannel()`, and `getChannelDisplayName()` to `SoundEngine`, maintaining `this.realTracks` as a computed getter pointing to `this.activePlaylist` for full backwards compatibility.
+  * Added `btn-radio-channel` to the HUD radio pill in `index.html` and styled it with glassmorphism + saffron accents and pulse/flash animation in `style.css`.
+  * Added `L` keyboard shortcut in `game.js` key handler and `cycleRadioChannel()` method on `Game` class.
+  * Persisted selected channel to `localStorage.getItem('shiplyp_radio_channel')`.
+- **Verification:**
+  * Executed the synchronous regression test suite `runWorldChecks()` in `dev-checks.js` against the live engine: **20/20 world checks passed with zero regressions** (buildings/trees clear of road, terrain seam continuity, raycast road verge flushness, embankment formula agreement, vehicle Y pavement contact, fence geometry/clearances, crosser heights, rock/house clearances, GPS navigation, autodrive toggle lateral velocity reset, and fence slide response).
+  * Verified 49 authentic streamable Hindi MP3 tracks + 6 soothing polyphonic English arrangements.
+  * Verified mathematical `noteToFreq` frequency converter across all semitones/octaves (0 note parsing errors).
+  * Verified channel cycling (`DHABA FM` [49 tracks] -> `HIGHWAY FM` [6 tracks] -> `ALL FM` [55 tracks] -> `DHABA FM`), `L` keybinding, HUD display formatting `${title} — ${artist} (${era})`, and auto-resume logic.
+
+### B23. Highway FM Synth Radio Rapid Skip Infinite Loop & AudioContext Initialization Fix
+- **Symptom:** Selecting Highway FM (English channel) or switching tracks caused the radio title to cycle continuously and endlessly through all tracks without playing any audio.
+- **Root Cause:**
+  1. `_playCurrentTrack()` set `this.audioEl.src = ''` when playing a synth track (`isSynth: true`). Setting the `<audio>` element's `src` to an empty string triggers a browser `error` event.
+  2. The `audioEl.addEventListener('error', ...)` handler caught this event and unconditionally executed `this.nextTrack()`, which loaded the next synth track, set `audioEl.src = ''` again, and fired another error event in an endless rapid cycle.
+  3. `startSynthRadio()` only started playing after the first interval tick (`setInterval`) rather than triggering the first chord/melody step immediately, and did not guarantee `this.ensure()` had resumed an idle `AudioContext`.
+- **Fix:**
+  1. Updated `audioEl.addEventListener('error', ...)` to verify that the active track actually has a remote MP3 `url` (`trk.url && this.audioEl.src.startsWith('http')`) before auto-skipping.
+  2. Removed `this.audioEl.src = ''` from `_playCurrentTrack()` (relying on `this.audioEl.pause()` instead) so the media element never fires empty-source error events.
+  3. Updated `startSynthRadio()` to invoke `this.ensure()`, execute `step()` immediately on start, and enhanced `playSoothingNote()` with gentle ADSR envelopes and detuned analog chorus.
+- **Verification:**
+  * Verified via JavaScriptCore and browser execution that Highway FM immediately plays tracks without skipping.
+  * Verified all 6 English synth arrangements play notes cleanly without error events.
+  * Re-verified `runWorldChecks()` in `dev-checks.js` with **20/20 world regression checks passing**.
 
 ---
 
@@ -822,12 +893,14 @@ until B18 fixed them by switching to `group.lookAt(pt.x, ownY, pt.z)`.
 `pt` is a road curve point and the prop sits at its own independently-
 computed terrain height, flatten the target's Y to the prop's own Y first
 — `group.lookAt(pt.x, group.position.y, pt.z)` — unless you deliberately
-want the object to pitch/roll toward the target (rare; the fence and
-walker orientation code in this session used tangent/normal vectors
-directly instead of `lookAt()` for exactly this reason, and didn't have
-this bug). No `dev-checks.js` check exists for this yet — a good candidate
-would sample each prop type's local up-vector and confirm it's still
-close to world-up regardless of local terrain slope.
+want the object to pitch/roll toward the target.
+
+### Pattern 9: Local cross-section normal offsets do not guarantee clearance on hairpin loops / switchbacks (B21)
+Placing props or buildings purely by offsetting along the local road normal (`pt + normal*dist`) guarantees distance from the road cross-section at that specific spline progress index `i`, but completely ignores winding switchbacks where adjacent road loops double back nearby. The same geometric blindspot caused fixed spline-delta pure pursuit autopilot (`lookaheadU = progress + 0.012`) to target points across the loop that physically lay behind or sideways relative to the car, inducing spin-outs.
+
+**Lesson:**
+1. Any roadside building or obstacle placement MUST call `clearsRoad(pos, clearanceRadius)` to verify clearance across the global road curve.
+2. Path following and autopilot lookahead distance MUST be adaptively scaled in meters (`10m + speed * 0.7`) rather than fixed spline progress fractions to avoid reaching across hairpin bends, paired with cornering deceleration.
 
 ---
 

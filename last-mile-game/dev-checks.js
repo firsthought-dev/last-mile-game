@@ -143,6 +143,99 @@ function runWorldChecks() {
       `terrain-above-road (tearing): ${worstSunken.toFixed(4)}u (expect ~0) | road-above-terrain: ${worstFloating.toFixed(4)}u (expect <0.08, and >0 so it wins the depth test) | ${checked} raycast samples, ${misses} misses`);
   }
 
+  // 3c. Props/walker are placed in the embankment zone (9-45m off-road) via
+  // groundHeightAt(), the true nonlinear terrain surface — but the RENDERED
+  // terrain mesh only has a handful of lateral vertices out there and
+  // linearly interpolates between them. On genuinely steep ground (the
+  // game gives raw terrain its own "cliff" color band past height 22) that
+  // straight-line approximation used to miss the real surface by up to
+  // 4.27u, which is what floated/sank the on-foot courier and roadside
+  // props near hillsides. Sweeps a dense grid of (u, lateral, side)
+  // combinations and raycasts the actual mesh, exactly like the verge
+  // check above — comparing against the formula alone proved nothing last
+  // time (see BUGFIX_LOG.md B17).
+  if (world.terrainMesh && world.curve) {
+    world.terrainMesh.updateMatrixWorld(true);
+    const rc2 = new THREE.Raycaster();
+    const down2 = new THREE.Vector3(0, -1, 0);
+    let worstGap = 0, worstDetail = null, n = 0;
+    for (let ui = 5; ui < 1195; ui += 15) {
+      const u = ui / 1200;
+      const pt = world.curve.getPointAt(u);
+      const t = world.curve.getTangentAt(u).normalize();
+      const nrm = new THREE.Vector3().crossVectors(t, new THREE.Vector3(0, 1, 0)).normalize();
+      for (const lat of [10, 12, 15, 19, 25, 30, 35, 42]) {
+        for (const side of [1, -1]) {
+          const worldPos = pt.clone().addScaledVector(nrm, lat * side);
+          const formulaY = world.groundHeightAt(pt, worldPos, lat * side);
+          rc2.set(new THREE.Vector3(worldPos.x, formulaY + 80, worldPos.z), down2);
+          const hits = rc2.intersectObject(world.terrainMesh, false);
+          if (!hits.length) continue;
+          let best = hits[0];
+          for (const h of hits) {
+            if (Math.abs(h.point.y - formulaY) < Math.abs(best.point.y - formulaY)) best = h;
+          }
+          const gap = Math.abs(formulaY - best.point.y);
+          n++;
+          if (gap > worstGap) { worstGap = gap; worstDetail = { u, lat: lat * side }; }
+        }
+      }
+    }
+    record('embankment-mesh-matches-formula', worstGap < 0.5,
+      `worst formula-vs-rendered-mesh gap in the 9-45m embankment zone: ${worstGap.toFixed(3)}u across ${n} samples (expect <0.5; >4 means lateralSlices went back to sparse spacing) ${worstDetail ? 'at u=' + worstDetail.u.toFixed(2) + ' lat=' + worstDetail.lat : ''}`);
+  }
+
+  // 3d. Vehicle must not sink below the actual driving surface while on
+  // real pavement (|lateralOffset| <= roadHalf — off-pavement/shoulder
+  // driving is EXCLUDED on purpose: the car is meant to follow the lower
+  // shoulder there, so comparing it against the paved verge geometry isn't
+  // a fair test and produced a misleading ~0.5u "regression" the first
+  // time this was measured). Drives under real autopilot physics — not
+  // synthetic position hacking — because manually setting heading/position
+  // doesn't reproduce projectToRoad's actual internal state.
+  //
+  // Root cause this guards: the vehicle used to estimate road banking via
+  // curve.getTangentAt(), a structurally different tangent estimate than
+  // createRoadMesh's own finite-difference-over-points-array method — they
+  // silently disagreed by a full clamp-width (0.14 vs 0.1137 rad) on an
+  // ordinary curve. Now both read from the same cached
+  // world.roadSpacedPoints array.
+  if (world.roadMesh && world.curve && game.vehicle && world.roadSpacedPoints) {
+    world.roadMesh.updateMatrixWorld(true);
+    const v = game.vehicle;
+    const savedPos = v.mesh.position.clone(), savedU = v.splineProgress,
+          savedHeading = v.heading, savedSpeed = v.speed, savedAuto = v.isAutodrive;
+    const startU = 0.02;
+    const startPt = world.curve.getPointAt(startU);
+    v.mesh.position.set(startPt.x, startPt.y + 3, startPt.z);
+    v.splineProgress = startU;
+    v.heading = Math.atan2(world.curve.getTangentAt(startU).x, world.curve.getTangentAt(startU).z);
+    v.speed = 20;
+    v.isAutodrive = true;
+    const rc3 = new THREE.Raycaster();
+    const down3 = new THREE.Vector3(0, -1, 0);
+    const roadHalf = (typeof CONFIG !== 'undefined' ? CONFIG.ROAD_WIDTH : 7.4) * 0.52;
+    let worstSunk = 0, n3 = 0;
+    for (let f = 0; f < 1800; f++) {
+      v.update(1 / 60, {}, world, 'autumn', 'asphalt');
+      if (f % 5 !== 0) continue;
+      if (Math.abs(v.lateralOffset) > roadHalf) continue; // genuine pavement only
+      const vy = v.mesh.position.y;
+      rc3.set(new THREE.Vector3(v.mesh.position.x, vy + 60, v.mesh.position.z), down3);
+      const hits = rc3.intersectObject(world.roadMesh, false);
+      if (!hits.length) continue;
+      let best = hits[0];
+      for (const h of hits) if (Math.abs(h.point.y - vy) < Math.abs(best.point.y - vy)) best = h;
+      const sunk = best.point.y - vy;
+      n3++;
+      if (sunk > worstSunk) worstSunk = sunk;
+    }
+    v.mesh.position.copy(savedPos); v.splineProgress = savedU; v.heading = savedHeading;
+    v.speed = savedSpeed; v.isAutodrive = savedAuto;
+    record('vehicle-y-flush-with-road-mesh-while-driving', worstSunk < 0.3,
+      `worst vehicle sink below the actual road mesh surface while genuinely on pavement: ${worstSunk.toFixed(4)}u across ${n3} samples from ${Math.round(1800/60)}s of real autopilot driving (expect <0.3; off-pavement/shoulder frames excluded on purpose)`);
+  }
+
   // 4. Delivery targets: hit-test position must be the porch ring's actual
   // world position, not the house pivot (regression: hit-test used
   // housePos while the visible ring sits ~3m off-pivot).

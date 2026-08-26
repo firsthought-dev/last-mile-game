@@ -76,7 +76,9 @@
         <div class="slowroads-radio-pill" id="cassette-radio-card">
           <span class="radio-label">RADIO</span>
           <span class="radio-sep">/</span>
-          <span id="radio-track-title" class="slowroads-track-text">Dil Ne Yeh Kaha - Dhaba FM</span>
+          <button id="btn-radio-channel" class="radio-channel-btn" title="Switch Channel [L]">DHABA FM</button>
+          <span class="radio-sep">/</span>
+          <span id="radio-track-title" class="slowroads-track-text">Dil Ne Yeh Kaha — Udit Narayan (90s)</span>
           <div class="slowroads-radio-btns">
             <button id="btn-radio-prev" class="slowroads-text-btn" title="Previous">PREV</button>
             <button id="btn-radio-play" class="slowroads-text-btn play-btn" title="Play / Pause">PLAY</button>
@@ -195,6 +197,53 @@
   <script>
     const s = document.createElement('script');
     s.src = 'game.js?t=' + Date.now();
+    s.onload = () => {
+      if (window.location.search.includes('test=1')) {
+        const d = document.createElement('script');
+        d.src = 'dev-checks.js?t=' + Date.now();
+        d.onload = async () => {
+          // Wait for game to initialize and world to build
+          for (let i = 0; i < 40; i++) {
+            if (window.game && window.game.world) break;
+            if (!window.game && typeof ShiplypEngine !== 'undefined') {
+              try { window.game = new ShiplypEngine(); } catch(e) {}
+            }
+            await new Promise(r => setTimeout(r, 100));
+          }
+          if (window.game && window.game.gameState === 'menu' && typeof window.game.startDrive === 'function') {
+            window.game.startDrive();
+          }
+          await new Promise(r => setTimeout(r, 600));
+          const res = typeof runWorldChecks === 'function' ? runWorldChecks() : [];
+          const testDiv = document.createElement('pre');
+          testDiv.id = 'automated-test-results';
+          testDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#0a0a0a;color:#eee;z-index:99999999;padding:20px;overflow:auto;font-family:monospace;font-size:13px;';
+          let out = '=== AUTOMATED TEST SUITE REPORT ===\n\n';
+          let pass = 0;
+          res.forEach(r => {
+            if (r.pass) pass++;
+            out += `[${r.pass ? 'PASS' : 'FAIL'}] ${r.name}: ${r.detail || ''}\n`;
+          });
+          out += `\nSUMMARY: ${pass}/${res.length} WORLD REGRESSION CHECKS PASSED\n\n`;
+          out += '=== RADIO CHANNEL VERIFICATION ===\n';
+          out += `Initial: ${sound.getChannelDisplayName()} (${sound.activePlaylist.length} tracks)\n`;
+          const c1 = sound.cycleChannel();
+          out += `Cycle 1: ${sound.getChannelDisplayName()} (${sound.activePlaylist.length} tracks) -> ${c1}\n`;
+          const c2 = sound.cycleChannel();
+          out += `Cycle 2: ${sound.getChannelDisplayName()} (${sound.activePlaylist.length} tracks) -> ${c2}\n`;
+          const c3 = sound.cycleChannel();
+          out += `Cycle 3: ${sound.getChannelDisplayName()} (${sound.activePlaylist.length} tracks) -> ${c3}\n`;
+          out += '\n=== ALL AUTOMATED CHECKS COMPLETE ===\n';
+          testDiv.textContent = out;
+          document.body.appendChild(testDiv);
+          
+          try {
+            fetch('/test-report', { method: 'POST', body: JSON.stringify({ results: res, summary: out }) });
+          } catch(e) {}
+        };
+        document.body.appendChild(d);
+      }
+    };
     document.body.appendChild(s);
   </script>
 </body>
