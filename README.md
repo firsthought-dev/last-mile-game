@@ -1,118 +1,71 @@
-# Last Mile: Shiplyp Chronicles — 3D Procedural Delivery Driver
+# 🚚 Shiplyp: Last Mile — 3D Indian Courier Driving Game
 
-**An AI-developed 3D driving game** built with Three.js, procedural terrain generation, and delivery mechanics.
-
----
-
-## 🎮 Current Game: 3D Procedural Driver
-
-**Shiplyp: Last Mile — Indian Courier 3D Action Driving** is a single-player 3D game where you pilot a delivery vehicle across procedurally generated landscapes, navigating road hazards and meeting delivery time targets.
-
-### Core Mechanics
-
-- **Driving** — Arrow keys / WASD to steer and accelerate; realistic physics and suspension
-- **Procedural Terrain** — Infinite procedurally generated world using Simplex noise
-- **Delivery Routes** — Route splines guide you to destinations; GPS indicator shows direction ([LEFT]/[RIGHT])
-- **Hazards** — Potholes damage vehicle; speed cameras issue fines (e-challans); repair bays restore health
-- **Scoring** — Earnings in ₹ INR; combo streaks for on-time deliveries; health/cash UI
-- **Notifications** — Unified event panel shows collisions, fines, deliveries, and repairs
-
-### How to Run Locally
-
-```bash
-# Serve on port 8091
-python3 -m http.server 8091 --directory last-mile-game
-
-# Then open http://localhost:8091 in your browser
-```
-
-Or use the Claude Code dev server:
-```bash
-claude code --name last-mile-game
-```
+**Shiplyp: Last Mile** is a browser-based 3D action driving and procedural delivery game set across Mumbai, Delhi, Kolkata, Pune, and Bengaluru. Pilot iconic Indian vehicles, cruise through scenic mountain ghats and coastal flyovers, dodge hazards, and deliver authentic regional cargo before the shift timer runs out!
 
 ---
 
-## 🛠️ Recent Fixes (This Session)
+## 🎮 Play Online
 
-All bugs fixed via iterative testing with Playwright MCP and visual verification:
-
-1. **Reversed driving view** — Car was facing backward; fixed mesh.lookAt() orientation
-2. **Inverted steering** — Left/right controls flipped; corrected basis vector signs
-3. **Console warnings** — 50+ shader warnings from invalid material properties
-4. **Collision spam** — Damage/sound fired every frame when pinned; added cooldown
-5. **Radio auto-play** — Music started without user consent; now localStorage-backed
-6. **Camera framing** — Chase cam too close; pulled back and adjusted look-ahead
-7. **Acceleration curve** — Ramp too aggressive (157 km/h in 2s); softened to 6s
-8. **Environment collisions** — Trees/rocks/buildings blocked free driving; disabled
-9. **Notifications** — Scattered popups replaced with unified panel (warning/danger/success/neutral)
-
-**Status:** Game is now fully playable with correct controls and visual feedback.
+Play directly in your browser with zero installs or downloads:
+👉 **[Play Shiplyp: Last Mile Live](https://firstthought-dev.github.io/last-mile-game/)**
 
 ---
 
-## 📋 Known Limitations & Next Priority
+## 🕹️ Controls
 
-### Unfinished (Per Design Spec)
-
-From `ROAD_GENERATION_IMPLEMENTATION_SPEC.md`:
-
-- **Terrain carving** — Roads float on top of terrain; should be carved into embankments
-- **Infinite road** — Capped at ~5km (500 nodes); infinite pooling not implemented
-- **Road banking** — Curves feel flat; no superelevation on turns
-- **One-pedal regen** — Braking is abrupt; no smooth coast-down
-- **Autodrive** — No PID-based autonomous driving mode
-
-### Priority Roadmap
-
-1. **Terrain carving** (high impact) — Blend terrain to road embankments for cohesive landscape
-2. **Infinite pooling** (functional blocker) — 16-chunk treadmill to enable true endless driving
-3. **Road banking** (game feel) — Compute curvature, apply superelevation to turns
-4. **One-pedal regen + autodrive** (polish) — Smooth coast-down and autonomous mode
-5. **Code organization** (maintenance) — Split 3.7KB monolith into scene/terrain/entities modules
+| Action | Shortcut Key | Description |
+|---|---|---|
+| **Accelerate / Reverse** | `W` / `S` or `↑` / `↓` | Drive forward / apply brakes / reverse gear |
+| **Steer Left / Right** | `A` / `D` or `←` / `→` | Turn the wheels |
+| **Toss Parcel (In Vehicle)** | `Spacebar` / Click | Launch an arcing 3D parcel with smoke trails into delivery rings |
+| **Deliver Package (On Foot)** | `Spacebar` / Click | Complete doorstep dropoff when walking |
+| **Step Out / Enter Vehicle** | `E` | Hop out of cars/trucks into 3rd-person walking courier mode |
+| **Autopilot (Self-Driving)** | `F` | AI autonomous curve cruising and speed control |
+| **Return to Road (Recenter)** | `R` | Safely resets your vehicle back onto the tarmac |
+| **Cycle Camera Mode** | `C` | Elevated Chase Cam / Hood Bumper Cam / Panoramic Sky Cam |
+| **Cycle Time of Day** | `T` | Dawn / Midday / Twilight / Midnight Starlight |
+| **Cycle Radio Station** | `L` | DHABA FM (Hindi 90s MP3s) / HIGHWAY FM (English Synth) / ALL FM |
+| **Mute Music / SFX** | `M` (Radio) / `N` (SFX) | Independent audio channel mutes |
 
 ---
 
-## 📁 Project Structure
+## 📚 Key Documentation
+
+- **[Game Architecture & Visuals Guide](last-mile-game/GAME_ARCHITECTURE_AND_VISUALS_GUIDE.md)** — Plain English guide covering controls, the full tech stack, gameplay systems, and the 3D graphics rendering pipeline.
+- **[Shiplyp GDD v3.0](last-mile-game/SHIPLYP_GDD_V2.md)** — Complete Game Design Document.
+- **[Credits, References & Attributions](last-mile-game/CREDITS_AND_REFERENCES.md)** — Attributions for creators, AI models (Claude & Antigravity), open-source libraries, CC0 assets, and music.
+
+---
+
+## 📁 Repository Structure
 
 ```
-last-mile-game/
-├── index.html              ← Entry point (loads game.js + style.css)
-├── game.js                 ← Main engine (3,700 lines, Three.js)
-├── style.css               ← HUD & UI styling (glassmorphic design)
-├── assets/
-│   ├── chhota_haathi_cover.jpg
-│   └── shiplyp_hub_backdrop.jpg
-├── ROAD_GENERATION_IMPLEMENTATION_SPEC.md
-├── SLOW_ROADS_SYSTEM_DESIGN.md
-└── _archive-2d-prototype/  ← Legacy 2D modular system (not used)
+├── index.html                           ← Root redirect for GitHub Pages
+├── README.md                            ← Project overview and guide
+└── last-mile-game/
+    ├── index.html                       ← WebGL Canvas & responsive HUD interface
+    ├── game.js                          ← Main game engine (Three.js r128)
+    ├── style.css                        ← Glassmorphic HUD & telemetry styling
+    ├── dev-checks.js                    ← Automated regression verification suite
+    ├── GAME_ARCHITECTURE_AND_VISUALS_GUIDE.md
+    ├── SHIPLYP_GDD_V2.md
+    ├── CREDITS_AND_REFERENCES.md
+    └── assets/                          ← CC0 3D models and backdrops
 ```
 
-**Note:** `_archive-2d-prototype/` contains the original modular 2D delivery-sim design (src/). It was superseded by the current 3D procedural driver approach.
+---
+
+## 🛠️ Built With
+
+- **Three.js (r128)** — 3D WebGL Rendering
+- **EffectComposer & UnrealBloomPass** — Cinematic bloom & FXAA anti-aliasing
+- **Web Audio API & HTML5 Audio** — Dual-engine streaming MP3 radio & analog synthesizer
+- **Simplex Noise & 4-Octave FBM** — Procedural terrain & infinite road generation
+- **Kenney Car Kit** — CC0 Public Domain 3D Vehicle Models
 
 ---
 
-## 🎓 Vibeoding Approach
+## ⚖️ License
 
-This game was built and debugged using **AI-assisted "vibeoding"** — iterative AI-human collaboration with Playwright MCP for visual verification. The workflow:
-
-1. Describe the desired feature or fix
-2. AI implements the code
-3. Playwright takes screenshots and verifies visuals
-4. AI diagnoses issues and iterates
-5. Commit when verified
-
-See `vibe-code-2d-game-guide.md` for the complete methodology and Playwright setup guide.
-
----
-
-## 🔗 References
-
-- **Three.js** — [threejs.org](https://threejs.org)
-- **Simplex Noise** — Procedural terrain generation
-- **Spline-based routing** — Used for road generation and camera following
-- **Playwright MCP** — [github.com/microsoft/playwright-mcp](https://github.com/microsoft/playwright-mcp)
-
----
-
-**Last Updated:** August 24, 2026 | **Status:** Playable, actively developed
+- Code is open-source under the MIT License.
+- 3D vehicle assets by Kenney ([kenney.nl](https://kenney.nl)) under CC0 1.0 Universal.

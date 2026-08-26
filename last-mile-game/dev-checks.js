@@ -575,6 +575,28 @@ function runWorldChecks() {
     }
   }
 
+  // 18. The road curve must be a seamless closed-loop circuit (curve.closed === true)
+  // so the player can drive indefinitely in either direction without reaching a dead end.
+  {
+    if (game.world && game.world.curve) {
+      const c = game.world.curve;
+      const isClosed = !!c.closed;
+      const p0 = c.getPointAt(0);
+      const p1 = c.getPointAt(1);
+      const gap = p0.distanceTo(p1);
+      const t0 = c.getTangentAt(0).normalize();
+      const t1 = c.getTangentAt(1).normalize();
+      const dotTangents = t0.dot(t1);
+      const len = c.getLength();
+
+      const pass = isClosed && gap < 0.05 && dotTangents > 0.98 && len > 4500;
+      record('closed-circuit-continuous-loop', pass,
+        `closed=${isClosed}, seam gap=${gap.toFixed(3)}u, tangent continuity=${dotTangents.toFixed(4)}, circuit length=${len.toFixed(1)}m`);
+    } else {
+      record('closed-circuit-continuous-loop', false, 'world.curve not present');
+    }
+  }
+
   console.table(results.map(r => ({ check: r.name, pass: r.pass ? 'PASS' : 'FAIL', detail: r.detail })));
   const failed = results.filter(r => !r.pass);
   if (failed.length) {
