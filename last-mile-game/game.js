@@ -1212,123 +1212,98 @@
     generateSpline() {
       this.splineNodes = [];
       const nodeCount = CONFIG.ROAD_POINTS_COUNT; // 500 nodes
-      const stepDist = 10.0; // Anslo 10m Incremental Step Scout
-
-      let curX = 0;
-      let curZ = 0;
-      let curAngle = 0;
-      let curY = this.getRawTerrainHeight(0, 0) + 0.8;
-
-      const angleHistory = [];
-      const repulsors = [];
 
       // City tuning parameters for regional topography
-      let windingWeight = 0.55;
-      let maxGrade = 0.08; // 8% maximum highway slope
+      let baseRadius = 820.0;
+      let octaves = [];
+      let maxGrade = 0.08;
 
-      if (this.cityKey === 'pune') {
-        windingWeight = 0.85; // High winding ghats & wadas
-        maxGrade = 0.12;
-      } else if (this.cityKey === 'mumbai') {
-        windingWeight = 0.60;
-        maxGrade = 0.07;
-      } else if (this.cityKey === 'delhi') {
-        windingWeight = 0.35;
+      if (this.cityKey === 'delhi') {
+        // New Delhi: Grand sweeping Ring Road & Heritage Havelis
+        baseRadius = 800.0;
+        octaves = [
+          { freq: 2, amp: 140.0 },
+          { freq: 3, amp: 70.0 },
+          { freq: 5, amp: 30.0 }
+        ];
         maxGrade = 0.05;
+      } else if (this.cityKey === 'mumbai') {
+        // Mumbai: Marine Drive & Coastal Peninsula Flyover Loop
+        baseRadius = 850.0;
+        octaves = [
+          { freq: 2, amp: 190.0 },
+          { freq: 4, amp: 90.0 },
+          { freq: 7, amp: 40.0 }
+        ];
+        maxGrade = 0.07;
       } else if (this.cityKey === 'kolkata') {
-        windingWeight = 0.48;
+        // Kolkata: Historic Boulevards & Ghats Circuit
+        baseRadius = 810.0;
+        octaves = [
+          { freq: 2, amp: 160.0 },
+          { freq: 3, amp: 80.0 },
+          { freq: 6, amp: 35.0 }
+        ];
         maxGrade = 0.06;
+      } else if (this.cityKey === 'pune') {
+        // Pune: Mountain Ghats & Deccan Peth Winding Loop
+        baseRadius = 780.0;
+        octaves = [
+          { freq: 2, amp: 220.0 },
+          { freq: 4, amp: 130.0 },
+          { freq: 8, amp: 60.0 },
+          { freq: 12, amp: 25.0 }
+        ];
+        maxGrade = 0.11;
       } else { // bangalore
-        windingWeight = 0.65;
+        // Bengaluru: Rolling Tech Corridors & Gulmohar Avenues
+        baseRadius = 830.0;
+        octaves = [
+          { freq: 2, amp: 180.0 },
+          { freq: 4, amp: 110.0 },
+          { freq: 7, amp: 50.0 }
+        ];
         maxGrade = 0.09;
       }
 
-      const candidateDeltas = [-0.30, -0.15, 0.0, 0.15, 0.30]; // Smooth sweeping curves (±17°, ±8.5°, 0°)
-
       for (let i = 0; i < nodeCount; i++) {
-        this.splineNodes.push(new THREE.Vector3(curX, curY, curZ));
-        angleHistory.push(curAngle);
-        if (i % 8 === 0) {
-          repulsors.push(new THREE.Vector2(curX, curZ));
+        const theta = (i / nodeCount) * Math.PI * 2.0;
+
+        let r = baseRadius;
+        for (let k = 0; k < octaves.length; k++) {
+          const { freq, amp } = octaves[k];
+          const nx = Math.cos(theta * freq);
+          const ny = Math.sin(theta * freq);
+          r += this.simplex.noise2D(nx * 0.85 + 15.0, ny * 0.85 + 15.0) * amp;
         }
 
-        // Long-term macro corridor bias (drifting gently forward while weaving)
-        const macroNoise = this.simplex.noise2D(curX * 0.0006, curZ * 0.0006) * 1.8;
-        const targetBias = macroNoise * windingWeight;
+        const x = Math.sin(theta) * r;
+        const z = Math.cos(theta) * r;
+        const y = this.simplex.noise2D(x * 0.0012, z * 0.0012) * 14.0 + this.simplex.noise2D(x * 0.003, z * 0.003) * 5.0 + 0.8;
 
-        let bestAngle = curAngle;
-        let bestScore = Infinity;
-        let bestCandidateY = curY;
-
-        for (let k = 0; k < candidateDeltas.length; k++) {
-          const delta = candidateDeltas[k];
-          const candAngle = curAngle + delta;
-
-          // 1. Tiered Angular Checks (Prevents hairpin self-intersections)
-          let angleViolated = false;
-          // Short window (50m = 5 steps): <= 90 deg (1.57 rad)
-          if (angleHistory.length >= 5) {
-            const sumTurn5 = Math.abs(candAngle - angleHistory[angleHistory.length - 5]);
-            if (sumTurn5 > 1.57) angleViolated = true;
-          }
-          // Medium window (150m = 15 steps): <= 160 deg (2.79 rad)
-          if (angleHistory.length >= 15) {
-            const sumTurn15 = Math.abs(candAngle - angleHistory[angleHistory.length - 15]);
-            if (sumTurn15 > 2.79) angleViolated = true;
-          }
-          // Long window (300m = 30 steps): <= 200 deg (3.49 rad)
-          if (angleHistory.length >= 30) {
-            const sumTurn30 = Math.abs(candAngle - angleHistory[angleHistory.length - 30]);
-            if (sumTurn30 > 3.49) angleViolated = true;
-          }
-
-          if (angleViolated) continue;
-
-          // Candidate position
-          const candX = curX + Math.sin(candAngle) * stepDist;
-          const candZ = curZ + Math.cos(candAngle) * stepDist;
-
-          // 2. Sample Terrain Elevation & Longitudinal Slope Grade
-          const rawTerrainY = this.getRawTerrainHeight(candX, candZ);
-          // Target elevation stays near ground contour, smoothed
-          let candY = THREE.MathUtils.lerp(curY, rawTerrainY + 0.6, 0.25);
-          const slopeGrade = Math.abs(candY - curY) / stepDist;
-
-          // 3. Repulsor Distance Force (Anti-looping)
-          let repulsorForce = 0;
-          for (let r = 0; r < repulsors.length; r++) {
-            const d = repulsors[r].distanceTo(new THREE.Vector2(candX, candZ));
-            if (d < 50.0) {
-              repulsorForce += (50.0 - d) * 3.0;
-            }
-          }
-
-          // 4. Multi-Factor Cost Function Scoring
-          const angleCost = Math.abs(candAngle - curAngle - targetBias * 0.2);
-          const slopeCost = Math.max(0, slopeGrade - maxGrade) * 35.0 + slopeGrade * 5.0;
-          const score = slopeCost * 1.5 + angleCost * 2.0 + repulsorForce;
-
-          if (score < bestScore) {
-            bestScore = score;
-            bestAngle = candAngle;
-            bestCandidateY = candY;
-          }
-        }
-
-        curAngle = THREE.MathUtils.lerp(curAngle, bestAngle, 0.45);
-        // Clamp slope grade to maximum allowed
-        const yDelta = Math.max(-maxGrade * stepDist, Math.min(maxGrade * stepDist, bestCandidateY - curY));
-        curY += yDelta;
-        curX += Math.sin(curAngle) * stepDist;
-        curZ += Math.cos(curAngle) * stepDist;
+        this.splineNodes.push(new THREE.Vector3(x, y, z));
       }
 
-      this.curve = new THREE.CatmullRomCurve3(this.splineNodes, false, 'centripetal');
+      // Circular smoothing passes on Y to enforce maxGrade slope limits across the loop
+      const smoothPasses = 8;
+      let smoothY = this.splineNodes.map(n => n.y);
+      for (let p = 0; p < smoothPasses; p++) {
+        const nextY = [];
+        for (let i = 0; i < nodeCount; i++) {
+          const prevI = (i - 1 + nodeCount) % nodeCount;
+          const nextI = (i + 1) % nodeCount;
+          nextY.push(smoothY[prevI] * 0.25 + smoothY[i] * 0.5 + smoothY[nextI] * 0.25);
+        }
+        smoothY = nextY;
+      }
 
-      // Bounding box of the actual road extent — the spline is a random
-      // walk and does not stay centered near the origin, so anything that
-      // needs to blanket the whole world (e.g. the background floor) must
-      // size and center itself off this, not off a fixed assumption.
+      for (let i = 0; i < nodeCount; i++) {
+        this.splineNodes[i].y = smoothY[i];
+      }
+
+      this.curve = new THREE.CatmullRomCurve3(this.splineNodes, true, 'centripetal');
+
+      // Bounding box of the actual road extent
       let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
       for (const n of this.splineNodes) {
         if (n.x < minX) minX = n.x;
@@ -1543,10 +1518,8 @@
         const pt = points[i];
 
         let tangent;
-        if (i === 0) {
-          tangent = new THREE.Vector3().subVectors(points[1], points[0]).normalize();
-        } else if (i === tubularSegments) {
-          tangent = new THREE.Vector3().subVectors(points[tubularSegments], points[tubularSegments - 1]).normalize();
+        if (i === 0 || i === tubularSegments) {
+          tangent = new THREE.Vector3().subVectors(points[1], points[tubularSegments - 1]).normalize();
         } else {
           tangent = new THREE.Vector3().subVectors(points[i + 1], points[i - 1]).normalize();
         }
@@ -1692,10 +1665,8 @@
         const pt = points[i];
 
         let tangent;
-        if (i === 0) {
-          tangent = new THREE.Vector3().subVectors(points[1], points[0]).normalize();
-        } else if (i === tubularSegments) {
-          tangent = new THREE.Vector3().subVectors(points[tubularSegments], points[tubularSegments - 1]).normalize();
+        if (i === 0 || i === tubularSegments) {
+          tangent = new THREE.Vector3().subVectors(points[1], points[tubularSegments - 1]).normalize();
         } else {
           tangent = new THREE.Vector3().subVectors(points[i + 1], points[i - 1]).normalize();
         }
@@ -2195,10 +2166,13 @@
       // against the FULL obstacle list once everything is placed instead.
       const pendingFences = [];
 
-      for (let i = 2; i < sampledPoints.length - 2; i++) {
+      const totalSamples = sampledPoints.length - 1;
+      for (let i = 0; i < totalSamples; i++) {
         const pt = sampledPoints[i];
-        const u = i / sampledPoints.length;
-        const tangent = new THREE.Vector3().subVectors(sampledPoints[i + 1], sampledPoints[i - 1]).normalize();
+        const u = i / totalSamples;
+        const prevPt = sampledPoints[(i - 1 + totalSamples) % totalSamples];
+        const nextPt = sampledPoints[(i + 1) % totalSamples];
+        const tangent = new THREE.Vector3().subVectors(nextPt, prevPt).normalize();
         const up = new THREE.Vector3(0, 1, 0);
         const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
@@ -3570,9 +3544,7 @@
 
       this.trafficVehicles.forEach(tv => {
         const dir = tv.direction || 1;
-        tv.splineU += (dir * tv.speed * dt) / totalLen;
-        if (tv.splineU >= 0.98) tv.splineU = 0.02;
-        if (tv.splineU <= 0.02) tv.splineU = 0.98;
+        tv.splineU = ((tv.splineU + (dir * tv.speed * dt) / totalLen) % 1.0 + 1.0) % 1.0;
 
         const pt = this.curve.getPointAt(tv.splineU);
         const tangent = this.curve.getTangentAt(tv.splineU).normalize();
@@ -3590,20 +3562,19 @@
     // How far off the road centerline the vehicle may legally drift at
     // this point on the route, on the given side (+1/-1, matching the
     // same normal-direction convention `side` uses during fence
-    // placement in createFoliageAndProps). Mirrors that exact placement
-    // logic — same i%24/i%48 house-checkpoint math, same FENCE_GAP_RADIUS
-    // — so the clamp only opens where a fence gap actually was left open,
-    // and stays tight to the fence line everywhere else. The fences exist
-    // specifically to mark "you can't get through here except at a
-    // delivery house," so the vehicle needs to actually be stopped by
-    // them, not just visually pass through.
+    // placement in createFoliageAndProps).
     getLateralClamp(splineProgress, side) {
       const TOTAL_POINTS = 800; // matches createFoliageAndProps' getSpacedPoints(800)
-      const i = Math.round(splineProgress * TOTAL_POINTS);
+      const u = ((splineProgress % 1.0) + 1.0) % 1.0;
+      const i = Math.round(u * TOTAL_POINTS) % TOTAL_POINTS;
       const avgSegStep = this.curve.getLength() / TOTAL_POINTS;
       const nearestHouseCheckpoint = Math.round(i / 24) * 24;
       const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
-      const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
+      const distSteps = Math.min(
+        Math.abs(i - nearestHouseCheckpoint),
+        TOTAL_POINTS - Math.abs(i - nearestHouseCheckpoint)
+      );
+      const distToHouse = distSteps * avgSegStep;
       const FENCE_GAP_RADIUS = 18.0;
       const hasGap = (side === houseCheckpointSide) && (distToHouse < FENCE_GAP_RADIUS);
       if (hasGap) return 9.0; // full shoulder range through the open gate to the house
@@ -4154,7 +4125,8 @@
       const search = (uMin, uMax, steps) => {
         let bestU = seedU, bestDistSq = Infinity;
         for (let k = 0; k <= steps; k++) {
-          const u = THREE.MathUtils.clamp(uMin + (uMax - uMin) * (k / steps), 0, 1);
+          const rawU = uMin + (uMax - uMin) * (k / steps);
+          const u = ((rawU % 1.0) + 1.0) % 1.0;
           const d = pos.distanceToSquared(curve.getPointAt(u));
           if (d < bestDistSq) { bestDistSq = d; bestU = u; }
         }
@@ -4172,21 +4144,14 @@
         ({ bestU, bestDistSq } = search(0, 1, 200));
       }
 
-      // The coarse 24-step scan only resolves u to ~1/12th of an 80m
-      // window (~3m of road length per step). Ground height is sampled
-      // straight off pt.y at whatever u this function returns, and pt.y
-      // changes with u on any graded slope — so without refinement, the
-      // car's height snaps between coarse samples as it moves rather than
-      // varying continuously, which reads as visible up-down bouncing even
-      // on a perfectly smooth road surface. Narrow in on the true nearest
-      // point with a few rounds of shrinking local search around bestU.
+      // Narrow in on the true nearest point with a few rounds of shrinking local search around bestU.
       let refineWindow = (windowU * 2) / 24;
       for (let pass = 0; pass < 4; pass++) {
         ({ bestU, bestDistSq } = search(bestU - refineWindow, bestU + refineWindow, 10));
         refineWindow *= 0.3;
       }
 
-      const u = bestU;
+      const u = ((bestU % 1.0) + 1.0) % 1.0;
       const pt = curve.getPointAt(u);
       const tangent = curve.getTangentAt(u).normalize();
       const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
@@ -4227,7 +4192,7 @@
         // understeering or spinning into the guardrails.
         const curveLength = world.curve.getLength() || 5000;
         const lookaheadMeters = THREE.MathUtils.clamp(10.0 + this.speed * 0.7, 8.0, 36.0);
-        const lookaheadU = THREE.MathUtils.clamp(this.splineProgress + (lookaheadMeters / curveLength), 0, 0.999);
+        const lookaheadU = ((this.splineProgress + (lookaheadMeters / curveLength)) % 1.0 + 1.0) % 1.0;
         const lookaheadPt = world.curve.getPointAt(lookaheadU);
         const toTarget = lookaheadPt.clone().sub(this.mesh.position);
         toTarget.y = 0;
@@ -4600,14 +4565,13 @@
       const SCAN = 120;
       let bestU = this.splineProgress;
       let bestDist = Infinity;
-      const pos = this.mesh.position;
-      for (let k = 0; k <= SCAN; k++) {
-        const u = k / SCAN;
+      for (let k = 0; k < SCAN; k++) {
+        const u = (k / SCAN);
         const candidate = curve.getPointAt(u);
         const d = pos.distanceToSquared(candidate);
         if (d < bestDist) { bestDist = d; bestU = u; }
       }
-      this.splineProgress = bestU;
+      this.splineProgress = ((bestU % 1.0) + 1.0) % 1.0;
       this.lateralOffset = 0;
       this.lateralVelocity = 0;
       const pt = curve.getPointAt(bestU);
