@@ -1723,21 +1723,28 @@
       const centerX = (b.minX + b.maxX) / 2;
       const centerZ = (b.minZ + b.maxZ) / 2;
 
-      // Keep grid cells small enough to track the terrain noise closely —
-      // too coarse and the floor's bilinearly-interpolated surface diverges
-      // from the true nonlinear raw-noise height between vertices, and
-      // anything placed there (background buildings, mostly) floats or
-      // sinks relative to it. The old fixed 400-segment cap meant this
-      // world's actual cell size was already maxed out at ~15m regardless
-      // of the "target 15m" comment — and 15m cells still measured up to
-      // 4u of building-vs-floor gap on locally steep raw terrain (BUGFIX_LOG
-      // B17/floor entry). Raised to ~9m target, capped higher (700) since
-      // this world is one long corridor (not square), so segments^2 total
-      // vertices stays reasonable even at this resolution — verified world
-      // build time actually net-improved this session (846ms baseline ->
-      // 620ms) after switching the nearest-road-sample search to a spatial
-      // grid, which freed up headroom to spend on this instead.
-      const segments = Math.min(700, Math.ceil(size / 9));
+      // REVERTED: this was briefly raised to 700 segments (~9m cells) to
+      // shrink a formula-vs-floor-mesh accuracy gap for distant background
+      // buildings. That reasoning only weighed ONE-TIME WORLD-BUILD cost
+      // (which did improve, thanks to the spatial-hash search below) and
+      // completely missed the real cost: this mesh is STATIC but still
+      // renders every single frame, and at 700 segments it was 647,522
+      // triangles — 89% of the entire scene's per-frame triangle budget —
+      // which measurably dropped real gameplay FPS from ~59.5 to ~42.6.
+      // Solving a placement-ACCURACY problem by brute-forcing RENDER
+      // density was the wrong lever: the floor is mostly invisible
+      // backdrop (hidden under the ribbon for 0-45m, and visual smoothness
+      // of distant terrain doesn't need per-formula precision). Back to
+      // 400 — the residual accuracy gap this was chasing is handled where
+      // it actually matters: buildings already have a 60-unit foundation
+      // slab (B21) that absorbs it, and the specific rock-floating bug
+      // reported alongside this FPS regression turned out to be an
+      // unrelated fixed-offset-vs-random-rotation bug in rock placement
+      // itself (see the boulder/rock spawn code), not a floor-resolution
+      // problem at all. If distant-prop floating is ever reported again
+      // for something WITHOUT its own foundation/offset fix, address that
+      // prop's own placement, not this mesh's global render resolution.
+      const segments = Math.min(400, Math.ceil(size / 15));
 
       const geom = new THREE.PlaneGeometry(size, size, segments, segments);
       geom.rotateX(-Math.PI / 2);
@@ -3118,10 +3125,35 @@
             const overlapsExisting = this.obstacles.some(o => o.pos.distanceTo(rockPos) < (o.radius + 1.6));
 
             if (!nearHouseZone && !overlapsExisting) {
-              rockPos.y = calcTerrainY(rockPos, rockDist) + 0.8;
+              const groundY = calcTerrainY(rockPos, rockDist);
               const rock = new THREE.Mesh(rockGeom, rockMat);
+              const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
+              rock.rotation.set(rotX, rotY, 0);
+              // The rock geometry (DodecahedronGeometry) is a 12-sided
+              // polyhedron, not a sphere — its true distance from center to
+              // lowest point varies with rotation (anywhere from the
+              // face-center inradius to the vertex circumradius, ~1.27 to
+              // ~2.24 for radius 1.6). Randomly rotating every rock while
+              // using one FIXED "+0.8" offset assumed a single, specific
+              // orientation, so most rotations put the actual bottom
+              // surface well above or below where +0.8 assumed it was —
+              // visibly floating (or buried) rocks with no per-instance
+              // pattern, matching the reported screenshots exactly.
+              // Compute the true lowest point directly from the shared
+              // geometry's 20 vertices (cheap — no extra Mesh/Box3 object
+              // per rock, which would add up over ~450 rocks) rotated by
+              // this instance's actual rotation, and offset by exactly
+              // that so the rock always sits flush regardless of orientation.
+              const rotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
+              const posAttr = rockGeom.attributes.position;
+              let minY = Infinity;
+              const v = new THREE.Vector3();
+              for (let vi = 0; vi < posAttr.count; vi++) {
+                v.set(posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi)).applyMatrix4(rotMat);
+                if (v.y < minY) minY = v.y;
+              }
+              rockPos.y = groundY - minY;
               rock.position.copy(rockPos);
-              rock.rotation.set(this.prng.next() * 3, this.prng.next() * 3, 0);
               rock.userData.isRock = true;
               this.foliageGroup.add(rock);
               this.obstacles.push({ pos: rockPos.clone(), radius: 1.6, type: 'rock', mesh: rock });
