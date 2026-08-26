@@ -941,13 +941,18 @@ evidence, not an aggregate claim. Three distinct, confirmed bugs.
   * **Fix:** Converted repair bay shed roof material to `MeshStandardMaterial({ color: 0x1e3a5f, flatShading: true })`.
 - **Symptom 2 (Sound playback on initial page load before driving):** If user clicked anywhere on the dispatch hub/menu, Web Audio synth notes or audio elements could play before a driving shift was started.
   * **Root cause:** `SoundEngine.suspended` initialized to `false` on initial construct.
-  * **Fix:** Initialized `this.suspended = true` on construct, ensuring complete silence during initial boot, dispatch hub menus, stuck recovery modals, and police arrests until `startDrive()` or recovery is triggered.
 - **Symptom 3 (Traffic vehicles floating/sinking on road slopes):** Traffic cars along curved and banked slopes did not track actual road ribbon elevation.
   * **Root cause:** `updateTraffic()` updated positions along `pt + normal*offset` without sampling `World.groundHeightAt()`.
   * **Fix:** Applied `pos.y = this.groundHeightAt(pt, pos, tv.laneOffset) + 0.15` and aligned forward heading with travel direction in `updateTraffic()`.
 - **Enhancement (HUD Dual Audio Controls & Parcel Trajectory FX):**
   * Added independent HUD buttons `#btn-hud-radio-mute` and `#btn-hud-sfx-mute` and keyboard shortcuts (`M` for Radio, `N` for SFX).
   * Added dynamic aerodynamic particle trails (`spawnParcelTrail`) during 3D parcel tosses arcing toward delivery targets.
+
+### B28. Stale Spline Progress Retained Across City Switches & Route Restarts
+
+- **Symptom:** When switching cities from the dispatch hub (e.g. from Mumbai to New Delhi) or restarting a shift, driving forward reached the end of the world in just a few seconds, while driving backward revealed thousands of meters of continuous road.
+- **Root cause:** `VehicleController.resetToSpline(curve)` sampled `curve.getPointAt(this.splineProgress)` without resetting `this.splineProgress = 0.008`. When the player drove deep into an earlier route ($u \approx 0.90$) and then chose a new city, the vehicle spawned at $u = 0.90$ on the new curve, leaving only 10% of the road ahead and 90% behind.
+- **Fix:** Updated `VehicleController.resetToSpline(curve, startU = 0.008)` to explicitly reset `this.splineProgress = startU` (and set `heading` to `+tangent`), and added check 17 (`vehicle-spawns-at-route-start-facing-forward`) in `dev-checks.js`.
 
 ---
 

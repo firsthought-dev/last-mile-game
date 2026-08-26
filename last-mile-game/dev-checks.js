@@ -553,6 +553,28 @@ function runWorldChecks() {
     }
   }
 
+  // 17. Switching cities or starting a new shift must reset splineProgress
+  // to the beginning (u=0.008) with heading aligned to the forward road tangent (+tangent),
+  // rather than retaining a stale u near 1.0 which caused the road to end immediately in New Delhi.
+  {
+    if (game.vehicle && game.world && game.world.curve) {
+      const v = game.vehicle;
+      const initialU = v.splineProgress;
+      const initialHeading = v.heading;
+      const tangent = game.world.curve.getTangentAt(initialU).normalize();
+      const carForward = new THREE.Vector3(Math.sin(v.heading), 0, Math.cos(v.heading)).normalize();
+      const dotForward = carForward.dot(tangent);
+
+      const startsNearBeginning = initialU < 0.05;
+      const facesForward = dotForward > 0.95;
+
+      record('vehicle-spawns-at-route-start-facing-forward', startsNearBeginning && facesForward,
+        `splineProgress=${initialU.toFixed(4)} (expect <0.05), forward-tangent dot=${dotForward.toFixed(3)} (expect >0.95)`);
+    } else {
+      record('vehicle-spawns-at-route-start-facing-forward', false, 'game.vehicle/world.curve not present');
+    }
+  }
+
   console.table(results.map(r => ({ check: r.name, pass: r.pass ? 'PASS' : 'FAIL', detail: r.detail })));
   const failed = results.filter(r => !r.pass);
   if (failed.length) {

@@ -4574,7 +4574,8 @@
       // Tree, rock, pole, and building collisions removed per design.
     }
 
-    resetToSpline(curve) {
+    resetToSpline(curve, startU = 0.008) {
+      this.splineProgress = (startU !== undefined && startU !== null) ? startU : 0.008;
       this.lateralOffset = 0;
       this.lateralVelocity = 0;
       const pt = curve.getPointAt(this.splineProgress);
@@ -4906,7 +4907,7 @@
       } else {
         this.vehicle.setVehicleType(this.selectedVehicle);
       }
-      this.vehicle.resetToSpline(this.world.curve);
+      this.vehicle.resetToSpline(this.world.curve, 0.008);
       this.vehicle.setHeadlightsActive(tod.night || tod.id === 'dusk');
       this.applyWindowGlow(tod);
 
