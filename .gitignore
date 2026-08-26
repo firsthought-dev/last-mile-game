@@ -38,7 +38,8 @@ vibe-code-2d-game-guide.md
 # Archived prototypes
 last-mile-game/_archive-2d-prototype/
 
-# Internal dev specs & bug logs (keep these private)
+# Internal dev specs, guides & bug logs (keep these private on local machine)
 last-mile-game/BUGFIX_LOG.md
 last-mile-game/ROAD_GENERATION_IMPLEMENTATION_SPEC.md
 last-mile-game/SLOW_ROADS_SYSTEM_DESIGN.md
+last-mile-game/GAME_ARCHITECTURE_AND_VISUALS_GUIDE.md
