@@ -358,6 +358,37 @@
           { bass: "A2", chord: ["C#4", "E4", "A4"], melody: ["F#4", "F#4", "D4", "B3", "B3", "E4", "E4", "E4", "G#4", "G#4", "A4", "B4"] },
           { bass: "D3", chord: ["F#3", "A3", "D4"], melody: ["A4", "A4", "A4", "E4", "D4", "F#4", "F#4", "F#4", "E4", "E4", "F#4", "E4"] }
         ]
+      },
+      {
+        // Rounds out the 2000s slot (previously Clocks + Boulevard of
+        // Broken Dreams only) for a more even 90s/2000s/2010s spread.
+        title: "Chasing Cars",
+        artist: "Snow Patrol (Warm Rhodes)",
+        era: "2000s",
+        language: "english",
+        isSynth: true,
+        bpm: 104,
+        patterns: [
+          { bass: "A2", chord: ["C4", "E4"], melody: ["E5", "C5", "A4", "E4"] },
+          { bass: "E2", chord: ["G#3", "B3"], melody: ["B4", "G#4", "E4", "B3"] },
+          { bass: "F#2", chord: ["A3", "C#4"], melody: ["C#5", "A4", "F#4", "C#4"] },
+          { bass: "D3", chord: ["F#3", "A3"], melody: ["A4", "F#4", "D4", "A3"] }
+        ]
+      },
+      {
+        // Rounds out the 2010s slot (previously Counting Stars only).
+        title: "Riptide",
+        artist: "Vance Joy (Lofi Ukulele Chill)",
+        era: "2010s",
+        language: "english",
+        isSynth: true,
+        bpm: 100,
+        patterns: [
+          { bass: "A2", chord: ["C4", "E4", "A4"], melody: ["C5", "E5", "A4", "E4"] },
+          { bass: "F2", chord: ["A3", "C4", "F4"], melody: ["A4", "C5", "F4", "C4"] },
+          { bass: "C3", chord: ["E4", "G4", "C5"], melody: ["E5", "G4", "C4", "G4"] },
+          { bass: "G2", chord: ["B3", "D4", "G4"], melody: ["B4", "D5", "G4", "D4"] }
+        ]
       }
     ]
   };
@@ -449,6 +480,29 @@
       if (this.currentTrackIndex >= this.activePlaylist.length) {
         this.currentTrackIndex = 0;
       }
+    }
+
+    // Dawn/dusk lean warm & nostalgic (90s), midday is upbeat cruising
+    // (2000s), night leans modern/atmospheric (2010s) — matches each era's
+    // acoustic texture to the mood of that time-of-day. Read from the game
+    // instance rather than tracked locally since SoundEngine is a
+    // standalone singleton constructed before `window.game` exists.
+    _eraForCurrentTOD() {
+      const tod = window.game && window.game.selectedTimeOfDay;
+      if (tod === 'dawn' || tod === 'dusk') return '90s';
+      if (tod === 'night') return '2010s';
+      return '2000s'; // day, or unknown/not-yet-set
+    }
+
+    // Bias the CURRENT selection toward a track matching the current
+    // time-of-day's era, without narrowing what prevTrack/nextTrack can
+    // reach afterward — the player can still freely browse the whole
+    // channel manually, this only picks where playback starts/resumes.
+    _biasTrackIndexToEra() {
+      if (!this.activePlaylist.length) return;
+      const era = this._eraForCurrentTOD();
+      const matchIdx = this.activePlaylist.findIndex(t => t.era === era);
+      if (matchIdx !== -1) this.currentTrackIndex = matchIdx;
     }
 
     _formatTrackTitle(trk) {
@@ -755,6 +809,7 @@
       this.userWantsRadio = this.radioPlaying;
       localStorage.setItem('shiplyp_radio_pref', this.radioPlaying ? 'on' : 'off');
       if (this.radioPlaying) {
+        this._biasTrackIndexToEra();
         this._playCurrentTrack();
       } else {
         this.audioEl.pause();
@@ -782,13 +837,21 @@
       this.radioChannel = channel;
       localStorage.setItem('shiplyp_radio_channel', channel);
       this._rebuildActivePlaylist();
-      this.currentTrackIndex = 0;
+      this._biasTrackIndexToEra();
       return this._playCurrentTrack();
     }
 
     cycleChannel() {
       const idx = CHANNEL_ORDER.indexOf(this.radioChannel);
       const next = CHANNEL_ORDER[(idx + 1) % CHANNEL_ORDER.length];
+      return this.switchChannel(next);
+    }
+
+    // Direct two-way toggle between the Hindi and English channels
+    // specifically (skips 'mix', which stays reachable via cycleChannel/[L]
+    // for anyone who wants the blended stream).
+    toggleLanguage() {
+      const next = this.radioChannel === 'hindi' ? 'english' : 'hindi';
       return this.switchChannel(next);
     }
   }
@@ -6077,6 +6140,10 @@
       if (btnChannel) {
         btnChannel.onclick = () => this.cycleRadioChannel();
       }
+      const btnLang = document.getElementById('btn-radio-lang');
+      if (btnLang) {
+        btnLang.onclick = () => this.toggleRadioLanguage();
+      }
 
       document.getElementById('btn-hud-autodrive')?.addEventListener('click', () => this.toggleAutodrive());
       document.getElementById('btn-hud-reset')?.addEventListener('click', () => {
@@ -6195,6 +6262,25 @@
         btnChannel.textContent = sound.getChannelDisplayName();
         btnChannel.classList.remove('channel-flash');
         void btnChannel.offsetWidth; // force reflow for re-triggering animation
+        btnChannel.classList.add('channel-flash');
+      }
+      if (radioTitleEl) radioTitleEl.textContent = title;
+      if (radioCard && sound.radioPlaying) radioCard.classList.add('playing');
+      this.showScorePopup(0, `RADIO: ${sound.getChannelDisplayName()}`);
+    }
+
+    // Direct Hindi/English switch (skips 'mix' — cycleRadioChannel/[L]
+    // still reaches it for anyone who wants the blended stream).
+    toggleRadioLanguage() {
+      sound.ensure();
+      const title = sound.toggleLanguage();
+      const btnChannel = document.getElementById('btn-radio-channel');
+      const radioTitleEl = document.getElementById('radio-track-title');
+      const radioCard = document.getElementById('cassette-radio-card');
+      if (btnChannel) {
+        btnChannel.textContent = sound.getChannelDisplayName();
+        btnChannel.classList.remove('channel-flash');
+        void btnChannel.offsetWidth;
         btnChannel.classList.add('channel-flash');
       }
       if (radioTitleEl) radioTitleEl.textContent = title;
