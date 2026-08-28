@@ -5495,6 +5495,62 @@
           else this.tossParcel3D();
         }
       });
+
+      this.initTouchControls();
+    }
+
+    // On-screen steer/throttle/action buttons for touch devices — the game
+    // had keyboard-only input, making it unplayable on phones/tablets.
+    // Every button just flips the exact same this.keys.* flags the
+    // keyboard handlers use (or fires the same toss/walk-delivery call
+    // SPACE does), so steering, acceleration and delivery logic stay
+    // single-sourced; touch is purely a second way to set those flags, not
+    // a parallel control path.
+    applyTouchControlVisibility() {
+      const isTouch = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+      document.body.classList.toggle('touch-controls-active', isTouch);
+    }
+
+    initTouchControls() {
+      this.applyTouchControlVisibility();
+      // A Bluetooth mouse/keyboard can be paired with a touch tablet mid-
+      // session (or vice versa on a convertible laptop) — re-check instead
+      // of only detecting once at load.
+      window.matchMedia('(pointer: coarse)').addEventListener?.('change', () => this.applyTouchControlVisibility());
+
+      const bindHoldButton = (id, onDown, onUp) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const start = e => {
+          e.preventDefault();
+          this.resetInactivity();
+          btn.classList.add('touch-pressed');
+          onDown();
+        };
+        const end = e => {
+          if (e) e.preventDefault();
+          btn.classList.remove('touch-pressed');
+          if (onUp) onUp();
+        };
+        btn.addEventListener('pointerdown', start);
+        btn.addEventListener('pointerup', end);
+        btn.addEventListener('pointercancel', end);
+        btn.addEventListener('pointerleave', end);
+      };
+
+      bindHoldButton('touch-steer-left', () => { this.keys.left = this.keys.a = true; }, () => { this.keys.left = this.keys.a = false; });
+      bindHoldButton('touch-steer-right', () => { this.keys.right = this.keys.d = true; }, () => { this.keys.right = this.keys.d = false; });
+      bindHoldButton('touch-pedal-gas', () => { this.keys.up = this.keys.w = true; }, () => { this.keys.up = this.keys.w = false; });
+      bindHoldButton('touch-pedal-brake', () => { this.keys.down = this.keys.s = true; }, () => { this.keys.down = this.keys.s = false; });
+
+      // Discrete tap, not a held flag — mirrors the SPACE keydown handler
+      // (fires once on press, not continuously while held).
+      bindHoldButton('touch-action-btn', () => {
+        if (this.gameState === 'menu') { this.startDrive(); return; }
+        if (this.gameState !== 'playing') return;
+        if (this.onFoot) this.tryWalkDelivery();
+        else this.tossParcel3D();
+      });
     }
 
     // Low-poly courier avatar for on-foot delivery, matching the crosser

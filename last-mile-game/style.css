@@ -2528,3 +2528,130 @@ html, body {
     top: 12px;
   }
 }
+
+/* ==========================================================================
+   TOUCH CONTROLS — on-screen steer/throttle/action, mirrors WASD/SPACE.
+   Hidden by default; shown only when game.js's applyTouchControlVisibility
+   detects a coarse (touch) primary pointer, so desktop mouse/keyboard
+   players never see it. Positioned to avoid the radar (bottom-left) and
+   telemetry/autopilot readouts (bottom-right).
+   ========================================================================== */
+.touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 55; /* level with the radar/telemetry boxes it's positioned to clear, above the plain HUD/canvas layers below */
+  pointer-events: none; /* only the buttons themselves capture input */
+  display: none;
+}
+
+body.touch-controls-active .touch-controls {
+  display: block;
+}
+
+.touch-btn {
+  pointer-events: auto;
+  touch-action: none; /* no scroll/zoom gestures stealing the press */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--glass-capsule);
+  border: 1px solid var(--glass-border-top);
+  border-radius: 16px;
+  color: var(--text-pure);
+  font-family: var(--font-primary);
+  font-weight: 800;
+  box-shadow: var(--shadow-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s ease, transform 0.1s ease;
+}
+
+.touch-btn:active,
+.touch-btn.touch-pressed {
+  background: rgba(255, 184, 51, 0.28);
+  border-color: var(--brand-saffron);
+  transform: scale(0.94);
+}
+
+.touch-steer-cluster {
+  position: absolute;
+  left: 16px;
+  /* Clears .slowroads-radar-box (bottom: 86px, ~150-160px tall including
+     the RADAR header + 116px canvas + padding) sitting in this same
+     corner — anything lower overlapped and rendered underneath it despite
+     an equal z-index, because the radar box's own painted background
+     covered these buttons. */
+  bottom: 260px;
+  display: flex;
+  gap: 12px;
+}
+
+.touch-steer-btn {
+  width: 68px;
+  height: 68px;
+  font-size: 1.6rem;
+}
+
+.touch-pedal-cluster {
+  position: absolute;
+  right: 16px;
+  /* Same clearance reasoning, mirrored for .slowroads-telemetry-box in
+     this corner (autopilot/recenter pills stacked beside the speed
+     digits — comparable height to the radar box). */
+  bottom: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.touch-pedal-btn {
+  width: 68px;
+  height: 68px;
+  font-size: 1.6rem;
+}
+
+.touch-pedal-gas {
+  color: var(--brand-teal);
+}
+
+.touch-pedal-brake {
+  color: var(--brand-red);
+}
+
+.touch-action-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 266px;
+  transform: translateX(-50%);
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  background: rgba(0, 212, 191, 0.22);
+  border-color: var(--brand-teal);
+}
+
+.touch-action-btn:active,
+.touch-action-btn.touch-pressed {
+  background: rgba(0, 212, 191, 0.4);
+  transform: translateX(-50%) scale(0.94);
+}
+
+@media (max-width: 480px) {
+  .touch-steer-cluster,
+  .touch-pedal-cluster {
+    bottom: 230px;
+  }
+  .touch-action-btn {
+    bottom: 236px;
+    width: 72px;
+    height: 72px;
+  }
+  .touch-steer-btn,
+  .touch-pedal-btn {
+    width: 58px;
+    height: 58px;
+  }
+}

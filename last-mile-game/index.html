@@ -111,6 +111,23 @@
         <span class="toss-msg">DROP CARGO</span>
       </div>
 
+      <!-- Touch Controls: shown only on touch/coarse-pointer devices (see
+           applyTouchControlVisibility in game.js). Wired to the exact same
+           this.keys.* flags the keyboard handlers set, so every downstream
+           system (steering, throttle, delivery toss) needs no separate
+           mobile-specific path. -->
+      <div id="touch-controls" class="touch-controls" aria-hidden="true">
+        <div class="touch-steer-cluster">
+          <button id="touch-steer-left" class="touch-btn touch-steer-btn" aria-label="Steer Left">◀</button>
+          <button id="touch-steer-right" class="touch-btn touch-steer-btn" aria-label="Steer Right">▶</button>
+        </div>
+        <button id="touch-action-btn" class="touch-btn touch-action-btn" aria-label="Toss / Drop Cargo">TOSS</button>
+        <div class="touch-pedal-cluster">
+          <button id="touch-pedal-gas" class="touch-btn touch-pedal-btn touch-pedal-gas" aria-label="Accelerate">▲</button>
+          <button id="touch-pedal-brake" class="touch-btn touch-pedal-btn touch-pedal-brake" aria-label="Brake / Reverse">▼</button>
+        </div>
+      </div>
+
       <!-- Bottom-Left: Minimalist Radar Minimap -->
       <div class="slowroads-radar-box">
         <div class="radar-header-row">
