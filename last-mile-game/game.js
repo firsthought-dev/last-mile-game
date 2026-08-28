@@ -5002,6 +5002,105 @@
   }
 
   // --------------------------------------------------------------------------
+  // 6B. RAIN — a bounded particle volume that rides with the camera
+  // --------------------------------------------------------------------------
+  // Modeled on slowroads.io's snow system (see SLOWROADS_PARITY_LOG.md
+  // section 1.4, derived from a live capture + confirming no snowflake
+  // texture asset exists there — it's plain geometry, not a sprite sheet):
+  // a 3D volume of particles centered on the camera, evenly distributed
+  // through depth, each respawning at the top when it falls out the
+  // bottom (or drifts out of the box) rather than a 2D screen-space
+  // overlay. Slowroads has no rain to copy directly (confirmed: Overcast
+  // + any non-winter season produces zero precipitation there) — this is
+  // a new system using the same *technique*, tuned per the user's ask:
+  // faster fall speed and higher density than snow, and streak-shaped
+  // rather than round (a streak needs real velocity to read as rain
+  // instead of snow — that's the actual visual difference between the
+  // two, not just speed).
+  //
+  // Real 3D thin boxes via InstancedMesh (not THREE.Points) so each
+  // streak reads as an actual line from any camera angle without a
+  // custom shader — Points sprites are screen-facing quads and would
+  // need GPU-side stretching along velocity to look like rain at all.
+  class RainSystem {
+    constructor(scene) {
+      this.scene = scene;
+      this.count = 700; // denser than a typical snow system, per the user's explicit ask
+      this.fallSpeed = 26.0; // m/s — real rain terminal velocity range; snow in the reference capture read as ~1-2 m/s equivalent, this is deliberately far faster, not just "a little"
+      this.streakLength = 0.55;
+      this.boxHalfWidth = 22.0; // lateral spread around the vehicle
+      this.boxHeight = 18.0;
+      this.boxDepth = 46.0; // along the direction of travel — wider than lateral since the car moves fast enough to outrun a narrow box
+      this.driftX = -1.4; // slight sideways drift, like wind-blown rain, not a perfectly vertical curtain
+
+      const geom = new THREE.BoxGeometry(0.018, this.streakLength, 0.018);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xcfd8e3,
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false
+      });
+      this.mesh = new THREE.InstancedMesh(geom, mat, this.count);
+      this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.mesh.frustumCulled = false;
+      this.mesh.visible = false;
+
+      this.positions = new Float32Array(this.count * 3);
+      const dummy = new THREE.Object3D();
+      for (let i = 0; i < this.count; i++) {
+        this.positions[i * 3] = (Math.random() - 0.5) * 2 * this.boxHalfWidth;
+        this.positions[i * 3 + 1] = Math.random() * this.boxHeight;
+        this.positions[i * 3 + 2] = (Math.random() - 0.5) * this.boxDepth;
+        dummy.position.set(this.positions[i * 3], this.positions[i * 3 + 1], this.positions[i * 3 + 2]);
+        dummy.updateMatrix();
+        this.mesh.setMatrixAt(i, dummy.matrix);
+      }
+      scene.add(this.mesh);
+    }
+
+    setActive(active) {
+      this.mesh.visible = !!active;
+    }
+
+    // `center` is the point the volume rides around (the vehicle position)
+    // — local-space particle coordinates stay in [-half, +half] ranges and
+    // get re-based onto `center` every frame, so the volume always reads
+    // as "raining around the car" rather than a fixed world-space patch
+    // the car drives in and out of.
+    update(dt, center) {
+      if (!this.mesh.visible) return;
+      const dummy = new THREE.Object3D();
+      const fall = this.fallSpeed * dt;
+      const drift = this.driftX * dt;
+      for (let i = 0; i < this.count; i++) {
+        let y = this.positions[i * 3 + 1] - fall;
+        let x = this.positions[i * 3] + drift;
+        if (y < 0) {
+          y = this.boxHeight;
+          x = (Math.random() - 0.5) * 2 * this.boxHalfWidth;
+          this.positions[i * 3 + 2] = (Math.random() - 0.5) * this.boxDepth;
+        }
+        if (x < -this.boxHalfWidth) x = this.boxHalfWidth;
+        if (x > this.boxHalfWidth) x = -this.boxHalfWidth;
+        this.positions[i * 3] = x;
+        this.positions[i * 3 + 1] = y;
+
+        dummy.position.set(
+          center.x + x,
+          center.y + y,
+          center.z + this.positions[i * 3 + 2]
+        );
+        // Streaks tilt slightly with the drift instead of staying perfectly
+        // vertical — a static vertical rod reads as a picket fence, not rain.
+        dummy.rotation.z = -this.driftX * 0.06;
+        dummy.updateMatrix();
+        this.mesh.setMatrixAt(i, dummy.matrix);
+      }
+      this.mesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // 7. MAIN SHIPLYP DISPATCH & MISSION ENGINE
   // --------------------------------------------------------------------------
   class ShiplypEngine {
@@ -5018,6 +5117,7 @@
       this.selectedSeason = 'autumn';
       this.selectedTimeOfDay = 'day'; // 'dawn', 'day', 'dusk', 'night'
       this.selectedRoadTerrain = 'asphalt'; // 'asphalt', 'gravel', 'mud', 'sand'
+      this.weather = 'clear'; // 'clear', 'rain' — see SLOWROADS_PARITY_LOG.md item 4
       this.selectedSeed = '5927cd04';
       this.selectedVehicle = 'swift';
       this.selectedDifficulty = 'medium';
@@ -5140,6 +5240,8 @@
       } catch (e) {
         console.warn('Post-processing initialization failed (headless mode):', e);
       }
+
+      this.rain = new RainSystem(this.scene);
     }
 
     // A tiny gradient "sky" scene captured with PMREM equirect rendering.
@@ -5489,6 +5591,7 @@
         if (k === 'l') this.cycleRadioChannel();
         if (k === 'v') this.toggleStatusPanel();
         if (k === 'e') this.toggleOnFoot();
+        if (k === 'p') this.toggleWeather();
         if (k === 'h' || k === '?') this.openSettingsModal('controls');
         if (k === 'escape') this.openSettingsModal('gameplay');
         if (k === ' ' && this.gameState === 'playing') {
@@ -6423,6 +6526,13 @@
       sound.playTone(800, 'sine', 0.08);
     }
 
+    toggleWeather() {
+      this.weather = this.weather === 'rain' ? 'clear' : 'rain';
+      if (this.rain) this.rain.setActive(this.weather === 'rain');
+      this.showScorePopup(0, this.weather === 'rain' ? '🌧️ RAIN' : '☀️ CLEAR SKIES');
+      sound.playTone(600, 'sine', 0.08);
+    }
+
     applyWindowGlow(tod) {
       if (!this.world || !this.world.windowMaterials) return;
       const intensity = (tod.night || tod.id === 'dusk') ? 0.85 : (tod.id === 'dawn' ? 0.15 : 0.0);
@@ -7046,6 +7156,7 @@
                 <div class="settings-row"><span class="settings-label">Return to Road (Recenter)</span><span class="slider-val">[R]</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Camera View</span><span class="slider-val">[C]</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Time of Day</span><span class="slider-val">[T]</span></div>
+                <div class="settings-row"><span class="settings-label">Toggle Rain</span><span class="slider-val">[P]</span></div>
                 <div class="settings-row"><span class="settings-label">Delivery Status Manifest</span><span class="slider-val">[V]</span></div>
 
                 <div class="settings-section-title" style="margin-top: 14px;"><span>📻 DHABA FM & AUDIO CONTROLS</span></div>
@@ -7464,6 +7575,7 @@
         this.world.updateTraffic(dt);
         this.world.updateCrossers(dt);
         this.checkCrosserCollisions();
+        if (this.rain && this.vehicle && this.vehicle.mesh) this.rain.update(dt, this.vehicle.mesh.position);
         if (this.world.updateClouds) this.world.updateClouds(dt);
         this.updateParcels(dt);
         this.updateParticles(dt);
