@@ -978,8 +978,15 @@
         skyTop: 0x4338ca,
         skyHorizon: 0xf97316,
         skyBottom: 0xfde047,
-        fog: 0xfde047,
-        fogDensity: 0.0017,
+        // Fog color matched to the sky's HORIZON band, not its base —
+        // distant terrain sits near the horizon in view, so fogging it
+        // toward the base color left a visible mismatch band where terrain
+        // faded into a different hue than the sky right behind it.
+        // Density raised from a near-invisible 0.0017 to something that
+        // actually dissolves distant geometry into atmosphere (slowroads.io
+        // reference read as noticeably hazier at any real draw distance).
+        fog: 0xf97316,
+        fogDensity: 0.0055,
         sunColor: 0xffedd5,
         sunIntensity: 1.15,
         sunPos: [220, 90, -120],
@@ -994,8 +1001,8 @@
         skyTop: 0x0284c7,
         skyHorizon: 0x38bdf8,
         skyBottom: 0xbae6fd,
-        fog: 0xbae6fd,
-        fogDensity: 0.0015,
+        fog: 0x38bdf8,
+        fogDensity: 0.0048,
         sunColor: 0xfffdf5,
         sunIntensity: 1.25,
         sunPos: [120, 260, 100],
@@ -1011,7 +1018,7 @@
         skyHorizon: 0x7c3aed,
         skyBottom: 0xf43f5e,
         fog: 0x7c3aed,
-        fogDensity: 0.0018,
+        fogDensity: 0.0058,
         sunColor: 0xf97316,
         sunIntensity: 1.05,
         sunPos: [-220, 75, -140],
@@ -1027,7 +1034,7 @@
         skyHorizon: 0x0f172a,
         skyBottom: 0x1e293b,
         fog: 0x0f172a,
-        fogDensity: 0.0022,
+        fogDensity: 0.0065,
         sunColor: 0x93c5fd,
         sunIntensity: 0.45,
         sunPos: [-60, 190, -100],
@@ -2332,8 +2339,13 @@
       const poleGeom = new THREE.CylinderGeometry(0.1, 0.12, 6.5, 6);
       const crossbarGeom = new THREE.BoxGeometry(1.8, 0.12, 0.12);
 
-      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, flatShading: true, roughness: 0.9 });
-      const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a6065, flatShading: true, roughness: 0.8, map: TextureFactory.rock(this.prng) });
+      // Trunks/rocks are organic shapes — flat shading on round primitives
+      // reads as faceted "gem" geometry (see SLOWROADS_PARITY_LOG.md item 2)
+      // where smooth shading reads as an actual rounded surface at the same
+      // triangle count. Man-made props (poles, buildings, vehicles below)
+      // keep flatShading — that's a deliberate low-poly look, not the bug.
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.9 });
+      const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a6065, roughness: 0.8, map: TextureFactory.rock(this.prng) });
       const poleMat = new THREE.MeshStandardMaterial({ color: 0x4a4e52, flatShading: true, roughness: 0.6, metalness: 0.3 });
 
       const potholeGeom = new THREE.CircleGeometry(1.3, 12);
@@ -2843,7 +2855,7 @@
           // canopies that would look wrong for the season.
           const isPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
           const leafColHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
-          const leavesMat = new THREE.MeshStandardMaterial({ color: leafColHex, flatShading: true });
+          const leavesMat = new THREE.MeshStandardMaterial({ color: leafColHex });
 
           const tree = new THREE.Group();
           const trunk = new THREE.Mesh(trunkGeom, trunkMat);
@@ -2852,9 +2864,9 @@
 
           if (isPine) {
             // Multi-Tiered Forest Pine Tree (3 stacked conical crowns)
-            const tierMat1 = new THREE.MeshStandardMaterial({ color: leafColHex, flatShading: true });
-            const tierMat2 = new THREE.MeshStandardMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.9), flatShading: true });
-            const tierMat3 = new THREE.MeshStandardMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.8), flatShading: true });
+            const tierMat1 = new THREE.MeshStandardMaterial({ color: leafColHex });
+            const tierMat2 = new THREE.MeshStandardMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.9) });
+            const tierMat3 = new THREE.MeshStandardMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.8) });
 
             const crown1 = new THREE.Mesh(new THREE.ConeGeometry(2.4, 2.2, 7), tierMat1);
             crown1.position.y = 2.4;
@@ -2907,7 +2919,7 @@
 
             const bgIsPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
             const bgLeafHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
-            const bgLeavesMat = new THREE.MeshStandardMaterial({ color: bgLeafHex, flatShading: true });
+            const bgLeavesMat = new THREE.MeshStandardMaterial({ color: bgLeafHex });
             const bgScale = this.prng.range(0.8, 1.5); // background trees can run larger — read fine from a distance, and vary the treeline silhouette
             const bgTree = new THREE.Group();
             const bgTrunk = new THREE.Mesh(trunkGeom, trunkMat);
@@ -6391,10 +6403,22 @@
     }
 
     toggleCameraMode() {
-      const modes = ['chase', 'hood', 'sky'];
+      // Camera set audited against slowroads.io's own 5 modes (Chase, Far
+      // Chase, First-Person, Bonnet, Bumper — see SLOWROADS_PARITY_LOG.md
+      // section 1.2b): Shiplyp had chase/hood/sky, missing a pulled-back
+      // chase variant and any true in-cabin view, and "hood" was actually
+      // sitting at bumper height, mislabeled. Renamed to match what it
+      // actually is rather than adding a redundant near-duplicate "bonnet".
+      const modes = ['chase', 'far-chase', 'first-person', 'hood', 'sky'];
       const curIdx = modes.indexOf(this.activeCameraMode || 'chase');
       this.activeCameraMode = modes[(curIdx + 1) % modes.length];
-      const names = { chase: 'ELEVATED CHASE CAM', hood: 'HOOD BUMPER CAM', sky: 'HIGH PANORAMIC CAM' };
+      const names = {
+        chase: 'ELEVATED CHASE CAM',
+        'far-chase': 'FAR CHASE CAM',
+        'first-person': 'FIRST-PERSON CAM',
+        hood: 'BUMPER CAM',
+        sky: 'HIGH PANORAMIC CAM'
+      };
       this.showScorePopup(0, `📹 ${names[this.activeCameraMode]}`);
       sound.playTone(800, 'sine', 0.08);
     }
@@ -7178,11 +7202,41 @@
       }
 
       if (this.activeCameraMode === 'hood') {
-        // Hood Bumper Cam - rigidly bolted to vehicle hood
+        // Bumper Cam - rigidly bolted at bumper height (see toggleCameraMode
+        // comment — this was labeled "hood" but sits at bumper height)
         const hoodPos = carPos.clone().addScaledVector(carForward, 1.35).add(new THREE.Vector3(0, 0.82, 0));
         this.camera.position.copy(hoodPos);
         const lookTarget = hoodPos.clone().addScaledVector(carForward, 35.0);
         this.camera.lookAt(lookTarget);
+      } else if (this.activeCameraMode === 'first-person') {
+        // True in-cabin view — driver eye height, seated near the
+        // windshield rather than out on the bumper. Rigidly bolted (no
+        // lerp/spring), same as bumper cam: a cockpit view that lags the
+        // car's own motion reads as broken, not cinematic.
+        const eyePos = carPos.clone().addScaledVector(carForward, 0.15).add(new THREE.Vector3(0, 1.15, 0));
+        this.camera.position.copy(eyePos);
+        const lookTarget = eyePos.clone().addScaledVector(carForward, 35.0);
+        this.camera.lookAt(lookTarget);
+      } else if (this.activeCameraMode === 'far-chase') {
+        // Same glued-chase behavior as the default chase cam below, just
+        // pulled back and raised further for a wider, more cinematic frame
+        // — slowroads' "Far Chase" relative to its "Chase".
+        const targetCamPos = carPos.clone()
+          .addScaledVector(carForward, -11.5)
+          .add(new THREE.Vector3(0, 4.4, 0));
+        const posLerp = Math.min(1.0, 1.0 - Math.exp(-16.0 * dt));
+        this.camera.position.lerp(targetCamPos, posLerp);
+
+        const minY = carPos.y + 2.6;
+        const maxY = carPos.y + 6.5;
+        this.camera.position.y = THREE.MathUtils.clamp(this.camera.position.y, minY, maxY);
+
+        const rawLookTarget = carPos.clone()
+          .addScaledVector(carForward, 20.0)
+          .add(new THREE.Vector3(0, 0.8, 0));
+        const lookLerp = Math.min(1.0, 1.0 - Math.exp(-22.0 * dt));
+        this.camLookTarget.lerp(rawLookTarget, lookLerp);
+        this.camera.lookAt(this.camLookTarget);
       } else if (this.activeCameraMode === 'sky') {
         // Drone Cam
         const skyPos = carPos.clone().addScaledVector(carForward, -9.5).add(new THREE.Vector3(0, 7.5, 0));
@@ -7236,7 +7290,7 @@
       // road height at this exact point — use that instead. (The chase
       // branch above already clamps to carPos.y+[1.6,4.2]; this is only a
       // backstop for the sky/drone mode, which has no such clamp.)
-      if (this.activeCameraMode !== 'hood') {
+      if (this.activeCameraMode !== 'hood' && this.activeCameraMode !== 'first-person') {
         const minClearance = carPos.y + 1.0;
         if (this.camera.position.y < minClearance) {
           this.camera.position.y = minClearance;
