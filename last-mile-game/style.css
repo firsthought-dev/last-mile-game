@@ -2548,6 +2548,13 @@ body.touch-controls-active .touch-controls {
   display: block;
 }
 
+/* Keyboard-hint banner ("SPACE / DROP CARGO") — meaningless on a device
+   with no SPACE key, and it sits in the same spot the TOSS action button
+   already covers, so it'd just double up. */
+body.touch-controls-active .slowroads-toss-banner {
+  display: none;
+}
+
 .touch-btn {
   pointer-events: auto;
   touch-action: none; /* no scroll/zoom gestures stealing the press */
