@@ -5118,6 +5118,7 @@
         if (k === 'l') this.cycleRadioChannel();
         if (k === 'v') this.toggleStatusPanel();
         if (k === 'e') this.toggleOnFoot();
+        if (k === 'h' || k === '?') this.openSettingsModal('controls');
         if (k === 'escape') this.openSettingsModal('gameplay');
         if (k === ' ' && this.gameState === 'playing') {
           if (this.onFoot) this.tryWalkDelivery();
@@ -6155,6 +6156,7 @@
       this.stuckTimer = 0;
       this.isStuckModalOpen = false;
       this.lostFromRoad = false;
+      this.modalContainer.innerHTML = '';
       this.hideReturnToRoadBanner();
       this.vehicle.snapToNearestRoadPoint(this.world.curve);
       sound.resumeForGameplay();
@@ -6567,13 +6569,28 @@
                   </div>
                 </div>
               ` : tab === 'controls' ? `
-                <div class="settings-section-title"><span>COURIER CONTROLS</span></div>
-                <div class="settings-row"><span class="settings-label">Drive / Regen Brake</span><span class="slider-val">W / S or Up / Down</span></div>
-                <div class="settings-row"><span class="settings-label">Steer</span><span class="slider-val">A / D or Left / Right</span></div>
-                <div class="settings-row"><span class="settings-label">3D Parcel Toss / Drop</span><span class="slider-val">[SPACE] or Click</span></div>
-                <div class="settings-row"><span class="settings-label">Autopilot Navigation</span><span class="slider-val">[F]</span></div>
-                <div class="settings-row"><span class="settings-label">Vehicle Recovery</span><span class="slider-val">[R]</span></div>
-                <div class="settings-row"><span class="settings-label">Toggle Camera View</span><span class="slider-val">[C]</span></div>
+                <div class="settings-section-title"><span>🚗 DRIVING & MOVEMENT</span></div>
+                <div class="settings-row"><span class="settings-label">Accelerate / Walk Forward</span><span class="slider-val">W / ↑</span></div>
+                <div class="settings-row"><span class="settings-label">Brake / Reverse / Walk Back</span><span class="slider-val">S / ↓</span></div>
+                <div class="settings-row"><span class="settings-label">Steer / Turn Left & Right</span><span class="slider-val">A / D or ← / →</span></div>
+
+                <div class="settings-section-title" style="margin-top: 14px;"><span>📦 PARCEL ACTIONS & COURIER MODE</span></div>
+                <div class="settings-row"><span class="settings-label">Toss 3D Parcel (Vehicle)</span><span class="slider-val">[SPACE] or Click</span></div>
+                <div class="settings-row"><span class="settings-label">Doorstep Delivery (On Foot)</span><span class="slider-val">[SPACE] or Click</span></div>
+                <div class="settings-row"><span class="settings-label">Hop Out / Enter Vehicle</span><span class="slider-val">[E]</span></div>
+
+                <div class="settings-section-title" style="margin-top: 14px;"><span>🛠️ ASSISTS, CAMERA & ENVIRONMENT</span></div>
+                <div class="settings-row"><span class="settings-label">AI Autopilot Cruise</span><span class="slider-val">[F]</span></div>
+                <div class="settings-row"><span class="settings-label">Return to Road (Recenter)</span><span class="slider-val">[R]</span></div>
+                <div class="settings-row"><span class="settings-label">Cycle Camera View</span><span class="slider-val">[C]</span></div>
+                <div class="settings-row"><span class="settings-label">Cycle Time of Day</span><span class="slider-val">[T]</span></div>
+                <div class="settings-row"><span class="settings-label">Delivery Status Manifest</span><span class="slider-val">[V]</span></div>
+
+                <div class="settings-section-title" style="margin-top: 14px;"><span>📻 DHABA FM & AUDIO CONTROLS</span></div>
+                <div class="settings-row"><span class="settings-label">Cycle Radio Stations</span><span class="slider-val">[L]</span></div>
+                <div class="settings-row"><span class="settings-label">Mute / Unmute Radio</span><span class="slider-val">[M]</span></div>
+                <div class="settings-row"><span class="settings-label">Mute / Unmute SFX & Engine</span><span class="slider-val">[N]</span></div>
+                <div class="settings-row"><span class="settings-label">Controls & Settings Menu</span><span class="slider-val">[H] or [ESC]</span></div>
               ` : `
                 <div class="settings-section-title"><span>SHIPLYP COURIER SUMMARY</span></div>
                 <div class="settings-row"><span class="settings-label">Total Delivery Earnings</span><span class="slider-val" style="color: #2ec4b6; font-weight: 700;">₹ ${this.earnings}</span></div>
