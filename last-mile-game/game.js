@@ -827,6 +827,18 @@
     TERRAIN_SEGMENTS: 100,
     FOLIAGE_COUNT: 600,
 
+    // Tunnels: where raw hillside terrain towers far enough above the road
+    // to loom over/through the camera (the recurring "terrain wall" bug —
+    // see BUGFIX_LOG.md Pattern 1/3), bore a tunnel through it instead of
+    // trying to out-clamp the noise. Turns an unfixable visual bug into an
+    // intentional set piece rather than chasing a 4th root cause.
+    TUNNEL_OVERHEAD_THRESHOLD: 16.0, // terrain must clear road by this much
+    TUNNEL_MIN_RUN: 6,               // min contiguous samples (~ meters * segment spacing) to count as a zone
+    TUNNEL_PAD: 3,                   // extra samples of portal buffer on each end
+    TUNNEL_HALF_WIDTH: 6.0,          // semicircle radius, must exceed embankment slices it clamps
+    TUNNEL_WALL_COLOR: 0x4a4038,
+    TUNNEL_LIGHT_SPACING: 8,         // place a lamp every N longitudinal samples inside a zone
+
     SEASONS: {
       autumn: {
         id: 'autumn',
@@ -1324,6 +1336,7 @@
       }
 
       this.curve = new THREE.CatmullRomCurve3(this.splineNodes, false, 'centripetal');
+      this.computeTunnelZones();
 
       // Bounding box of the actual road extent — the spline is a random
       // walk and does not stay centered near the origin, so anything that
@@ -1643,6 +1656,83 @@
       return this.roadMesh;
     }
 
+    // Scans the finished curve at the SAME sampling rate createTerrainMesh
+    // uses (CONFIG.ROAD_MESH_SEGMENTS) for stretches where raw hillside
+    // terrain clears the road by more than TUNNEL_OVERHEAD_THRESHOLD — the
+    // condition that produces the "terrain wall" bug. Those stretches get a
+    // tunnel bored through them instead: this.tunnelZones is consumed both
+    // by createTunnelMeshes() (builds the bore) and createTerrainMesh()
+    // (flattens the corridor so the hillside doesn't poke back through the
+    // tube walls). Indices are into curve.getSpacedPoints(tubularSegments),
+    // so they line up 1:1 with createTerrainMesh's own `i` loop variable.
+    computeTunnelZones() {
+      const tubularSegments = CONFIG.ROAD_MESH_SEGMENTS;
+      const points = this.curve.getSpacedPoints(tubularSegments);
+      const up = new THREE.Vector3(0, 1, 0);
+      // Centerline-only overhead missed asymmetric hills — a hillside that
+      // buries just one shoulder while the exact centerline stays clear
+      // still loomed into frame the moment the car (or the chase camera,
+      // which trails/swings independently) drifted toward that side. Probe
+      // the vehicle's actual max lateral drift (±9m, see the fence lateral
+      // clamp) as well as dead center and take the worst of the three —
+      // matches what a hillside would actually do to the driveable corridor
+      // and the camera riding inside it, not just the rail down the middle.
+      const LATERAL_PROBES = [-9, 0, 9];
+      const overhead = points.map((pt, i) => {
+        const prev = points[Math.max(0, i - 1)];
+        const next = points[Math.min(tubularSegments, i + 1)];
+        const tangent = new THREE.Vector3().subVectors(next, prev).normalize();
+        const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
+        let worst = -Infinity;
+        for (const lat of LATERAL_PROBES) {
+          const wp = pt.clone().addScaledVector(normal, lat);
+          const h = this.getRawTerrainHeight(wp.x, wp.z) - pt.y;
+          if (h > worst) worst = h;
+        }
+        return worst;
+      });
+
+      const zones = [];
+      let runStart = -1;
+      for (let i = 0; i <= tubularSegments; i++) {
+        const over = overhead[i] > CONFIG.TUNNEL_OVERHEAD_THRESHOLD;
+        if (over && runStart === -1) {
+          runStart = i;
+        } else if (!over && runStart !== -1) {
+          if (i - runStart >= CONFIG.TUNNEL_MIN_RUN) zones.push({ start: runStart, end: i - 1 });
+          runStart = -1;
+        }
+      }
+      if (runStart !== -1 && tubularSegments - runStart >= CONFIG.TUNNEL_MIN_RUN) {
+        zones.push({ start: runStart, end: tubularSegments });
+      }
+
+      // Pad each zone with a portal buffer, then merge any that now overlap
+      // so two nearby hills don't produce two tunnels with a sliver of open
+      // road wedged between their portals.
+      const pad = CONFIG.TUNNEL_PAD;
+      const padded = zones.map(z => ({
+        start: Math.max(0, z.start - pad),
+        end: Math.min(tubularSegments, z.end + pad)
+      }));
+      const merged = [];
+      for (const z of padded) {
+        const prev = merged[merged.length - 1];
+        if (prev && z.start <= prev.end) prev.end = Math.max(prev.end, z.end);
+        else merged.push({ ...z });
+      }
+
+      this.tunnelZones = merged;
+      this.tunnelPoints = points; // cached — same array createTunnelMeshes/createTerrainMesh index into
+    }
+
+    // Is longitudinal sample index `i` inside a tunnel zone (optionally
+    // padded further, e.g. so the terrain carve fades out past the portal)?
+    isInTunnelZone(i, extraPad = 0) {
+      if (!this.tunnelZones) return false;
+      return this.tunnelZones.some(z => i >= z.start - extraPad && i <= z.end + extraPad);
+    }
+
     createTerrainMesh(season) {
       // Must match createRoadMesh's segment count exactly — see
       // CONFIG.ROAD_MESH_SEGMENTS. At 800 vs the road's 1200 the two
@@ -1686,7 +1776,7 @@
       const grassLight = new THREE.Color(season.grassLight);
       const cliffCol = new THREE.Color(season.cliffColor);
 
-      const points = this.curve.getSpacedPoints(tubularSegments);
+      const points = this.tunnelPoints || this.curve.getSpacedPoints(tubularSegments);
 
       for (let i = 0; i <= tubularSegments; i++) {
         const pt = points[i];
@@ -1783,6 +1873,135 @@
       this.terrainMesh = new THREE.Mesh(geom, terrainMat);
       this.terrainMesh.receiveShadow = true;
       return this.terrainMesh;
+    }
+
+    // Builds a tunnel bore (arched cross-section extruded along the curve)
+    // for every zone computeTunnelZones() found, plus a lamp every few
+    // samples so the inside isn't pitch black. Returns a Group (possibly
+    // empty — most seeds have zero tall-hill zones) to add/remove from the
+    // scene alongside the road/terrain meshes.
+    createTunnelMeshes() {
+      const group = new THREE.Group();
+      group.name = 'tunnels';
+      this.tunnelGroup = group;
+      if (!this.tunnelZones || !this.tunnelZones.length) return group;
+
+      const points = this.tunnelPoints;
+      const halfWidth = CONFIG.TUNNEL_HALF_WIDTH;
+      const wallHeight = 4.0;
+      const archRadius = halfWidth + 1.0;
+      const archSegs = 10;
+
+      // Cross-section as a list of {lat, h} offsets from the road surface,
+      // left wall base -> left wall top -> arch -> right wall top -> right
+      // wall base. Order matters: it becomes the j index used below.
+      const section = [];
+      section.push({ lat: -halfWidth, h: 0 });
+      section.push({ lat: -halfWidth, h: wallHeight });
+      for (let s = 0; s <= archSegs; s++) {
+        const theta = Math.PI - (Math.PI * s / archSegs); // PI (left) -> 0 (right)
+        section.push({ lat: Math.cos(theta) * archRadius, h: wallHeight + Math.sin(theta) * archRadius });
+      }
+      section.push({ lat: halfWidth, h: wallHeight });
+      section.push({ lat: halfWidth, h: 0 });
+      const sliceCount = section.length;
+
+      const wallMat = new THREE.MeshStandardMaterial({
+        color: CONFIG.TUNNEL_WALL_COLOR,
+        roughness: 0.9,
+        metalness: 0.05,
+        side: THREE.DoubleSide
+      });
+
+      for (const zone of this.tunnelZones) {
+        const positions = [];
+        const normals = [];
+        const uvs = [];
+        const indices = [];
+        const rowIndices = [];
+
+        for (let i = zone.start; i <= zone.end; i++) {
+          const pt = points[i];
+          const prev = points[Math.max(zone.start, i - 1)];
+          const next = points[Math.min(zone.end, i + 1)];
+          const tangent = new THREE.Vector3().subVectors(next, prev).normalize();
+          const up = new THREE.Vector3(0, 1, 0);
+          const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
+
+          const rowStart = positions.length / 3;
+          rowIndices.push(rowStart);
+
+          for (const { lat, h } of section) {
+            const worldPos = pt.clone().addScaledVector(normal, lat);
+            worldPos.y = pt.y - 0.18 + h;
+            positions.push(worldPos.x, worldPos.y, worldPos.z);
+            // Inward-facing normal: from the cross-section edge back toward
+            // the tunnel's own centerline/axis at this height.
+            const nrm = new THREE.Vector3(-normal.x, 0, -normal.z).normalize().lerp(new THREE.Vector3(0, -1, 0), h / (wallHeight + archRadius));
+            normals.push(nrm.x, nrm.y, nrm.z);
+            uvs.push((i - zone.start) * 0.3, (lat + halfWidth) * 0.1);
+          }
+
+          if (i > zone.start) {
+            const prevRow = rowIndices[rowIndices.length - 2];
+            for (let j = 0; j < sliceCount - 1; j++) {
+              const a = prevRow + j, b = prevRow + j + 1, c = rowStart + j, d = rowStart + j + 1;
+              // Wound so the visible (front) face points inward, toward the tube's own axis.
+              indices.push(a, c, b);
+              indices.push(b, c, d);
+            }
+          }
+        }
+
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+        geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geom.setIndex(indices);
+
+        const mesh = new THREE.Mesh(geom, wallMat);
+        mesh.receiveShadow = true;
+        group.add(mesh);
+
+        // Ceiling-mounted fixtures every few samples, centered on the arch
+        // apex — a distinct fixture from the outdoor roadside streetlamps
+        // (which are boom-armed poles planted beside the shoulder; these
+        // are flush-mounted overhead, the way an actual bored tunnel is
+        // lit). A visible housing + lens, not just a bare point light, so
+        // it reads as a fixture even with the light off in the distance.
+        const fixtureGeom = new THREE.BoxGeometry(0.5, 0.22, 2.4);
+        const fixtureMat = new THREE.MeshStandardMaterial({ color: 0x2b2f33, roughness: 0.5, metalness: 0.6 });
+        const lensGeom = new THREE.BoxGeometry(0.36, 0.06, 2.0);
+        const lensMat = new THREE.MeshStandardMaterial({ color: 0xfff2d9, emissive: 0xfff2d9, emissiveIntensity: 1.6, roughness: 0.3 });
+
+        const apexHeight = wallHeight + archRadius;
+        const lampSpacing = CONFIG.TUNNEL_LIGHT_SPACING;
+        for (let i = zone.start; i <= zone.end; i += lampSpacing) {
+          const pt = points[i];
+          const prev = points[Math.max(zone.start, i - 1)];
+          const next = points[Math.min(zone.end, i + 1)];
+          const tangent = new THREE.Vector3().subVectors(next, prev).normalize();
+
+          const fixturePos = pt.clone();
+          fixturePos.y = pt.y - 0.18 + apexHeight - 0.14; // recessed slightly into the ceiling, not floating below it
+
+          const fixture = new THREE.Group();
+          const housing = new THREE.Mesh(fixtureGeom, fixtureMat);
+          const lens = new THREE.Mesh(lensGeom, lensMat);
+          lens.position.y = -0.09;
+          fixture.add(housing, lens);
+          fixture.position.copy(fixturePos);
+          fixture.lookAt(fixturePos.clone().add(tangent));
+          group.add(fixture);
+
+          const lamp = new THREE.PointLight(0xfff2d9, 5.5, 15.0, 2.0);
+          lamp.position.set(fixturePos.x, fixturePos.y - 0.3, fixturePos.z);
+          group.add(lamp);
+        }
+      }
+
+      this.tunnelGroup = group;
+      return group;
     }
 
     // The road-hugging terrain ribbon above only extends ±40m from the
@@ -2172,12 +2391,31 @@
       // building right on top of a different stretch of road. Check
       // against the whole sampled curve (strided for speed — this runs
       // per-candidate during world gen) before committing to a spot.
+      // Points along every tunnel zone (in world space, generous margin
+      // past the bore's own half-width) — trees/rocks/buildings placed
+      // inside a tunnel's footprint would clip straight through its walls
+      // or root out of the flattened portal ground, so they're excluded
+      // the same way regular road clearance is.
+      const tunnelExclusionPoints = [];
+      if (this.tunnelZones && this.tunnelZones.length && this.tunnelPoints) {
+        for (const zone of this.tunnelZones) {
+          for (let i = zone.start; i <= zone.end; i += 2) tunnelExclusionPoints.push(this.tunnelPoints[i]);
+        }
+      }
+      const tunnelClearance = CONFIG.TUNNEL_HALF_WIDTH + 10.0;
+      const tunnelClearanceSq = tunnelClearance * tunnelClearance;
+
       const clearsRoad = (pos, minClearance) => {
         const minClearanceSq = minClearance * minClearance;
         for (let s = 0; s < sampledPoints.length; s += 3) {
           const dx = pos.x - sampledPoints[s].x;
           const dz = pos.z - sampledPoints[s].z;
           if (dx * dx + dz * dz < minClearanceSq) return false;
+        }
+        for (const tp of tunnelExclusionPoints) {
+          const dx = pos.x - tp.x;
+          const dz = pos.z - tp.z;
+          if (dx * dx + dz * dz < tunnelClearanceSq) return false;
         }
         return true;
       };
@@ -2210,6 +2448,16 @@
         // one shared function so props derive their height from the same
         // surface the terrain mesh and road verge use, by construction.
         const calcTerrainY = (pos, latDist) => this.groundHeightAt(pt, pos, latDist);
+
+        // Inside a tunnel bore's footprint, skip roadside foliage/rock
+        // placement entirely — clearsRoad() above already keeps the bigger
+        // building-class props out, but trees are placed directly off
+        // `pt`/`normal` without going through it, and would otherwise root
+        // right through the tunnel's own walls.
+        const inTunnel = tunnelExclusionPoints.length > 0 && tunnelExclusionPoints.some(tp => {
+          const dx = pt.x - tp.x, dz = pt.z - tp.z;
+          return dx * dx + dz * dz < tunnelClearanceSq;
+        });
 
         // 1. Potholes & Rumble Strips on Road
         if (i % 26 === 0) {
@@ -2244,7 +2492,10 @@
         // as a start/end pair straddling the road on this point's normal
         // so updateCrossers can walk them straight across; sparsity (the
         // prng roll) keeps crossings occasional rather than a wall of NPCs.
-        if (i % 33 === 0 && this.prng.next() > 0.45) {
+        // Skipped inside a tunnel bore entirely — no road-crossing NPCs,
+        // no shoulder walkers, no guardrails in there (see below); a bored
+        // tunnel is a straight, empty, lit corridor, not a village stretch.
+        if (i % 33 === 0 && this.prng.next() > 0.45 && !inTunnel) {
           const kindRoll = this.prng.next();
           const kind = kindRoll < 0.55 ? 'pedestrian' : (kindRoll < 0.8 ? 'dog' : 'cat');
           const crossHalf = CONFIG.ROAD_WIDTH * 0.62 + 3.0;
@@ -2284,6 +2535,47 @@
             progress: initialProgress,
             speed: mesh.userData.walkSpeed,
             hitRadius: mesh.userData.hitRadius,
+            struck: false,
+            legPhase: this.prng.next() * Math.PI * 2
+          });
+        }
+
+        // Shoulder pedestrians who patrol UP AND DOWN the roadside instead
+        // of crossing — reuses the exact same updateCrossers loop (it only
+        // ever lerps mesh position between `start`/`end` and ping-pongs at
+        // either end), just with both endpoints offset along the road
+        // TANGENT at a fixed lateral distance instead of straddling the
+        // road on the NORMAL. latStart === latEnd here on purpose: no
+        // lateral movement, they stay on the shoulder the whole patrol.
+        if (i % 47 === 0 && this.prng.next() > 0.5 && !inTunnel) {
+          const walkSide = this.prng.next() > 0.5 ? 1 : -1;
+          const walkLat = walkSide * (CONFIG.ROAD_WIDTH * 0.5 + 3.5 + this.prng.range(0, 3.0));
+          const walkRange = this.prng.range(12.0, 24.0);
+
+          const walkMesh = buildCrosserMesh('pedestrian');
+          const startPos = pt.clone().addScaledVector(tangent, -walkRange).addScaledVector(normal, walkLat);
+          const endPos = pt.clone().addScaledVector(tangent, walkRange).addScaledVector(normal, walkLat);
+          startPos.y = this.groundHeightAt(pt, startPos, walkLat) + 0.15;
+          endPos.y = this.groundHeightAt(pt, endPos, walkLat) + 0.15;
+
+          const initialProgress = this.prng.next();
+          walkMesh.position.lerpVectors(startPos, endPos, initialProgress);
+          walkMesh.position.y = this.groundHeightAt(pt, walkMesh.position, walkLat) + 0.15;
+          walkMesh.lookAt(endPos.x, walkMesh.position.y, endPos.z);
+          this.foliageGroup.add(walkMesh);
+
+          this.crossers.push({
+            mesh: walkMesh,
+            kind: 'pedestrian',
+            start: startPos,
+            end: endPos,
+            pt: pt.clone(),
+            normal: normal.clone(),
+            latStart: walkLat,
+            latEnd: walkLat,
+            progress: initialProgress,
+            speed: walkMesh.userData.walkSpeed * 0.75, // ambling shoulder pace, slower than a road-crossing dash
+            hitRadius: walkMesh.userData.hitRadius,
             struck: false,
             legPhase: this.prng.next() * Math.PI * 2
           });
@@ -2470,7 +2762,7 @@
           // skyscrapers) under a wall of forest, wrong for what's supposed
           // to read as an Indian city. Gate to ~45% so greenery still lines
           // the road without drowning out the buildings.
-          const spawnTree = this.prng.next() > 0.55;
+          const spawnTree = this.prng.next() > 0.55 && !inTunnel;
 
           // Minimum offset kept clear of the vehicle's own max lateral
           // drift (±9m from centerline, see lateralOffset clamp in
@@ -2545,7 +2837,7 @@
           // near-road tree density. Uses the same pendingTrees overlap
           // resolution as every other tree, so these never overlap
           // buildings/rocks/houses placed in the same pass.
-          if (i % 4 === 0 && this.prng.next() > 0.45) {
+          if (i % 4 === 0 && this.prng.next() > 0.45 && !inTunnel) {
             const bgDist = side * this.prng.range(24.0, 90.0);
             const bgPos = pt.clone().addScaledVector(normal, bgDist);
             bgPos.y = calcTerrainY(bgPos, bgDist);
@@ -2779,7 +3071,7 @@
           // so the gap itself reads as "turn in here" (houses always spawn
           // at i % 24 === 0, alternating sides via i % 48 — see the cabin
           // block below).
-          if (i % FENCE_STEP === 0) {
+          if (i % FENCE_STEP === 0 && !inTunnel) {
             const nearestHouseCheckpoint = Math.round(i / 24) * 24;
             const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
             const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
@@ -2836,7 +3128,7 @@
           }
 
           // Indian Highway Milestone Markers (National Highway Standard: Yellow Dome + White Base)
-          if (i % 32 === 0 && side === 1) {
+          if (i % 32 === 0 && side === 1 && !inTunnel) {
             const stoneDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.6);
             const stonePos = pt.clone().addScaledVector(normal, stoneDist);
             stonePos.y = calcTerrainY(stonePos, stoneDist);
@@ -2871,8 +3163,10 @@
             this.foliageGroup.add(stoneGroup);
           }
 
-          // Modular Curved Highway Streetlamps (with amber night glow)
-          if (i % 28 === 0 && side === -1) {
+          // Modular Curved Highway Streetlamps (with amber night glow) —
+          // skipped inside a tunnel bore, which supplies its own sodium
+          // lamps and would otherwise have this poking through its wall.
+          if (i % 28 === 0 && side === -1 && !inTunnel) {
             const lampDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.8);
             const lampPos = pt.clone().addScaledVector(normal, lampDist);
             lampPos.y = calcTerrainY(lampPos, lampDist);
@@ -3218,7 +3512,7 @@
           // are gated to specific i%N checkpoints). We also check distance
           // against all delivery house checkpoints so rocks never spawn
           // anywhere near a house footprint or driveway.
-          if (this.prng.next() > 0.65) {
+          if (this.prng.next() > 0.65 && !inTunnel) {
             const nearestHouseCheckpoint = Math.round(i / 24) * 24;
             const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
             const ROCK_HOUSE_GAP = 14.0; // meters — house obstacle radius (3.5) plus porch & driveway clearance
@@ -4894,6 +5188,7 @@
         if (this.world.terrainMesh) this.scene.remove(this.world.terrainMesh);
         if (this.world.floorMesh) this.scene.remove(this.world.floorMesh);
         if (this.world.foliageGroup) this.scene.remove(this.world.foliageGroup);
+        if (this.world.tunnelGroup) this.scene.remove(this.world.tunnelGroup);
       }
 
       this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
@@ -4901,6 +5196,7 @@
       this.scene.add(this.world.createRoadMesh(this.selectedRoadTerrain));
       this.scene.add(this.world.createWorldFloor(season));
       this.scene.add(this.world.createTerrainMesh(season));
+      this.scene.add(this.world.createTunnelMeshes());
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
 
       if (!this.vehicle) {
@@ -7011,7 +7307,7 @@
               if (t.mesh) t.mesh.visible = true;
             });
             this.activeOrderIndex = 0;
-            this.loadNextOrder();
+            this.updateActiveOrderCard();
           }
 
           setTimeout(() => { this.districtTransitioning = false; }, 3500);
