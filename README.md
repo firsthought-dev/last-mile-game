@@ -11,6 +11,14 @@ Play directly in your browser with zero installs or downloads:
 
 ---
 
+## 💻 GitHub Repository
+
+👉 **[firsthought-dev/last-mile-game](https://github.com/firsthought-dev/last-mile-game)**
+
+> Active development happens in a local repo; only the files needed to run/deploy the game are pushed here.
+
+---
+
 ## 🕹️ Controls
 
 | Action | Shortcut Key | Description |
@@ -24,8 +32,10 @@ Play directly in your browser with zero installs or downloads:
 | **Return to Road (Recenter)** | `R` | Safely resets your vehicle back onto the tarmac |
 | **Cycle Camera Mode** | `C` | Elevated Chase Cam / Hood Bumper Cam / Panoramic Sky Cam |
 | **Cycle Time of Day** | `T` | Dawn / Midday / Twilight / Midnight Starlight |
+| **Delivery Status Manifest** | `V` | Toggle live delivery order manifest and mission log |
 | **Cycle Radio Station** | `L` | DHABA FM (Hindi 90s MP3s) / HIGHWAY FM (English Synth) / ALL FM |
 | **Mute Music / SFX** | `M` (Radio) / `N` (SFX) | Independent audio channel mutes |
+| **Controls & Settings** | `H` or `?` / `ESC` | Open full in-game Controls Cheat Sheet & Fleet Tuning |
 
 ---
 
