@@ -185,13 +185,7 @@
           if (!child.isMesh) return;
           child.castShadow = true;
         });
-        // Corrected via live raycast verification, not the earlier
-        // hand-derived Blender-axis math (which was wrong): the model was
-        // actually mounted backwards — a camera positioned to see the
-        // car's actual driving-forward face was hitting geometry at local
-        // -Z, not +Z, meaning this needs the same 180° correction as
-        // SportsCoupeAsset after all.
-        gltf.scene.rotation.y = Math.PI;
+        // Model naturally faces local +Z (headlights at +Z, taillights at -Z)
         this.template = gltf.scene;
         this.pendingControllers.forEach((vc) => vc.buildModel());
         this.pendingControllers.length = 0;
@@ -5535,10 +5529,10 @@
         // Blank cover plates over two front badges — scaled proportionally
         const badgeMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
         const scriptCover = new THREE.Mesh(new THREE.BoxGeometry(0.55 * scaleFactor, 0.16 * scaleFactor, 0.03), badgeMat);
-        scriptCover.position.set(0, 0.826 * scaleFactor, -2.46 * scaleFactor);
+        scriptCover.position.set(0, 0.826 * scaleFactor, 2.46 * scaleFactor);
         this.mesh.add(scriptCover);
         const plateCover = new THREE.Mesh(new THREE.BoxGeometry(0.4 * scaleFactor, 0.13 * scaleFactor, 0.03), badgeMat);
-        plateCover.position.set(0, 0.729 * scaleFactor, -2.42 * scaleFactor);
+        plateCover.position.set(0, 0.729 * scaleFactor, 2.42 * scaleFactor);
         this.mesh.add(plateCover);
 
       } else if (this.vehicleType === 'musclecoupe') {
@@ -5974,8 +5968,8 @@
 
       // Authentic automotive centrifugal suspension body roll (rolls OUTWARD away from the turn)
       // When steering RIGHT (steerAngle < 0), centrifugal force pushes chassis LEFT (rolls outward)
-      const centrifugalBodyRoll = -this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.08;
-      const targetRoll = -trueRoadRoll + centrifugalBodyRoll;
+      const centrifugalBodyRoll = this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.08;
+      const targetRoll = trueRoadRoll + centrifugalBodyRoll;
 
       // 2nd-Order Spring-Mass-Damper Suspension Filter
       const subDt = Math.min(dt, 0.05);
