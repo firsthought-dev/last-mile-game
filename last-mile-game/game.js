@@ -1152,12 +1152,35 @@
         skyBottom: 0xbfdbfe,
         fog: 0xdbeafe,
         fogDensity: 0.0016,
-        // Winter's snow-white grass/light already read as fairly desaturated
-        // (near-white), so only the cliff/tree tones needed muting.
         grassColor: 0xe5e8ec,
         grassLight: 0xf9fafb,
         cliffColor: 0x252a33,
         treeLeaves: [0x30553f, 0x366247, 0x3c7652, 0x356e69]
+      },
+      desert: {
+        id: 'desert',
+        name: 'Sahyadri Red Sandstone & Dunes',
+        skyTop: 0x1e3a8a,
+        skyBottom: 0xfbbf24,
+        fog: 0xf59e0b,
+        fogDensity: 0.0016,
+        grassColor: 0x9a3412, // terracotta red rock
+        grassLight: 0xd97706, // golden desert sand
+        cliffColor: 0x7c2d12,
+        treeLeaves: [0x78716c, 0xa8a29e, 0x57534e, 0xb45309]
+      },
+      space: {
+        id: 'space',
+        name: 'Lunar Horizon & Nebula',
+        skyTop: 0x050510,
+        skyBottom: 0x111827,
+        fog: 0x0f172a,
+        fogDensity: 0.0012,
+        grassColor: 0x334155, // lunar dark basalt
+        grassLight: 0x64748b, // bright lunar regolith
+        cliffColor: 0x1e293b,
+        treeLeaves: [0x475569, 0x334155, 0x64748b, 0x94a3b8],
+        gravity: 0.45 // low lunar gravity
       }
     },
 
@@ -4781,6 +4804,61 @@
       scene.add(this.foliageGroup);
     }
 
+    // Slow Roads Natural Mountain Rock Arches & Bridges
+    createMountainArches(scene, season) {
+      const archGroup = new THREE.Group();
+      archGroup.name = 'mountain-arches';
+      const points = this.curve.getSpacedPoints(CONFIG.ROAD_MESH_SEGMENTS);
+      const archIndices = [160, 380, 640, 880, 1080];
+
+      const rockMat = new THREE.MeshStandardMaterial({
+        color: season.cliffColor || 0x4a4038,
+        roughness: 0.92,
+        metalness: 0.05,
+        map: RealTextureFactory.rockColor(),
+        normalMap: RealTextureFactory.rockNormal()
+      });
+
+      for (const idx of archIndices) {
+        if (idx >= points.length - 2) continue;
+        if (this.isInTunnelZone && this.isInTunnelZone(idx, 8)) continue;
+
+        const pt = points[idx];
+        const prev = points[Math.max(0, idx - 1)];
+        const next = points[Math.min(points.length - 1, idx + 1)];
+        const tangent = new THREE.Vector3().subVectors(next, prev).normalize();
+
+        const archNode = new THREE.Group();
+        archNode.position.copy(pt);
+        archNode.position.y = pt.y + 0.12;
+
+        const spanRadius = 8.8;
+        const archHeight = 8.5;
+        const archSegs = 14;
+
+        const curvePts = [];
+        for (let s = 0; s <= archSegs; s++) {
+          const theta = Math.PI - (Math.PI * s / archSegs);
+          const x = Math.cos(theta) * spanRadius;
+          const y = Math.sin(theta) * archHeight;
+          curvePts.push(new THREE.Vector3(x, y, 0));
+        }
+
+        const archSpline = new THREE.CatmullRomCurve3(curvePts);
+        const tubeGeom = new THREE.TubeGeometry(archSpline, 18, 1.8, 8, false);
+        const archMesh = new THREE.Mesh(tubeGeom, rockMat);
+        archMesh.castShadow = true;
+        archMesh.receiveShadow = true;
+
+        archNode.add(archMesh);
+        archNode.lookAt(archNode.position.clone().add(tangent));
+        archGroup.add(archNode);
+      }
+
+      scene.add(archGroup);
+      return archGroup;
+    }
+
     updateTraffic(dt) {
       // No-op: NPC traffic vehicles removed. Kept as a stable call target
       // (animate() still calls this every frame) rather than also editing
@@ -5895,11 +5973,20 @@
       // animation. Autodrive gets a fast fixed rate regardless of surface
       // grip so the autopilot's own pure-pursuit path-following (which
       // already targets `heading` directly) doesn't visibly wobble.
+      // 2b. Pacejka-Style Progressive Tire Slip Friction & Drift Model
       let headingDelta = this.heading - this.velocityHeading;
       headingDelta = Math.atan2(Math.sin(headingDelta), Math.cos(headingDelta));
+      this.driftAngle = headingDelta;
+
+      // Pacejka Magic Formula curve approximation for progressive tire grip:
+      // F_lat = D * sin(C * atan(B * slipAngle))
+      const B = 4.0, C = 1.35, D = 1.0;
+      const slipTireForce = D * Math.sin(C * Math.atan(B * Math.abs(headingDelta)));
+      const lateralEfficiency = THREE.MathUtils.clamp(1.0 - Math.abs(headingDelta) * 0.45, 0.25, 1.0);
+
       const convergeRate = this.isAutodrive
         ? 14.0
-        : 9.0 * climateGrip * driftGripMult;
+        : (8.8 * climateGrip * driftGripMult * lateralEfficiency);
       this.velocityHeading += headingDelta * (1 - Math.exp(-convergeRate * dt));
 
       // 3. Move freely along the car's actual direction of travel (not
@@ -6616,6 +6703,7 @@
         if (this.world.foliageGroup) this.scene.remove(this.world.foliageGroup);
         if (this.world.tunnelGroup) this.scene.remove(this.world.tunnelGroup);
         if (this.world.laneMarkingsGroup) this.scene.remove(this.world.laneMarkingsGroup);
+        if (this.world.archGroup) this.scene.remove(this.world.archGroup);
       }
 
       this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
@@ -6625,6 +6713,7 @@
       this.scene.add(this.world.createWorldFloor(season));
       this.scene.add(this.world.createTerrainMesh(season));
       this.scene.add(this.world.createTunnelMeshes());
+      this.world.createMountainArches(this.scene, season);
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
 
       if (!this.vehicle) {
@@ -8061,8 +8150,9 @@
               <span class="dock-panel-label">SEASON & BIOME</span>
               <div class="dock-btn-row">
                 <button class="dock-sq-btn ${this.selectedSeason === 'spring' ? 'active-sq' : ''}" data-s="spring">SPRING</button>
-                <button class="dock-sq-btn ${this.selectedSeason === 'summer' ? 'active-sq' : ''}" data-s="summer">SUMMER</button>
                 <button class="dock-sq-btn ${this.selectedSeason === 'autumn' ? 'active-sq' : ''}" data-s="autumn">AUTUMN</button>
+                <button class="dock-sq-btn ${this.selectedSeason === 'desert' ? 'active-sq' : ''}" data-s="desert">DESERT</button>
+                <button class="dock-sq-btn ${this.selectedSeason === 'space' ? 'active-sq' : ''}" data-s="space">SPACE</button>
                 <button class="dock-sq-btn ${this.selectedSeason === 'winter' ? 'active-sq' : ''}" data-s="winter">WINTER</button>
               </div>
             </div>
@@ -8311,35 +8401,12 @@
         this.sunLight.target.updateMatrixWorld();
       }
 
-      // First-Person mode showed a solid pink fill along the frame edge —
-      // the eye position sits inside the car's own solid body geometry
-      // (there's no modeled cabin cavity to place a camera inside), so the
-      // near side of the frustum renders the inside of that mesh. Pushing
-      // the eye position further out risks re-clipping on bumps/roll at
-      // some point in the frame even if a static test spot looks clear —
-      // the standard fix most driving games use instead: hide the car's
-      // own mesh while in first-person, the same way you don't render your
-      // own head in a real cockpit view.
-      this.vehicle.mesh.visible = this.activeCameraMode !== 'first-person';
+      const isMuscleCoupe = this.vehicle && this.vehicle.vehicleType === 'musclecoupe' && MuscleCoupeAsset.template;
+      // In first-person cockpit mode for Muscle Coupe: keep car mesh visible so player sees interior dashboard & steering wheel!
+      this.vehicle.mesh.visible = (this.activeCameraMode !== 'first-person') || !!isMuscleCoupe;
 
       const carPos = this.vehicle.mesh.position;
-      // Rigidly-mounted views (hood/first-person) track the car's actual
-      // visual orientation — a dashcam bolted to the body should show
-      // exactly where the body/wheels point, slip and all, same as a real
-      // dashcam would during a slide.
       const bodyForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
-      // Free-following views (chase/far-chase/sky) instead track the car's
-      // actual direction of TRAVEL, not its visual heading — these two can
-      // now genuinely diverge (see VehicleController's velocityHeading).
-      // Chasing the visual heading here made the camera look ahead of
-      // where the car was actually going for the full duration of any
-      // sustained turn, which read as the world subtly swinging out from
-      // under the car rather than the car turning — reported directly as
-      // "turning mechanics... completely off" at higher speeds, where the
-      // slip angle is largest. Matches slowroads.io's own approach,
-      // verified from their shipped code: their camera explicitly blends
-      // toward motion direction rather than body heading for exactly this
-      // reason.
       const vh = this.vehicle.velocityHeading;
       const carForward = new THREE.Vector3(Math.sin(vh), 0, Math.cos(vh));
 
@@ -8356,13 +8423,25 @@
         this.camera.fov = 68;
         this.camera.updateProjectionMatrix();
       } else if (this.activeCameraMode === 'first-person') {
-        // True in-cabin view — driver eye height, seated near the windshield.
-        // Rigidly bolted, car mesh hidden to prevent clipping.
-        const eyePos = carPos.clone().addScaledVector(bodyForward, 0.12).add(new THREE.Vector3(0, 1.05, 0));
-        this.camera.position.copy(eyePos);
-        const lookTarget = eyePos.clone().addScaledVector(bodyForward, 35.0);
-        this.camera.lookAt(lookTarget);
-        this.camera.fov = 70;
+        const bodyRight = new THREE.Vector3(-bodyForward.z, 0, bodyForward.x).normalize();
+        if (isMuscleCoupe) {
+          // Slow Roads Authentic Cockpit View: driver seated behind steering wheel looking over hood
+          const driverEyePos = carPos.clone()
+            .addScaledVector(bodyForward, -0.15)
+            .addScaledVector(bodyRight, -0.32)
+            .add(new THREE.Vector3(0, 0.96, 0));
+          this.camera.position.copy(driverEyePos);
+          const lookTarget = driverEyePos.clone().addScaledVector(bodyForward, 35.0).add(new THREE.Vector3(0, -0.05, 0));
+          this.camera.lookAt(lookTarget);
+          this.camera.fov = 74;
+        } else {
+          // Standard in-cabin / windshield view for procedural shells
+          const eyePos = carPos.clone().addScaledVector(bodyForward, 0.12).add(new THREE.Vector3(0, 1.05, 0));
+          this.camera.position.copy(eyePos);
+          const lookTarget = eyePos.clone().addScaledVector(bodyForward, 35.0);
+          this.camera.lookAt(lookTarget);
+          this.camera.fov = 70;
+        }
         this.camera.updateProjectionMatrix();
       } else if (this.activeCameraMode === 'far-chase') {
         // Far Chase Cam: balanced wide framing
