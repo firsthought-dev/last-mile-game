@@ -1217,6 +1217,43 @@
     }
   };
 
+  // Setting `flatShading: false` on a material does nothing by itself if
+  // the geometry has no smooth normal data to interpolate — and Three.js's
+  // primitive polyhedra (DodecahedronGeometry etc.) are built non-indexed,
+  // with each triangle's 3 vertices duplicated and given that triangle's
+  // own flat face normal. There is nothing smooth stored on the geometry
+  // for flatShading:false to blend between, so the material flag alone is
+  // a no-op — confirmed directly: reading a rock's normal attribute showed
+  // 9 consecutive vertices sharing one identical flat normal despite
+  // flatShading already being off (see SLOWROADS_PARITY_LOG.md item 2's
+  // correction). This welds coincident positions (the geometry stays
+  // non-indexed — every duplicate vertex at a shared corner just gets
+  // written the same averaged normal, which reads identically to a
+  // properly indexed+smoothed mesh) and averages their face normals, the
+  // same effect `BufferGeometryUtils.mergeVertices()` + computeVertexNormals
+  // would give, without adding that as a new script dependency.
+  function smoothFaceNormals(geometry, precision = 4) {
+    geometry.computeVertexNormals(); // baseline: flat per-triangle normals
+    const pos = geometry.attributes.position;
+    const norm = geometry.attributes.normal;
+    const groups = new Map();
+    for (let i = 0; i < pos.count; i++) {
+      const key = `${pos.getX(i).toFixed(precision)},${pos.getY(i).toFixed(precision)},${pos.getZ(i).toFixed(precision)}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(i);
+    }
+    const avg = new THREE.Vector3();
+    const tmp = new THREE.Vector3();
+    for (const indices of groups.values()) {
+      avg.set(0, 0, 0);
+      for (const i of indices) avg.add(tmp.set(norm.getX(i), norm.getY(i), norm.getZ(i)));
+      avg.normalize();
+      for (const i of indices) norm.setXYZ(i, avg.x, avg.y, avg.z);
+    }
+    norm.needsUpdate = true;
+    return geometry;
+  }
+
   // --------------------------------------------------------------------------
   // 5. SLOW ROADS PROCEDURAL TERRAIN & DUAL-GRID ARCHITECTURE
   // --------------------------------------------------------------------------
@@ -2332,10 +2369,18 @@
 
       // Reusable Low-Poly Foliage & Prop Geometries
       const trunkGeom = new THREE.CylinderGeometry(0.25, 0.45, 2.8, 6);
-      const pineLeavesGeom = new THREE.ConeGeometry(2.4, 5.0, 6);
-      const decLeavesGeom = new THREE.DodecahedronGeometry(2.4, 0);
+      const pineLeavesGeom = new THREE.ConeGeometry(2.4, 5.0, 10);
+      // detail 1 (not 0): flat-normal duplicate vertices only welding to a
+      // SHARED smooth normal (via smoothFaceNormals below) isn't enough on
+      // its own either — at detail 0 a dodecahedron's 12 faces are each so
+      // large that even perfect normal averaging only shows a gradient
+      // right at the face edges, reading as "still basically flat" in the
+      // middle of every face. Detail 1 subdivides each face so there's
+      // enough vertex density for the averaged gradient to actually be
+      // visible across the surface, not just at seams.
+      const decLeavesGeom = smoothFaceNormals(new THREE.DodecahedronGeometry(2.4, 1));
       const bushGeom = new THREE.DodecahedronGeometry(1.2, 0);
-      const rockGeom = new THREE.DodecahedronGeometry(1.6, 0);
+      const rockGeom = smoothFaceNormals(new THREE.DodecahedronGeometry(1.6, 1));
       const poleGeom = new THREE.CylinderGeometry(0.1, 0.12, 6.5, 6);
       const crossbarGeom = new THREE.BoxGeometry(1.8, 0.12, 0.12);
 
@@ -2868,11 +2913,11 @@
             const tierMat2 = new THREE.MeshStandardMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.9) });
             const tierMat3 = new THREE.MeshStandardMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.8) });
 
-            const crown1 = new THREE.Mesh(new THREE.ConeGeometry(2.4, 2.2, 7), tierMat1);
+            const crown1 = new THREE.Mesh(new THREE.ConeGeometry(2.4, 2.2, 10), tierMat1);
             crown1.position.y = 2.4;
-            const crown2 = new THREE.Mesh(new THREE.ConeGeometry(1.8, 1.9, 7), tierMat2);
+            const crown2 = new THREE.Mesh(new THREE.ConeGeometry(1.8, 1.9, 10), tierMat2);
             crown2.position.y = 3.6;
-            const crown3 = new THREE.Mesh(new THREE.ConeGeometry(1.2, 1.6, 7), tierMat3);
+            const crown3 = new THREE.Mesh(new THREE.ConeGeometry(1.2, 1.6, 10), tierMat3);
             crown3.position.y = 4.7;
 
             tree.add(crown1);
@@ -2926,15 +2971,19 @@
             bgTrunk.position.y = 1.4;
             bgTree.add(bgTrunk);
             if (bgIsPine) {
-              const bgTier1 = new THREE.Mesh(new THREE.ConeGeometry(2.2, 3.4, 7), bgLeavesMat);
+              const bgTier1 = new THREE.Mesh(new THREE.ConeGeometry(2.2, 3.4, 10), bgLeavesMat);
               bgTier1.position.y = 3.6;
-              const bgTier2 = new THREE.Mesh(new THREE.ConeGeometry(1.7, 2.8, 7), bgLeavesMat);
+              const bgTier2 = new THREE.Mesh(new THREE.ConeGeometry(1.7, 2.8, 10), bgLeavesMat);
               bgTier2.position.y = 5.6;
-              const bgTier3 = new THREE.Mesh(new THREE.ConeGeometry(1.2, 2.2, 7), bgLeavesMat);
+              const bgTier3 = new THREE.Mesh(new THREE.ConeGeometry(1.2, 2.2, 10), bgLeavesMat);
               bgTier3.position.y = 7.2;
               bgTree.add(bgTier1, bgTier2, bgTier3);
             } else {
-              const bgCanopy = new THREE.Mesh(new THREE.DodecahedronGeometry(2.4, 0), bgLeavesMat);
+              // Reuses the shared, already-smoothed decLeavesGeom instead of
+              // allocating a fresh un-smoothed DodecahedronGeometry(2.4, 0)
+              // per background tree — was silently bypassing the flat-
+              // shading fix above for every one of these.
+              const bgCanopy = new THREE.Mesh(decLeavesGeom, bgLeavesMat);
               bgCanopy.position.y = 4.6;
               bgTree.add(bgCanopy);
             }
@@ -7304,6 +7353,17 @@
       }
 
       if (!this.vehicle || !this.vehicle.mesh) return;
+
+      // First-Person mode showed a solid pink fill along the frame edge —
+      // the eye position sits inside the car's own solid body geometry
+      // (there's no modeled cabin cavity to place a camera inside), so the
+      // near side of the frustum renders the inside of that mesh. Pushing
+      // the eye position further out risks re-clipping on bumps/roll at
+      // some point in the frame even if a static test spot looks clear —
+      // the standard fix most driving games use instead: hide the car's
+      // own mesh while in first-person, the same way you don't render your
+      // own head in a real cockpit view.
+      this.vehicle.mesh.visible = this.activeCameraMode !== 'first-person';
 
       const carPos = this.vehicle.mesh.position;
       const carForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
