@@ -1309,6 +1309,14 @@ html, body {
   pointer-events: none;
 }
 
+/* Master Prompt "calmer intro screen" pass: the saturated Mumbai-skyline
+   photo + heavy dark vignette + neon saffron/red/teal glows read as busy
+   and game-arcade-like next to slowroads' actual minimal menu treatment.
+   Replaced with a soft, desaturated gradient sky (no photo asset), a
+   lighter glass card, and a single muted accent color used sparingly
+   instead of three competing saturated ones — calmer without going flat:
+   still has depth (the gradient + soft card blur + gentle hover motion),
+   just nothing shouting for attention. */
 .modal-backdrop {
   position: absolute;
   top: 0;
@@ -1320,9 +1328,7 @@ html, body {
   justify-content: center;
   z-index: 100;
   pointer-events: auto;
-  background: url('assets/shiplyp_hub_backdrop.jpg') center center / cover no-repeat;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: linear-gradient(180deg, #cfd8e3 0%, #dbe2df 45%, #eef0ea 100%);
 }
 
 .modal-backdrop::before {
@@ -1332,7 +1338,10 @@ html, body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle at center, rgba(14, 20, 32, 0.45) 0%, rgba(6, 8, 12, 0.85) 100%);
+  /* Faint horizon glow instead of a hard dark vignette — a soft light
+     source low in the frame, like an overcast slowroads sky, not a
+     spotlight-on-a-poster treatment. */
+  background: radial-gradient(ellipse at 50% 82%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 60%);
   pointer-events: none;
 }
 
@@ -1341,13 +1350,13 @@ html, body {
   z-index: 10;
   width: 740px;
   max-width: 92vw;
-  background: rgba(1, 22, 39, 0.78);
-  backdrop-filter: blur(32px);
-  -webkit-backdrop-filter: blur(32px);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(28, 36, 48, 0.08);
+  border-radius: 22px;
   padding: 34px 38px;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 24px 70px rgba(28, 36, 48, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.6);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1381,21 +1390,22 @@ html, body {
 
 .hub-brand-title {
   font-family: var(--font-primary);
-  font-size: 2.2rem;
-  font-weight: 800;
-  letter-spacing: 2px;
-  color: #ffffff;
+  font-size: 2.1rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #1c2430;
 }
 
 .hub-brand-title span {
-  color: var(--brand-saffron);
+  color: #4f7d78;
+  font-weight: 600;
 }
 
 .hub-tagline {
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   letter-spacing: 2.5px;
-  color: var(--brand-teal);
+  color: #6b7680;
   text-transform: uppercase;
   font-weight: 600;
   margin-bottom: 26px;
@@ -1412,9 +1422,9 @@ html, body {
 
 .hub-section-label {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   letter-spacing: 2px;
-  color: var(--text-muted);
+  color: #7c8790;
   text-transform: uppercase;
   font-weight: 700;
   text-align: left;
@@ -1427,8 +1437,8 @@ html, body {
 }
 
 .city-pill-btn {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(28, 36, 48, 0.03);
+  border: 1px solid rgba(28, 36, 48, 0.08);
   border-radius: 12px;
   padding: 10px 8px;
   display: flex;
@@ -1440,15 +1450,15 @@ html, body {
 }
 
 .city-pill-btn:hover {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: var(--glass-border-hover);
-  transform: translateY(-2px);
+  background: rgba(28, 36, 48, 0.06);
+  border-color: rgba(28, 36, 48, 0.16);
+  transform: translateY(-1px);
 }
 
 .city-pill-btn.active-city {
-  background: rgba(252, 163, 17, 0.15);
-  border-color: var(--brand-saffron);
-  box-shadow: 0 0 16px rgba(252, 163, 17, 0.25);
+  background: rgba(79, 125, 120, 0.12);
+  border-color: #4f7d78;
+  box-shadow: none;
 }
 
 .city-pill-icon {
@@ -1459,7 +1469,7 @@ html, body {
   font-family: var(--font-mono);
   font-size: 0.76rem;
   font-weight: 700;
-  color: #fff;
+  color: #2a333d;
   letter-spacing: 1px;
   white-space: nowrap;
   overflow: hidden;
@@ -1483,8 +1493,8 @@ html, body {
 }
 
 .vehicle-card-btn {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(28, 36, 48, 0.03);
+  border: 1px solid rgba(28, 36, 48, 0.08);
   border-radius: 12px;
   padding: 12px 10px;
   display: flex;
@@ -1496,14 +1506,14 @@ html, body {
 }
 
 .vehicle-card-btn:hover {
-  background: rgba(255, 255, 255, 0.09);
-  transform: translateY(-2px);
+  background: rgba(28, 36, 48, 0.06);
+  transform: translateY(-1px);
 }
 
 .vehicle-card-btn.active-veh {
-  background: rgba(46, 196, 182, 0.18);
-  border-color: var(--brand-teal);
-  box-shadow: 0 0 16px rgba(46, 196, 182, 0.3);
+  background: rgba(79, 125, 120, 0.12);
+  border-color: #4f7d78;
+  box-shadow: none;
 }
 
 .vehicle-card-icon {
@@ -1514,7 +1524,7 @@ html, body {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   font-weight: 700;
-  color: #fff;
+  color: #2a333d;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1524,7 +1534,7 @@ html, body {
 .vehicle-card-stat {
   font-family: var(--font-mono);
   font-size: 0.62rem;
-  color: var(--text-muted);
+  color: #7c8790;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1547,8 +1557,8 @@ html, body {
 }
 
 .diff-card-btn {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(28, 36, 48, 0.03);
+  border: 1px solid rgba(28, 36, 48, 0.08);
   border-radius: 12px;
   padding: 10px 8px;
   display: flex;
@@ -1560,33 +1570,28 @@ html, body {
 }
 
 .diff-card-btn:hover {
-  background: rgba(255, 255, 255, 0.09);
-  transform: translateY(-2px);
+  background: rgba(28, 36, 48, 0.06);
+  transform: translateY(-1px);
 }
 
-.diff-card-btn.active-diff {
-  background: rgba(231, 29, 54, 0.18);
-  border-color: var(--brand-red);
-  box-shadow: 0 0 16px rgba(231, 29, 54, 0.3);
-}
-
-.diff-card-btn.active-diff.easy {
-  background: rgba(46, 196, 182, 0.18);
-  border-color: var(--brand-teal);
-  box-shadow: 0 0 16px rgba(46, 196, 182, 0.3);
-}
-
+/* Single muted accent for every "active" state across all three selector
+   grids now (city/road-style/vehicle) instead of three competing
+   saturated colors (saffron/red/teal) each with its own neon glow — one
+   quiet visual language reads as calmer and more intentional than a
+   different loud color per section. */
+.diff-card-btn.active-diff,
+.diff-card-btn.active-diff.easy,
 .diff-card-btn.active-diff.medium {
-  background: rgba(252, 163, 17, 0.18);
-  border-color: var(--brand-saffron);
-  box-shadow: 0 0 16px rgba(252, 163, 17, 0.3);
+  background: rgba(79, 125, 120, 0.12);
+  border-color: #4f7d78;
+  box-shadow: none;
 }
 
 .diff-card-title {
   font-family: var(--font-mono);
   font-size: 0.74rem;
   font-weight: 800;
-  color: #fff;
+  color: #2a333d;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1596,20 +1601,20 @@ html, body {
 .diff-card-stat {
   font-family: var(--font-mono);
   font-size: 0.62rem;
-  color: var(--text-muted);
+  color: #7c8790;
 }
 
-/* Dispatch CTA Button */
+/* Dispatch CTA Button — calmer solid tone, no saturated orange glow */
 .btn-launch-dispatch {
   width: 100%;
-  background: linear-gradient(135deg, #ff9f1c 0%, #fca311 100%);
+  background: #2a333d;
   border: none;
-  border-radius: 16px;
+  border-radius: 14px;
   padding: 16px 24px;
-  color: #080c12;
+  color: #f4f5f2;
   font-family: var(--font-primary);
-  font-size: 1.05rem;
-  font-weight: 800;
+  font-size: 1.0rem;
+  font-weight: 700;
   letter-spacing: 2px;
   text-transform: uppercase;
   cursor: pointer;
@@ -1618,13 +1623,13 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  box-shadow: 0 12px 35px rgba(252, 163, 17, 0.4);
+  box-shadow: 0 8px 24px rgba(28, 36, 48, 0.22);
 }
 
 .btn-launch-dispatch:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 45px rgba(252, 163, 17, 0.6);
-  filter: brightness(1.05);
+  transform: translateY(-1px);
+  background: #333d48;
+  box-shadow: 0 10px 28px rgba(28, 36, 48, 0.28);
 }
 
 .btn-launch-dispatch:active {
@@ -1641,7 +1646,7 @@ html, body {
 .hub-link-btn {
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: #8b959e;
   font-family: var(--font-mono);
   font-size: 0.74rem;
   letter-spacing: 1px;
@@ -1650,7 +1655,7 @@ html, body {
 }
 
 .hub-link-btn:hover {
-  color: #fff;
+  color: #2a333d;
 }
 
 /* ==========================================================================
