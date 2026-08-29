@@ -112,6 +112,41 @@
   ChotaHathiAsset.load();
 
   // --------------------------------------------------------------------------
+  // 0d. SECOND PLAYER VEHICLE: SUV (CC0, Kenney Car Kit) — replaces the flat
+  // primitive-box "Volt Scooter" per the roster cut to 2 well-made vehicles
+  // (sedan + SUV) instead of a wider roster including a poorly-modeled
+  // two-wheeler no CC0 source had a good replacement for.
+  // --------------------------------------------------------------------------
+  const SuvAsset = {
+    template: null,
+    loading: false,
+    pendingControllers: [],
+    load() {
+      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
+      this.loading = true;
+      new THREE.GLTFLoader().load('assets/models/suv.glb', (gltf) => {
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1c2430, flatShading: true }); // Slate charcoal
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+        gltf.scene.traverse((child) => {
+          if (!child.isMesh) return;
+          child.castShadow = true;
+          if (child.name === 'body') child.material = bodyMat;
+          else if (child.name.startsWith('wheel')) child.material = wheelMat;
+        });
+        this.template = gltf.scene;
+        this.pendingControllers.forEach((vc) => vc.buildModel());
+        this.pendingControllers.length = 0;
+      }, undefined, (err) => {
+        console.warn('SuvAsset: failed to load suv.glb, falling back to procedural model', err);
+      });
+    },
+    clone() {
+      return this.template ? this.template.clone(true) : null;
+    }
+  };
+  SuvAsset.load();
+
+  // --------------------------------------------------------------------------
   // 1. DETERMINISTIC PRNG
   // --------------------------------------------------------------------------
   class PRNG {
@@ -2141,7 +2176,13 @@
 
           positions.push(worldPos.x, finalY, worldPos.z);
           normals.push(0, 1, 0);
-          uvs.push(worldPos.x * 0.15, worldPos.z * 0.15);
+          // 0.15 -> 0.45: at 0.15 each texture tile stretched across ~6.7m
+          // of ground, so individual grass blades read as smeared/blown-up
+          // rather than fine detail at normal driving distance — user
+          // asked directly for denser-looking grass. Tripling the tiling
+          // frequency shrinks each tile to ~2.2m, closer to how fine real
+          // turf actually reads from a moving vehicle.
+          uvs.push(worldPos.x * 0.45, worldPos.z * 0.45);
 
           if (i < tubularSegments && j < sliceCount - 1) {
             const row1 = i * sliceCount + j;
@@ -2537,7 +2578,10 @@
       // fight with the terrain ribbon's repeat setting on the cached
       // original. SLOWROADS_PARITY_LOG.md item 6.
       const floorGrassTex = RealTextureFactory.grassColorFloor();
-      floorGrassTex.repeat.set(size * 0.15, size * 0.15);
+      // Matches the terrain ribbon's 0.45 tiling density (see that comment)
+      // so the background floor and the close-up ribbon read as the same
+      // grass at the seam, not two different densities.
+      floorGrassTex.repeat.set(size * 0.45, size * 0.45);
 
       const floorMat = new THREE.MeshStandardMaterial({
         vertexColors: true,
@@ -6827,12 +6871,13 @@
       // Section 2.1: vehicle roster cut to 2 (was 4) — chotahathi (cargo
       // mini-truck) and cycle (courier bike) were both framed entirely
       // around delivery capacity/speed tradeoffs that no longer apply.
+      // Cut to one world, per direct instruction: concentrate on a single
+      // map and keep expanding on it (denser/richer content on this one
+      // route) rather than spreading effort across 5 shallow ones. The
+      // list stays a list (not a hardcoded single button) so a second
+      // world can be added back here later without restructuring this UI.
       const cityList = [
-        { id: 'mumbai', name: 'Mumbai' },
-        { id: 'delhi', name: 'Delhi' },
-        { id: 'kolkata', name: 'Kolkata' },
-        { id: 'pune', name: 'Pune' },
-        { id: 'bangalore', name: 'Bengaluru' }
+        { id: 'mumbai', name: 'Mumbai' }
       ];
 
       const roadStyleList = [
@@ -6957,15 +7002,17 @@
       const el = this.dockPanelEl;
 
       if (type === 'world') {
-        const cityKeys = Object.keys(CONFIG.CITIES);
+        // Single map, per direct instruction — the world/city stepper's
+        // prev/next used to cycle 5 cities; now there's one, so this is a
+        // static readout instead of dead-end arrows. ROAD SURFACE and
+        // ROUTE SEED below are the actual "keep expanding on the same
+        // map" knobs — regenerate variety within this one city/world.
         el.innerHTML = `
           <div class="dock-panel-grid">
             <div class="dock-panel-col">
-              <span class="dock-panel-label">CITY ROUTE</span>
+              <span class="dock-panel-label">WORLD</span>
               <div class="dock-stepper-box">
-                <button id="dp-c-prev" class="stepper-arrow">&lt;</button>
                 <span class="dock-stepper-val">${CONFIG.CITIES[this.selectedCity].name.toUpperCase()}</span>
-                <button id="dp-c-next" class="stepper-arrow">&gt;</button>
               </div>
             </div>
             <div class="dock-panel-col">
@@ -6987,18 +7034,6 @@
             <button id="dp-gen-btn" class="btn-generate-dock">APPLY & REGEN</button>
           </div>
         `;
-        document.getElementById('dp-c-prev').onclick = () => {
-          let idx = (cityKeys.indexOf(this.selectedCity) - 1 + cityKeys.length) % cityKeys.length;
-          this.selectedCity = cityKeys[idx];
-          this.selectedSeason = CONFIG.CITIES[this.selectedCity].season;
-          this.renderDockPanelContent('world');
-        };
-        document.getElementById('dp-c-next').onclick = () => {
-          let idx = (cityKeys.indexOf(this.selectedCity) + 1) % cityKeys.length;
-          this.selectedCity = cityKeys[idx];
-          this.selectedSeason = CONFIG.CITIES[this.selectedCity].season;
-          this.renderDockPanelContent('world');
-        };
         el.querySelectorAll('[data-rt]').forEach(b => {
           b.onclick = () => {
             this.selectedRoadTerrain = b.dataset.rt;
