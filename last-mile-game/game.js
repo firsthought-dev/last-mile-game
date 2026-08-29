@@ -5494,6 +5494,8 @@
       const binormal = new THREE.Vector3().crossVectors(roadRight, bankTangent).normalize();
       const bankedYOffset = latDist * binormal.y * Math.sin(bankingAngle);
 
+      const halfWheelbase = 1.45, halfTrack = 0.8;
+
       // Road surface slab sits at groundY + bankedYOffset + 0.12 (from createRoadMesh's slab offset).
       // Wheels and chassis clearance must rest the tire contact patch squarely on the tarmac.
       const roadSlabLift = 0.12;
@@ -5520,27 +5522,9 @@
       // not just along the curve.
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
 
-      // Real 4-wheel ground contact (user-requested "Slow Roads" revamp,
-      // section 3) — FL/FR/RL/RR each query `world.groundHeightAt`, the
-      // SAME single-source-of-truth height function `vehiclePos.y` above
-      // already uses (see BUGFIX_LOG.md Pattern 1: "duplicated height
-      // formulas drift apart" — every past regression in this exact area
-      // came from a second approximation of ground height, not from
-      // reusing this one). This is deliberately additive/cosmetic: it only
-      // feeds the visual pitch/roll target below, not `vehiclePos.y`
-      // itself — replacing the actual chassis-height source with a
-      // 4-point average would be a much larger, higher-risk change to a
-      // system this file's bugfix history has hardened repeatedly, and
-      // wasn't asked for. `wheelPitch`/`wheelRoll` add genuine terrain-
-      // grade response (nose tilts up a real hill, chassis rolls on a
-      // real cross-slope) on top of the existing accel/brake dive-squat
-      // and cornering lean, which previously only ever came from a single
-      // road-curvature estimate at the vehicle's own center point.
       // True Road Grade Pitch & Terrain Cross-Slope Roll (Slow Roads Parity).
       // Samples true road spline elevations ahead and behind the vehicle along its wheelbase,
       // ensuring the car sits completely level on flat roads and tilts naturally with topography.
-      const halfWheelbase = 1.45, halfTrack = 0.8;
-
       let roadGradePitch = 0;
       if (world.curve) {
         const uStep = halfWheelbase / 5000;
@@ -5883,6 +5867,7 @@
       this.initThree();
       this.buildWorldAndScene();
       this.initEvents();
+      this.initHUD();
       // Launch directly into driving behind the car (Slow Roads Parity)
       this.startDrive();
 
