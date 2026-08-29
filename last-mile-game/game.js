@@ -5253,16 +5253,25 @@
   // --------------------------------------------------------------------------
   // 6B. RAIN — a bounded particle volume that rides with the camera
   // --------------------------------------------------------------------------
-  // CORRECTED per SHIPLYP_VISUAL_ENHANCEMENT_BRIEF.md section 3.5: the
-  // original version here used elongated streaks + a fast fall speed,
-  // reasoning that real rain at speed reads as streaks. Explicit direction
-  // overrode that — reuse slowroads' snow mechanics EXACTLY (soft round
-  // point-sprites, perspective-attenuated size, near-vertical slow fall,
-  // volume follows the vehicle regardless of its speed, respawn on exit)
-  // and vary ONLY particle count for density. Slowroads has no rain to
-  // copy directly (confirmed: Overcast + any non-winter season produces
-  // zero precipitation there) — this borrows snow's technique, tuned only
-  // by count, not speed or shape.
+  // Mechanics reused from slowroads' snow EXACTLY (soft round point-
+  // sprites, perspective-attenuated size, volume tied to vehicle position
+  // so it keeps falling/recentering regardless of speed, respawn on exit)
+  // — confirmed directly by re-checking the reference at idle, ~70km/h,
+  // and ~104km/h: snow stays vertical round dots with only slight wind
+  // drift at every speed tested, no streaking or lean at any velocity.
+  // Slowroads has no rain to copy directly (Overcast + any non-winter
+  // season produces zero precipitation there).
+  //
+  // Two explicit, deliberate differences from snow, per direct
+  // instruction (not present in the slowroads reference, added anyway):
+  // faster fall speed + higher count (rain is denser than snow), and a
+  // speed-proportional backward bend — perfectly vertical at rest,
+  // leaning further back as the vehicle's own speed increases. This is
+  // real physics (a raindrop falls straight in the world frame; in a
+  // frame moving forward at speed v it acquires an apparent backward
+  // horizontal velocity of v, the same reason rain looks slanted through
+  // a moving car's windshield) even though slowroads' own snow doesn't
+  // model it for the vehicle it rides with.
   //
   // THREE.Points (not InstancedMesh) — camera-facing sprites are the
   // correct primitive for a round dot with size falloff; a streak needed
@@ -5274,8 +5283,9 @@
   class RainSystem {
     constructor(scene) {
       this.scene = scene;
-      this.count = 900; // denser than snow would be — the one intentional difference, per spec
-      this.fallSpeed = 2.0; // m/s — matches the observed real-snow-like terminal velocity from the slowroads reference capture, not tuned for high-speed readability
+      this.count = 1200; // denser than snow — explicit spec
+      this.fallSpeed = 9.0; // m/s — real rain terminal velocity range, noticeably faster than snow's ~2 m/s per spec ("will fall on the ground faster")
+      this.bendFactor = 0.35; // horizontal drift rate as a fraction of vehicle speed — 0 at rest (perfectly vertical), increasing smoothly with speed
       this.boxHalfWidth = 22.0;
       this.boxHeight = 18.0;
       this.boxDepth = 46.0;
@@ -5291,7 +5301,13 @@
 
       const mat = new THREE.PointsMaterial({
         color: 0xd8e2ec,
-        size: 0.22,
+        // 0.22 (matching a literal raindrop's real-world diameter) rendered
+        // essentially invisible on screen at any normal camera distance —
+        // confirmed directly: bumping to 2.0 live made drops suddenly
+        // obvious, 0.6 was the smallest size that stayed clearly visible
+        // without reading as a blurry blob. Visual size, not physical
+        // accuracy, is what actually matters here.
+        size: 0.6,
         map: this._makeSoftDotTexture(),
         transparent: true,
         opacity: 0.65,
@@ -5327,18 +5343,37 @@
     // `center` is the point the volume rides around (the vehicle position)
     // — passed unconditionally every frame regardless of vehicle speed, so
     // the volume keeps falling/recentering even while idling, matching the
-    // reference (tied to position, not speed).
-    update(dt, center) {
+    // reference (tied to position, not speed). `forward`/`speed`: the
+    // vehicle's current heading and speed, driving the backward bend —
+    // at speed 0 the bend term is exactly 0 (perfectly vertical fall);
+    // each particle accumulates horizontal drift only for as long as it's
+    // actually been falling, which is what makes a constant-angle lean
+    // happen naturally rather than needing to compute an angle directly —
+    // exactly how it works physically.
+    update(dt, center, forward, speed) {
       if (!this.points.visible) return;
       const fall = this.fallSpeed * dt;
+      const bendX = -forward.x * speed * this.bendFactor * dt;
+      const bendZ = -forward.z * speed * this.bendFactor * dt;
       for (let i = 0; i < this.count; i++) {
         let y = this.positions[i * 3 + 1] - fall;
+        let x = this.positions[i * 3] + bendX;
+        let z = this.positions[i * 3 + 2] + bendZ;
         if (y < 0) {
           y = this.boxHeight;
-          this.positions[i * 3] = (Math.random() - 0.5) * 2 * this.boxHalfWidth;
-          this.positions[i * 3 + 2] = (Math.random() - 0.5) * this.boxDepth;
+          x = (Math.random() - 0.5) * 2 * this.boxHalfWidth;
+          z = (Math.random() - 0.5) * this.boxDepth;
         }
+        // Keep the bend-accumulated drift bounded to the box, same wrap
+        // used for the old fixed-drift version, so a long fast drive
+        // doesn't walk particles arbitrarily far from the vehicle.
+        if (x < -this.boxHalfWidth) x = this.boxHalfWidth;
+        if (x > this.boxHalfWidth) x = -this.boxHalfWidth;
+        if (z < -this.boxDepth / 2) z = this.boxDepth / 2;
+        if (z > this.boxDepth / 2) z = -this.boxDepth / 2;
+        this.positions[i * 3] = x;
         this.positions[i * 3 + 1] = y;
+        this.positions[i * 3 + 2] = z;
       }
       const posAttr = this.points.geometry.getAttribute('position');
       for (let i = 0; i < this.count; i++) {
@@ -7838,7 +7873,10 @@
         this.world.updateTraffic(dt);
         this.world.updateCrossers(dt);
         this.checkCrosserCollisions();
-        if (this.rain && this.vehicle && this.vehicle.mesh) this.rain.update(dt, this.vehicle.mesh.position);
+        if (this.rain && this.vehicle && this.vehicle.mesh) {
+          const rainForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion);
+          this.rain.update(dt, this.vehicle.mesh.position, rainForward, this.vehicle.speed);
+        }
         if (this.world.updateClouds) this.world.updateClouds(dt);
         this.updateParcels(dt);
         this.updateParticles(dt);
