@@ -5876,27 +5876,15 @@
         if (k === 'm') this.toggleRadioMute();
         if (k === 'n') this.toggleSfxMute();
         if (k === 'l') this.cycleRadioChannel();
-        if (k === 'v') this.toggleStatusPanel();
-        if (k === 'e') this.toggleOnFoot();
         if (k === 'p') this.toggleWeather();
         if (k === 'h' || k === '?') this.openSettingsModal('controls');
         if (k === 'escape') this.openSettingsModal('gameplay');
-        if (k === ' ' && this.gameState === 'playing') {
-          if (this.onFoot) this.tryWalkDelivery();
-          else this.tossParcel3D();
-        }
-        if ((k === 'enter' || k === ' ') && this.gameState === 'menu') this.startDrive();
+        if (k === 'enter' && this.gameState === 'menu') this.startDrive();
       });
 
       window.addEventListener('keyup', e => onKey(e, false));
       window.addEventListener('mousemove', () => this.resetInactivity());
-      window.addEventListener('mousedown', e => {
-        this.resetInactivity();
-        if (this.gameState === 'playing' && e.target.tagName === 'CANVAS') {
-          if (this.onFoot) this.tryWalkDelivery();
-          else this.tossParcel3D();
-        }
-      });
+      window.addEventListener('mousedown', () => this.resetInactivity());
 
       this.initTouchControls();
     }
@@ -5944,15 +5932,6 @@
       bindHoldButton('touch-steer-right', () => { this.keys.right = this.keys.d = true; }, () => { this.keys.right = this.keys.d = false; });
       bindHoldButton('touch-pedal-gas', () => { this.keys.up = this.keys.w = true; }, () => { this.keys.up = this.keys.w = false; });
       bindHoldButton('touch-pedal-brake', () => { this.keys.down = this.keys.s = true; }, () => { this.keys.down = this.keys.s = false; });
-
-      // Discrete tap, not a held flag — mirrors the SPACE keydown handler
-      // (fires once on press, not continuously while held).
-      bindHoldButton('touch-action-btn', () => {
-        if (this.gameState === 'menu') { this.startDrive(); return; }
-        if (this.gameState !== 'playing') return;
-        if (this.onFoot) this.tryWalkDelivery();
-        else this.tossParcel3D();
-      });
     }
 
     // Low-poly courier avatar for on-foot delivery, matching the crosser
@@ -6435,8 +6414,14 @@
     // meter instead of an instant fail, and decays back down when clean —
     // so a couple of unlucky hits doesn't end the run outright, but a
     // reckless streak eventually lands you in jail.
+    // The WANTED-level / fine / jail escalation was entirely the courier-
+    // game's police-pursuit framing (Master Prompt section 1: remove the
+    // WANTED system). Pedestrians/animals are still part of the world as
+    // scenery/traffic (Master Prompt section 1 keeps world population),
+    // so a hit still registers as a real collision — it just no longer
+    // escalates into a fine/arrest modal, which was delivery-specific.
     checkCrosserCollisions() {
-      if (!this.vehicle || !this.world || !this.world.crossers || this.isJailed) return;
+      if (!this.vehicle || !this.world || !this.world.crossers) return;
       const carPos = this.vehicle.mesh.position;
 
       for (let i = this.world.crossers.length - 1; i >= 0; i--) {
@@ -6447,79 +6432,10 @@
           c.struck = true;
           this.world.foliageGroup.remove(c.mesh);
           this.world.crossers.splice(i, 1);
-
-          this.wantedLevel = Math.min(this.maxWantedLevel, this.wantedLevel + 1);
-          this.wantedDecayTimer = 0;
-          this.updateWantedHUD();
-
-          const box = document.getElementById('wanted-meter');
-          if (box) {
-            box.classList.remove('wanted-pulse');
-            void box.offsetWidth;
-            box.classList.add('wanted-pulse');
-          }
-
-          const label = c.kind === 'pedestrian' ? 'PEDESTRIAN' : (c.kind === 'dog' ? 'DOG' : 'CAT');
-          this.addNotification(`🚨 HIT A ${label}! Wanted level ${this.wantedLevel}/${this.maxWantedLevel}`, 'danger', 3000);
           sound.playCrash();
-
-          if (this.wantedLevel >= this.maxWantedLevel) {
-            this.triggerJail();
-          }
           break; // one hit per frame is plenty
         }
       }
-
-      // Clean-driving decay: wanted level drops one star after a stretch
-      // of no new hits, so a single early mistake doesn't dog the whole run.
-      if (this.wantedLevel > 0) {
-        this.wantedDecayTimer += 1 / 60;
-        if (this.wantedDecayTimer > 12.0) {
-          this.wantedLevel = Math.max(0, this.wantedLevel - 1);
-          this.wantedDecayTimer = 0;
-          this.updateWantedHUD();
-        }
-      }
-    }
-
-    triggerJail() {
-      if (this.isJailed) return;
-      this.isJailed = true;
-      this.gameState = 'jailed';
-      sound.playCrash();
-      sound.suspendForMenu();
-
-      const fine = 120;
-      this.earnings = Math.max(0, this.earnings - fine);
-      this.updateHUDStats();
-
-      this.modalContainer.innerHTML = `
-        <div class="modal-backdrop">
-          <div class="recovery-card">
-            <div class="recovery-badge failed">🚔 ARRESTED</div>
-            <h2 class="recovery-title">TOO MANY HIT-AND-RUNS</h2>
-            <p class="recovery-desc">
-              Traffic police pulled you over after repeated collisions with pedestrians and animals.
-              <br><br>
-              <strong>Fine Paid:</strong> -₹${fine}
-            </p>
-            <button id="btn-jail-release" class="btn-resume-drive">
-              <span>⚡ PAY FINE & RESUME DISPATCH</span>
-            </button>
-          </div>
-        </div>
-      `;
-
-      document.getElementById('btn-jail-release')?.addEventListener('click', () => {
-        this.isJailed = false;
-        this.wantedLevel = 0;
-        this.wantedDecayTimer = 0;
-        this.updateWantedHUD();
-        this.modalContainer.innerHTML = '';
-        this.gameState = 'playing';
-        if (this.vehicle) this.vehicle.speed = 0;
-        sound.resumeForGameplay();
-      });
     }
 
     initHUD() {
@@ -7131,6 +7047,11 @@
       this.dockEl.style.display = 'none';
       if (this.dockPanelEl) this.dockPanelEl.style.display = 'none';
 
+      // Master Prompt section 1: no region/difficulty/delivery selection —
+      // pick a world (location) and road style, and a vehicle, then drive.
+      // Section 2.1: vehicle roster cut to 2 (was 4) — chotahathi (cargo
+      // mini-truck) and cycle (courier bike) were both framed entirely
+      // around delivery capacity/speed tradeoffs that no longer apply.
       const cityList = [
         { id: 'mumbai', name: 'Mumbai' },
         { id: 'delhi', name: 'Delhi' },
@@ -7139,17 +7060,16 @@
         { id: 'bangalore', name: 'Bengaluru' }
       ];
 
-      const vehList = [
-        { id: 'swift', name: 'Raftaar GT Hatch', stat: '160 km/h • Sports EV' },
-        { id: 'chotahathi', name: 'Gaja 500 Mini-Truck', stat: '110 km/h • Cargo Deck' },
-        { id: 'scooter', name: 'Vayu Volt Scooter', stat: '120 km/h • Thermal Backpack' },
-        { id: 'cycle', name: 'Pawan Pedaler Bike', stat: '80 km/h • Carrier Rack' }
+      const roadStyleList = [
+        { id: 'asphalt', name: 'Asphalt' },
+        { id: 'gravel', name: 'Gravel' },
+        { id: 'mud', name: 'Mud' },
+        { id: 'sand', name: 'Sand' }
       ];
 
-      const diffList = [
-        { id: 'easy', name: 'Relaxed Shift', stat: '55s • Roadside Curbs' },
-        { id: 'medium', name: 'City Standard', stat: '36s • Winding Hills • 1.5x' },
-        { id: 'hard', name: 'Rush Hour Pro', stat: '22s • Hidden Havelis • 2.5x' }
+      const vehList = [
+        { id: 'swift', name: 'GT Hatch', stat: '160 km/h • Sports EV' },
+        { id: 'scooter', name: 'Volt Scooter', stat: '120 km/h • Electric' }
       ];
 
       this.modalContainer.innerHTML = `
@@ -7158,11 +7078,11 @@
             <div class="hub-brand-header">
               <h1 class="hub-brand-title">SHIP<span>LYP</span></h1>
             </div>
-            <p class="hub-tagline">Last Mile Courier • India Dispatch OS</p>
+            <p class="hub-tagline">Endless Driving • India Roads</p>
 
-            <!-- 1. Select Region -->
+            <!-- 1. Select World -->
             <div class="hub-city-selector">
-              <span class="hub-section-label">SELECT DISPATCH REGION</span>
+              <span class="hub-section-label">SELECT WORLD</span>
               <div class="hub-city-pills">
                 ${cityList.map(c => `
                   <button class="city-pill-btn ${this.selectedCity === c.id ? 'active-city' : ''}" data-city="${c.id}">
@@ -7172,22 +7092,21 @@
               </div>
             </div>
 
-            <!-- 2. Select Difficulty Tier -->
+            <!-- 2. Select Road Style -->
             <div class="hub-difficulty-selector">
-              <span class="hub-section-label">SELECT DELIVERY DIFFICULTY & TIMERS</span>
+              <span class="hub-section-label">SELECT ROAD STYLE</span>
               <div class="hub-difficulty-grid">
-                ${diffList.map(d => `
-                  <button class="diff-card-btn ${d.id} ${this.selectedDifficulty === d.id ? `active-diff ${d.id}` : ''}" data-diff="${d.id}">
-                    <span class="diff-card-title">${d.name.toUpperCase()}</span>
-                    <span class="diff-card-stat">${d.stat}</span>
+                ${roadStyleList.map(r => `
+                  <button class="diff-card-btn ${this.selectedRoadTerrain === r.id ? 'active-diff' : ''}" data-rt="${r.id}">
+                    <span class="diff-card-title">${r.name.toUpperCase()}</span>
                   </button>
                 `).join('')}
               </div>
             </div>
 
-            <!-- 3. Select Courier Vehicle -->
+            <!-- 3. Select Vehicle -->
             <div class="hub-vehicle-selector">
-              <span class="hub-section-label">SELECT COURIER FLEET VEHICLE</span>
+              <span class="hub-section-label">SELECT VEHICLE</span>
               <div class="hub-vehicle-grid">
                 ${vehList.map(v => `
                   <button class="vehicle-card-btn ${this.selectedVehicle === v.id ? 'active-veh' : ''}" data-veh="${v.id}">
@@ -7199,13 +7118,12 @@
             </div>
 
             <button id="btn-start-dispatch" class="btn-launch-dispatch">
-              <span>START COURIER DISPATCH</span>
+              <span>DRIVE</span>
             </button>
 
             <div class="hub-footer-links">
               <button id="btn-hub-mute" class="hub-link-btn"><span>${sound.muted ? 'UNMUTE [M]' : 'MUTE [M]'}</span></button>
-              <button id="btn-hub-fleet" class="hub-link-btn">FLEET TUNING</button>
-              <button id="btn-hub-log" class="hub-link-btn">COURIER LOG</button>
+              <button id="btn-hub-fleet" class="hub-link-btn">SETTINGS</button>
             </div>
           </div>
         </div>
@@ -7225,7 +7143,7 @@
       this.modalContainer.querySelectorAll('.diff-card-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.preventDefault();
-          this.selectedDifficulty = btn.dataset.diff;
+          this.selectedRoadTerrain = btn.dataset.rt;
           this.modalContainer.querySelectorAll('.diff-card-btn').forEach(b => {
             b.classList.remove('active-diff');
           });
@@ -7257,10 +7175,6 @@
       document.getElementById('btn-hub-fleet')?.addEventListener('click', (e) => {
         e.preventDefault();
         this.openSettingsModal('gameplay');
-      });
-      document.getElementById('btn-hub-log')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        this.openSettingsModal('profile');
       });
     }
 
@@ -7371,12 +7285,10 @@
         el.innerHTML = `
           <div class="dock-panel-grid">
             <div class="dock-panel-col">
-              <span class="dock-panel-label">COURIER FLEET</span>
+              <span class="dock-panel-label">VEHICLE</span>
               <div class="dock-btn-row">
                 <button class="dock-sq-btn ${this.selectedVehicle === 'swift' ? 'active-sq' : ''}" data-v="swift">HATCH</button>
-                <button class="dock-sq-btn ${this.selectedVehicle === 'chotahathi' ? 'active-sq' : ''}" data-v="chotahathi">TRUCK</button>
                 <button class="dock-sq-btn ${this.selectedVehicle === 'scooter' ? 'active-sq' : ''}" data-v="scooter">SCOOTER</button>
-                <button class="dock-sq-btn ${this.selectedVehicle === 'cycle' ? 'active-sq' : ''}" data-v="cycle">BIKE</button>
               </div>
             </div>
           </div>
@@ -7398,9 +7310,9 @@
           <div class="settings-modal">
             <div class="settings-header-tabs">
               <button class="tab-link ${tab === 'home' ? 'active-tab' : ''}" data-tab="home">HUB</button>
-              <button class="tab-link ${tab === 'gameplay' ? 'active-tab' : ''}" data-tab="gameplay">• FLEET TUNING •</button>
+              <button class="tab-link ${tab === 'gameplay' ? 'active-tab' : ''}" data-tab="gameplay">• VEHICLE TUNING •</button>
               <button class="tab-link ${tab === 'controls' ? 'active-tab' : ''}" data-tab="controls">CONTROLS</button>
-              <button class="tab-link ${tab === 'profile' ? 'active-tab' : ''}" data-tab="profile">EARNINGS</button>
+              <button class="tab-link ${tab === 'profile' ? 'active-tab' : ''}" data-tab="profile">TRIP</button>
             </div>
 
             <div class="settings-body">
@@ -7429,14 +7341,9 @@
                 </div>
               ` : tab === 'controls' ? `
                 <div class="settings-section-title"><span>🚗 DRIVING & MOVEMENT</span></div>
-                <div class="settings-row"><span class="settings-label">Accelerate / Walk Forward</span><span class="slider-val">W / ↑</span></div>
-                <div class="settings-row"><span class="settings-label">Brake / Reverse / Walk Back</span><span class="slider-val">S / ↓</span></div>
+                <div class="settings-row"><span class="settings-label">Accelerate</span><span class="slider-val">W / ↑</span></div>
+                <div class="settings-row"><span class="settings-label">Brake / Reverse</span><span class="slider-val">S / ↓</span></div>
                 <div class="settings-row"><span class="settings-label">Steer / Turn Left & Right</span><span class="slider-val">A / D or ← / →</span></div>
-
-                <div class="settings-section-title" style="margin-top: 14px;"><span>📦 PARCEL ACTIONS & COURIER MODE</span></div>
-                <div class="settings-row"><span class="settings-label">Toss 3D Parcel (Vehicle)</span><span class="slider-val">[SPACE] or Click</span></div>
-                <div class="settings-row"><span class="settings-label">Doorstep Delivery (On Foot)</span><span class="slider-val">[SPACE] or Click</span></div>
-                <div class="settings-row"><span class="settings-label">Hop Out / Enter Vehicle</span><span class="slider-val">[E]</span></div>
 
                 <div class="settings-section-title" style="margin-top: 14px;"><span>🛠️ ASSISTS, CAMERA & ENVIRONMENT</span></div>
                 <div class="settings-row"><span class="settings-label">AI Autopilot Cruise</span><span class="slider-val">[F]</span></div>
@@ -7444,17 +7351,14 @@
                 <div class="settings-row"><span class="settings-label">Cycle Camera View</span><span class="slider-val">[C]</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Time of Day</span><span class="slider-val">[T]</span></div>
                 <div class="settings-row"><span class="settings-label">Toggle Rain</span><span class="slider-val">[P]</span></div>
-                <div class="settings-row"><span class="settings-label">Delivery Status Manifest</span><span class="slider-val">[V]</span></div>
 
-                <div class="settings-section-title" style="margin-top: 14px;"><span>📻 DHABA FM & AUDIO CONTROLS</span></div>
+                <div class="settings-section-title" style="margin-top: 14px;"><span>📻 RADIO & AUDIO CONTROLS</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Radio Stations</span><span class="slider-val">[L]</span></div>
                 <div class="settings-row"><span class="settings-label">Mute / Unmute Radio</span><span class="slider-val">[M]</span></div>
                 <div class="settings-row"><span class="settings-label">Mute / Unmute SFX & Engine</span><span class="slider-val">[N]</span></div>
                 <div class="settings-row"><span class="settings-label">Controls & Settings Menu</span><span class="slider-val">[H] or [ESC]</span></div>
               ` : `
-                <div class="settings-section-title"><span>SHIPLYP COURIER SUMMARY</span></div>
-                <div class="settings-row"><span class="settings-label">Total Delivery Earnings</span><span class="slider-val" style="color: #2ec4b6; font-weight: 700;">₹ ${this.earnings}</span></div>
-                <div class="settings-row"><span class="settings-label">Delivered Porches</span><span class="slider-val">${this.deliveriesMade}</span></div>
+                <div class="settings-section-title"><span>TRIP SUMMARY</span></div>
                 <div class="settings-row"><span class="settings-label">Distance Driven</span><span class="slider-val">${this.vehicle.distanceTraveled.toFixed(1)} KM</span></div>
               `}
             </div>
