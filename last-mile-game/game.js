@@ -5497,23 +5497,17 @@
       const halfWheelbase = 1.45, halfTrack = 0.8;
 
       // Road surface slab sits at groundY + bankedYOffset + 0.12 (from createRoadMesh's slab offset).
-      // Wheels and chassis clearance must rest the tire contact patch squarely on the tarmac.
+      // Since the 3D vehicle model's tire bottoms sit at local Y = 0.00, placing vehiclePos.y at
+      // groundY + bankedYOffset + 0.12 rests the tires flush onto the tarmac with 0 floating gap.
       const roadSlabLift = 0.12;
-      const baseRideHeight = (this.vehicleType === 'musclecoupe' || this.vehicleType === 'sportscoupe') ? 0.36 : 0.32;
-
-      // Dynamic 4-wheel ride height compensation: ensures front/rear or outer tires never sink below road plane
-      const dynamicPitchDrop = Math.abs(Math.sin(this.currentPitch || 0)) * halfWheelbase;
-      const dynamicRollDrop = Math.abs(Math.sin(this.currentRoll || 0)) * halfTrack;
-      const suspensionClearance = Math.max(0, Math.max(dynamicPitchDrop, dynamicRollDrop) * 0.35);
-
-      vehiclePos.y = groundY + bankedYOffset + roadSlabLift + baseRideHeight + suspensionClearance;
 
       // Surface elevation bump on gravel / mud
+      let terrainBump = 0;
       if (roadTerrainKey === 'gravel' || roadTerrainKey === 'mud') {
-        const bump = Math.sin(Date.now() * 0.035 * (this.speed / 10)) * 0.04;
-        vehiclePos.y += bump;
+        terrainBump = Math.sin(Date.now() * 0.035 * (this.speed / 10)) * 0.04;
       }
 
+      vehiclePos.y = groundY + bankedYOffset + roadSlabLift + terrainBump;
       this.mesh.position.copy(vehiclePos);
 
       // 4. Chassis orientation now comes directly from `heading` (the
@@ -5532,8 +5526,10 @@
         const uBwd = (this.splineProgress - uStep + 1.0) % 1.0;
         const ptFwd = world.curve.getPointAt(uFwd);
         const ptBwd = world.curve.getPointAt(uBwd);
-        // Positive road elevation ahead -> nose tilts up (-rotateX in Three.js coordinates)
-        roadGradePitch = THREE.MathUtils.clamp(-Math.atan2(ptFwd.y - ptBwd.y, halfWheelbase * 2), -0.15, 0.15);
+        const horizDist = Math.max(0.1, Math.hypot(ptFwd.x - ptBwd.x, ptFwd.z - ptBwd.z));
+        // Model faces local -Z away from Chase Cam: positive rotateX tilts front (-Z) UP, negative tilts front DOWN.
+        // When road rises ahead (ptFwd.y > ptBwd.y), front tilts UP (+rotateX).
+        roadGradePitch = THREE.MathUtils.clamp(Math.atan2(ptFwd.y - ptBwd.y, horizDist), -0.15, 0.15);
       }
 
       // Cross-slope roll from shoulder/terrain drop
@@ -5541,12 +5537,14 @@
       const rightTrackY = world.groundHeightAt(proj.pt, vehiclePos, latDist + halfTrack);
       const terrainRoll = THREE.MathUtils.clamp(Math.atan2(rightTrackY - leftTrackY, halfTrack * 2), -0.15, 0.15);
 
-      // Controlled throttle dive/squat (Slow Roads parity: 0 at steady cruise, subtle under input)
+      // Controlled throttle dive/squat (Slow Roads parity):
+      // On acceleration (keys.w): squat rear / tilt front up (+0.010 rad).
+      // On active braking (keys.s): dive front down (-0.015 rad).
       let throttlePitch = 0;
       if (keys.w || keys.up) {
-        throttlePitch = -0.012; // subtle squat on acceleration
+        throttlePitch = 0.010;
       } else if (keys.s || keys.down) {
-        throttlePitch = 0.018;  // subtle dive on active braking
+        throttlePitch = -0.015;
       }
       const targetPitch = roadGradePitch + throttlePitch;
 
@@ -5610,23 +5608,21 @@
       const pt = curve.getPointAt(this.splineProgress);
       const tangent = curve.getTangentAt(this.splineProgress).normalize();
       this.mesh.position.copy(pt);
-      // Matches the on-road branch of the ground-following formula in
-      // update() (pt.y - 0.18 + 0.25) — using the old flat +0.25 here made
-      // the car visibly pop up 0.18m on every crash/checkpoint reset.
-      this.mesh.position.y += 0.07;
-      // Orientation now comes from `heading` (see update()'s free-movement
-      // rewrite), not mesh.lookAt — set it to match the tangent so a reset
-      // still faces down the road.
+      // Matches groundHeightAt(pt.y - 0.18) + roadSlabLift(0.12) = pt.y - 0.06
+      this.mesh.position.y = pt.y - 0.06;
       this.heading = Math.atan2(tangent.x, tangent.z);
-      this.velocityHeading = this.heading; // avoid resuming with a stale slide angle after a teleport
+      this.velocityHeading = this.heading;
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
       this.speed = preserveSpeed ? prevSpeed : 0;
       this.steerAngle = 0;
+      this.currentPitch = 0;
+      this.currentRoll = 0;
+      this.pitchVelocity = 0;
+      this.rollVelocity = 0;
       this.health = Math.max(75, this.health);
     }
 
     snapToNearestRoadPoint(curve) {
-      // Scan 120 samples across the full spline, find the closest point to current pos
       const SCAN = 120;
       let bestU = this.splineProgress;
       let bestDist = Infinity;
@@ -5643,13 +5639,16 @@
       const pt = curve.getPointAt(bestU);
       const tangent = curve.getTangentAt(bestU).normalize();
       this.mesh.position.copy(pt);
-      // See resetToSpline — matches the on-road ground-following formula.
-      this.mesh.position.y += 0.07;
+      this.mesh.position.y = pt.y - 0.06;
       this.heading = Math.atan2(tangent.x, tangent.z);
       this.velocityHeading = this.heading;
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
       this.speed = 0;
       this.steerAngle = 0;
+      this.currentPitch = 0;
+      this.currentRoll = 0;
+      this.pitchVelocity = 0;
+      this.rollVelocity = 0;
     }
 
     setHeadlightsActive(active) {
