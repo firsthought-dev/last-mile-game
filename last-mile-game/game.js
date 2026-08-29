@@ -1709,6 +1709,41 @@
       }
     }
 
+    // Exact Road Surface Height (includes road slab +0.12 and true 3D banking)
+    getRoadSurfaceHeight(pt, worldPos, latDist, u = 0) {
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
+      const absDist = Math.abs(latDist);
+
+      let bankingAngle = 0;
+      if (this.roadBankingAngles && this.roadSpacedPoints && this.roadSpacedPoints.length > 2) {
+        const segs = this.roadSpacedPoints.length - 1;
+        const rawIdx = THREE.MathUtils.clamp(u * segs, 0, segs - 1);
+        const i0 = Math.floor(rawIdx), i1 = Math.min(i0 + 1, segs - 1);
+        const frac = rawIdx - i0;
+        bankingAngle = THREE.MathUtils.lerp(this.roadBankingAngles[i0] || 0, this.roadBankingAngles[i1] || 0, frac);
+      }
+
+      if (absDist <= roadHalf) {
+        return pt.y + 0.12 + latDist * Math.sin(bankingAngle);
+      } else {
+        const SHOULDER_TRANSITION = 9.0;
+        const EMBANKMENT_BLEND = 45.0;
+        if (absDist <= SHOULDER_TRANSITION) {
+          const t = (absDist - roadHalf) / (SHOULDER_TRANSITION - roadHalf);
+          const baseShoulderY = pt.y - 0.18 - t * 0.32;
+          const bankedYOffset = latDist * Math.sin(bankingAngle) * (1 - t);
+          return baseShoulderY + 0.12 + bankedYOffset;
+        } else if (absDist <= EMBANKMENT_BLEND) {
+          const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
+          const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
+          const shoulderDrop = pt.y - 0.5;
+          return THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
+        } else {
+          return this.getRawTerrainHeight(worldPos.x, worldPos.z) - 0.3;
+        }
+      }
+    }
+
     generateSpline() {
       this.splineNodes = [];
       const nodeCount = CONFIG.ROAD_POINTS_COUNT; // 500 nodes
@@ -5896,7 +5931,9 @@
       const wheelWorldPos = wheelOffsets.map(o => {
         const wp = vehiclePos.clone().addScaledVector(carFwd, o.fwd).addScaledVector(carRight, o.right);
         const wProj = this.projectToRoad(wp, world.curve, this.splineProgress);
-        const wGroundY = world.groundHeightAt(wProj.pt, wp, wProj.latDist);
+        const wGroundY = world.getRoadSurfaceHeight
+          ? world.getRoadSurfaceHeight(wProj.pt, wp, wProj.latDist, wProj.u)
+          : world.groundHeightAt(wProj.pt, wp, wProj.latDist);
         return { wp, wProj, y: wGroundY };
       });
 
@@ -5926,8 +5963,6 @@
 
       // In parent space, the GLTF model is mounted with rotation.y = Math.PI,
       // which inverts local Z (front is +Z in parent) and local X (right is -X in parent).
-      // Applying -trueRoadPitch lifts the car front up on hill climbs.
-      // Applying -trueRoadRoll drops the car right side down on right-banked slopes.
       const targetPitch = -trueRoadPitch - throttlePitch;
 
       // Centrifugal roll during hard steering
@@ -5954,8 +5989,8 @@
         terrainBump = Math.sin(Date.now() * 0.035 * (this.speed / 10)) * 0.04;
       }
 
-      // Exact tire contact height (road slab lift 0.12 + 0.02 cushion)
-      vehiclePos.y = trueGroundCenterY + 0.14 + terrainBump;
+      // Exact tire contact height (tire bottom rests squarely on road surface with 0.02m contact cushion)
+      vehiclePos.y = trueGroundCenterY + 0.02 + terrainBump;
       this.mesh.position.copy(vehiclePos);
 
       // Set chassis orientation: heading yaw + true 4-wheel pitch & roll
