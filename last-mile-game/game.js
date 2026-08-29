@@ -1185,10 +1185,10 @@
     },
 
     ROAD_TERRAINS: {
-      asphalt: { id: 'asphalt', name: 'Asphalt Expressway', icon: '🛣️', color: 0x1e2229, gripMult: 1.0, desc: 'Smooth highway tarmac' },
-      gravel: { id: 'gravel', name: 'Mountain Ghats Gravel', icon: '🪨', color: 0x5a483a, gripMult: 0.75, desc: 'Rocky shale & mountain rumble' },
-      mud: { id: 'mud', name: 'Monsoon Mud & Slush', icon: '🌧️', color: 0x3d291b, gripMult: 0.52, desc: 'Slippery drift clay track' },
-      sand: { id: 'sand', name: 'Coastal Dune Sand', icon: '🏖️', color: 0xb88e58, gripMult: 0.65, desc: 'Soft golden sand verge' }
+      asphalt: { id: 'asphalt', name: 'Asphalt Expressway', icon: '🛣️', color: 0x1e2229, roughness: 0.82, metalness: 0.05, gripMult: 1.00, paintLines: true, desc: 'Smooth highway tarmac' },
+      gravel: { id: 'gravel', name: 'Mountain Ghats Gravel', icon: '🪨', color: 0x6b5744, roughness: 0.94, metalness: 0.02, gripMult: 0.82, paintLines: false, desc: 'Scenic mountain gravel & rally shale' },
+      mud: { id: 'mud', name: 'Monsoon Mud & Slush', icon: '🌧️', color: 0x4a3322, roughness: 0.38, metalness: 0.15, gripMult: 0.68, paintLines: false, desc: 'Slippery drift clay track with wet sheen' },
+      sand: { id: 'sand', name: 'Coastal Dune Sand', icon: '🏖️', color: 0xc49b66, roughness: 0.96, metalness: 0.02, gripMult: 0.72, paintLines: false, desc: 'Soft golden dune trail' }
     },
 
     TIME_OF_DAY: {
@@ -1644,7 +1644,12 @@
     grassNormal() { return this._get('grassNormal', 'assets/textures/grass_normal.webp'); },
     rockColor() { return this._get('rockColor', 'assets/textures/rock_color.webp'); },
     rockNormal() { return this._get('rockNormal', 'assets/textures/rock_normal.webp'); },
-    roadColor() { return this._get('roadColor', 'assets/textures/road_color.webp'); },
+    roadColor(roadTerrainKey = 'asphalt') {
+      if (roadTerrainKey === 'gravel') return this._get('roadGravel', 'assets/textures/gravel_color.webp');
+      if (roadTerrainKey === 'sand') return this._get('roadSand', 'assets/textures/sand_color.webp');
+      if (roadTerrainKey === 'mud') return this._get('roadMud', 'assets/textures/rock_color.webp');
+      return this._get('roadColor', 'assets/textures/road_color.webp');
+    },
     roadNormal() { return this._get('roadNormal', 'assets/textures/road_normal.webp'); },
     woodColor() { return this._get('woodColor', 'assets/textures/wood_color.webp'); },
     woodNormal() { return this._get('woodNormal', 'assets/textures/wood_normal.webp'); },
@@ -2336,12 +2341,12 @@
       // goes unstable on it, corrupting the perturbed normal and zeroing
       // out the lighting entirely. Same risk applies to the terrain ribbon
       // below (same custom-UV pattern) — normalMap skipped there too.
-      const roadTex = RealTextureFactory.roadColor();
+      const roadTex = RealTextureFactory.roadColor(roadTerrainKey);
       const roadMaterial = new THREE.MeshStandardMaterial({
         vertexColors: true,
         side: THREE.DoubleSide,
-        roughness: 0.85,
-        metalness: 0.05,
+        roughness: (tCfg.roughness !== undefined) ? tCfg.roughness : 0.85,
+        metalness: (tCfg.metalness !== undefined) ? tCfg.metalness : 0.05,
         map: roadTex
       });
 
@@ -2350,26 +2355,11 @@
       return this.roadMesh;
     }
 
-    // Lane paint as dedicated thin decal ribbons, separate from the base
-    // road surface — see the comment in createRoadMesh for why (matches
-    // slowroads.io's own actual technique: their shipped assets include
-    // standalone road_paint_dashed / road_paint_solid_left / _right
-    // textures, not paint baked into the base road material, confirmed
-    // directly from their live CDN network requests). Must run AFTER
-    // createRoadMesh, which populates roadSpacedPoints/roadBankingAngles/
-    // roadNormals/roadBankedUp.
-    //
-    // Each ribbon has a fixed physical width the whole length of the
-    // road, independent of the base mesh's own vertex spacing — the
-    // previous vertex-color approach's "uneven width" bug came from the
-    // paint being interpolated across the base ribbon's comparatively
-    // coarse (~4.2m) vertex spacing, so its apparent width/position
-    // wobbled with however much banking shifted between one base-mesh
-    // vertex and the next, worst on sharp curves. These ribbons still
-    // follow the same points/banking arrays (so they bank and curve
-    // exactly with the road), but their cross-section width is fixed by
-    // this function's own offsets, not by the base mesh's column spacing.
     createLaneMarkingMeshes(roadTerrainKey = 'asphalt') {
+      const tCfg = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
+      // Only render painted highway decals on paved asphalt — gravel, mud, and sand are unpainted natural routes
+      if (!tCfg.paintLines) return new THREE.Group();
+
       const points = this.roadSpacedPoints;
       const bankingAngles = this.roadBankingAngles;
       const normals = this.roadNormals;
@@ -5317,12 +5307,14 @@
         }
       };
 
-      const edgeLineColor = new THREE.Color(0x9aa0a8);
-      const centerLineColor = new THREE.Color(0xb9a968);
-      const edgeOffset = roadWidth * 0.46;
-      buildExtensionMarking(-edgeOffset, edgeLineColor, false);
-      buildExtensionMarking(edgeOffset, edgeLineColor, false);
-      buildExtensionMarking(0.0, centerLineColor, true);
+      if (roadTerrainKey === 'asphalt') {
+        const edgeLineColor = new THREE.Color(0x9aa0a8);
+        const centerLineColor = new THREE.Color(0xb9a968);
+        const edgeOffset = roadWidth * 0.46;
+        buildExtensionMarking(-edgeOffset, edgeLineColor, false);
+        buildExtensionMarking(edgeOffset, edgeLineColor, false);
+        buildExtensionMarking(0.0, centerLineColor, true);
+      }
 
       // 2. Terrain ribbon extension mesh (wide horizon landscape out to ±320m)
       const lateralSlices = [
@@ -6027,10 +6019,8 @@
       const isWind = (seasonKey === 'winter' || seasonKey === 'summer');
 
       // Surface Terrain Grip Modifiers
-      let terrainGrip = 1.0;
-      if (roadTerrainKey === 'gravel') terrainGrip = 0.75;
-      else if (roadTerrainKey === 'mud') terrainGrip = 0.52;
-      else if (roadTerrainKey === 'sand') terrainGrip = 0.65;
+      const tCfg = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
+      let terrainGrip = tCfg.gripMult || 1.0;
 
       let climateGrip = terrainGrip;
       if (isRain) {
@@ -6308,16 +6298,28 @@
       // which inverts local Z (front is +Z in parent) and local X (right is -X in parent).
       const targetPitch = -trueRoadPitch - throttlePitch;
 
+      // Subtle terrain surface harmonic micro-rumble (filtered smoothly through suspension)
+      let terrainPitchJitter = 0;
+      let terrainRollJitter = 0;
+      if (roadTerrainKey === 'gravel' && Math.abs(this.speed) > 2.0) {
+        const speedScale = Math.min(1.0, Math.abs(this.speed) / 20);
+        terrainPitchJitter = Math.sin(Date.now() * 0.015) * 0.0012 * speedScale;
+        terrainRollJitter = Math.cos(Date.now() * 0.018) * 0.0010 * speedScale;
+      } else if (roadTerrainKey === 'mud' && Math.abs(this.speed) > 2.0) {
+        terrainRollJitter = Math.sin(Date.now() * 0.006) * 0.0022; // gentle mud sway
+      }
+
       // Authentic automotive centrifugal suspension body roll (rolls OUTWARD away from the turn)
       // When steering RIGHT (steerAngle < 0), centrifugal force pushes chassis LEFT (rolls outward)
       const centrifugalBodyRoll = this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.08;
-      const targetRoll = trueRoadRoll + centrifugalBodyRoll;
+      const targetRoll = trueRoadRoll + centrifugalBodyRoll + terrainRollJitter;
+      const targetPitchWithJitter = targetPitch + terrainPitchJitter;
 
       // 2nd-Order Spring-Mass-Damper Suspension Filter
       const subDt = Math.min(dt, 0.05);
       const omegaPitch = 16.0;
       const zetaPitch = 0.90;
-      const pitchAccel = (omegaPitch * omegaPitch) * (targetPitch - this.currentPitch) - 2.0 * zetaPitch * omegaPitch * this.pitchVelocity;
+      const pitchAccel = (omegaPitch * omegaPitch) * (targetPitchWithJitter - this.currentPitch) - 2.0 * zetaPitch * omegaPitch * this.pitchVelocity;
       this.pitchVelocity += pitchAccel * subDt;
       this.currentPitch += this.pitchVelocity * subDt;
 
@@ -6327,14 +6329,8 @@
       this.rollVelocity += rollAccel * subDt;
       this.currentRoll += this.rollVelocity * subDt;
 
-      // Surface elevation bump on gravel / mud
-      let terrainBump = 0;
-      if (roadTerrainKey === 'gravel' || roadTerrainKey === 'mud') {
-        terrainBump = Math.sin(Date.now() * 0.035 * (this.speed / 10)) * 0.04;
-      }
-
       // Exact tire contact height (tire bottom rests squarely on road surface with 0.02m contact cushion)
-      vehiclePos.y = trueGroundCenterY + 0.02 + terrainBump;
+      vehiclePos.y = trueGroundCenterY + 0.02;
       this.mesh.position.copy(vehiclePos);
 
       // Set chassis orientation: heading yaw + true 4-wheel pitch & roll
