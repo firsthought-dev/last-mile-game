@@ -2594,13 +2594,6 @@
       const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a6065, roughness: 0.8, map: RealTextureFactory.rockColor(), normalMap: RealTextureFactory.rockNormal() });
       const poleMat = new THREE.MeshStandardMaterial({ color: 0x4a4e52, flatShading: true, roughness: 0.6, metalness: 0.3 });
 
-      const potholeGeom = new THREE.CircleGeometry(1.3, 12);
-      potholeGeom.rotateX(-Math.PI / 2);
-      const potholeMat = new THREE.MeshBasicMaterial({ color: 0x0a0c10 });
-
-      const rumbleGeom = new THREE.BoxGeometry(CONFIG.ROAD_WIDTH * 0.82, 0.08, 0.45);
-      const rumbleMat = new THREE.MeshLambertMaterial({ color: 0xfca311 });
-
       // Low-poly pedestrian/animal road-crosser builder — same flat-shaded
       // block-figure style as the porch resident so crossers read as part
       // of the world rather than a mismatched asset dropped in.
@@ -2780,126 +2773,56 @@
           return dx * dx + dz * dz < tunnelClearanceSq;
         });
 
-        // 1. Potholes & Rumble Strips on Road
-        if (i % 26 === 0) {
-          const potOffset = (this.prng.next() - 0.5) * (CONFIG.ROAD_WIDTH * 0.62);
-          const potPos = pt.clone().addScaledVector(normal, potOffset);
-          potPos.y += 0.17;
-          // Every pothole used to share one fixed-size geometry — visually
-          // identical and identical -14% damage regardless of how big the
-          // hole actually looked. Scaling the shared unit geometry per
-          // instance (cheap — no new geometry allocation) gives real size
-          // variety, and both the hit radius and damage now scale with it
-          // so a small crack barely matters while a real crater hurts.
-          const potSize = this.prng.range(0.55, 2.0);
-          const potMesh = new THREE.Mesh(potholeGeom, potholeMat);
-          potMesh.position.copy(potPos);
-          potMesh.scale.set(potSize, potSize, 1);
-          this.foliageGroup.add(potMesh);
-          this.potholes.push({ pos: potPos, radius: 1.6 * potSize, hitRecently: false, sizeFactor: potSize });
-        }
-
-        if (i % 65 === 0) {
-          const rumblePos = pt.clone();
-          rumblePos.y += 0.17;
-          const rumbleMesh = new THREE.Mesh(rumbleGeom, rumbleMat);
-          rumbleMesh.position.copy(rumblePos);
-          rumbleMesh.lookAt(rumblePos.clone().add(normal));
-          this.foliageGroup.add(rumbleMesh);
-          this.potholes.push({ pos: rumblePos, radius: 2.2, isRumble: true, hitRecently: false });
-        }
-
-        // 1b. Pedestrians and stray dogs/cats crossing the road. Spawned
-        // as a start/end pair straddling the road on this point's normal
-        // so updateCrossers can walk them straight across; sparsity (the
-        // prng roll) keeps crossings occasional rather than a wall of NPCs.
-        // Skipped inside a tunnel bore entirely — no road-crossing NPCs,
-        // no shoulder walkers, no guardrails in there (see below); a bored
-        // tunnel is a straight, empty, lit corridor, not a village stretch.
-        if (i % 33 === 0 && this.prng.next() > 0.45 && !inTunnel) {
-          const kindRoll = this.prng.next();
-          const kind = kindRoll < 0.55 ? 'pedestrian' : (kindRoll < 0.8 ? 'dog' : 'cat');
-          const crossHalf = CONFIG.ROAD_WIDTH * 0.62 + 3.0;
-          const side = this.prng.next() > 0.5 ? 1 : -1;
-          const latStart = side * crossHalf;
-          const latEnd = -side * crossHalf;
-          const startPos = pt.clone().addScaledVector(normal, latStart);
-          const endPos = pt.clone().addScaledVector(normal, latEnd);
-          startPos.y = this.groundHeightAt(pt, startPos, latStart) + 0.15;
-          endPos.y = this.groundHeightAt(pt, endPos, latEnd) + 0.15;
-
-          const mesh = buildCrosserMesh(kind);
-          const initialProgress = this.prng.next() * 0.3; // stagger so they don't all step off in lockstep
-          const initialLat = THREE.MathUtils.lerp(latStart, latEnd, initialProgress);
-          mesh.position.x = THREE.MathUtils.lerp(startPos.x, endPos.x, initialProgress);
-          mesh.position.z = THREE.MathUtils.lerp(startPos.z, endPos.z, initialProgress);
-          mesh.position.y = this.groundHeightAt(pt, mesh.position, initialLat) + 0.15;
-          mesh.lookAt(endPos.x, mesh.position.y, endPos.z);
-          this.foliageGroup.add(mesh);
-
-          this.crossers.push({
-            mesh,
-            kind,
-            start: startPos,
-            end: endPos,
-            // Fixed reference point + normal so updateCrossers can recompute
-            // ground height at the crosser's *current* lateral position each
-            // frame (via groundHeightAt) instead of linearly interpolating
-            // between the start/end heights — a straight Y lerp cut through
-            // the actual road surface mid-crossing wherever the road profile
-            // between those two points isn't flat (banked/curved sections),
-            // which is why crossers were sinking through the road.
-            pt: pt.clone(),
-            normal: normal.clone(),
-            latStart,
-            latEnd,
-            progress: initialProgress,
-            speed: mesh.userData.walkSpeed,
-            hitRadius: mesh.userData.hitRadius,
-            struck: false,
-            legPhase: this.prng.next() * Math.PI * 2
-          });
-        }
-
-        // Shoulder pedestrians who patrol UP AND DOWN the roadside instead
-        // of crossing — reuses the exact same updateCrossers loop (it only
-        // ever lerps mesh position between `start`/`end` and ping-pongs at
-        // either end), just with both endpoints offset along the road
-        // TANGENT at a fixed lateral distance instead of straddling the
-        // road on the NORMAL. latStart === latEnd here on purpose: no
-        // lateral movement, they stay on the shoulder the whole patrol.
-        if (i % 47 === 0 && this.prng.next() > 0.5 && !inTunnel) {
+        // Shoulder pedestrians who patrol UP AND DOWN the roadside — this is
+        // now the ONLY pedestrian mechanic (potholes, rumble strips, and
+        // road-crossing pedestrians/dogs/cats were removed per the
+        // slowroads-style pivot: no hazards, no road-crossing NPCs, just a
+        // populated roadside). Reuses updateCrossers (it only ever lerps
+        // mesh position between `start`/`end` and ping-pongs at either
+        // end), with both endpoints offset along the road TANGENT at a
+        // fixed lateral distance instead of straddling the road on the
+        // NORMAL. latStart === latEnd here on purpose: no lateral movement,
+        // they stay on the shoulder the whole patrol. Density raised
+        // significantly (i%47->i%16, probability 0.5->0.2, plus a 2-4
+        // person cluster per spawn point) per explicit "quite a few" density
+        // instruction — this is now a much denser roll than the original
+        // sparse solo-walker spacing.
+        if (i % 16 === 0 && this.prng.next() > 0.2 && !inTunnel) {
+          const clusterSize = Math.floor(this.prng.range(2, 5));
           const walkSide = this.prng.next() > 0.5 ? 1 : -1;
-          const walkLat = walkSide * (CONFIG.ROAD_WIDTH * 0.5 + 3.5 + this.prng.range(0, 3.0));
-          const walkRange = this.prng.range(12.0, 24.0);
+          for (let c = 0; c < clusterSize; c++) {
+            const walkLat = walkSide * (CONFIG.ROAD_WIDTH * 0.5 + 3.5 + this.prng.range(0, 4.0));
+            const walkRange = this.prng.range(10.0, 22.0);
+            const tangentJitter = this.prng.range(-6.0, 6.0);
 
-          const walkMesh = buildCrosserMesh('pedestrian');
-          const startPos = pt.clone().addScaledVector(tangent, -walkRange).addScaledVector(normal, walkLat);
-          const endPos = pt.clone().addScaledVector(tangent, walkRange).addScaledVector(normal, walkLat);
-          startPos.y = this.groundHeightAt(pt, startPos, walkLat) + 0.15;
-          endPos.y = this.groundHeightAt(pt, endPos, walkLat) + 0.15;
+            const walkMesh = buildCrosserMesh('pedestrian');
+            const startPos = pt.clone().addScaledVector(tangent, tangentJitter - walkRange).addScaledVector(normal, walkLat);
+            const endPos = pt.clone().addScaledVector(tangent, tangentJitter + walkRange).addScaledVector(normal, walkLat);
+            startPos.y = this.groundHeightAt(pt, startPos, walkLat) + 0.15;
+            endPos.y = this.groundHeightAt(pt, endPos, walkLat) + 0.15;
 
-          const initialProgress = this.prng.next();
-          walkMesh.position.lerpVectors(startPos, endPos, initialProgress);
-          walkMesh.position.y = this.groundHeightAt(pt, walkMesh.position, walkLat) + 0.15;
-          walkMesh.lookAt(endPos.x, walkMesh.position.y, endPos.z);
-          this.foliageGroup.add(walkMesh);
+            const initialProgress = this.prng.next();
+            walkMesh.position.lerpVectors(startPos, endPos, initialProgress);
+            walkMesh.position.y = this.groundHeightAt(pt, walkMesh.position, walkLat) + 0.15;
+            walkMesh.lookAt(endPos.x, walkMesh.position.y, endPos.z);
+            this.foliageGroup.add(walkMesh);
 
-          this.crossers.push({
-            mesh: walkMesh,
-            kind: 'pedestrian',
-            start: startPos,
-            end: endPos,
-            pt: pt.clone(),
-            normal: normal.clone(),
-            latStart: walkLat,
-            latEnd: walkLat,
-            progress: initialProgress,
-            speed: walkMesh.userData.walkSpeed * 0.75, // ambling shoulder pace, slower than a road-crossing dash
-            hitRadius: walkMesh.userData.hitRadius,
-            struck: false,
-            legPhase: this.prng.next() * Math.PI * 2
-          });
+            this.crossers.push({
+              mesh: walkMesh,
+              kind: 'pedestrian',
+              start: startPos,
+              end: endPos,
+              pt: pt.clone(),
+              normal: normal.clone(),
+              latStart: walkLat,
+              latEnd: walkLat,
+              progress: initialProgress,
+              speed: walkMesh.userData.walkSpeed * 0.75, // ambling shoulder pace, slower than a road-crossing dash
+              hitRadius: walkMesh.userData.hitRadius,
+              struck: false,
+              legPhase: this.prng.next() * Math.PI * 2
+            });
+          }
         }
 
         // 2. Roadside Chevron Turn Warning Signs (Yellow/Black <<< >>> on metal poles)
@@ -4128,81 +4051,18 @@
         this.foliageGroup.add(fenceGroup);
       });
 
-      // Add Real-Time Road Traffic (Rickshaws, BEST Buses, Mini-Trucks, Kaali-Peeli Cabs)
-      let trafficSpawnIndex = 0;
-      for (let i = 8; i < sampledPoints.length - 8; i += 30) {
-        const trafficGroup = new THREE.Group();
-        const isBus = (i % 60 === 0);
-        const isTruck = !isBus && (i % 90 === 0);
-
-        if (isBus) {
-          // BEST Red Double-Decker / Single Bus
-          const busGeom = new THREE.BoxGeometry(2.4, 2.6, 6.5);
-          const busMat = new THREE.MeshStandardMaterial({ color: 0xd90429, flatShading: true });
-          const bus = new THREE.Mesh(busGeom, busMat);
-          bus.position.y = 1.4;
-          trafficGroup.add(bus);
-        } else if (isTruck && IndianTruckAsset.template) {
-          // Tata Ace-style Mini-Truck (teal-green/white livery)
-          trafficGroup.add(IndianTruckAsset.clone());
-        } else {
-          // Bajaj Auto Rickshaw (Yellow & Green)
-          const autoGeom = new THREE.BoxGeometry(1.4, 1.3, 2.4);
-          const autoMat = new THREE.MeshStandardMaterial({ color: 0xfca311, flatShading: true });
-          const autoBody = new THREE.Mesh(autoGeom, autoMat);
-          autoBody.position.y = 0.8;
-          trafficGroup.add(autoBody);
-        }
-
-        const u = i / sampledPoints.length;
-        // Was `i % 2` — but i starts at 8 and steps by 30 (both even), so
-        // i%2 was 0 on every single iteration; every "alternating" lane
-        // assignment was actually always the same lane. Alternates on an
-        // independent counter instead, which actually increments by 1
-        // each spawn regardless of i's step size.
-        const laneOffset = (trafficSpawnIndex % 2 === 0 ? 1.8 : -1.8);
-        trafficSpawnIndex++;
-        // Both lanes previously only ever incremented splineU forward —
-        // laneOffset put them visually on either side of the centerline,
-        // but every vehicle traveled the same direction along the route
-        // regardless of lane, so there was never any oncoming traffic.
-        // The opposite lane now travels splineU backward instead.
-        const direction = laneOffset > 0 ? 1 : -1;
-        this.trafficVehicles.push({
-          mesh: trafficGroup,
-          splineU: u,
-          speed: 12.0 + (i % 5) * 2.0,
-          laneOffset: laneOffset,
-          direction: direction
-        });
-
-        this.foliageGroup.add(trafficGroup);
-      }
-
+      // NPC/traffic vehicles (rickshaws/buses/mini-trucks) removed per the
+      // slowroads-style pivot — open road, no AI traffic. `trafficVehicles`
+      // stays an always-empty array (see updateTraffic below) rather than
+      // being deleted outright, since it's still a harmless no-op read from
+      // the animate() loop and the minimap draw call.
       scene.add(this.foliageGroup);
     }
 
     updateTraffic(dt) {
-      if (!this.curve) return;
-      const totalLen = this.curve.getLength();
-
-      this.trafficVehicles.forEach(tv => {
-        const dir = tv.direction || 1;
-        tv.splineU += (dir * tv.speed * dt) / totalLen;
-        if (tv.splineU >= 0.98) tv.splineU = 0.02;
-        if (tv.splineU <= 0.02) tv.splineU = 0.98;
-
-        const pt = this.curve.getPointAt(tv.splineU);
-        const tangent = this.curve.getTangentAt(tv.splineU).normalize();
-        const up = new THREE.Vector3(0, 1, 0);
-        const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
-
-        const pos = pt.clone().addScaledVector(normal, tv.laneOffset);
-        pos.y = this.groundHeightAt(pt, pos, tv.laneOffset) + 0.15;
-        tv.mesh.position.copy(pos);
-        const fwdHeading = tangent.clone().multiplyScalar(dir);
-        tv.mesh.lookAt(pos.clone().add(fwdHeading));
-      });
+      // No-op: NPC traffic vehicles removed. Kept as a stable call target
+      // (animate() still calls this every frame) rather than also editing
+      // every call site.
     }
 
     // How far off the road centerline the vehicle may legally drift at
@@ -5077,98 +4937,13 @@
 
       const carPos = this.mesh.position;
 
-      // 4. Pothole Collision & Health Degradation
-      if (world.potholes) {
-        world.potholes.forEach(p => {
-          const d = carPos.distanceTo(p.pos);
-          if (d < p.radius) {
-            if (!p.hitRecently) {
-              p.hitRecently = true;
-              this.speed *= 0.65;
-              // Clamped: hitting several potholes in quick succession (easy
-              // at high speed) used to stack this kick unbounded, since
-              // normal steering only lerps toward a ±0.42 limit but this
-              // was a raw += with no ceiling. steerAngle feeds directly
-              // into the chassis's visual yaw (mesh.rotateY) every frame,
-              // and the camera reads its forward direction straight off
-              // that mesh — so an unclamped steerAngle could swing the
-              // camera to point at near-ground terrain at a steep angle,
-              // reading as a giant close-up terrain fill with the car
-              // rendering as a flattened silhouette.
-              this.steerAngle = THREE.MathUtils.clamp(this.steerAngle + (Math.random() - 0.5) * 0.45, -0.9, 0.9);
-
-              // Two-wheelers have no suspension/cage to absorb a pothole at
-              // speed — a fast hit throws the rider off outright instead of
-              // just chipping health like a car's shock absorbers would.
-              // Bigger holes are more dangerous both ways: they knock a
-              // two-wheeler off at a lower speed, and they chip more
-              // health off a car. sizeFactor spans ~0.55-2.0.
-              const sizeFactor = p.sizeFactor || 1.0;
-              const isTwoWheeler = this.vehicleType === 'scooter' || this.vehicleType === 'cycle';
-              const baseSpillThreshold = this.vehicleType === 'scooter' ? 14.0 : 10.0; // m/s
-              const spillSpeedThreshold = baseSpillThreshold / Math.max(0.6, sizeFactor);
-              const isSpill = isTwoWheeler && Math.abs(this.speed) > spillSpeedThreshold;
-              const damage = Math.round(14 * sizeFactor);
-
-              if (isSpill) {
-                this.health = 0;
-                this.speed = 0;
-                if (window.game) window.game.crashReason = `${this.vehicleType === 'scooter' ? 'SCOOTER' : 'BICYCLE'} SPILL: Thrown off at speed hitting a pothole`;
-              } else {
-                this.health = Math.max(0, this.health - damage);
-              }
-              sound.playPothole();
-
-              const app = document.getElementById('game-app');
-              if (app) {
-                app.classList.add('screen-shake');
-                setTimeout(() => app.classList.remove('screen-shake'), 350);
-              }
-              if (window.game) {
-                window.game.spawnPotholeSplash(carPos, Math.round(16 * sizeFactor));
-                window.game.addNotification(
-                  isSpill ? '💥 THROWN OFF! Pothole ended your run' : `⚠️ POTHOLE HIT! Health -${damage}%`,
-                  isSpill ? 'danger' : 'warning',
-                  3500
-                );
-                window.game.updateHUDStats();
-              }
-              setTimeout(() => { p.hitRecently = false; }, 1500);
-            }
-          }
-        });
-      }
-
-      // 5. Overhead Speed Camera Detection & E-Challans
-      if (world.speedCameras) {
-        world.speedCameras.forEach(cam => {
-          const d = carPos.distanceTo(cam.pos);
-          if (d < 5.2 && !cam.triggeredRecently) {
-            if (this.speed > cam.speedLimit) {
-              cam.triggeredRecently = true;
-              sound.playSpeedCam();
-
-              // Screen camera photo flash
-              const flash = document.getElementById('speed-cam-flash');
-              if (flash) {
-                flash.classList.remove('flash-active');
-                void flash.offsetWidth;
-                flash.classList.add('flash-active');
-              }
-
-              // Deduct fine
-              if (window.game) {
-                window.game.earnings = Math.max(0, window.game.earnings - 150);
-                window.game.updateHUDStats();
-                const overKmh = Math.round(this.speed * 3.6);
-                window.game.addNotification(`🚨 E-CHALLAN! Overspeeding ${overKmh} km/h (-₹150)`, 'danger', 4000);
-              }
-
-              setTimeout(() => { cam.triggeredRecently = false; }, 4000);
-            }
-          }
-        });
-      }
+      // Speed camera / E-Challan fine system removed — caught live during
+      // verification driving at 114 km/h (a normal speed for this game, not
+      // a punishable one): fired a "-₹150 E-CHALLAN" notification, which is
+      // courier-fine framing the slowroads-style pivot doesn't want. The
+      // gantry props/`world.speedCameras` spawn logic is left in place
+      // (still a visible roadside structure — decorative overhead gantry),
+      // only the speed-triggered fine/flash/notification behavior is gone.
 
       // 6. Roadside Garage Pitstop Repair Bay
       if (world.repairBays) {
@@ -7717,22 +7492,7 @@
         ctx.stroke();
       }
 
-      // Draw Traffic Dots on Minimap
-      this.world.trafficVehicles.forEach(tv => {
-        const rel = tv.mesh.position.clone().sub(carPos);
-        const latDist = rel.dot(carRight);
-        const fwdDist = rel.dot(carForward);
-
-        const mx = w / 2 + latDist * 0.85;
-        const my = h / 2 - fwdDist * 0.85;
-
-        if (mx >= 6 && mx <= w - 6 && my >= 6 && my <= h - 6) {
-          ctx.fillStyle = '#ff9f1c';
-          ctx.beginPath();
-          ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      });
+      // Traffic dots removed — no NPC traffic vehicles exist anymore.
 
       // Draw Next Delivery Target Pin on Minimap
       if (nextTarget) {
@@ -7791,7 +7551,13 @@
             this.spawnDust(this.vehicle.mesh.position, 1);
           }
         }
-        this.updateOrderTimer(dt);
+        // updateOrderTimer() call removed — it fired live "TIME EXPIRED"/
+        // "DELIVERY MISSED" penalty notifications and earnings deductions
+        // during driving, a real leftover from the courier loop the
+        // dispatch UI removal (Master Prompt section 1) missed since it
+        // only touched HUD markup, not this per-frame timer tick. Caught
+        // live: an actual "TIME EXPIRED! Penalty -₹25" banner appeared
+        // during a verification drive with no dispatch UI on screen.
         this.updateCamera(dt);
         this.updateGPSNavigation();
         this.updateClimateHUD();
