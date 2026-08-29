@@ -1082,12 +1082,12 @@
     // see BUGFIX_LOG.md Pattern 1/3), bore a tunnel through it instead of
     // trying to out-clamp the noise. Turns an unfixable visual bug into an
     // intentional set piece rather than chasing a 4th root cause.
-    TUNNEL_OVERHEAD_THRESHOLD: 16.0, // terrain must clear road by this much
-    TUNNEL_MIN_RUN: 6,               // min contiguous samples (~ meters * segment spacing) to count as a zone
-    TUNNEL_PAD: 3,                   // extra samples of portal buffer on each end
-    TUNNEL_HALF_WIDTH: 6.0,          // semicircle radius, must exceed embankment slices it clamps
-    TUNNEL_WALL_COLOR: 0x4a4038,
-    TUNNEL_LIGHT_SPACING: 8,         // place a lamp every N longitudinal samples inside a zone
+    TUNNEL_OVERHEAD_THRESHOLD: 7.5,  // terrain clears road by 7.5m -> bores highway tunnel
+    TUNNEL_MIN_RUN: 8,               // min contiguous samples for a zone
+    TUNNEL_PAD: 4,                   // portal buffer on each end
+    TUNNEL_HALF_WIDTH: 6.2,          // wide 2-lane arched bore
+    TUNNEL_WALL_COLOR: 0x334155,     // modern reinforced concrete
+    TUNNEL_LIGHT_SPACING: 6,         // frequent amber sodium fixtures
 
     SEASONS: {
       autumn: {
@@ -1741,7 +1741,7 @@
     generateSpline() {
       this.splineNodes = [];
       const nodeCount = CONFIG.ROAD_POINTS_COUNT; // 500 nodes
-      const stepDist = 10.0; // Anslo 10m Incremental Step Scout
+      const stepDist = 12.0; // Slow Roads 12m Sweeping Guide Steps
 
       let curX = 0;
       let curZ = 0;
@@ -1751,28 +1751,24 @@
       const angleHistory = [];
       const repulsors = [];
 
-      // City tuning parameters for regional topography
-      let windingWeight = 0.55;
-      let maxGrade = 0.08; // 8% maximum highway slope
+      // City tuning parameters for regional topography (Slow Roads silky curves)
+      let windingWeight = 0.40;
+      const maxGrade = 0.045; // Strict 4.5% max highway grade (eliminates sudden steep hills & bumpy crests)
 
       if (this.cityKey === 'pune') {
-        windingWeight = 0.85; // High winding ghats & wadas
-        maxGrade = 0.12;
+        windingWeight = 0.55;
       } else if (this.cityKey === 'mumbai') {
-        windingWeight = 0.60;
-        maxGrade = 0.07;
+        windingWeight = 0.45;
       } else if (this.cityKey === 'delhi') {
-        windingWeight = 0.35;
-        maxGrade = 0.05;
+        windingWeight = 0.28;
       } else if (this.cityKey === 'kolkata') {
-        windingWeight = 0.48;
-        maxGrade = 0.06;
+        windingWeight = 0.35;
       } else { // bangalore
-        windingWeight = 0.65;
-        maxGrade = 0.09;
+        windingWeight = 0.48;
       }
 
-      const candidateDeltas = [-0.30, -0.15, 0.0, 0.15, 0.30]; // Smooth sweeping curves (±17°, ±8.5°, 0°)
+      // Gentle sweeping turn candidate deltas (±8°, ±4°, 0°)
+      const candidateDeltas = [-0.14, -0.07, 0.0, 0.07, 0.14];
 
       for (let i = 0; i < nodeCount; i++) {
         this.splineNodes.push(new THREE.Vector3(curX, curY, curZ));
@@ -1782,7 +1778,7 @@
         }
 
         // Long-term macro corridor bias (drifting gently forward while weaving)
-        const macroNoise = this.simplex.noise2D(curX * 0.0006, curZ * 0.0006) * 1.8;
+        const macroNoise = this.simplex.noise2D(curX * 0.0004, curZ * 0.0004) * 1.5;
         const targetBias = macroNoise * windingWeight;
 
         let bestAngle = curAngle;
@@ -1795,20 +1791,17 @@
 
           // 1. Tiered Angular Checks (Prevents hairpin self-intersections)
           let angleViolated = false;
-          // Short window (50m = 5 steps): <= 90 deg (1.57 rad)
           if (angleHistory.length >= 5) {
             const sumTurn5 = Math.abs(candAngle - angleHistory[angleHistory.length - 5]);
-            if (sumTurn5 > 1.57) angleViolated = true;
+            if (sumTurn5 > 1.20) angleViolated = true;
           }
-          // Medium window (150m = 15 steps): <= 160 deg (2.79 rad)
           if (angleHistory.length >= 15) {
             const sumTurn15 = Math.abs(candAngle - angleHistory[angleHistory.length - 15]);
-            if (sumTurn15 > 2.79) angleViolated = true;
+            if (sumTurn15 > 2.40) angleViolated = true;
           }
-          // Long window (300m = 30 steps): <= 200 deg (3.49 rad)
           if (angleHistory.length >= 30) {
             const sumTurn30 = Math.abs(candAngle - angleHistory[angleHistory.length - 30]);
-            if (sumTurn30 > 3.49) angleViolated = true;
+            if (sumTurn30 > 3.20) angleViolated = true;
           }
 
           if (angleViolated) continue;
@@ -1819,23 +1812,23 @@
 
           // 2. Sample Terrain Elevation & Longitudinal Slope Grade
           const rawTerrainY = this.getRawTerrainHeight(candX, candZ);
-          // Target elevation stays near ground contour, smoothed
-          let candY = THREE.MathUtils.lerp(curY, rawTerrainY + 0.6, 0.25);
+          // Target elevation stays near ground contour, smoothed gently
+          let candY = THREE.MathUtils.lerp(curY, rawTerrainY + 0.8, 0.12);
           const slopeGrade = Math.abs(candY - curY) / stepDist;
 
           // 3. Repulsor Distance Force (Anti-looping)
           let repulsorForce = 0;
           for (let r = 0; r < repulsors.length; r++) {
             const d = repulsors[r].distanceTo(new THREE.Vector2(candX, candZ));
-            if (d < 50.0) {
-              repulsorForce += (50.0 - d) * 3.0;
+            if (d < 60.0) {
+              repulsorForce += (60.0 - d) * 3.5;
             }
           }
 
           // 4. Multi-Factor Cost Function Scoring
-          const angleCost = Math.abs(candAngle - curAngle - targetBias * 0.2);
-          const slopeCost = Math.max(0, slopeGrade - maxGrade) * 35.0 + slopeGrade * 5.0;
-          const score = slopeCost * 1.5 + angleCost * 2.0 + repulsorForce;
+          const angleCost = Math.abs(candAngle - curAngle - targetBias * 0.15);
+          const slopeCost = Math.max(0, slopeGrade - maxGrade) * 50.0 + slopeGrade * 6.0;
+          const score = slopeCost * 2.0 + angleCost * 2.5 + repulsorForce;
 
           if (score < bestScore) {
             bestScore = score;
@@ -1844,12 +1837,24 @@
           }
         }
 
-        curAngle = THREE.MathUtils.lerp(curAngle, bestAngle, 0.45);
-        // Clamp slope grade to maximum allowed
+        curAngle = THREE.MathUtils.lerp(curAngle, bestAngle, 0.35);
+        // Strict highway grade clamp
         const yDelta = Math.max(-maxGrade * stepDist, Math.min(maxGrade * stepDist, bestCandidateY - curY));
         curY += yDelta;
         curX += Math.sin(curAngle) * stepDist;
         curZ += Math.cos(curAngle) * stepDist;
+      }
+
+      // 3-Pass Rolling Gaussian Smoothing across all spline nodes (Slow Roads signature silky smooth road profile)
+      for (let pass = 0; pass < 3; pass++) {
+        for (let i = 1; i < this.splineNodes.length - 1; i++) {
+          const prev = this.splineNodes[i - 1];
+          const cur = this.splineNodes[i];
+          const next = this.splineNodes[i + 1];
+          cur.x = prev.x * 0.20 + cur.x * 0.60 + next.x * 0.20;
+          cur.y = prev.y * 0.20 + cur.y * 0.60 + next.y * 0.20;
+          cur.z = prev.z * 0.20 + cur.z * 0.60 + next.z * 0.20;
+        }
       }
 
       this.angleHistory = angleHistory;
@@ -1858,10 +1863,7 @@
       this.curve = new THREE.CatmullRomCurve3(this.splineNodes, false, 'centripetal');
       this.computeTunnelZones();
 
-      // Bounding box of the actual road extent — the spline is a random
-      // walk and does not stay centered near the origin, so anything that
-      // needs to blanket the whole world (e.g. the background floor) must
-      // size and center itself off this, not off a fixed assumption.
+      // Bounding box of the actual road extent
       let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
       for (const n of this.splineNodes) {
         if (n.x < minX) minX = n.x;
@@ -1874,34 +1876,30 @@
 
     // Incremental Forward Highway Spline Scout (Infinite Highway Streaming)
     extendSpline(count = 50) {
-      const stepDist = 10.0;
-      let windingWeight = 0.55;
-      let maxGrade = 0.08;
+      const stepDist = 12.0;
+      let windingWeight = 0.40;
+      const maxGrade = 0.045; // Strict 4.5% max grade
 
       if (this.cityKey === 'pune') {
-        windingWeight = 0.85;
-        maxGrade = 0.12;
+        windingWeight = 0.55;
       } else if (this.cityKey === 'mumbai') {
-        windingWeight = 0.60;
-        maxGrade = 0.07;
+        windingWeight = 0.45;
       } else if (this.cityKey === 'delhi') {
-        windingWeight = 0.35;
-        maxGrade = 0.05;
+        windingWeight = 0.28;
       } else if (this.cityKey === 'kolkata') {
+        windingWeight = 0.35;
+      } else { // bangalore
         windingWeight = 0.48;
-        maxGrade = 0.06;
-      } else {
-        windingWeight = 0.65;
-        maxGrade = 0.09;
       }
 
-      const candidateDeltas = [-0.30, -0.15, 0.0, 0.15, 0.30];
+      const candidateDeltas = [-0.14, -0.07, 0.0, 0.07, 0.14];
       let lastNode = this.splineNodes[this.splineNodes.length - 1];
       let curX = lastNode.x, curY = lastNode.y, curZ = lastNode.z;
       let curAngle = this.lastScoutAngle || 0;
+      const startIndex = this.splineNodes.length;
 
       for (let i = 0; i < count; i++) {
-        const macroNoise = this.simplex.noise2D(curX * 0.0006, curZ * 0.0006) * 1.8;
+        const macroNoise = this.simplex.noise2D(curX * 0.0004, curZ * 0.0004) * 1.5;
         const targetBias = macroNoise * windingWeight;
 
         let bestAngle = curAngle;
@@ -1915,15 +1913,15 @@
           let angleViolated = false;
           if (this.angleHistory && this.angleHistory.length >= 5) {
             const sumTurn5 = Math.abs(candAngle - this.angleHistory[this.angleHistory.length - 5]);
-            if (sumTurn5 > 1.57) angleViolated = true;
+            if (sumTurn5 > 1.20) angleViolated = true;
           }
           if (this.angleHistory && this.angleHistory.length >= 15) {
             const sumTurn15 = Math.abs(candAngle - this.angleHistory[this.angleHistory.length - 15]);
-            if (sumTurn15 > 2.79) angleViolated = true;
+            if (sumTurn15 > 2.40) angleViolated = true;
           }
           if (this.angleHistory && this.angleHistory.length >= 30) {
             const sumTurn30 = Math.abs(candAngle - this.angleHistory[this.angleHistory.length - 30]);
-            if (sumTurn30 > 3.49) angleViolated = true;
+            if (sumTurn30 > 3.20) angleViolated = true;
           }
 
           if (angleViolated) continue;
@@ -1932,22 +1930,22 @@
           const candZ = curZ + Math.cos(candAngle) * stepDist;
 
           const rawTerrainY = this.getRawTerrainHeight(candX, candZ);
-          let candY = THREE.MathUtils.lerp(curY, rawTerrainY + 0.6, 0.25);
+          let candY = THREE.MathUtils.lerp(curY, rawTerrainY + 0.8, 0.12);
           const slopeGrade = Math.abs(candY - curY) / stepDist;
 
           let repulsorForce = 0;
           if (this.repulsors) {
             for (let r = Math.max(0, this.repulsors.length - 30); r < this.repulsors.length; r++) {
               const d = this.repulsors[r].distanceTo(new THREE.Vector2(candX, candZ));
-              if (d < 50.0) {
-                repulsorForce += (50.0 - d) * 3.0;
+              if (d < 60.0) {
+                repulsorForce += (60.0 - d) * 3.5;
               }
             }
           }
 
-          const angleCost = Math.abs(candAngle - curAngle - targetBias * 0.2);
-          const slopeCost = Math.max(0, slopeGrade - maxGrade) * 35.0 + slopeGrade * 5.0;
-          const score = slopeCost * 1.5 + angleCost * 2.0 + repulsorForce;
+          const angleCost = Math.abs(candAngle - curAngle - targetBias * 0.15);
+          const slopeCost = Math.max(0, slopeGrade - maxGrade) * 50.0 + slopeGrade * 6.0;
+          const score = slopeCost * 2.0 + angleCost * 2.5 + repulsorForce;
 
           if (score < bestScore) {
             bestScore = score;
@@ -1956,7 +1954,7 @@
           }
         }
 
-        curAngle = THREE.MathUtils.lerp(curAngle, bestAngle, 0.45);
+        curAngle = THREE.MathUtils.lerp(curAngle, bestAngle, 0.35);
         const yDelta = Math.max(-maxGrade * stepDist, Math.min(maxGrade * stepDist, bestCandidateY - curY));
         curY += yDelta;
         curX += Math.sin(curAngle) * stepDist;
@@ -1966,6 +1964,18 @@
         this.angleHistory.push(curAngle);
         if (this.splineNodes.length % 8 === 0) {
           this.repulsors.push(new THREE.Vector2(curX, curZ));
+        }
+      }
+
+      // Smooth the newly appended nodes seamlessly with the existing spline
+      for (let pass = 0; pass < 3; pass++) {
+        for (let i = Math.max(1, startIndex - 2); i < this.splineNodes.length - 1; i++) {
+          const prev = this.splineNodes[i - 1];
+          const cur = this.splineNodes[i];
+          const next = this.splineNodes[i + 1];
+          cur.x = prev.x * 0.20 + cur.x * 0.60 + next.x * 0.20;
+          cur.y = prev.y * 0.20 + cur.y * 0.60 + next.y * 0.20;
+          cur.z = prev.z * 0.20 + cur.z * 0.60 + next.z * 0.20;
         }
       }
 
@@ -2722,7 +2732,8 @@
     // for every zone computeTunnelZones() found, plus a lamp every few
     // samples so the inside isn't pitch black. Returns a Group (possibly
     // empty — most seeds have zero tall-hill zones) to add/remove from the
-    // scene alongside the road/terrain meshes.
+    // Builds a premium highway tunnel bore with architectural portal facades,
+    // overhead warm sodium tube lighting, and flush road slab meeting
     createTunnelMeshes() {
       const group = new THREE.Group();
       group.name = 'tunnels';
@@ -2730,19 +2741,17 @@
       if (!this.tunnelZones || !this.tunnelZones.length) return group;
 
       const points = this.tunnelPoints;
-      const halfWidth = CONFIG.TUNNEL_HALF_WIDTH;
-      const wallHeight = 4.0;
-      const archRadius = halfWidth + 1.0;
-      const archSegs = 10;
+      const halfWidth = CONFIG.TUNNEL_HALF_WIDTH || 6.2;
+      const wallHeight = 4.2;
+      const archRadius = halfWidth + 0.8;
+      const archSegs = 12;
 
-      // Cross-section as a list of {lat, h} offsets from the road surface,
-      // left wall base -> left wall top -> arch -> right wall top -> right
-      // wall base. Order matters: it becomes the j index used below.
+      // Cross-section of tunnel casing from road surface up to ceiling arch
       const section = [];
       section.push({ lat: -halfWidth, h: 0 });
       section.push({ lat: -halfWidth, h: wallHeight });
       for (let s = 0; s <= archSegs; s++) {
-        const theta = Math.PI - (Math.PI * s / archSegs); // PI (left) -> 0 (right)
+        const theta = Math.PI - (Math.PI * s / archSegs);
         section.push({ lat: Math.cos(theta) * archRadius, h: wallHeight + Math.sin(theta) * archRadius });
       }
       section.push({ lat: halfWidth, h: wallHeight });
@@ -2750,10 +2759,23 @@
       const sliceCount = section.length;
 
       const wallMat = new THREE.MeshStandardMaterial({
-        color: CONFIG.TUNNEL_WALL_COLOR,
-        roughness: 0.9,
-        metalness: 0.05,
+        color: 0x334155, // reinforced concrete tunnel casing
+        roughness: 0.82,
+        metalness: 0.15,
         side: THREE.DoubleSide
+      });
+
+      const portalMat = new THREE.MeshStandardMaterial({
+        color: 0x1e293b, // weathered structural concrete portal facade
+        roughness: 0.90,
+        metalness: 0.20
+      });
+
+      const cautionMat = new THREE.MeshStandardMaterial({
+        color: 0xf59e0b, // amber caution header strip
+        emissive: 0xd97706,
+        emissiveIntensity: 0.6,
+        roughness: 0.4
       });
 
       for (const zone of this.tunnelZones) {
@@ -2776,20 +2798,18 @@
 
           for (const { lat, h } of section) {
             const worldPos = pt.clone().addScaledVector(normal, lat);
-            worldPos.y = pt.y - 0.18 + h;
+            // Sits flush atop the +0.12 road surface slab
+            worldPos.y = pt.y + 0.12 + h;
             positions.push(worldPos.x, worldPos.y, worldPos.z);
-            // Inward-facing normal: from the cross-section edge back toward
-            // the tunnel's own centerline/axis at this height.
             const nrm = new THREE.Vector3(-normal.x, 0, -normal.z).normalize().lerp(new THREE.Vector3(0, -1, 0), h / (wallHeight + archRadius));
             normals.push(nrm.x, nrm.y, nrm.z);
-            uvs.push((i - zone.start) * 0.3, (lat + halfWidth) * 0.1);
+            uvs.push((i - zone.start) * 0.25, (lat + halfWidth) * 0.1);
           }
 
           if (i > zone.start) {
             const prevRow = rowIndices[rowIndices.length - 2];
             for (let j = 0; j < sliceCount - 1; j++) {
               const a = prevRow + j, b = prevRow + j + 1, c = rowStart + j, d = rowStart + j + 1;
-              // Wound so the visible (front) face points inward, toward the tube's own axis.
               indices.push(a, c, b);
               indices.push(b, c, d);
             }
@@ -2806,39 +2826,75 @@
         mesh.receiveShadow = true;
         group.add(mesh);
 
-        // Ceiling-mounted fixtures every few samples, centered on the arch
-        // apex — a distinct fixture from the outdoor roadside streetlamps
-        // (which are boom-armed poles planted beside the shoulder; these
-        // are flush-mounted overhead, the way an actual bored tunnel is
-        // lit). A visible housing + lens, not just a bare point light, so
-        // it reads as a fixture even with the light off in the distance.
-        const fixtureGeom = new THREE.BoxGeometry(0.5, 0.22, 2.4);
-        const fixtureMat = new THREE.MeshStandardMaterial({ color: 0x2b2f33, roughness: 0.5, metalness: 0.6 });
-        const lensGeom = new THREE.BoxGeometry(0.36, 0.06, 2.0);
-        const lensMat = new THREE.MeshStandardMaterial({ color: 0xfff2d9, emissive: 0xfff2d9, emissiveIntensity: 1.6, roughness: 0.3 });
+        // 2. Reinforced Concrete Portal Facades at Entrance & Exit
+        [zone.start, zone.end].forEach((portalIdx, pIndex) => {
+          const pt = points[portalIdx];
+          const prev = points[Math.max(0, portalIdx - 1)];
+          const next = points[Math.min(points.length - 1, portalIdx + 1)];
+          const tangent = new THREE.Vector3().subVectors(next, prev).normalize();
+          if (pIndex === 1) tangent.negate(); // face outward at exit
+          const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+          const portalGroup = new THREE.Group();
+          portalGroup.position.copy(pt);
+          portalGroup.position.y = pt.y + 0.12;
+
+          // Left & Right Portal Concrete Pillars
+          const pillarGeom = new THREE.BoxGeometry(2.4, wallHeight + archRadius + 1.2, 3.2);
+          const leftPillar = new THREE.Mesh(pillarGeom, portalMat);
+          leftPillar.position.set(-(halfWidth + 1.2), (wallHeight + archRadius + 1.2) * 0.5, 0);
+          const rightPillar = new THREE.Mesh(pillarGeom, portalMat);
+          rightPillar.position.set(halfWidth + 1.2, (wallHeight + archRadius + 1.2) * 0.5, 0);
+
+          // Top Header Arch Beam
+          const headerGeom = new THREE.BoxGeometry(halfWidth * 2 + 4.8, 2.2, 3.2);
+          const headerBeam = new THREE.Mesh(headerGeom, portalMat);
+          headerBeam.position.set(0, wallHeight + archRadius + 1.1, 0);
+
+          // Amber Caution Clearance Sign Bar
+          const cautionGeom = new THREE.BoxGeometry(halfWidth * 2 + 1.0, 0.45, 0.3);
+          const cautionBar = new THREE.Mesh(cautionGeom, cautionMat);
+          cautionBar.position.set(0, wallHeight + archRadius - 0.1, 1.65);
+
+          portalGroup.add(leftPillar, rightPillar, headerBeam, cautionBar);
+          portalGroup.lookAt(portalGroup.position.clone().add(tangent));
+          group.add(portalGroup);
+        });
+
+        // 3. Overhead Warm Sodium Tube Light Fixtures & Lamps
+        const fixtureGeom = new THREE.BoxGeometry(0.55, 0.22, 3.2);
+        const fixtureMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4, metalness: 0.8 });
+        const tubeGeom = new THREE.CylinderGeometry(0.08, 0.08, 2.8, 12);
+        tubeGeom.rotateX(Math.PI / 2);
+        const sodiumMat = new THREE.MeshStandardMaterial({
+          color: 0xffedd5,
+          emissive: 0xffb347,
+          emissiveIntensity: 2.5,
+          roughness: 0.2
+        });
 
         const apexHeight = wallHeight + archRadius;
-        const lampSpacing = CONFIG.TUNNEL_LIGHT_SPACING;
-        for (let i = zone.start; i <= zone.end; i += lampSpacing) {
+        const lampSpacing = CONFIG.TUNNEL_LIGHT_SPACING || 6;
+        for (let i = zone.start + 1; i < zone.end; i += lampSpacing) {
           const pt = points[i];
           const prev = points[Math.max(zone.start, i - 1)];
           const next = points[Math.min(zone.end, i + 1)];
           const tangent = new THREE.Vector3().subVectors(next, prev).normalize();
 
           const fixturePos = pt.clone();
-          fixturePos.y = pt.y - 0.18 + apexHeight - 0.14; // recessed slightly into the ceiling, not floating below it
+          fixturePos.y = pt.y + 0.12 + apexHeight - 0.15;
 
           const fixture = new THREE.Group();
           const housing = new THREE.Mesh(fixtureGeom, fixtureMat);
-          const lens = new THREE.Mesh(lensGeom, lensMat);
-          lens.position.y = -0.09;
-          fixture.add(housing, lens);
+          const tube = new THREE.Mesh(tubeGeom, sodiumMat);
+          tube.position.y = -0.10;
+          fixture.add(housing, tube);
           fixture.position.copy(fixturePos);
           fixture.lookAt(fixturePos.clone().add(tangent));
           group.add(fixture);
 
-          const lamp = new THREE.PointLight(0xfff2d9, 5.5, 15.0, 2.0);
-          lamp.position.set(fixturePos.x, fixturePos.y - 0.3, fixturePos.z);
+          const lamp = new THREE.PointLight(0xffb347, 3.8, 22.0, 2.0);
+          lamp.position.set(fixturePos.x, fixturePos.y - 0.35, fixturePos.z);
           group.add(lamp);
         }
       }
@@ -4749,6 +4805,14 @@
       const TOTAL_POINTS = 800; // matches createFoliageAndProps' getSpacedPoints(800)
       const i = Math.round(splineProgress * TOTAL_POINTS);
       const avgSegStep = (this.curve ? this.curve.getLength() : 5000) / TOTAL_POINTS;
+
+      // Inside tunnel bore, widen lateral clamp to the tunnel walls (5.0m)
+      const meshIdx = Math.round(splineProgress * CONFIG.ROAD_MESH_SEGMENTS);
+      if (this.isInTunnelZone && this.isInTunnelZone(meshIdx, 2)) {
+        const tunnelHalf = CONFIG.TUNNEL_HALF_WIDTH || 6.2;
+        return tunnelHalf - 1.05 - 0.15; // 5.00m clean glancing against concrete tunnel wall
+      }
+
       const nearestHouseCheckpoint = Math.round(i / 24) * 24;
       const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
       const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
@@ -8582,6 +8646,15 @@
         this.updateGPSNavigation();
         this.updateClimateHUD();
         this.updateHealthHUD();
+
+        // Dynamic Tunnel Interior Atmosphere & Fog Control (crisp clear view inside tunnels)
+        if (this.scene && this.scene.fog && this.world && this.vehicle) {
+          const meshIdx = Math.round(this.vehicle.splineProgress * CONFIG.ROAD_MESH_SEGMENTS);
+          const inTunnel = this.world.isInTunnelZone && this.world.isInTunnelZone(meshIdx, 2);
+          const season = CONFIG.SEASONS[this.selectedSeason] || CONFIG.SEASONS.autumn;
+          const targetFog = inTunnel ? 0.0003 : (season.fogDensity || 0.0016);
+          this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, targetFog, 0.08);
+        }
 
         // Infinite Highway District Milestones (Seamless progression every 5 km)
         const nextDistrictThreshold = (this.currentDistrict || 1) * 5.0;
