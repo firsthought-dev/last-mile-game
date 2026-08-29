@@ -1216,18 +1216,18 @@
       },
       dusk: {
         id: 'dusk',
-        name: 'Twilight Dusk',
+        name: 'Sunset Golden Hour',
         icon: '🌇',
-        skyTop: 0x1e1b4b,
-        skyHorizon: 0x7c3aed,
-        skyBottom: 0xf43f5e,
-        fog: 0x7c3aed,
-        fogDensity: 0.0058,
-        sunColor: 0xf97316,
-        sunIntensity: 1.05,
+        skyTop: 0x1e293b,
+        skyHorizon: 0xf97316,
+        skyBottom: 0xfde047,
+        fog: 0xf97316,
+        fogDensity: 0.0052,
+        sunColor: 0xffedd5,
+        sunIntensity: 1.10,
         sunPos: [-220, 75, -140],
-        ambientColor: 0xa855f7,
-        ambientIntensity: 0.42,
+        ambientColor: 0xfb923c,
+        ambientIntensity: 0.48,
         night: false
       },
       night: {
@@ -4896,6 +4896,70 @@
       roadMesh.receiveShadow = true;
       scene.add(roadMesh);
 
+      // 1b. Lane Markings extension decals (White outer lines & Yellow dashed centerline)
+      const buildExtensionMarking = (lateralOffset, color, dashed) => {
+        const positions = [];
+        const colors = [];
+        const normalsOut = [];
+        const indices = [];
+        let vertCount = 0;
+        const stripeHalfW = 0.06;
+        const dashPeriod = 3;
+        const paintLift = 0.02;
+
+        for (let i = startSeg; i <= endSeg; i++) {
+          if (dashed && (Math.floor(i / dashPeriod) % 2 === 1)) {
+            continue;
+          }
+          if (dashed && (i < endSeg) && (Math.floor((i + 1) / dashPeriod) % 2 === 1)) {
+            continue;
+          }
+
+          const pt = points[i];
+          const bankingAngle = this.roadBankingAngles[i] || 0;
+          const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
+          const binormal = this.roadBinormals[i] || new THREE.Vector3(0, 1, 0);
+          const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
+          const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
+
+          const pLeft = pt.clone().addScaledVector(bankedNormal, lateralOffset - stripeHalfW).addScaledVector(bankedUp, 0.12 + paintLift);
+          const pRight = pt.clone().addScaledVector(bankedNormal, lateralOffset + stripeHalfW).addScaledVector(bankedUp, 0.12 + paintLift);
+
+          positions.push(pLeft.x, pLeft.y, pLeft.z, pRight.x, pRight.y, pRight.z);
+          normalsOut.push(bankedUp.x, bankedUp.y, bankedUp.z, bankedUp.x, bankedUp.y, bankedUp.z);
+          colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
+
+          if (vertCount >= 2 && (!dashed || (Math.floor((i - 1) / dashPeriod) % 2 === 0))) {
+            const v0 = vertCount - 2;
+            const v1 = vertCount - 1;
+            const v2 = vertCount;
+            const v3 = vertCount + 1;
+            indices.push(v0, v1, v2);
+            indices.push(v1, v3, v2);
+          }
+          vertCount += 2;
+        }
+
+        if (positions.length > 0) {
+          const geom = new THREE.BufferGeometry();
+          geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+          geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+          geom.setAttribute('normal', new THREE.Float32BufferAttribute(normalsOut, 3));
+          geom.setIndex(indices);
+          const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, depthWrite: false });
+          const mesh = new THREE.Mesh(geom, mat);
+          mesh.renderOrder = 1;
+          scene.add(mesh);
+        }
+      };
+
+      const edgeLineColor = new THREE.Color(0x9aa0a8);
+      const centerLineColor = new THREE.Color(0xb9a968);
+      const edgeOffset = roadWidth * 0.46;
+      buildExtensionMarking(-edgeOffset, edgeLineColor, false);
+      buildExtensionMarking(edgeOffset, edgeLineColor, false);
+      buildExtensionMarking(0.0, centerLineColor, true);
+
       // 2. Terrain ribbon extension mesh
       const lateralSlices = [
         -45.0, -30.0, -18.0, -9.0, -laneHalf - shoulderWidth,
@@ -4977,13 +5041,13 @@
       terrainMesh.receiveShadow = true;
       scene.add(terrainMesh);
 
-      // 3. Roadside Props (Trees, rocks, streetlights) along the new segment
+      // 3. Roadside Props (Trees, rocks, fences) along the new segment
       const newTrees = [];
-      for (let i = startSeg; i <= endSeg; i += 6) {
+      for (let i = startSeg; i <= endSeg; i += 5) {
         const pt = points[i];
         const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
         [-1, 1].forEach(side => {
-          const lat = (12.0 + (this.prng ? this.prng.next() : Math.random()) * 28.0) * side;
+          const lat = (10.0 + (this.prng ? this.prng.next() : Math.random()) * 26.0) * side;
           const p = pt.clone().addScaledVector(normal, lat);
           p.y = this.groundHeightAt(pt, p, lat);
           const scale = 3.5 + (this.prng ? this.prng.next() : Math.random()) * 3.5;
@@ -8474,11 +8538,19 @@
         if (!this.onFoot && this.vehicle.distanceTraveled >= nextDistrictThreshold && !this.districtTransitioning) {
           this.districtTransitioning = true;
           this.currentDistrict = (this.currentDistrict || 1) + 1;
+          const districtNames = [
+            'Scenic Foothills Highway',
+            'Western Ghats Ridge',
+            'Sahyadri Valley Expressway',
+            'Konkan Coastal Pass',
+            'Deccan Plateau Grand Corridor'
+          ];
+          const distName = districtNames[(this.currentDistrict - 1) % districtNames.length];
           const bonus = 150;
           this.earnings += bonus;
           sound.playRepair();
-          this.addNotification(`🏙️ ENTERED DISTRICT ${this.currentDistrict}! Highway Bonus +₹${bonus}`, 'success', 4000);
-          this.showScorePopup(bonus, `DISTRICT ${this.currentDistrict} REACHED!`);
+          this.addNotification(`🏙️ ENTERED DISTRICT ${this.currentDistrict}: ${distName}! Highway Bonus +₹${bonus}`, 'success', 5000);
+          this.showScorePopup(bonus, `DISTRICT ${this.currentDistrict}: ${distName.toUpperCase()}`);
 
           // Smoothly cycle time of day across highway districts
           this.cycleTimeOfDay();
