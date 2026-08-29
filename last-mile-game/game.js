@@ -3068,6 +3068,11 @@
       // the same iteration, or in different iterations entirely). Resolve
       // against the FULL obstacle list once everything is placed instead.
       const pendingFences = [];
+      // Reusable scratch objects for the instanced-fence matrix math below
+      // — avoids allocating a fresh Object3D/Matrix4 per fence segment
+      // (FENCE_STEP=1 means one segment per sampled road point, ~1200+ of
+      // these per side of the route).
+      const _fenceDummy = new THREE.Object3D();
 
       for (let i = 2; i < sampledPoints.length - 2; i++) {
         const pt = sampledPoints[i];
@@ -3683,82 +3688,65 @@
               const offsetB = yB - fencePos.y;
               const tiltAngle = Math.atan2(yB - yA, railLen);
 
-              const fenceGroup = new THREE.Group();
+              // Was one THREE.Group per segment with 4 individual Mesh
+              // children (2 posts + 2 rails, or 4 stone rows) — at
+              // FENCE_STEP=1 over a ~5km route on both shoulders, that's
+              // thousands of separate draw calls (confirmed live: 5022
+              // individual BoxGeometry meshes + 2196 CylinderGeometry
+              // meshes, almost entirely this fence, ~2000 total draw
+              // calls/frame, tanking framerate to ~18-22fps while driving).
+              // Same fix already proven for trees (TreeBillboardFactory):
+              // compute each piece's WORLD matrix now, defer only the
+              // decision of which segments survive the obstacle-overlap
+              // check below, then batch every surviving piece into a
+              // handful of InstancedMesh draw calls after the loop.
+              //
+              // The rail/wall-row geometries are unit-length (X=1) so a
+              // per-instance non-uniform scale (baked into the matrix)
+              // stretches each one to its actual railLen — the same
+              // technique the old per-segment BoxGeometry(railLen,...)
+              // achieved by baking length into the geometry itself, just
+              // moved into the instance matrix instead.
+              _fenceDummy.position.copy(fencePos);
+              _fenceDummy.up.set(0, 1, 0);
+              // Same axis-swap reasoning as the old fenceGroup.lookAt call:
+              // targeting along the road normal (not the tangent) puts
+              // local +X along the tangent, so the rail runs alongside the
+              // road instead of straight across it.
+              _fenceDummy.lookAt(fencePos.clone().add(normal));
+              _fenceDummy.updateMatrix();
+              const groupMatrix = _fenceDummy.matrix;
 
-              // Master Prompt section 3: "one of the largest, most obvious
-              // gaps against the reference" was having no dry-stone-wall
-              // barrier material at all — only ever the wood split-rail.
-              // Long contiguous stretches (not isolated single segments,
-              // which would read as a glitch sandwiched between wood)
-              // alternate to a stacked fieldstone wall instead, reusing the
-              // same real rock photo texture already wired in for boulder
-              // props (RealTextureFactory.rockColor/rockNormal).
               const useStoneWall = Math.floor(i / 40) % 3 === 2;
+              const matrices = { posts: [], rails: [], stoneRows: [] };
 
               if (useStoneWall) {
-                const stoneTex = RealTextureFactory.rockColor();
-                const stoneNormal = RealTextureFactory.rockNormal();
-                // Dark exposed-stone face, pixel-verified against the
-                // reference (~#404046) — see SLOWROADS_PARITY_LOG.md.
-                const stoneMat = new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true });
                 const rowHeights = [0.22, 0.44, 0.64, 0.8];
                 rowHeights.forEach((ry, rowIdx) => {
-                  // Slight width/depth jitter per row so the wall doesn't
-                  // read as a perfectly extruded box — real dry-stone walls
-                  // taper and bulge course to course.
                   const jitter = 1.0 - rowIdx * 0.04;
-                  const wallRow = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.22, 0.32 * jitter), stoneMat);
-                  // Same terrain-following tilt as the wood fence's rails
-                  // (see the tiltAngle/offsetA/offsetB comment above) — a
-                  // flat-level course would show the same stepped-height
-                  // artifact between adjacent segments the user pointed out
-                  // for the wood fence, on this new stone variant too.
-                  wallRow.position.set(0, ry, 0);
-                  wallRow.rotation.z = tiltAngle;
-                  wallRow.castShadow = true;
-                  fenceGroup.add(wallRow);
+                  const local = new THREE.Matrix4().compose(
+                    new THREE.Vector3(0, ry, 0),
+                    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                    new THREE.Vector3(railLen, 1, jitter)
+                  );
+                  matrices.stoneRows.push(groupMatrix.clone().multiply(local));
                 });
               } else {
-                // Real wood-grain photo texture (ambientcg WoodSiding013)
-                // replacing flat brown color — SLOWROADS_PARITY_LOG.md item 7.
-                // Same map on both post/rail materials (only the base color
-                // tint differs) since it's one continuous split-rail fence,
-                // not two different wood types.
-                const fWoodTex = RealTextureFactory.woodColor();
-                const fWoodNormal = RealTextureFactory.woodNormal();
-                const fPostMat = new THREE.MeshStandardMaterial({ color: 0x8a7a68, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 });
-                const fRailMat = new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 });
-
-                // 2 vertical posts — each sits at its OWN end's ground
-                // offset (offsetA/offsetB), not both assumed level with the
-                // segment's center — see the tiltAngle comment above.
                 [[-railLen / 2, offsetA], [railLen / 2, offsetB]].forEach(([px, offset]) => {
-                  const fPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6), fPostMat);
-                  fPost.position.set(px, offset + 0.6, 0);
-                  fenceGroup.add(fPost);
+                  const local = new THREE.Matrix4().makeTranslation(px, offset + 0.6, 0);
+                  matrices.posts.push(groupMatrix.clone().multiply(local));
                 });
-                // 2 horizontal split rails — tilted to actually connect the
-                // two posts' (potentially different) heights instead of
-                // sitting perfectly flat regardless of slope.
                 [0.45, 0.85].forEach(ry => {
-                  const fRail = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.08, 0.08), fRailMat);
-                  fRail.position.set(0, ry, 0);
-                  fRail.rotation.z = tiltAngle;
-                  fenceGroup.add(fRail);
+                  const local = new THREE.Matrix4().compose(
+                    new THREE.Vector3(0, ry, 0),
+                    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                    new THREE.Vector3(railLen, 1, 1)
+                  );
+                  matrices.rails.push(groupMatrix.clone().multiply(local));
                 });
               }
 
-              fenceGroup.position.copy(fencePos);
-              // The rail spans the group's local X axis. lookAt(pos+tangent)
-              // points local -Z at the tangent, which — by how Object3D's
-              // lookAt derives its axes — puts local X along the road
-              // NORMAL instead, sending the rail straight across the road.
-              // Targeting along the normal instead puts local X along the
-              // tangent, running the rail alongside the road as intended.
-              fenceGroup.lookAt(fencePos.clone().add(normal));
-              fenceGroup.userData.isFence = true;
-              fenceGroup.userData.railLen = railLen;
-              pendingFences.push({ fenceGroup, pos: fencePos.clone(), radius: railLen / 2 });
+              pendingFences.push({ matrices, pos: fencePos.clone(), radius: railLen / 2 });
             }
           }
 
@@ -4442,11 +4430,55 @@
         }
       }
 
-      pendingFences.forEach(({ fenceGroup, pos, radius }) => {
-        const overlaps = this.obstacles.some(o => o.pos.distanceTo(pos) < (o.radius + radius));
-        if (overlaps) return;
-        this.foliageGroup.add(fenceGroup);
-      });
+      {
+        const acceptedPosts = [];
+        const acceptedRails = [];
+        const acceptedStoneRows = [];
+        pendingFences.forEach(({ matrices, pos, radius }) => {
+          const overlaps = this.obstacles.some(o => o.pos.distanceTo(pos) < (o.radius + radius));
+          if (overlaps) return;
+          acceptedPosts.push(...matrices.posts);
+          acceptedRails.push(...matrices.rails);
+          acceptedStoneRows.push(...matrices.stoneRows);
+        });
+
+        const buildFenceBatch = (matrices, geom, mat, castShadow) => {
+          if (!matrices.length) return;
+          const mesh = new THREE.InstancedMesh(geom, mat, matrices.length);
+          matrices.forEach((m, idx) => mesh.setMatrixAt(idx, m));
+          mesh.instanceMatrix.needsUpdate = true;
+          mesh.castShadow = castShadow;
+          mesh.frustumCulled = false;
+          this.foliageGroup.add(mesh);
+        };
+
+        const fWoodTex = RealTextureFactory.woodColor();
+        const fWoodNormal = RealTextureFactory.woodNormal();
+        buildFenceBatch(
+          acceptedPosts,
+          new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6),
+          new THREE.MeshStandardMaterial({ color: 0x8a7a68, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
+          false
+        );
+        buildFenceBatch(
+          acceptedRails,
+          new THREE.BoxGeometry(1, 0.08, 0.08),
+          new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
+          false
+        );
+        // Master Prompt section 3's dry-stone-wall barrier variant (see the
+        // original per-segment comment this replaced) — same real rock
+        // texture, now one InstancedMesh for all rows/segments combined
+        // instead of 4 individual Mesh objects per wall segment.
+        const stoneTex = RealTextureFactory.rockColor();
+        const stoneNormal = RealTextureFactory.rockNormal();
+        buildFenceBatch(
+          acceptedStoneRows,
+          new THREE.BoxGeometry(1, 0.22, 0.32),
+          new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
+          true
+        );
+      }
 
       // NPC/traffic vehicles (rickshaws/buses/mini-trucks) removed per the
       // slowroads-style pivot — open road, no AI traffic. `trafficVehicles`
@@ -5403,6 +5435,44 @@
       // not just along the curve.
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
 
+      // Real 4-wheel ground contact (user-requested "Slow Roads" revamp,
+      // section 3) — FL/FR/RL/RR each query `world.groundHeightAt`, the
+      // SAME single-source-of-truth height function `vehiclePos.y` above
+      // already uses (see BUGFIX_LOG.md Pattern 1: "duplicated height
+      // formulas drift apart" — every past regression in this exact area
+      // came from a second approximation of ground height, not from
+      // reusing this one). This is deliberately additive/cosmetic: it only
+      // feeds the visual pitch/roll target below, not `vehiclePos.y`
+      // itself — replacing the actual chassis-height source with a
+      // 4-point average would be a much larger, higher-risk change to a
+      // system this file's bugfix history has hardened repeatedly, and
+      // wasn't asked for. `wheelPitch`/`wheelRoll` add genuine terrain-
+      // grade response (nose tilts up a real hill, chassis rolls on a
+      // real cross-slope) on top of the existing accel/brake dive-squat
+      // and cornering lean, which previously only ever came from a single
+      // road-curvature estimate at the vehicle's own center point.
+      const carFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+      const carRt = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.mesh.quaternion);
+      const halfWheelbase = 1.45, halfTrack = 0.8;
+      const wheelCorners = {
+        FL: vehiclePos.clone().addScaledVector(carFwd, halfWheelbase).addScaledVector(carRt, -halfTrack),
+        FR: vehiclePos.clone().addScaledVector(carFwd, halfWheelbase).addScaledVector(carRt, halfTrack),
+        RL: vehiclePos.clone().addScaledVector(carFwd, -halfWheelbase).addScaledVector(carRt, -halfTrack),
+        RR: vehiclePos.clone().addScaledVector(carFwd, -halfWheelbase).addScaledVector(carRt, halfTrack)
+      };
+      const wheelY = {};
+      for (const key in wheelCorners) {
+        const p = wheelCorners[key];
+        const d = p.clone().sub(proj.pt).dot(roadRight);
+        wheelY[key] = world.groundHeightAt(proj.pt, p, d);
+      }
+      const frontAxleY = (wheelY.FL + wheelY.FR) / 2;
+      const rearAxleY = (wheelY.RL + wheelY.RR) / 2;
+      const leftTrackY = (wheelY.FL + wheelY.RL) / 2;
+      const rightTrackY = (wheelY.FR + wheelY.RR) / 2;
+      const wheelPitch = THREE.MathUtils.clamp(-Math.atan2(frontAxleY - rearAxleY, halfWheelbase * 2), -0.2, 0.2);
+      const wheelRoll = THREE.MathUtils.clamp(Math.atan2(rightTrackY - leftTrackY, halfTrack * 2), -0.2, 0.2);
+
       // Dynamic Chassis Pitch (dive on braking, squat on acceleration).
       // `accelRatio` is a raw per-frame instantaneous derivative — noisy by
       // nature, and especially spiky the instant throttle is first pressed
@@ -5416,13 +5486,14 @@
       // already used for `steerAngle` elsewhere in this function.
       const accelRatio = (this.speed - (this.lastSpeed || this.speed)) / Math.max(0.01, dt);
       this.lastSpeed = this.speed;
-      const targetPitch = THREE.MathUtils.clamp(-accelRatio * 0.004, -0.06, 0.06);
+      const targetPitch = THREE.MathUtils.clamp(-accelRatio * 0.004, -0.06, 0.06) + wheelPitch;
       this.currentPitch = THREE.MathUtils.lerp(this.currentPitch, targetPitch, 1 - Math.exp(-8.0 * dt));
       this.mesh.rotateX(this.currentPitch);
 
-      // Dynamic Chassis Roll (centrifugal roll against turn + bank) — now
-      // purely cosmetic since steerAngle no longer drives orientation.
-      const targetRoll = -this.steerAngle * (this.speed / this.maxSpeed) * 0.35;
+      // Dynamic Chassis Roll (centrifugal roll against turn + bank, now
+      // also real terrain cross-slope via wheelRoll above) — still purely
+      // cosmetic since steerAngle no longer drives orientation.
+      const targetRoll = -this.steerAngle * (this.speed / this.maxSpeed) * 0.35 + wheelRoll;
       this.currentRoll = THREE.MathUtils.lerp(this.currentRoll, targetRoll, 1 - Math.exp(-8.0 * dt));
       this.mesh.rotateZ(this.currentRoll);
 
@@ -5793,13 +5864,31 @@
       // recenter on the vehicle every frame (see updateCamera) so the
       // shadow always renders near wherever the car actually is, not just
       // near the spawn point.
-      this.sunLight.shadow.camera.left = -30;
-      this.sunLight.shadow.camera.right = 30;
-      this.sunLight.shadow.camera.top = 30;
-      this.sunLight.shadow.camera.bottom = -30;
+      // Tightened from +-30 to +-16 — halving the frustum width roughly
+      // quadruples texel density (2048 texels now cover 32 units instead
+      // of 60), which is what was actually producing the jagged, blocky
+      // shadow edge reported directly ("shadow is very shitty") — the car
+      // is only ~4.5m long, so a 32-unit-wide frustum still comfortably
+      // covers it plus fence/prop shadows immediately around it without
+      // spreading the same 2048x2048 texels over 3.5x more area than
+      // needed.
+      this.sunLight.shadow.camera.left = -16;
+      this.sunLight.shadow.camera.right = 16;
+      this.sunLight.shadow.camera.top = 16;
+      this.sunLight.shadow.camera.bottom = -16;
       this.sunLight.shadow.camera.near = 1;
       this.sunLight.shadow.camera.far = 500;
-      this.sunLight.shadow.bias = -0.0015;
+      // A flat depth bias (-0.0015) fights acne and peter-panning against
+      // each other on a banked/sloped surface — too little and the sloped
+      // road self-shadows into moire noise, too much and the shadow
+      // visibly detaches from its caster. `normalBias` offsets along the
+      // surface normal instead of view depth, which is the standard fix
+      // for exactly this (slanted receiver geometry) and doesn't need a
+      // large depth bias to compensate. `radius` softens the hard/aliased
+      // edge PCFSoftShadowMap still shows at radius 1 (its default).
+      this.sunLight.shadow.bias = -0.0002;
+      this.sunLight.shadow.normalBias = 0.04;
+      this.sunLight.shadow.radius = 3;
       this.sunLight.target = new THREE.Object3D();
       this.scene.add(this.sunLight.target);
       // Fixed offset from whatever the light is currently tracking —
