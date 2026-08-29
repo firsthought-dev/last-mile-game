@@ -5876,15 +5876,19 @@
       const halfWheelbase = 1.45;
       const halfTrack = 0.82;
       const carHeading = this.heading;
+      // Car travel forward vector (along heading):
       const carFwd = new THREE.Vector3(Math.sin(carHeading), 0, Math.cos(carHeading));
-      const carRight = new THREE.Vector3(-Math.cos(carHeading), 0, Math.sin(carHeading));
+      // Car right vector (perpendicular to travel heading):
+      const carRight = new THREE.Vector3(Math.cos(carHeading), 0, -Math.sin(carHeading));
 
-      // Model faces local -Z: front axle is at -halfWheelbase along carFwd, rear axle is at +halfWheelbase
+      // 4 wheel contact sample positions in 3D world space:
+      // Front axle (+halfWheelbase in travel direction), Rear axle (-halfWheelbase)
+      // Left side (-halfTrack in right direction), Right side (+halfTrack)
       const wheelOffsets = [
-        { fwd: -halfWheelbase, right: -halfTrack }, // Front-Left
-        { fwd: -halfWheelbase, right: halfTrack },  // Front-Right
-        { fwd: halfWheelbase, right: -halfTrack },  // Rear-Left
-        { fwd: halfWheelbase, right: halfTrack }   // Rear-Right
+        { fwd: halfWheelbase, right: -halfTrack }, // Front-Left
+        { fwd: halfWheelbase, right: halfTrack },  // Front-Right
+        { fwd: -halfWheelbase, right: -halfTrack }, // Rear-Left
+        { fwd: -halfWheelbase, right: halfTrack }  // Rear-Right
       ];
 
       const wheelWorldPos = wheelOffsets.map(o => {
@@ -5905,25 +5909,28 @@
       const avgRightY = (yFR + yRR) * 0.5;
       const trueGroundCenterY = (yFL + yFR + yRL + yRR) * 0.25;
 
-      // True road grade pitch along car's actual heading orientation:
-      // Front rising (avgFrontY > avgRearY) produces positive rotateX (tilts front UP)
+      // True road grade pitch along car's actual travel orientation (front vs rear):
       const trueRoadPitch = Math.atan2(avgFrontY - avgRearY, halfWheelbase * 2.0);
-      // True road cross-slope roll across car's track width:
-      // Right dropping (avgRightY < avgLeftY) produces negative rotateZ (rolls right)
+      // True road cross-slope roll across car's track width (right vs left):
       const trueRoadRoll = Math.atan2(avgRightY - avgLeftY, halfTrack * 2.0);
 
-      // Controlled throttle dive/squat (Slow Roads parity):
+      // Controlled throttle dive/squat:
       let throttlePitch = 0;
       if (keys.w || keys.up) {
         throttlePitch = 0.008; // subtle rear squat on acceleration
       } else if (keys.s || keys.down) {
         throttlePitch = -0.012; // subtle front dive on braking
       }
-      const targetPitch = trueRoadPitch + throttlePitch;
+
+      // In parent space, the GLTF model is mounted with rotation.y = Math.PI,
+      // which inverts local Z (front is +Z in parent) and local X (right is -X in parent).
+      // Applying -trueRoadPitch lifts the car front up on hill climbs.
+      // Applying -trueRoadRoll drops the car right side down on right-banked slopes.
+      const targetPitch = -trueRoadPitch - throttlePitch;
 
       // Centrifugal roll during hard steering
-      const steerRoll = -this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.18;
-      const targetRoll = trueRoadRoll + steerRoll;
+      const steerRoll = this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.18;
+      const targetRoll = -trueRoadRoll + steerRoll;
 
       // 2nd-Order Spring-Mass-Damper Suspension Filter
       const subDt = Math.min(dt, 0.05);
