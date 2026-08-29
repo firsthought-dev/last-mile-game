@@ -5994,6 +5994,65 @@
       this.mesh.add(headR);
       this.mesh.add(headR.target);
 
+      // Slow Roads Signature Ground-Projected Headlight Illumination Decal
+      const groundHeadlightTex = (() => {
+        const c = document.createElement('canvas');
+        c.width = 512;
+        c.height = 512;
+        const gCtx = c.getContext('2d');
+        gCtx.clearRect(0, 0, 512, 512);
+
+        // Left headlight fan (casts leftward across left shoulder & barrier)
+        const leftGrad = gCtx.createRadialGradient(210, 500, 15, 140, 160, 420);
+        leftGrad.addColorStop(0.0, 'rgba(255, 252, 240, 0.95)');
+        leftGrad.addColorStop(0.2, 'rgba(255, 248, 220, 0.75)');
+        leftGrad.addColorStop(0.5, 'rgba(255, 240, 190, 0.35)');
+        leftGrad.addColorStop(0.8, 'rgba(255, 235, 180, 0.08)');
+        leftGrad.addColorStop(1.0, 'rgba(255, 235, 180, 0.0)');
+
+        gCtx.fillStyle = leftGrad;
+        gCtx.beginPath();
+        gCtx.moveTo(210, 505);
+        gCtx.lineTo(20, 20);
+        gCtx.lineTo(320, 20);
+        gCtx.closePath();
+        gCtx.fill();
+
+        // Right headlight fan (casts forward-right across road & hillside)
+        const rightGrad = gCtx.createRadialGradient(302, 500, 15, 370, 160, 420);
+        rightGrad.addColorStop(0.0, 'rgba(255, 252, 240, 0.95)');
+        rightGrad.addColorStop(0.2, 'rgba(255, 248, 220, 0.75)');
+        rightGrad.addColorStop(0.5, 'rgba(255, 240, 190, 0.35)');
+        rightGrad.addColorStop(0.8, 'rgba(255, 235, 180, 0.08)');
+        rightGrad.addColorStop(1.0, 'rgba(255, 235, 180, 0.0)');
+
+        gCtx.fillStyle = rightGrad;
+        gCtx.beginPath();
+        gCtx.moveTo(302, 505);
+        gCtx.lineTo(190, 20);
+        gCtx.lineTo(490, 20);
+        gCtx.closePath();
+        gCtx.fill();
+
+        const t = new THREE.CanvasTexture(c);
+        t.wrapS = THREE.ClampToEdgeWrapping;
+        t.wrapT = THREE.ClampToEdgeWrapping;
+        return t;
+      })();
+
+      const gBeamGeom = new THREE.PlaneGeometry(12, 28);
+      gBeamGeom.rotateX(-Math.PI / 2);
+      gBeamGeom.translate(0, 0.035, 14);
+      const gBeamMat = new THREE.MeshBasicMaterial({
+        map: groundHeadlightTex,
+        transparent: true,
+        opacity: 0.0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      this.groundHeadlightMesh = new THREE.Mesh(gBeamGeom, gBeamMat);
+      this.mesh.add(this.groundHeadlightMesh);
+
       this.headlights = [headL, headR];
       this.scene.add(this.mesh);
     }
@@ -6478,6 +6537,10 @@
           h.visible = !!active;
           h.intensity = active ? 3.6 : 0.0;
         });
+      }
+      if (this.groundHeadlightMesh) {
+        this.groundHeadlightMesh.visible = !!active;
+        this.groundHeadlightMesh.material.opacity = active ? 0.85 : 0.0;
       }
     }
   }
