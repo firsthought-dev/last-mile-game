@@ -1925,21 +1925,47 @@
       // BUGFIX_LOG.md's vehicle-sinks-into-road entry (Pattern 2, 4th
       // occurrence).
       this.roadSpacedPoints = points;
+      // Per-point banking angle + frame vectors, cached alongside
+      // roadSpacedPoints so createLaneMarkingMeshes() (built right after
+      // this) computes its decal ribbons from the EXACT same values the
+      // road surface itself used, not a second recomputation that can
+      // silently diverge (see the points-array comment above — same
+      // failure class).
+      this.roadBankingAngles = new Array(tubularSegments + 1);
+      this.roadNormals = new Array(tubularSegments + 1);
+      this.roadBankedUp = new Array(tubularSegments + 1);
       const tCfg = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
       const baseTarmac = new THREE.Color(tCfg.color);
       const vergeColor = new THREE.Color(tCfg.color).multiplyScalar(0.72);
 
-      // 7-Point Cross-Section with Painted Road Stripes
+      // Lane paint used to be baked into this ribbon's own vertex colors —
+      // first as a single column (a bright line that was actually a smooth
+      // color gradient bleeding across most of the lane, since Gouraud
+      // interpolation spreads linearly across a whole triangle), then as
+      // tightly-paired columns to narrow that bleed. Both attempts still
+      // rode on THIS mesh's own vertex density (1200 segments over ~5km,
+      // ~4.2m apart), so the painted line's apparent width and position
+      // wobbled with however much the banking/curvature happened to shift
+      // between one road vertex and the next — worse on sharper curves,
+      // which is exactly the unevenness reported. Checked slowroads.io's
+      // own shipped assets directly (network tab, live CDN): their lane
+      // paint (road_paint_dashed.webp, road_paint_solid.webp, etc.) are
+      // separate decal textures, not part of the base road material at
+      // all. This ribbon goes back to a plain 7-point tarmac/verge cross
+      // section with no paint baked in; createLaneMarkingMeshes() below
+      // adds the actual lines as their own thin, independent ribbon
+      // meshes with a fixed physical width that can't drift with the
+      // base road's vertex spacing.
+      const laneHalf = roadWidth * 0.5;
       const offsets = [
-        -roadWidth * 0.5 - shoulderWidth, // 0: Left Verge Outer
-        -roadWidth * 0.5,                  // 1: Left Solid Edge Stripe
-        -roadWidth * 0.46,                 // 2: Left Lane Tarmac
-        0.0,                               // 3: Center Yellow Divider
-        roadWidth * 0.46,                  // 4: Right Lane Tarmac
-        roadWidth * 0.5,                   // 5: Right Solid Edge Stripe
-        roadWidth * 0.5 + shoulderWidth    // 6: Right Verge Outer
+        -laneHalf - shoulderWidth, // 0: Left Verge Outer
+        -laneHalf,                  // 1: Left Tarmac Edge
+        -laneHalf * 0.46 / 0.5,     // 2: Left Lane Tarmac
+        0.0,                        // 3: Center
+        laneHalf * 0.46 / 0.5,      // 4: Right Lane Tarmac
+        laneHalf,                   // 5: Right Tarmac Edge
+        laneHalf + shoulderWidth    // 6: Right Verge Outer
       ];
-
       for (let i = 0; i <= tubularSegments; i++) {
         const pt = points[i];
 
@@ -1966,6 +1992,9 @@
         const bankingAngle = THREE.MathUtils.clamp(curvatureY * 0.25, -0.14, 0.14);
         const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
         const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
+        this.roadBankingAngles[i] = bankingAngle;
+        this.roadNormals[i] = normal.clone();
+        this.roadBankedUp[i] = bankedUp.clone();
 
         for (let j = 0; j < offsets.length; j++) {
           const off = offsets[j];
@@ -1997,32 +2026,20 @@
           normals.push(bankedUp.x, bankedUp.y, bankedUp.z);
           uvs.push(off * 0.5, i * 0.3);
 
-          // Assign sharp vertex colors for asphalt and highway paint
+          // Plain tarmac/verge only — paint is a separate decal mesh now
+          // (see createLaneMarkingMeshes), not baked into this ribbon.
           if (j === 0 || j === 6) {
             colors.push(vergeColor.r, vergeColor.g, vergeColor.b);
-          } else if (j === 1 || j === 5) {
-            // Was a near-white "Solid Edge Stripe" — same blowout problem
-            // as the old yellow center line below: under strong daylight +
-            // ACES tonemapping it read as a soft glowing white band curving
-            // along the road edge rather than a crisp paint stripe.
-            // Removed rather than dimmed, per direct user report + screenshot.
-            colors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
-          } else if (j === 3) {
-            // Was a bright yellow dashed center line — under strong
-            // daylight + ACES tonemapping it crossed the bloom threshold
-            // and blew out into large soft glowing blobs across the road
-            // instead of reading as a crisp lane marking, defeating its
-            // own purpose. Removed rather than just dimmed, per request.
-            colors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
           } else {
             colors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
           }
         }
 
         if (i < tubularSegments) {
-          const row1 = i * 7;
-          const row2 = (i + 1) * 7;
-          for (let j = 0; j < 6; j++) {
+          const cols = offsets.length;
+          const row1 = i * cols;
+          const row2 = (i + 1) * cols;
+          for (let j = 0; j < cols - 1; j++) {
             indices.push(row1 + j, row1 + j + 1, row2 + j);
             indices.push(row1 + j + 1, row2 + j + 1, row2 + j);
           }
@@ -2037,10 +2054,9 @@
       geom.computeVertexNormals();
 
       // Real photo asphalt (ambientcg Asphalt033) replacing the procedural
-      // canvas-noise texture — SLOWROADS_PARITY_LOG.md item 6. Lane-marking
-      // colors are still baked into vertexColors and multiply over this
-      // same way they did over the old texture, so stripes keep working
-      // without any separate decal pass.
+      // canvas-noise texture — SLOWROADS_PARITY_LOG.md item 6. Lane paint is
+      // no longer part of this vertexColors buffer — see
+      // createLaneMarkingMeshes() for the decal ribbons that render it.
       //
       // normalMap deliberately NOT wired in here — confirmed by direct
       // test (removing it live fixed a fully solid-black road instantly):
@@ -4417,6 +4433,8 @@
       // car with weight. See `update()`'s steering block for how this
       // reconverges toward `heading` at a grip-scaled rate each frame.
       this.velocityHeading = 0;
+      this.currentPitch = 0; // smoothed chassis dive/squat — see update()'s pitch/roll block
+      this.currentRoll = 0;  // smoothed chassis roll — same reason
       this.lateralOffset = 0; // still maintained (derived) for banking/ground-height/fence-clamp math
       this.lateralVelocity = 0; // unused by movement now; kept only so any external reset code touching it doesn't throw
       this.grip = 1.0;
@@ -5080,20 +5098,20 @@
         // car's steering behaves backing up.
         const baseTurnRate = 1.55; // rad/s at full effect
         const turnRateLimit = baseTurnRate * (isDrifting ? 1.4 : 1.0) * climateGrip;
-        // Speed-sensitive turn rate: ramps up from a dead stop (same as
-        // before, so low-speed parking maneuvers keep working), but now
-        // also falls off above ~8 m/s (~29 km/h) instead of staying flat
-        // at max turn rate all the way to top speed. A real car needs a
-        // much smaller wheel angle to hold the same yaw rate at 130 km/h
-        // than at 30 km/h — turning identically hard at any speed above a
-        // walking pace was a direct, verifiable-in-code reason driving felt
-        // wrong (checked against slowroads.io's own shipped bundle: their
-        // steering is driven by a heading/motion-direction blend that
-        // inherently softens at speed, not a flat-rate yaw controller).
-        const speedAbs = Math.abs(this.speed);
-        const speedRampUp = THREE.MathUtils.clamp(speedAbs / 6.0, 0.22, 1.0);
-        const speedFalloff = THREE.MathUtils.clamp(1.0 - (speedAbs - 8.0) / 22.0, 0.38, 1.0);
-        const speedScale = Math.min(speedRampUp, speedFalloff);
+        // Speed-sensitive turn rate: ramps up from a dead stop only (can't
+        // spin in place, but gets enough at a crawl for tight maneuvers),
+        // then holds flat to top speed. A high-speed falloff was tried here
+        // (real cars need a smaller wheel angle to hold the same yaw rate
+        // at 130 km/h than at 30 km/h) but reverted — this game's road
+        // curves were generated assuming this flat-rate turn response, and
+        // nerfing it at speed meant the car could no longer physically
+        // complete curves it used to handle fine, running off-road on
+        // ordinary bends. Confirmed directly: a sustained turn that stayed
+        // on-road before ran the car into the terrain at the same speed
+        // and input after adding the falloff. The genuine slip/momentum
+        // feel now comes from `velocityHeading` diverging from `heading`
+        // below, not from also throttling the turn rate itself.
+        const speedScale = THREE.MathUtils.clamp(Math.abs(this.speed) / 6.0, 0.22, 1.0);
         const reverseFlip = this.speed < -0.05 ? -1 : 1;
         const turnRate = turnRateLimit * speedScale * reverseFlip;
 
@@ -5258,16 +5276,28 @@
       // not just along the curve.
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
 
-      // Dynamic Chassis Pitch (dive on braking, squat on acceleration)
+      // Dynamic Chassis Pitch (dive on braking, squat on acceleration).
+      // `accelRatio` is a raw per-frame instantaneous derivative — noisy by
+      // nature, and especially spiky the instant throttle is first pressed
+      // (the exponential accel curve's biggest single-frame jump happens
+      // right at that moment). Applying it straight to `rotateX` with zero
+      // smoothing meant the whole chassis visibly snapped to a pitch angle
+      // in one frame instead of easing into it — reported directly as an
+      // "ugly snap" right when pressing accelerate. Smoothed both pitch and
+      // roll through persistent `currentPitch`/`currentRoll` state instead
+      // of applying the instantaneous target directly, same lerp pattern
+      // already used for `steerAngle` elsewhere in this function.
       const accelRatio = (this.speed - (this.lastSpeed || this.speed)) / Math.max(0.01, dt);
       this.lastSpeed = this.speed;
       const targetPitch = THREE.MathUtils.clamp(-accelRatio * 0.004, -0.06, 0.06);
-      this.mesh.rotateX(targetPitch);
+      this.currentPitch = THREE.MathUtils.lerp(this.currentPitch, targetPitch, 1 - Math.exp(-8.0 * dt));
+      this.mesh.rotateX(this.currentPitch);
 
       // Dynamic Chassis Roll (centrifugal roll against turn + bank) — now
       // purely cosmetic since steerAngle no longer drives orientation.
-      const turnRoll = -this.steerAngle * (this.speed / this.maxSpeed) * 0.35;
-      this.mesh.rotateZ(turnRoll);
+      const targetRoll = -this.steerAngle * (this.speed / this.maxSpeed) * 0.35;
+      this.currentRoll = THREE.MathUtils.lerp(this.currentRoll, targetRoll, 1 - Math.exp(-8.0 * dt));
+      this.mesh.rotateZ(this.currentRoll);
 
       this.wheels.forEach(w => w.rotateX((this.speed * dt) / 0.38));
 
@@ -7129,7 +7159,10 @@
       this.updateHUDStats();
       if (this.vehicle) {
         const carPos = this.vehicle.mesh.position;
-        const carForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
+        // Recenter uses the car's actual direction of travel, not its
+        // visual heading — see the comment in updateCamera() below for why.
+        const vh = this.vehicle.velocityHeading;
+        const carForward = new THREE.Vector3(Math.sin(vh), 0, Math.cos(vh));
         this.camera.position.copy(carPos.clone().addScaledVector(carForward, -6.8).add(new THREE.Vector3(0, 3.0, 0)));
         this.camLookTarget = carPos.clone().addScaledVector(carForward, 28.0).add(new THREE.Vector3(0, 0.8, 0));
         this.camera.lookAt(this.camLookTarget);
@@ -7589,7 +7622,25 @@
       this.vehicle.mesh.visible = this.activeCameraMode !== 'first-person';
 
       const carPos = this.vehicle.mesh.position;
-      const carForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
+      // Rigidly-mounted views (hood/first-person) track the car's actual
+      // visual orientation — a dashcam bolted to the body should show
+      // exactly where the body/wheels point, slip and all, same as a real
+      // dashcam would during a slide.
+      const bodyForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
+      // Free-following views (chase/far-chase/sky) instead track the car's
+      // actual direction of TRAVEL, not its visual heading — these two can
+      // now genuinely diverge (see VehicleController's velocityHeading).
+      // Chasing the visual heading here made the camera look ahead of
+      // where the car was actually going for the full duration of any
+      // sustained turn, which read as the world subtly swinging out from
+      // under the car rather than the car turning — reported directly as
+      // "turning mechanics... completely off" at higher speeds, where the
+      // slip angle is largest. Matches slowroads.io's own approach,
+      // verified from their shipped code: their camera explicitly blends
+      // toward motion direction rather than body heading for exactly this
+      // reason.
+      const vh = this.vehicle.velocityHeading;
+      const carForward = new THREE.Vector3(Math.sin(vh), 0, Math.cos(vh));
 
       if (!this.camLookTarget) {
         this.camLookTarget = carPos.clone().addScaledVector(carForward, 18.0);
@@ -7598,18 +7649,18 @@
       if (this.activeCameraMode === 'hood') {
         // Bumper Cam - rigidly bolted at bumper height (see toggleCameraMode
         // comment — this was labeled "hood" but sits at bumper height)
-        const hoodPos = carPos.clone().addScaledVector(carForward, 1.35).add(new THREE.Vector3(0, 0.82, 0));
+        const hoodPos = carPos.clone().addScaledVector(bodyForward, 1.35).add(new THREE.Vector3(0, 0.82, 0));
         this.camera.position.copy(hoodPos);
-        const lookTarget = hoodPos.clone().addScaledVector(carForward, 35.0);
+        const lookTarget = hoodPos.clone().addScaledVector(bodyForward, 35.0);
         this.camera.lookAt(lookTarget);
       } else if (this.activeCameraMode === 'first-person') {
         // True in-cabin view — driver eye height, seated near the
         // windshield rather than out on the bumper. Rigidly bolted (no
         // lerp/spring), same as bumper cam: a cockpit view that lags the
         // car's own motion reads as broken, not cinematic.
-        const eyePos = carPos.clone().addScaledVector(carForward, 0.15).add(new THREE.Vector3(0, 1.15, 0));
+        const eyePos = carPos.clone().addScaledVector(bodyForward, 0.15).add(new THREE.Vector3(0, 1.15, 0));
         this.camera.position.copy(eyePos);
-        const lookTarget = eyePos.clone().addScaledVector(carForward, 35.0);
+        const lookTarget = eyePos.clone().addScaledVector(bodyForward, 35.0);
         this.camera.lookAt(lookTarget);
       } else if (this.activeCameraMode === 'far-chase') {
         // Same glued-chase behavior as the default chase cam below, just
