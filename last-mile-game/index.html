@@ -67,11 +67,14 @@
         </div>
 
         <div class="slowroads-sys-btns">
-          <button id="btn-hud-tod" class="slowroads-icon-btn" title="Cycle Time of Day [T]">TOD</button>
-          <button id="btn-hud-camera" class="slowroads-icon-btn" title="Camera Mode [C]">CAM</button>
-          <button id="btn-hud-radio-mute" class="slowroads-icon-btn" title="Toggle Radio [M]">RADIO</button>
+          <button id="btn-hud-radio-mute" class="slowroads-status-pill" title="Toggle Radio [M]"><span class="status-dot" id="dot-audio"></span><span id="label-audio">AUDIO: ON</span></button>
+          <button id="btn-hud-camera" class="slowroads-status-pill" title="Camera Mode [C]"><span id="label-cam">CAM: CHASE</span></button>
           <button id="btn-hud-sfx-mute" class="slowroads-icon-btn" title="Toggle SFX [N]">SFX</button>
           <button id="btn-hud-sound" class="slowroads-icon-btn" title="Toggle All Audio" style="display:none;">MUTE</button>
+        </div>
+        <div class="slowroads-sys-btns">
+          <div class="slowroads-status-pill" id="hud-fps-pill"><span id="hud-fps-value">60</span> FPS</div>
+          <button id="btn-hud-tod" class="slowroads-status-pill" title="Cycle Time of Day [T]"><span id="label-tod">DAY</span></button>
         </div>
       </div>
 

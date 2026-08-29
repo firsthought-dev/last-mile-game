@@ -1933,6 +1933,7 @@
       // failure class).
       this.roadBankingAngles = new Array(tubularSegments + 1);
       this.roadNormals = new Array(tubularSegments + 1);
+      this.roadBinormals = new Array(tubularSegments + 1);
       this.roadBankedUp = new Array(tubularSegments + 1);
       const tCfg = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
       const baseTarmac = new THREE.Color(tCfg.color);
@@ -1994,6 +1995,7 @@
         const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
         this.roadBankingAngles[i] = bankingAngle;
         this.roadNormals[i] = normal.clone();
+        this.roadBinormals[i] = binormal.clone();
         this.roadBankedUp[i] = bankedUp.clone();
 
         for (let j = 0; j < offsets.length; j++) {
@@ -2078,6 +2080,131 @@
       this.roadMesh = new THREE.Mesh(geom, roadMaterial);
       this.roadMesh.receiveShadow = true;
       return this.roadMesh;
+    }
+
+    // Lane paint as dedicated thin decal ribbons, separate from the base
+    // road surface — see the comment in createRoadMesh for why (matches
+    // slowroads.io's own actual technique: their shipped assets include
+    // standalone road_paint_dashed / road_paint_solid_left / _right
+    // textures, not paint baked into the base road material, confirmed
+    // directly from their live CDN network requests). Must run AFTER
+    // createRoadMesh, which populates roadSpacedPoints/roadBankingAngles/
+    // roadNormals/roadBankedUp.
+    //
+    // Each ribbon has a fixed physical width the whole length of the
+    // road, independent of the base mesh's own vertex spacing — the
+    // previous vertex-color approach's "uneven width" bug came from the
+    // paint being interpolated across the base ribbon's comparatively
+    // coarse (~4.2m) vertex spacing, so its apparent width/position
+    // wobbled with however much banking shifted between one base-mesh
+    // vertex and the next, worst on sharp curves. These ribbons still
+    // follow the same points/banking arrays (so they bank and curve
+    // exactly with the road), but their cross-section width is fixed by
+    // this function's own offsets, not by the base mesh's column spacing.
+    createLaneMarkingMeshes(roadTerrainKey = 'asphalt') {
+      const points = this.roadSpacedPoints;
+      const bankingAngles = this.roadBankingAngles;
+      const normals = this.roadNormals;
+      const binormals = this.roadBinormals;
+      const bankedUps = this.roadBankedUp;
+      if (!points || !bankingAngles) return new THREE.Group();
+
+      const tubularSegments = points.length - 1;
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.5;
+      // Muted pale colors, not pure white/yellow — those crossed the
+      // 0.94 post-ACES-tonemap bloom threshold (bloomPass, ~line 5691)
+      // and blew out into soft glowing blobs under strong daylight,
+      // which is what got the original stripes removed entirely.
+      const edgeLineColor = new THREE.Color(0x9aa0a8);
+      const centerLineColor = new THREE.Color(0xb9a968);
+      // Real-world lane paint is roughly 10-15cm wide; half-width here.
+      const stripeHalfW = 0.06;
+      // ~4.2m per segment (1200 segments / ~5km route) — getSpacedPoints
+      // is arc-length-uniform so segment index doubles as a distance
+      // proxy. A period of 3 segments gives a ~12.6m on/off cycle, close
+      // to a real dashed-line cadence (dash ~3-4m, gap ~8-9m).
+      const dashPeriod = 3;
+      // Lifted further above the road surface than the old baked-in
+      // paint (0.12) needed to be, since this is now a separate coplanar
+      // mesh riding on top of it — needs its own clearance to win the
+      // depth test cleanly rather than z-fighting with the asphalt.
+      const paintLift = 0.02;
+
+      const buildRibbon = (lateralOffset, color, dashed) => {
+        const positions = [];
+        const colors = [];
+        const normalsOut = [];
+        const indices = [];
+        let vertCount = 0;
+
+        for (let i = 0; i <= tubularSegments; i++) {
+          const pt = points[i];
+          const bankingAngle = bankingAngles[i];
+          const normal = normals[i];
+          const binormal = binormals[i];
+          const bankedUp = bankedUps[i];
+          // Exactly createRoadMesh's bankedNormal, reconstructed from the
+          // same cached normal/binormal rather than a second cos/sin call
+          // on its own — the earlier version of this ribbon builder
+          // wrongly substituted bankedUp for binormal here, which put the
+          // decal at the wrong lateral position (and buried it under the
+          // road, see the lift fix below) instead of tracing the road's
+          // actual surface. Confirmed by rendering nothing visible at all.
+          const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
+
+          const dashOn = !dashed || (Math.floor(i / dashPeriod) % 2 === 0);
+          const rowColor = dashOn ? color : null;
+
+          [-stripeHalfW, stripeHalfW].forEach((edgeOff) => {
+            const off = lateralOffset + edgeOff;
+            // Reuses the exact banked frame the road surface computed at
+            // this same point — see the cached arrays above. The base
+            // tarmac surface itself sits at pt + bankedNormal*off +
+            // bankedUp*0.12 (createRoadMesh's non-verge branch) — this
+            // decal needs that SAME 0.12 base lift plus its own clearance
+            // on top, not just paintLift alone (which by itself sat the
+            // decal ~0.10m below the actual road surface, invisible under it).
+            const p = pt.clone()
+              .addScaledVector(bankedNormal, off)
+              .addScaledVector(bankedUp, 0.12 + paintLift);
+            positions.push(p.x, p.y, p.z);
+            normalsOut.push(bankedUp.x, bankedUp.y, bankedUp.z);
+            const c = rowColor || color;
+            // When a dash is "off", push the road's own tarmac-adjacent
+            // alpha via vertex color alpha isn't available without a
+            // 4th channel — instead this row is simply skipped from the
+            // index buffer below (no triangles emitted for an off dash),
+            // which is a cleaner "gap" than color-fading to tarmac would
+            // be, and can't mismatch the base road's actual tarmac color
+            // per terrain type.
+            colors.push(c.r, c.g, c.b);
+          });
+          vertCount += 2;
+
+          if (dashed && !dashOn) continue; // no triangles for this row — real gap, not a color fade
+          if (i > 0 && (!dashed || (Math.floor((i - 1) / dashPeriod) % 2 === 0))) {
+            const row1 = (i - 1) * 2;
+            const row2 = i * 2;
+            indices.push(row1, row1 + 1, row2);
+            indices.push(row1 + 1, row2 + 1, row2);
+          }
+        }
+
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geom.setAttribute('normal', new THREE.Float32BufferAttribute(normalsOut, 3));
+        geom.setIndex(indices);
+        const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+        return new THREE.Mesh(geom, mat);
+      };
+
+      const group = new THREE.Group();
+      group.add(buildRibbon(0, centerLineColor, true));
+      group.add(buildRibbon(-roadHalf, edgeLineColor, false));
+      group.add(buildRibbon(roadHalf, edgeLineColor, false));
+      this.laneMarkingsGroup = group;
+      return group;
     }
 
     // Scans the finished curve at the SAME sampling rate createTerrainMesh
@@ -5653,6 +5780,32 @@
       this.sunLight.castShadow = true;
       this.sunLight.shadow.mapSize.width = 2048;
       this.sunLight.shadow.mapSize.height = 2048;
+      // Directional-light shadow cameras never auto-fit the scene — this
+      // was left at Three's default orthographic frustum (-5..5 on each
+      // axis, i.e. a 10x10 unit box) fixed at world origin, since neither
+      // the frustum size nor the light's target was ever set. The result:
+      // the car only ever cast a visible ground shadow within ~5 units of
+      // the route's spawn point — everywhere else (which is most of a
+      // multi-km drive) it rendered with NO contact shadow at all, which
+      // reads as the car floating/pasted onto the scene rather than
+      // sitting on the road. Widened the frustum to comfortably cover the
+      // car and its immediate surroundings, and target/position now
+      // recenter on the vehicle every frame (see updateCamera) so the
+      // shadow always renders near wherever the car actually is, not just
+      // near the spawn point.
+      this.sunLight.shadow.camera.left = -30;
+      this.sunLight.shadow.camera.right = 30;
+      this.sunLight.shadow.camera.top = 30;
+      this.sunLight.shadow.camera.bottom = -30;
+      this.sunLight.shadow.camera.near = 1;
+      this.sunLight.shadow.camera.far = 500;
+      this.sunLight.shadow.bias = -0.0015;
+      this.sunLight.target = new THREE.Object3D();
+      this.scene.add(this.sunLight.target);
+      // Fixed offset from whatever the light is currently tracking —
+      // preserves the original (150, 250, 100) sun angle/direction, just
+      // recentered on the vehicle each frame instead of pinned to origin.
+      this.sunOffset = new THREE.Vector3(150, 250, 100);
       this.scene.add(this.sunLight);
 
       // Cheap procedural sky/ground gradient env map: gives PBR materials
@@ -5786,7 +5939,11 @@
       if (this.sunLight) {
         this.sunLight.color.setHex(tod.sunColor);
         this.sunLight.intensity = tod.sunIntensity;
-        this.sunLight.position.set(...tod.sunPos);
+        // Direction only — actual position is recentered on the vehicle
+        // every frame (see updateCamera) so the shadow-camera frustum
+        // stays near the car instead of pinned at world origin.
+        this.sunOffset = new THREE.Vector3(...tod.sunPos);
+        this.sunLight.position.copy(this.sunOffset);
       }
 
       if (this.world) {
@@ -5796,11 +5953,13 @@
         if (this.world.floorMesh) this.scene.remove(this.world.floorMesh);
         if (this.world.foliageGroup) this.scene.remove(this.world.foliageGroup);
         if (this.world.tunnelGroup) this.scene.remove(this.world.tunnelGroup);
+        if (this.world.laneMarkingsGroup) this.scene.remove(this.world.laneMarkingsGroup);
       }
 
       this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
       this.scene.add(this.world.createSkyDome(season, this.selectedTimeOfDay));
       this.scene.add(this.world.createRoadMesh(this.selectedRoadTerrain));
+      this.scene.add(this.world.createLaneMarkingMeshes(this.selectedRoadTerrain));
       this.scene.add(this.world.createWorldFloor(season));
       this.scene.add(this.world.createTerrainMesh(season));
       this.scene.add(this.world.createTunnelMeshes());
@@ -6752,7 +6911,10 @@
 
       if (radioHudBtn) {
         radioHudBtn.classList.toggle('muted', sound.radioMuted);
-        radioHudBtn.textContent = sound.radioMuted ? 'RADIO OFF' : 'RADIO';
+        const audioLabel = document.getElementById('label-audio');
+        const audioDot = document.getElementById('dot-audio');
+        if (audioLabel) audioLabel.textContent = sound.radioMuted ? 'AUDIO: OFF' : 'AUDIO: ON';
+        if (audioDot) audioDot.classList.toggle('dot-off', sound.radioMuted);
       }
       if (sfxHudBtn) {
         sfxHudBtn.classList.toggle('muted', sound.sfxMuted);
@@ -6868,6 +7030,15 @@
         hood: 'BUMPER CAM',
         sky: 'HIGH PANORAMIC CAM'
       };
+      const shortNames = {
+        chase: 'CHASE',
+        'far-chase': 'FAR CHASE',
+        'first-person': 'FPV',
+        hood: 'BUMPER',
+        sky: 'SKY'
+      };
+      const camLabel = document.getElementById('label-cam');
+      if (camLabel) camLabel.textContent = `CAM: ${shortNames[this.activeCameraMode]}`;
       this.showScorePopup(0, `📹 ${names[this.activeCameraMode]}`);
       sound.playTone(800, 'sine', 0.08);
     }
@@ -6898,7 +7069,11 @@
       if (this.sunLight) {
         this.sunLight.color.setHex(tod.sunColor);
         this.sunLight.intensity = tod.sunIntensity;
-        this.sunLight.position.set(...tod.sunPos);
+        // Direction only — actual position is recentered on the vehicle
+        // every frame (see updateCamera) so the shadow-camera frustum
+        // stays near the car instead of pinned at world origin.
+        this.sunOffset = new THREE.Vector3(...tod.sunPos);
+        this.sunLight.position.copy(this.sunOffset);
       }
       if (this.scene) {
         this.scene.background = new THREE.Color(tod.skyBottom);
@@ -6920,9 +7095,9 @@
       }
       this.applyWindowGlow(tod);
 
-      const hudTod = document.getElementById('btn-hud-tod');
+      const hudTodLabel = document.getElementById('label-tod');
       const dockTod = document.getElementById('btn-dock-tod');
-      if (hudTod) hudTod.textContent = tod.icon;
+      if (hudTodLabel) hudTodLabel.textContent = (tod.id || todKey).toUpperCase();
       if (dockTod) dockTod.textContent = tod.icon;
 
       this.showScorePopup(0, `${tod.icon} ${tod.name.toUpperCase()}`);
@@ -7610,6 +7785,19 @@
 
       if (!this.vehicle || !this.vehicle.mesh) return;
 
+      // Recenter the sun + its shadow-camera frustum on the vehicle every
+      // frame — see the setup comment in initThree for why this matters
+      // (without it the car only casts a shadow within ~5 units of the
+      // route's spawn point). Direction is preserved (sunOffset is a
+      // fixed vector from the current time-of-day config); only the
+      // recentering point moves.
+      if (this.sunLight && this.sunOffset) {
+        const vp = this.vehicle.mesh.position;
+        this.sunLight.position.set(vp.x + this.sunOffset.x, vp.y + this.sunOffset.y, vp.z + this.sunOffset.z);
+        this.sunLight.target.position.copy(vp);
+        this.sunLight.target.updateMatrixWorld();
+      }
+
       // First-Person mode showed a solid pink fill along the frame edge —
       // the eye position sits inside the car's own solid body geometry
       // (there's no modeled cabin cavity to place a camera inside), so the
@@ -7884,6 +8072,18 @@
 
     animate() {
       const dt = Math.min(this.clock.getDelta(), 0.1);
+
+      // Live FPS readout for the top-right status pill — smoothed over a
+      // rolling ~0.5s window (raw per-frame dt is too jittery to read).
+      this._fpsAccumTime = (this._fpsAccumTime || 0) + dt;
+      this._fpsAccumFrames = (this._fpsAccumFrames || 0) + 1;
+      if (this._fpsAccumTime >= 0.5) {
+        const fps = Math.round(this._fpsAccumFrames / this._fpsAccumTime);
+        const fpsEl = document.getElementById('hud-fps-value');
+        if (fpsEl) fpsEl.textContent = String(fps);
+        this._fpsAccumTime = 0;
+        this._fpsAccumFrames = 0;
+      }
 
       if (this.gameState === 'playing') {
         if (this.onFoot) {
