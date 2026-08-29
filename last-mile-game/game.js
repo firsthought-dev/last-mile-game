@@ -1004,13 +1004,18 @@
         skyBottom: 0xfde047,
         fog: 0xfbd38d,
         fogDensity: 0.0016,
-        grassColor: 0x78350f,
-        grassLight: 0xb45309,
-        cliffColor: 0x451a03,
+        // Desaturated per Master Prompt section 3 — slowroads' reference
+        // reads as lighting-blended/muted regardless of season, never this
+        // saturated. Values below are the same hues at ~45-50% saturation
+        // (computed via HSL desaturation, not hand-picked), matching the
+        // "muted grey-green, not saturated green" reference standard.
+        grassColor: 0x5d3c29,
+        grassLight: 0x895833,
+        cliffColor: 0x341f13,
         // Kept visually distinct from grassColor/grassLight/cliffColor above —
         // the old palette shared 0xb45309 with grassLight, which let dense
         // clusters of trees blend into the hillside into one flat mass.
-        treeLeaves: [0xdc2626, 0xea580c, 0xeab308, 0x991b1b]
+        treeLeaves: [0xb46c6c, 0xb97b5a, 0xbaa156, 0x8a4848]
       },
       // Spring/Summer are green-first by design — foliage should read as
       // living trees rather than a rainbow. Autumn keeps its fire tones,
@@ -1022,12 +1027,14 @@
         skyBottom: 0xbae6fd,
         fog: 0xbae6fd,
         fogDensity: 0.0015,
-        grassColor: 0x15803d,
-        grassLight: 0x22c55e,
-        cliffColor: 0x3f3f46,
+        // Desaturated per Master Prompt section 3 — see autumn's comment
+        // above for the rationale/method.
+        grassColor: 0x2f6543,
+        grassLight: 0x4a9c68,
+        cliffColor: 0x404044,
         // Mostly fresh green with one soft cherry-blossom pink accent for
         // seasonal character — no longer a scattershot of unrelated hues.
-        treeLeaves: [0x22c55e, 0x16a34a, 0x4ade80, 0xf9a8d4]
+        treeLeaves: [0x5baa78, 0x469062, 0x86bf9b, 0xecd3e0]
       },
       summer: {
         id: 'summer',
@@ -1036,12 +1043,14 @@
         skyBottom: 0xfef08a,
         fog: 0xfde047,
         fogDensity: 0.0014,
-        grassColor: 0x65a30d,
-        grassLight: 0x84cc16,
-        cliffColor: 0x78350f,
+        // Desaturated per Master Prompt section 3 — see autumn's comment
+        // for rationale/method.
+        grassColor: 0x5e7d32,
+        grassLight: 0x7a9e43,
+        cliffColor: 0x5d3c29,
         // Deep lush summer greens — no orange/brown outliers pulling the
         // canopy toward autumn colors.
-        treeLeaves: [0x166534, 0x15803d, 0x22c55e, 0x14532d]
+        treeLeaves: [0x366247, 0x3c7652, 0x5baa78, 0x30553f]
       },
       winter: {
         id: 'winter',
@@ -1050,10 +1059,12 @@
         skyBottom: 0xbfdbfe,
         fog: 0xdbeafe,
         fogDensity: 0.0016,
-        grassColor: 0xe2e8f0,
-        grassLight: 0xf8fafc,
-        cliffColor: 0x1e293b,
-        treeLeaves: [0x14532d, 0x166534, 0x15803d, 0x0f766e]
+        // Winter's snow-white grass/light already read as fairly desaturated
+        // (near-white), so only the cliff/tree tones needed muting.
+        grassColor: 0xe5e8ec,
+        grassLight: 0xf9fafb,
+        cliffColor: 0x252a33,
+        treeLeaves: [0x30553f, 0x366247, 0x3c7652, 0x356e69]
       }
     },
 
@@ -2168,6 +2179,20 @@
       const grassCol = new THREE.Color(season.grassColor);
       const grassLight = new THREE.Color(season.grassLight);
       const cliffCol = new THREE.Color(season.cliffColor);
+      // Master Prompt section 3: roadside ground is two-layered in the
+      // reference — a narrow vivid green strip right at the road edge,
+      // then dominant pale khaki/straw beyond it — not one flat grass
+      // color across the whole shoulder. Applied below to the existing
+      // shoulder-verge zone (roadHalf..9.0m): a ~1.2m vivid-green band
+      // right at the road edge, blending into a pale khaki/straw tone for
+      // the rest of the shoulder. "Visible blade detail" from the spec is
+      // approximated here with per-vertex noise variation on the khaki
+      // band, not new blade geometry — an actual billboard-grass-clump
+      // asset pass (matching TreeBillboardFactory's approach) would be
+      // needed for real geometric detail; disclosed as not done, not
+      // silently skipped.
+      const vividGreen = new THREE.Color(0x4a7c3f);
+      const khaki = new THREE.Color(0xc9bb84);
 
       const points = this.tunnelPoints || this.curve.getSpacedPoints(tubularSegments);
 
@@ -2185,23 +2210,69 @@
 
         const up = new THREE.Vector3(0, 1, 0);
         const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
+        const binormal = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+
+        // Mirrors createRoadMesh's own banking calc exactly (same points
+        // array, same index, same formula) — this is the actual cause of
+        // terrain visibly clipping through the road on curves. createRoadMesh
+        // tilts the road's interior surface up to ±0.14rad on bends
+        // (banking), but this terrain slab directly underneath it was
+        // always pinned to the flat, unbanked `pt.y - 0.18`. On a banked
+        // curve the real road surface sits well over a meter above or below
+        // that flat height at the outer/inner edge, so the flat slab either
+        // floats visibly above the low side of the road or — the reported
+        // bug — pokes up through it on the high side. The vehicle's own
+        // ground-following has a separate fix for this same divergence
+        // (see the `bankedYOffset` comment in `update()`), but that only
+        // corrects where the CAR sits, not where this mesh renders, so the
+        // visual clipping remained even after the car stopped sinking.
+        let curvatureY = 0;
+        if (i < tubularSegments - 1) {
+          const nextTang = new THREE.Vector3().subVectors(points[i + 2], points[i]).normalize();
+          curvatureY = (nextTang.x - tangent.x) * 10.0;
+        }
+        const bankingAngle = THREE.MathUtils.clamp(curvatureY * 0.25, -0.14, 0.14);
 
         for (let j = 0; j < sliceCount; j++) {
           const latDist = lateralSlices[j];
           const absDist = Math.abs(latDist);
+          // Pure-vertical banking correction at this lateral offset — same
+          // formula as the vehicle's `bankedYOffset`, which only nudges Y,
+          // matching how this loop already places X/Z via the unbanked
+          // `normal` and only ever adjusts `finalY`.
+          const bankedYOffset = latDist * binormal.y * Math.sin(bankingAngle);
 
           const worldPos = pt.clone().addScaledVector(normal, latDist);
           let finalY = pt.y;
 
           if (absDist <= roadHalf) {
-            // 1. Under Asphalt: strictly 0.18m below road surface
-            finalY = pt.y - 0.18;
+            // 1. Under Asphalt: strictly 0.18m below road surface, banked
+            // the same amount the road surface directly above it is.
+            finalY = pt.y - 0.18 + bankedYOffset;
             colors.push(grassLight.r, grassLight.g, grassLight.b);
           } else if (absDist <= 9.0) {
-            // 2. Road Shoulder Verge: gentle downward slope from road edge
+            // 2. Road Shoulder Verge: gentle downward slope from road edge.
+            // Banking fades out across the shoulder (full at the road edge,
+            // zero by the embankment) since the shoulder isn't a rigid part
+            // of the tilted road surface, just meets it.
             const t = (absDist - roadHalf) / (9.0 - roadHalf);
-            finalY = pt.y - 0.18 - t * 0.32;
-            colors.push(grassLight.r * 0.95, grassLight.g * 0.95, grassLight.b * 0.95);
+            finalY = pt.y - 0.18 - t * 0.32 + bankedYOffset * (1 - t);
+            // Two-layer roadside ground (Master Prompt section 3): a
+            // narrow vivid-green band right at the road edge (first ~1.2m
+            // of shoulder), blending into pale khaki/straw for the rest —
+            // replaces the old single grassLight*0.95 tone across the
+            // whole shoulder.
+            const GREEN_BAND_T = 1.2 / (9.0 - roadHalf);
+            if (t <= GREEN_BAND_T) {
+              colors.push(vividGreen.r, vividGreen.g, vividGreen.b);
+            } else {
+              const bandT = THREE.MathUtils.smoothstep(t, GREEN_BAND_T, GREEN_BAND_T + 0.15);
+              const bladeNoise = 0.88 + this.simplex.noise2D(worldPos.x * 0.5, worldPos.z * 0.5) * 0.18;
+              const r = THREE.MathUtils.lerp(vividGreen.r, khaki.r * bladeNoise, bandT);
+              const g = THREE.MathUtils.lerp(vividGreen.g, khaki.g * bladeNoise, bandT);
+              const b = THREE.MathUtils.lerp(vividGreen.b, khaki.b * bladeNoise, bandT);
+              colors.push(r, g, b);
+            }
           } else {
             // 3. Embankment Carving: Smooth terrain transition from road edge to raw hills
             // Road is carved into terrain with embankments (cut/fill slopes)
@@ -3432,28 +3503,58 @@
 
               const railLen = FENCE_STEP * avgSegStep + 0.6; // slight overlap so segments tile without gaps
               const fenceGroup = new THREE.Group();
-              // Real wood-grain photo texture (ambientcg WoodSiding013)
-              // replacing flat brown color — SLOWROADS_PARITY_LOG.md item 7.
-              // Same map on both post/rail materials (only the base color
-              // tint differs) since it's one continuous split-rail fence,
-              // not two different wood types.
-              const fWoodTex = RealTextureFactory.woodColor();
-              const fWoodNormal = RealTextureFactory.woodNormal();
-              const fPostMat = new THREE.MeshStandardMaterial({ color: 0x8a7a68, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 });
-              const fRailMat = new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 });
 
-              // 2 vertical posts
-              [-railLen / 2, railLen / 2].forEach(px => {
-                const fPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6), fPostMat);
-                fPost.position.set(px, 0.6, 0);
-                fenceGroup.add(fPost);
-              });
-              // 2 horizontal split rails
-              [0.45, 0.85].forEach(ry => {
-                const fRail = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.08, 0.08), fRailMat);
-                fRail.position.set(0, ry, 0);
-                fenceGroup.add(fRail);
-              });
+              // Master Prompt section 3: "one of the largest, most obvious
+              // gaps against the reference" was having no dry-stone-wall
+              // barrier material at all — only ever the wood split-rail.
+              // Long contiguous stretches (not isolated single segments,
+              // which would read as a glitch sandwiched between wood)
+              // alternate to a stacked fieldstone wall instead, reusing the
+              // same real rock photo texture already wired in for boulder
+              // props (RealTextureFactory.rockColor/rockNormal).
+              const useStoneWall = Math.floor(i / 40) % 3 === 2;
+
+              if (useStoneWall) {
+                const stoneTex = RealTextureFactory.rockColor();
+                const stoneNormal = RealTextureFactory.rockNormal();
+                // Dark exposed-stone face, pixel-verified against the
+                // reference (~#404046) — see SLOWROADS_PARITY_LOG.md.
+                const stoneMat = new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true });
+                const rowHeights = [0.22, 0.44, 0.64, 0.8];
+                rowHeights.forEach((ry, rowIdx) => {
+                  // Slight width/depth jitter per row so the wall doesn't
+                  // read as a perfectly extruded box — real dry-stone walls
+                  // taper and bulge course to course.
+                  const jitter = 1.0 - rowIdx * 0.04;
+                  const wallRow = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.22, 0.32 * jitter), stoneMat);
+                  wallRow.position.set(0, ry, 0);
+                  wallRow.castShadow = true;
+                  fenceGroup.add(wallRow);
+                });
+              } else {
+                // Real wood-grain photo texture (ambientcg WoodSiding013)
+                // replacing flat brown color — SLOWROADS_PARITY_LOG.md item 7.
+                // Same map on both post/rail materials (only the base color
+                // tint differs) since it's one continuous split-rail fence,
+                // not two different wood types.
+                const fWoodTex = RealTextureFactory.woodColor();
+                const fWoodNormal = RealTextureFactory.woodNormal();
+                const fPostMat = new THREE.MeshStandardMaterial({ color: 0x8a7a68, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 });
+                const fRailMat = new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 });
+
+                // 2 vertical posts
+                [-railLen / 2, railLen / 2].forEach(px => {
+                  const fPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6), fPostMat);
+                  fPost.position.set(px, 0.6, 0);
+                  fenceGroup.add(fPost);
+                });
+                // 2 horizontal split rails
+                [0.45, 0.85].forEach(ry => {
+                  const fRail = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.08, 0.08), fRailMat);
+                  fRail.position.set(0, ry, 0);
+                  fenceGroup.add(fRail);
+                });
+              }
 
               fenceGroup.position.copy(fencePos);
               // The rail spans the group's local X axis. lookAt(pos+tangent)
@@ -4255,6 +4356,18 @@
       // that reads it (camera, GPS, autopilot, fence clamp, off-road-lost
       // detection) still gets a meaningful road-relative value.
       this.heading = 0;
+      // Direction the car is ACTUALLY travelling, as distinct from `heading`
+      // (the direction the body/wheels are pointed). Real cars — and,
+      // verified directly from slowroads.io's own shipped bundle, their
+      // vehicle model too — let these two diverge under grip loss: tap the
+      // brakes into a turn and the tail can still be sliding one way while
+      // the nose points another. Before this, `forward` for movement was
+      // computed straight from `heading` every frame, so the car always
+      // moved exactly where it was pointed with zero momentum carry-through
+      // — a big part of why turning felt like a kart on rails rather than a
+      // car with weight. See `update()`'s steering block for how this
+      // reconverges toward `heading` at a grip-scaled rate each frame.
+      this.velocityHeading = 0;
       this.lateralOffset = 0; // still maintained (derived) for banking/ground-height/fence-clamp math
       this.lateralVelocity = 0; // unused by movement now; kept only so any external reset code touching it doesn't throw
       this.grip = 1.0;
@@ -4918,7 +5031,20 @@
         // car's steering behaves backing up.
         const baseTurnRate = 1.55; // rad/s at full effect
         const turnRateLimit = baseTurnRate * (isDrifting ? 1.4 : 1.0) * climateGrip;
-        const speedScale = THREE.MathUtils.clamp(Math.abs(this.speed) / 6.0, 0.22, 1.0);
+        // Speed-sensitive turn rate: ramps up from a dead stop (same as
+        // before, so low-speed parking maneuvers keep working), but now
+        // also falls off above ~8 m/s (~29 km/h) instead of staying flat
+        // at max turn rate all the way to top speed. A real car needs a
+        // much smaller wheel angle to hold the same yaw rate at 130 km/h
+        // than at 30 km/h — turning identically hard at any speed above a
+        // walking pace was a direct, verifiable-in-code reason driving felt
+        // wrong (checked against slowroads.io's own shipped bundle: their
+        // steering is driven by a heading/motion-direction blend that
+        // inherently softens at speed, not a flat-rate yaw controller).
+        const speedAbs = Math.abs(this.speed);
+        const speedRampUp = THREE.MathUtils.clamp(speedAbs / 6.0, 0.22, 1.0);
+        const speedFalloff = THREE.MathUtils.clamp(1.0 - (speedAbs - 8.0) / 22.0, 0.38, 1.0);
+        const speedScale = Math.min(speedRampUp, speedFalloff);
         const reverseFlip = this.speed < -0.05 ? -1 : 1;
         const turnRate = turnRateLimit * speedScale * reverseFlip;
 
@@ -4935,13 +5061,33 @@
         }
       }
 
-      // 3. Move freely along the car's own heading (position + orientation
-      // are now true, independent state — not derived from a spline
-      // parameter — so the car can actually turn, reverse, and maneuver
-      // off the road instead of only drifting sideways within a lane).
+      // 2b. Reconverge velocityHeading (actual travel direction) toward
+      // heading (where the body/wheels point) at a grip-scaled rate. This
+      // is what actually lets the two diverge in the first place: under
+      // full grip the convergence is fast enough to be indistinguishable
+      // from the old always-equal behavior, but low terrainGrip/climateGrip
+      // (rain, gravel, mud, sand) or holding the drift key slows it down,
+      // so a hard steering input at speed genuinely swings the nose before
+      // the travel direction catches up — a real slide, not just a wheel
+      // animation. Autodrive gets a fast fixed rate regardless of surface
+      // grip so the autopilot's own pure-pursuit path-following (which
+      // already targets `heading` directly) doesn't visibly wobble.
+      let headingDelta = this.heading - this.velocityHeading;
+      headingDelta = Math.atan2(Math.sin(headingDelta), Math.cos(headingDelta));
+      const convergeRate = this.isAutodrive
+        ? 14.0
+        : 9.0 * climateGrip * driftGripMult;
+      this.velocityHeading += headingDelta * (1 - Math.exp(-convergeRate * dt));
+
+      // 3. Move freely along the car's actual direction of travel (not
+      // necessarily the same as `heading`, its visual orientation — see
+      // above). Position + orientation are true, independent state — not
+      // derived from a spline parameter — so the car can actually turn,
+      // reverse, and maneuver off the road instead of only drifting
+      // sideways within a lane.
       const moveDist = this.speed * dt;
       this.distanceTraveled += Math.abs(moveDist) * 0.001;
-      const forward = new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
+      const forward = new THREE.Vector3(Math.sin(this.velocityHeading), 0, Math.cos(this.velocityHeading));
       const proposedPos = this.mesh.position.clone().addScaledVector(forward, moveDist);
 
       // Everything below (ground height, banking, the fence lateral clamp)
@@ -5124,6 +5270,7 @@
       // rewrite), not mesh.lookAt — set it to match the tangent so a reset
       // still faces down the road.
       this.heading = Math.atan2(tangent.x, tangent.z);
+      this.velocityHeading = this.heading; // avoid resuming with a stale slide angle after a teleport
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
       this.speed = preserveSpeed ? prevSpeed : 0;
       this.steerAngle = 0;
@@ -5151,6 +5298,7 @@
       // See resetToSpline — matches the on-road ground-following formula.
       this.mesh.position.y += 0.07;
       this.heading = Math.atan2(tangent.x, tangent.z);
+      this.velocityHeading = this.heading;
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
       this.speed = 0;
       this.steerAngle = 0;
