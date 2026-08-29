@@ -5520,9 +5520,16 @@
         const scaleFactor = 0.82;
         carModel.scale.setScalar(scaleFactor);
         this.mesh.add(carModel);
+        this.frontWheels = [];
+        this.rearWheels = [];
         carModel.traverse((child) => {
           if (child.isMesh && child.name && /^(wheel|brakes)_/i.test(child.name)) {
             this.wheels.push(child);
+            if (/_f_/i.test(child.name)) {
+              this.frontWheels.push(child);
+            } else if (/_r_/i.test(child.name)) {
+              this.rearWheels.push(child);
+            }
           }
         });
         // Blank cover plates over two front badges — scaled proportionally
@@ -5956,18 +5963,19 @@
       // Controlled throttle dive/squat:
       let throttlePitch = 0;
       if (keys.w || keys.up) {
-        throttlePitch = 0.008; // subtle rear squat on acceleration
+        throttlePitch = 0.015; // realistic rear squat on acceleration
       } else if (keys.s || keys.down) {
-        throttlePitch = -0.012; // subtle front dive on braking
+        throttlePitch = -0.022; // realistic front dive on braking
       }
 
       // In parent space, the GLTF model is mounted with rotation.y = Math.PI,
       // which inverts local Z (front is +Z in parent) and local X (right is -X in parent).
       const targetPitch = -trueRoadPitch - throttlePitch;
 
-      // Centrifugal roll during hard steering
-      const steerRoll = this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.18;
-      const targetRoll = -trueRoadRoll + steerRoll;
+      // Authentic automotive centrifugal suspension body roll (rolls OUTWARD away from the turn)
+      // When steering RIGHT (steerAngle < 0), centrifugal force pushes chassis LEFT (rolls outward)
+      const centrifugalBodyRoll = -this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.08;
+      const targetRoll = -trueRoadRoll + centrifugalBodyRoll;
 
       // 2nd-Order Spring-Mass-Damper Suspension Filter
       const subDt = Math.min(dt, 0.05);
@@ -5998,7 +6006,17 @@
       this.mesh.rotateX(this.currentPitch);
       this.mesh.rotateZ(this.currentRoll);
 
-      this.wheels.forEach(w => w.rotateX((this.speed * dt) / 0.38));
+      // 4-Wheel Visual Dynamics:
+      // Turn front steering knuckles/wheels in yaw with Ackerman steering angle
+      if (this.frontWheels && this.frontWheels.length > 0) {
+        this.frontWheels.forEach(w => {
+          w.rotation.y = this.steerAngle * 0.85;
+        });
+      }
+      // Spin all 4 wheels along pitch axis with forward ground speed
+      if (this.wheels && this.wheels.length > 0) {
+        this.wheels.forEach(w => w.rotateX((this.speed * dt) / 0.38));
+      }
 
       const carPos = this.mesh.position;
 
