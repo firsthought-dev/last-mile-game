@@ -2542,6 +2542,19 @@
       }
 
       this.tunnelZones = merged;
+      // If natural terrain overhead generated fewer than 2 tunnels, guarantee 2 scenic mountain tunnels through major ridges
+      if (this.tunnelZones.length < 2) {
+        const defaultZones = [
+          { start: 260, end: 360 },
+          { start: 700, end: 800 }
+        ];
+        for (const dz of defaultZones) {
+          if (!this.tunnelZones.some(z => Math.abs(z.start - dz.start) < 80)) {
+            this.tunnelZones.push(dz);
+          }
+        }
+        this.tunnelZones.sort((a, b) => a.start - b.start);
+      }
       this.tunnelPoints = points; // cached — same array createTunnelMeshes/createTerrainMesh index into
     }
 
@@ -2675,33 +2688,31 @@
             }
           } else {
             // 3. Embankment Carving: Smooth terrain transition from road edge to raw hills
-            // Road is carved into terrain with embankments (cut/fill slopes)
             const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
+            const inTunnel = this.isInTunnelZone && this.isInTunnelZone(i);
 
-            // Define embankment zones (in meters from road center)
-            const SHOULDER_TRANSITION = 9.0;  // End of shoulder
-            const EMBANKMENT_BLEND = 45.0;    // Fully back to raw terrain
-
-            // Smoothly blend from road shoulder to raw terrain height
-            // This creates a natural slope down from the road edge to surrounding landscape
-            const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
-
-            // Embankment starts at road-level minus a shoulder drop, blends to raw terrain
-            const shoulderDrop = pt.y - 0.5;  // 50cm down from road surface
-            // No ceiling here — the shoulder zone above already guarantees
-            // clearance right at the road edge, and hillside terrain 10-40m
-            // out is legitimately much taller than the road (that's what a
-            // hillside is). Clamping this to "road height + 0.2" used to
-            // flatten the ribbon near the road while the world floor plane
-            // (unclamped past 45m) shot up to true height right past the
-            // seam — a hard cliff appearing to erupt beside/over the road.
-            finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
-
-            if (rawH > 22.0) {
-              colors.push(cliffCol.r, cliffCol.g, cliffCol.b);
+            if (inTunnel) {
+              // Tunnel Corridor Mountain Cut:
+              // Embankment slopes smoothly up into the mountain ridge ABOVE the tunnel roof
+              const SHOULDER_TRANSITION = 9.0;
+              const EMBANKMENT_BLEND = 45.0;
+              const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
+              const mountainOverhead = Math.max(rawH, pt.y + 14.0);
+              finalY = THREE.MathUtils.lerp(pt.y - 0.5, mountainOverhead, blendFactor);
+              colors.push(cliffCol.r * 0.9, cliffCol.g * 0.9, cliffCol.b * 0.9);
             } else {
-              const nVal = 0.85 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.25;
-              colors.push(grassCol.r * nVal, grassCol.g * nVal, grassCol.b * nVal);
+              const SHOULDER_TRANSITION = 9.0;  // End of shoulder
+              const EMBANKMENT_BLEND = 45.0;    // Fully back to raw terrain
+              const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
+              const shoulderDrop = pt.y - 0.5;  // 50cm down from road surface
+              finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
+
+              if (rawH > 22.0) {
+                colors.push(cliffCol.r, cliffCol.g, cliffCol.b);
+              } else {
+                const nVal = 0.85 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.25;
+                colors.push(grassCol.r * nVal, grassCol.g * nVal, grassCol.b * nVal);
+              }
             }
           }
 
@@ -2764,49 +2775,101 @@
       if (!this.tunnelZones || !this.tunnelZones.length) return group;
 
       const points = this.tunnelPoints;
-      const halfWidth = CONFIG.TUNNEL_HALF_WIDTH || 6.2;
-      const wallHeight = 4.2;
+      const halfWidth = CONFIG.TUNNEL_HALF_WIDTH || 6.4;
+      const wallHeight = 4.4;
       const archRadius = halfWidth + 0.8;
-      const archSegs = 12;
+      const archSegs = 14;
+      const apexHeight = wallHeight + archRadius; // ~11.6m
 
-      // Cross-section of tunnel casing from road surface up to ceiling arch
-      const section = [];
-      section.push({ lat: -halfWidth, h: 0 });
-      section.push({ lat: -halfWidth, h: wallHeight });
-      for (let s = 0; s <= archSegs; s++) {
-        const theta = Math.PI - (Math.PI * s / archSegs);
-        section.push({ lat: Math.cos(theta) * archRadius, h: wallHeight + Math.sin(theta) * archRadius });
-      }
-      section.push({ lat: halfWidth, h: wallHeight });
-      section.push({ lat: halfWidth, h: 0 });
-      const sliceCount = section.length;
-
-      const wallMat = new THREE.MeshStandardMaterial({
-        color: 0x334155, // reinforced concrete tunnel casing
-        roughness: 0.82,
-        metalness: 0.15,
+      // 1. Premium Materials
+      const tileMat = new THREE.MeshStandardMaterial({
+        color: 0xebf1f6, // Glazed reflective ceramic wainscot tile
+        roughness: 0.16,
+        metalness: 0.08,
         side: THREE.DoubleSide
       });
 
-      const portalMat = new THREE.MeshStandardMaterial({
-        color: 0x1e293b, // weathered structural concrete portal facade
+      const ceilingMat = new THREE.MeshStandardMaterial({
+        color: 0x1e293b, // Vaulted dark reinforced concrete arch
         roughness: 0.90,
+        metalness: 0.20,
+        side: THREE.DoubleSide
+      });
+
+      const ribMat = new THREE.MeshStandardMaterial({
+        color: 0x0f172a, // Structural concrete arch support rings
+        roughness: 0.85,
+        metalness: 0.25
+      });
+
+      const curbMat = new THREE.MeshStandardMaterial({
+        color: 0x64748b, // Raised concrete safety walkway
+        roughness: 0.80
+      });
+
+      const amberReflectorMat = new THREE.MeshStandardMaterial({
+        color: 0xffedd5,
+        emissive: 0xf59e0b,
+        emissiveIntensity: 2.4,
+        roughness: 0.2
+      });
+
+      const whiteReflectorMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: 0xffffff,
+        emissiveIntensity: 2.2,
+        roughness: 0.2
+      });
+
+      const sodiumMat = new THREE.MeshStandardMaterial({
+        color: 0xffedd5,
+        emissive: 0xffb347,
+        emissiveIntensity: 3.4,
+        roughness: 0.2
+      });
+
+      const portalMat = new THREE.MeshStandardMaterial({
+        color: 0x1e293b, // Weathered structural concrete portal facade
+        roughness: 0.92,
         metalness: 0.20
       });
 
+      const matrixMat = new THREE.MeshStandardMaterial({
+        color: 0x10b981, // Glowing green LED electronic matrix board
+        emissive: 0x10b981,
+        emissiveIntensity: 2.8,
+        roughness: 0.2
+      });
+
       const cautionMat = new THREE.MeshStandardMaterial({
-        color: 0xf59e0b, // amber caution header strip
+        color: 0xf59e0b, // Amber caution header strip
         emissive: 0xd97706,
-        emissiveIntensity: 0.6,
+        emissiveIntensity: 0.8,
         roughness: 0.4
       });
 
+      const sosMat = new THREE.MeshStandardMaterial({
+        color: 0xf97316,
+        emissive: 0xea580c,
+        emissiveIntensity: 2.2,
+        roughness: 0.3
+      });
+
+      const exitSignMat = new THREE.MeshStandardMaterial({
+        color: 0x22c55e,
+        emissive: 0x16a34a,
+        emissiveIntensity: 2.6,
+        roughness: 0.2
+      });
+
+      // Cross-sections for Lower Glazed Walls and Upper Vaulted Ceiling
+      const lowerWallHeight = 2.6; // Ceramic subway tile wainscot height
+
       for (const zone of this.tunnelZones) {
-        const positions = [];
-        const normals = [];
-        const uvs = [];
-        const indices = [];
-        const rowIndices = [];
+        // --- A. Lower Glazed Ceramic Tile Walls (Left & Right) ---
+        const tilePositions = [], tileNormals = [], tileUvs = [], tileIndices = [];
+        const ceilPositions = [], ceilNormals = [], ceilUvs = [], ceilIndices = [];
+        let tileRowIdx = 0, ceilRowIdx = 0;
 
         for (let i = zone.start; i <= zone.end; i++) {
           const pt = points[i];
@@ -2816,40 +2879,198 @@
           const up = new THREE.Vector3(0, 1, 0);
           const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
 
-          const rowStart = positions.length / 3;
-          rowIndices.push(rowStart);
+          // Left and right lower tile wall vertices
+          const lBot = pt.clone().addScaledVector(normal, -halfWidth); lBot.y = pt.y + 0.12;
+          const lTop = pt.clone().addScaledVector(normal, -halfWidth); lTop.y = pt.y + 0.12 + lowerWallHeight;
+          const rBot = pt.clone().addScaledVector(normal, halfWidth); rBot.y = pt.y + 0.12;
+          const rTop = pt.clone().addScaledVector(normal, halfWidth); rTop.y = pt.y + 0.12 + lowerWallHeight;
 
-          for (const { lat, h } of section) {
-            const worldPos = pt.clone().addScaledVector(normal, lat);
-            // Sits flush atop the +0.12 road surface slab
-            worldPos.y = pt.y + 0.12 + h;
-            positions.push(worldPos.x, worldPos.y, worldPos.z);
-            const nrm = new THREE.Vector3(-normal.x, 0, -normal.z).normalize().lerp(new THREE.Vector3(0, -1, 0), h / (wallHeight + archRadius));
-            normals.push(nrm.x, nrm.y, nrm.z);
-            uvs.push((i - zone.start) * 0.25, (lat + halfWidth) * 0.1);
+          tilePositions.push(lBot.x, lBot.y, lBot.z, lTop.x, lTop.y, lTop.z);
+          tilePositions.push(rBot.x, rBot.y, rBot.z, rTop.x, rTop.y, rTop.z);
+          tileNormals.push(normal.x, 0, normal.z, normal.x, 0, normal.z);
+          tileNormals.push(-normal.x, 0, -normal.z, -normal.x, 0, -normal.z);
+          const uStep = (i - zone.start) * 0.4;
+          tileUvs.push(uStep, 0, uStep, 1, uStep, 0, uStep, 1);
+
+          if (i > zone.start) {
+            const prevR = (tileRowIdx - 1) * 4;
+            const currR = tileRowIdx * 4;
+            // Left wall quad
+            tileIndices.push(prevR, currR, prevR + 1, currR, currR + 1, prevR + 1);
+            // Right wall quad
+            tileIndices.push(prevR + 2, prevR + 3, currR + 2, currR + 2, prevR + 3, currR + 3);
+          }
+          tileRowIdx++;
+
+          // --- Upper Vaulted Ceiling Arch ---
+          const ceilSlice = [];
+          ceilSlice.push({ lat: -halfWidth, h: lowerWallHeight });
+          ceilSlice.push({ lat: -halfWidth, h: wallHeight });
+          for (let s = 0; s <= archSegs; s++) {
+            const theta = Math.PI - (Math.PI * s / archSegs);
+            ceilSlice.push({ lat: Math.cos(theta) * archRadius, h: wallHeight + Math.sin(theta) * archRadius });
+          }
+          ceilSlice.push({ lat: halfWidth, h: wallHeight });
+          ceilSlice.push({ lat: halfWidth, h: lowerWallHeight });
+
+          const cRowStart = ceilPositions.length / 3;
+          for (const { lat, h } of ceilSlice) {
+            const wPos = pt.clone().addScaledVector(normal, lat);
+            wPos.y = pt.y + 0.12 + h;
+            ceilPositions.push(wPos.x, wPos.y, wPos.z);
+            const nrm = new THREE.Vector3(-normal.x, 0, -normal.z).normalize().lerp(new THREE.Vector3(0, -1, 0), h / apexHeight);
+            ceilNormals.push(nrm.x, nrm.y, nrm.z);
+            ceilUvs.push(uStep, (lat + halfWidth) * 0.1);
           }
 
           if (i > zone.start) {
-            const prevRow = rowIndices[rowIndices.length - 2];
-            for (let j = 0; j < sliceCount - 1; j++) {
-              const a = prevRow + j, b = prevRow + j + 1, c = rowStart + j, d = rowStart + j + 1;
-              indices.push(a, c, b);
-              indices.push(b, c, d);
+            const prevCRow = cRowStart - ceilSlice.length;
+            for (let j = 0; j < ceilSlice.length - 1; j++) {
+              const a = prevCRow + j, b = prevCRow + j + 1, c = cRowStart + j, d = cRowStart + j + 1;
+              ceilIndices.push(a, c, b);
+              ceilIndices.push(b, c, d);
             }
           }
         }
 
-        const geom = new THREE.BufferGeometry();
-        geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-        geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-        geom.setIndex(indices);
+        const tileGeom = new THREE.BufferGeometry();
+        tileGeom.setAttribute('position', new THREE.Float32BufferAttribute(tilePositions, 3));
+        tileGeom.setAttribute('normal', new THREE.Float32BufferAttribute(tileNormals, 3));
+        tileGeom.setAttribute('uv', new THREE.Float32BufferAttribute(tileUvs, 2));
+        tileGeom.setIndex(tileIndices);
+        const tileMesh = new THREE.Mesh(tileGeom, tileMat);
+        tileMesh.receiveShadow = true;
+        group.add(tileMesh);
 
-        const mesh = new THREE.Mesh(geom, wallMat);
-        mesh.receiveShadow = true;
-        group.add(mesh);
+        const ceilGeom = new THREE.BufferGeometry();
+        ceilGeom.setAttribute('position', new THREE.Float32BufferAttribute(ceilPositions, 3));
+        ceilGeom.setAttribute('normal', new THREE.Float32BufferAttribute(ceilNormals, 3));
+        ceilGeom.setAttribute('uv', new THREE.Float32BufferAttribute(ceilUvs, 2));
+        ceilGeom.setIndex(ceilIndices);
+        const ceilMesh = new THREE.Mesh(ceilGeom, ceilingMat);
+        ceilMesh.receiveShadow = true;
+        group.add(ceilMesh);
 
-        // 2. Reinforced Concrete Portal Facades at Entrance & Exit
+        // --- B. Structural Reinforced Arch Support Ribs (every 10m) ---
+        const ribGeom = new THREE.BoxGeometry(0.7, 0.45, 0.6);
+        for (let i = zone.start + 3; i < zone.end - 2; i += 10) {
+          const pt = points[i];
+          const prev = points[Math.max(zone.start, i - 1)];
+          const next = points[Math.min(zone.end, i + 1)];
+          const tangent = new THREE.Vector3().subVectors(next, prev).normalize();
+          const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+          const ribGroup = new THREE.Group();
+          ribGroup.position.copy(pt);
+          ribGroup.position.y = pt.y + 0.12;
+
+          // Left and Right Arch Rib Columns
+          const colGeom = new THREE.BoxGeometry(0.65, wallHeight + 0.4, 0.65);
+          const leftCol = new THREE.Mesh(colGeom, ribMat);
+          leftCol.position.set(-halfWidth + 0.25, (wallHeight + 0.4) * 0.5, 0);
+          const rightCol = new THREE.Mesh(colGeom, ribMat);
+          rightCol.position.set(halfWidth - 0.25, (wallHeight + 0.4) * 0.5, 0);
+          ribGroup.add(leftCol, rightCol);
+
+          // Curved Arch Ceiling Rib Segments
+          for (let s = 0; s <= 8; s++) {
+            const theta = Math.PI - (Math.PI * s / 8);
+            const rx = Math.cos(theta) * (archRadius - 0.15);
+            const ry = wallHeight + Math.sin(theta) * (archRadius - 0.15);
+            const ribSeg = new THREE.Mesh(ribGeom, ribMat);
+            ribSeg.position.set(rx, ry, 0);
+            ribSeg.rotation.z = theta - Math.PI / 2;
+            ribGroup.add(ribSeg);
+          }
+
+          ribGroup.lookAt(ribGroup.position.clone().add(tangent));
+          group.add(ribGroup);
+        }
+
+        // --- C. Continuous Raised Safety Walkways & Reflective Cat's Eyes ---
+        const curbGeom = new THREE.BoxGeometry(1.1, 0.28, 4.0);
+        const reflectorGeom = new THREE.BoxGeometry(0.12, 0.06, 0.18);
+
+        for (let i = zone.start + 1; i < zone.end; i += 4) {
+          const pt = points[i];
+          const prev = points[Math.max(zone.start, i - 1)];
+          const next = points[Math.min(zone.end, i + 1)];
+          const tangent = new THREE.Vector3().subVectors(next, prev).normalize();
+          const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+          [-1, 1].forEach(side => {
+            const curbPos = pt.clone().addScaledVector(normal, side * (halfWidth - 0.6));
+            curbPos.y = pt.y + 0.12 + 0.14;
+
+            const curb = new THREE.Mesh(curbGeom, curbMat);
+            curb.position.copy(curbPos);
+            curb.lookAt(curbPos.clone().add(tangent));
+            group.add(curb);
+
+            // Reflective Cat's Eye Stud on Curb Edge
+            const studPos = pt.clone().addScaledVector(normal, side * (halfWidth - 1.15));
+            studPos.y = pt.y + 0.12 + 0.28;
+            const stud = new THREE.Mesh(reflectorGeom, side === -1 ? amberReflectorMat : whiteReflectorMat);
+            stud.position.copy(studPos);
+            stud.lookAt(studPos.clone().add(tangent));
+            group.add(stud);
+          });
+        }
+
+        // --- D. Dual Continuous Overhead Sodium Tube Light Rails ---
+        const fixtureRailGeom = new THREE.BoxGeometry(0.45, 0.18, 5.0);
+        const fixtureMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4, metalness: 0.8 });
+        const tubeGeom = new THREE.CylinderGeometry(0.06, 0.06, 4.6, 12);
+        tubeGeom.rotateX(Math.PI / 2);
+
+        for (let i = zone.start + 2; i < zone.end - 1; i += 5) {
+          const pt = points[i];
+          const prev = points[Math.max(zone.start, i - 1)];
+          const next = points[Math.min(zone.end, i + 1)];
+          const tangent = new THREE.Vector3().subVectors(next, prev).normalize();
+          const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+          // Dual parallel overhead rails: Left (-1.8m) and Right (+1.8m)
+          [-1.8, 1.8].forEach(railOffset => {
+            const fixturePos = pt.clone().addScaledVector(normal, railOffset);
+            fixturePos.y = pt.y + 0.12 + apexHeight - 0.25;
+
+            const fixture = new THREE.Group();
+            const housing = new THREE.Mesh(fixtureRailGeom, fixtureMat);
+            const tube = new THREE.Mesh(tubeGeom, sodiumMat);
+            tube.position.y = -0.10;
+            fixture.add(housing, tube);
+            fixture.position.copy(fixturePos);
+            fixture.lookAt(fixturePos.clone().add(tangent));
+            group.add(fixture);
+          });
+        }
+
+        // --- E. Emergency Niches & SOS Call Alcoves (every 35m) ---
+        for (let i = zone.start + 15; i < zone.end - 15; i += 35) {
+          const pt = points[i];
+          const prev = points[Math.max(zone.start, i - 1)];
+          const next = points[Math.min(zone.end, i + 1)];
+          const tangent = new THREE.Vector3().subVectors(next, prev).normalize();
+          const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+
+          const sosPos = pt.clone().addScaledVector(normal, halfWidth - 0.2);
+          sosPos.y = pt.y + 0.12 + 1.4;
+
+          const sosGroup = new THREE.Group();
+          // Orange SOS Call Box
+          const box = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.65, 0.45), sosMat);
+          box.position.set(0, 0, 0);
+          // Green Emergency Exit Sign above
+          const exitSign = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.28, 0.55), exitSignMat);
+          exitSign.position.set(0, 0.65, 0);
+          sosGroup.add(box, exitSign);
+          sosGroup.position.copy(sosPos);
+          sosGroup.lookAt(pt.x, sosPos.y, pt.z);
+          group.add(sosGroup);
+        }
+
+        // --- F. Grand Mountain Retaining Portals & Wing Walls (Entrance & Exit) ---
         [zone.start, zone.end].forEach((portalIdx, pIndex) => {
           const pt = points[portalIdx];
           const prev = points[Math.max(0, portalIdx - 1)];
@@ -2862,60 +3083,47 @@
           portalGroup.position.copy(pt);
           portalGroup.position.y = pt.y + 0.12;
 
-          // Left & Right Portal Concrete Pillars
-          const pillarGeom = new THREE.BoxGeometry(2.4, wallHeight + archRadius + 1.2, 3.2);
+          // Left & Right Massive Concrete Pillars
+          const pillarGeom = new THREE.BoxGeometry(2.8, apexHeight + 2.4, 4.2);
           const leftPillar = new THREE.Mesh(pillarGeom, portalMat);
-          leftPillar.position.set(-(halfWidth + 1.2), (wallHeight + archRadius + 1.2) * 0.5, 0);
+          leftPillar.position.set(-(halfWidth + 1.4), (apexHeight + 2.4) * 0.5, 0);
           const rightPillar = new THREE.Mesh(pillarGeom, portalMat);
-          rightPillar.position.set(halfWidth + 1.2, (wallHeight + archRadius + 1.2) * 0.5, 0);
+          rightPillar.position.set(halfWidth + 1.4, (apexHeight + 2.4) * 0.5, 0);
 
-          // Top Header Arch Beam
-          const headerGeom = new THREE.BoxGeometry(halfWidth * 2 + 4.8, 2.2, 3.2);
+          // 45-degree Flared Mountain Retaining Wing Walls
+          const wingGeom = new THREE.BoxGeometry(6.5, apexHeight + 1.2, 2.2);
+          const leftWing = new THREE.Mesh(wingGeom, portalMat);
+          leftWing.position.set(-(halfWidth + 4.8), (apexHeight + 1.2) * 0.5, 1.8);
+          leftWing.rotation.y = 0.42;
+          const rightWing = new THREE.Mesh(wingGeom, portalMat);
+          rightWing.position.set(halfWidth + 4.8, (apexHeight + 1.2) * 0.5, 1.8);
+          rightWing.rotation.y = -0.42;
+
+          // Heavy Structural Header Beam
+          const headerGeom = new THREE.BoxGeometry(halfWidth * 2 + 5.6, 2.8, 4.4);
           const headerBeam = new THREE.Mesh(headerGeom, portalMat);
-          headerBeam.position.set(0, wallHeight + archRadius + 1.1, 0);
+          headerBeam.position.set(0, apexHeight + 1.4, 0);
 
-          // Amber Caution Clearance Sign Bar
-          const cautionGeom = new THREE.BoxGeometry(halfWidth * 2 + 1.0, 0.45, 0.3);
+          // Overhanging Concrete Rain Visor Canopy
+          const canopyGeom = new THREE.BoxGeometry(halfWidth * 2 + 6.2, 0.45, 2.6);
+          const canopy = new THREE.Mesh(canopyGeom, portalMat);
+          canopy.position.set(0, apexHeight + 2.8, 1.6);
+          canopy.rotation.x = 0.08;
+
+          // Amber Caution Clearance Hazard Bar
+          const cautionGeom = new THREE.BoxGeometry(halfWidth * 2 + 1.4, 0.45, 0.35);
           const cautionBar = new THREE.Mesh(cautionGeom, cautionMat);
-          cautionBar.position.set(0, wallHeight + archRadius - 0.1, 1.65);
+          cautionBar.position.set(0, apexHeight - 0.1, 2.2);
 
-          portalGroup.add(leftPillar, rightPillar, headerBeam, cautionBar);
+          // Electronic LED Dot Matrix Display Board ("TUNNEL AHEAD / 70 KM/H / ⬇ ⬇")
+          const matrixGeom = new THREE.BoxGeometry(halfWidth * 1.5, 0.95, 0.25);
+          const matrixBoard = new THREE.Mesh(matrixGeom, matrixMat);
+          matrixBoard.position.set(0, apexHeight + 1.2, 2.25);
+
+          portalGroup.add(leftPillar, rightPillar, leftWing, rightWing, headerBeam, canopy, cautionBar, matrixBoard);
           portalGroup.lookAt(portalGroup.position.clone().add(tangent));
           group.add(portalGroup);
         });
-
-        // 3. Overhead Warm Sodium Tube Light Fixtures (Pure Emissive Bloom - 0 PointLight overhead)
-        const fixtureGeom = new THREE.BoxGeometry(0.55, 0.22, 3.2);
-        const fixtureMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4, metalness: 0.8 });
-        const tubeGeom = new THREE.CylinderGeometry(0.08, 0.08, 2.8, 12);
-        tubeGeom.rotateX(Math.PI / 2);
-        const sodiumMat = new THREE.MeshStandardMaterial({
-          color: 0xffedd5,
-          emissive: 0xffb347,
-          emissiveIntensity: 2.8,
-          roughness: 0.2
-        });
-
-        const apexHeight = wallHeight + archRadius;
-        const lampSpacing = 8;
-        for (let i = zone.start + 2; i < zone.end - 1; i += lampSpacing) {
-          const pt = points[i];
-          const prev = points[Math.max(zone.start, i - 1)];
-          const next = points[Math.min(zone.end, i + 1)];
-          const tangent = new THREE.Vector3().subVectors(next, prev).normalize();
-
-          const fixturePos = pt.clone();
-          fixturePos.y = pt.y + 0.12 + apexHeight - 0.15;
-
-          const fixture = new THREE.Group();
-          const housing = new THREE.Mesh(fixtureGeom, fixtureMat);
-          const tube = new THREE.Mesh(tubeGeom, sodiumMat);
-          tube.position.y = -0.10;
-          fixture.add(housing, tube);
-          fixture.position.copy(fixturePos);
-          fixture.lookAt(fixturePos.clone().add(tangent));
-          group.add(fixture);
-        }
       }
 
       this.tunnelGroup = group;
@@ -8723,13 +8931,30 @@
         this.updateClimateHUD();
         this.updateHealthHUD();
 
-        // Dynamic Tunnel Interior Atmosphere & Fog Control (crisp clear view inside tunnels)
-        if (this.scene && this.scene.fog && this.world && this.vehicle) {
+        // Dynamic Tunnel Interior Atmosphere, Lighting & Fog Control
+        if (this.scene && this.world && this.vehicle) {
           const meshIdx = Math.round(this.vehicle.splineProgress * CONFIG.ROAD_MESH_SEGMENTS);
           const inTunnel = this.world.isInTunnelZone && this.world.isInTunnelZone(meshIdx, 2);
           const season = CONFIG.SEASONS[this.selectedSeason] || CONFIG.SEASONS.autumn;
-          const targetFog = inTunnel ? 0.0003 : (season.fogDensity || 0.0016);
-          this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, targetFog, 0.08);
+          const tod = CONFIG.TIME_OF_DAY[this.selectedTimeOfDay] || CONFIG.TIME_OF_DAY.day;
+
+          // Fog control: deep atmospheric clarity inside tunnels
+          if (this.scene.fog) {
+            const targetFog = inTunnel ? 0.0003 : (season.fogDensity || 0.0016);
+            this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, targetFog, 0.08);
+          }
+
+          // Ambient & Sun Lighting transition
+          if (this.ambientLight) {
+            const targetAmbientCol = inTunnel ? new THREE.Color(0xffd180) : new THREE.Color(tod.ambientColor);
+            const targetAmbientInt = inTunnel ? 0.62 : tod.ambientIntensity;
+            this.ambientLight.color.lerp(targetAmbientCol, 0.08);
+            this.ambientLight.intensity = THREE.MathUtils.lerp(this.ambientLight.intensity, targetAmbientInt, 0.08);
+          }
+          if (this.sunLight) {
+            const targetSunInt = inTunnel ? (tod.sunIntensity * 0.15) : tod.sunIntensity;
+            this.sunLight.intensity = THREE.MathUtils.lerp(this.sunLight.intensity, targetSunInt, 0.08);
+          }
         }
 
         // Infinite Highway District Milestones (Seamless progression every 5 km)
