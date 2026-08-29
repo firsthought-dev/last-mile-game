@@ -1385,6 +1385,51 @@
     }
   };
 
+  // Real sourced CC0 photo textures (ambientcg.com — Grass005, Rock064,
+  // Asphalt033, WoodSiding013) replacing the flat-color / canvas-noise
+  // materials for the ground/rock/road/fence, per
+  // SLOWROADS_PARITY_LOG.md item 6. Same lazy-load-and-cache shape as
+  // TreeBillboardFactory, same rule learned from that bug: never assign
+  // `.encoding` synchronously right after `.load()` — that rendered the
+  // tree sprites solid black because the image hadn't finished its async
+  // fetch yet when the assignment ran.
+  const RealTextureFactory = {
+    _cache: null,
+    _loader: null,
+    _get(key, url) {
+      this._cache = this._cache || new Map();
+      this._loader = this._loader || new THREE.TextureLoader();
+      let tex = this._cache.get(key);
+      if (!tex) {
+        tex = this._loader.load(url);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        this._cache.set(key, tex);
+      }
+      return tex;
+    },
+    grassColor() { return this._get('grassColor', 'assets/textures/grass_color.webp'); },
+    // Separate cache key/instance (NOT texture.clone() of grassColor()) —
+    // the world floor needs its own `.repeat` scale, different from the
+    // terrain ribbon's. Cloning a texture before its async image load
+    // completes copies `.image` as undefined at that instant, and the
+    // clone never receives the original's later load callback — confirmed
+    // directly: `floorMesh.material.map.image` was `undefined` at runtime
+    // despite the source texture rendering correctly elsewhere. Loading
+    // the same URL again is cheap (the browser's own HTTP cache dedupes
+    // the actual network fetch) and gives a fully independent, properly
+    // self-loading Texture instance instead.
+    grassColorFloor() { return this._get('grassColorFloor', 'assets/textures/grass_color.webp'); },
+    grassNormal() { return this._get('grassNormal', 'assets/textures/grass_normal.webp'); },
+    rockColor() { return this._get('rockColor', 'assets/textures/rock_color.webp'); },
+    rockNormal() { return this._get('rockNormal', 'assets/textures/rock_normal.webp'); },
+    roadColor() { return this._get('roadColor', 'assets/textures/road_color.webp'); },
+    roadNormal() { return this._get('roadNormal', 'assets/textures/road_normal.webp'); },
+    woodColor() { return this._get('woodColor', 'assets/textures/wood_color.webp'); },
+    woodNormal() { return this._get('woodNormal', 'assets/textures/wood_normal.webp'); },
+    stoneColor() { return this._get('stoneColor', 'assets/textures/stone_color.webp'); },
+    stoneNormal() { return this._get('stoneNormal', 'assets/textures/stone_normal.webp'); }
+  };
+
   // --------------------------------------------------------------------------
   // 5. SLOW ROADS PROCEDURAL TERRAIN & DUAL-GRID ARCHITECTURE
   // --------------------------------------------------------------------------
@@ -1881,12 +1926,27 @@
       geom.setIndex(indices);
       geom.computeVertexNormals();
 
+      // Real photo asphalt (ambientcg Asphalt033) replacing the procedural
+      // canvas-noise texture — SLOWROADS_PARITY_LOG.md item 6. Lane-marking
+      // colors are still baked into vertexColors and multiply over this
+      // same way they did over the old texture, so stripes keep working
+      // without any separate decal pass.
+      //
+      // normalMap deliberately NOT wired in here — confirmed by direct
+      // test (removing it live fixed a fully solid-black road instantly):
+      // this ribbon's UV layout is custom per-vertex generated
+      // (`off*0.5, i*0.3`, not a standard 0-1 planar UV), and
+      // MeshStandardMaterial's auto-computed screen-space tangent basis
+      // goes unstable on it, corrupting the perturbed normal and zeroing
+      // out the lighting entirely. Same risk applies to the terrain ribbon
+      // below (same custom-UV pattern) — normalMap skipped there too.
+      const roadTex = RealTextureFactory.roadColor();
       const roadMaterial = new THREE.MeshStandardMaterial({
         vertexColors: true,
         side: THREE.DoubleSide,
         roughness: 0.85,
         metalness: 0.05,
-        map: TextureFactory.asphalt(this.prng)
+        map: roadTex
       });
 
       this.roadMesh = new THREE.Mesh(geom, roadMaterial);
@@ -2100,12 +2160,18 @@
       geom.setIndex(indices);
       geom.computeVertexNormals();
 
+      // Real photo grass (ambientcg Grass005) replacing the procedural
+      // canvas-noise texture — SLOWROADS_PARITY_LOG.md item 6. vertexColors
+      // still multiplies over this (grass-green in the flat bands, the
+      // cliffCol grey-brown in steep bands per the embankment logic above)
+      // exactly as it did over the old texture — same mechanism, just a
+      // real photo underneath instead of procedural speckle noise.
       const terrainMat = new THREE.MeshStandardMaterial({
         vertexColors: true,
         side: THREE.DoubleSide,
         roughness: 0.95,
         metalness: 0.0,
-        map: TextureFactory.grass(this.prng)
+        map: RealTextureFactory.grassColor() // normalMap deliberately omitted — see the road material's comment above, same custom-UV instability risk
       });
 
       this.terrainMesh = new THREE.Mesh(geom, terrainMat);
@@ -2466,11 +2532,11 @@
       geom.computeVertexNormals();
       geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
-      // Own clone of the shared grass texture so this mesh's repeat count
-      // (driven by its own, much larger, world-space size) doesn't fight
-      // with the terrain ribbon's repeat setting on the cached original.
-      const floorGrassTex = TextureFactory.grass(this.prng).clone();
-      floorGrassTex.needsUpdate = true;
+      // Own clone of the shared real grass texture so this mesh's repeat
+      // count (driven by its own, much larger, world-space size) doesn't
+      // fight with the terrain ribbon's repeat setting on the cached
+      // original. SLOWROADS_PARITY_LOG.md item 6.
+      const floorGrassTex = RealTextureFactory.grassColorFloor();
       floorGrassTex.repeat.set(size * 0.15, size * 0.15);
 
       const floorMat = new THREE.MeshStandardMaterial({
@@ -2521,7 +2587,11 @@
       // where smooth shading reads as an actual rounded surface at the same
       // triangle count. Man-made props (poles, buildings, vehicles below)
       // keep flatShading — that's a deliberate low-poly look, not the bug.
-      const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a6065, roughness: 0.8, map: TextureFactory.rock(this.prng) });
+      // Real photo rock (ambientcg Rock064) + its normal map, actually
+      // wired into normalMap this time — SLOWROADS_PARITY_LOG.md item 6
+      // (the brief explicitly called out "loading it and not using it
+      // doesn't count").
+      const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a6065, roughness: 0.8, map: RealTextureFactory.rockColor(), normalMap: RealTextureFactory.rockNormal() });
       const poleMat = new THREE.MeshStandardMaterial({ color: 0x4a4e52, flatShading: true, roughness: 0.6, metalness: 0.3 });
 
       const potholeGeom = new THREE.CircleGeometry(1.3, 12);
@@ -3335,8 +3405,15 @@
 
               const railLen = FENCE_STEP * avgSegStep + 0.6; // slight overlap so segments tile without gaps
               const fenceGroup = new THREE.Group();
-              const fPostMat = new THREE.MeshLambertMaterial({ color: 0x54361e });
-              const fRailMat = new THREE.MeshLambertMaterial({ color: 0x6e472a });
+              // Real wood-grain photo texture (ambientcg WoodSiding013)
+              // replacing flat brown color — SLOWROADS_PARITY_LOG.md item 7.
+              // Same map on both post/rail materials (only the base color
+              // tint differs) since it's one continuous split-rail fence,
+              // not two different wood types.
+              const fWoodTex = RealTextureFactory.woodColor();
+              const fWoodNormal = RealTextureFactory.woodNormal();
+              const fPostMat = new THREE.MeshStandardMaterial({ color: 0x8a7a68, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 });
+              const fRailMat = new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 });
 
               // 2 vertical posts
               [-railLen / 2, railLen / 2].forEach(px => {
