@@ -1266,11 +1266,11 @@
     },
 
     CITIES: {
-      mumbai: { id: 'mumbai', name: 'Mumbai', tagline: 'Marine Drive & Coastal Flyovers', season: 'autumn' },
-      delhi: { id: 'delhi', name: 'New Delhi', tagline: 'Ring Road & Heritage Havelis', season: 'winter' },
-      kolkata: { id: 'kolkata', name: 'Kolkata', tagline: 'Historic Boulevards & Ghats', season: 'summer' },
-      pune: { id: 'pune', name: 'Pune', tagline: 'Deccan Peths & Wada Alleys', season: 'spring' },
-      bangalore: { id: 'bangalore', name: 'Bengaluru', tagline: 'Gulmohar Avenues & Tech Corridors', season: 'spring' }
+      desert: { id: 'desert', name: 'Sahyadri Open Desert', tagline: 'Endless Red Rock Canyons & Dunes', season: 'desert', openRoad: true },
+      mountains: { id: 'mountains', name: 'Western Ghats Open Pass', tagline: 'Rolling Foothills & Natural Arches', season: 'spring', openRoad: true },
+      highlands: { id: 'highlands', name: 'Highland Dusk Highway', tagline: 'Sweeping Heather & Rolling Horizon', season: 'autumn', openRoad: true },
+      lunar: { id: 'lunar', name: 'Lunar Crater Expanse', tagline: 'Off-World Basalt & Starry Cosmos', season: 'space', openRoad: true },
+      mumbai: { id: 'mumbai', name: 'Mumbai Coastal Highway', tagline: 'Marine Drive & Coastal Flyovers', season: 'autumn', openRoad: false }
     },
 
     VEHICLES: {
@@ -3180,6 +3180,8 @@
       this.crossers = [];
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
+      const cityCfg = CONFIG.CITIES[this.cityKey] || CONFIG.CITIES.desert;
+      const isOpenRoad = !!cityCfg.openRoad;
 
       // Reusable Low-Poly Foliage & Prop Geometries
       // Pine/broadleaf tree canopy geometry retired — trees are now
@@ -3409,7 +3411,7 @@
         // person cluster per spawn point) per explicit "quite a few" density
         // instruction — this is now a much denser roll than the original
         // sparse solo-walker spacing.
-        if (i % 16 === 0 && this.prng.next() > 0.2 && !inTunnel) {
+        if (!isOpenRoad && i % 16 === 0 && this.prng.next() > 0.2 && !inTunnel) {
           const clusterSize = Math.floor(this.prng.range(2, 5));
           const walkSide = this.prng.next() > 0.5 ? 1 : -1;
           for (let c = 0; c < clusterSize; c++) {
@@ -3488,7 +3490,7 @@
         }
 
         // 3. Roadside Electric Utility Poles
-        if (i % 24 === 0) {
+        if (!isOpenRoad && i % 24 === 0) {
           const latDist = CONFIG.ROAD_WIDTH * 0.5 + 2.2;
           const polePos = pt.clone().addScaledVector(normal, latDist);
           polePos.y = calcTerrainY(polePos, latDist);
@@ -3509,7 +3511,7 @@
         }
 
         // 4. Overhead Traffic Police Speed Radar Gantries
-        if (i % 52 === 0 && i > 15) {
+        if (!isOpenRoad && i % 52 === 0 && i > 15) {
           const gantryGroup = new THREE.Group();
           const gantryHeight = 5.2;
           const gantrySpan = CONFIG.ROAD_WIDTH + 2.8;
@@ -3562,7 +3564,7 @@
         }
 
         // 5. Roadside Garage & Pitstop Repair Bay
-        if (i % 45 === 0 && i > 20) {
+        if (!isOpenRoad && i % 45 === 0 && i > 20) {
           const baySide = 1;
           const bayDist = CONFIG.ROAD_WIDTH * 0.5 + 4.8;
           const bayPos = pt.clone().addScaledVector(normal, baySide * bayDist);
@@ -3726,7 +3728,7 @@
           // treeline so they read as a backdrop rather than roadside clutter.
           // Spaced out per side so towers don't visually collide with each
           // other at close draw distance.
-          if (i % 7 === (side > 0 ? 0 : 3) && this.prng.next() > 0.15) {
+          if (!isOpenRoad && i % 7 === (side > 0 ? 0 : 3) && this.prng.next() > 0.15) {
             const bldgDist = side * this.prng.range(34.0, 78.0);
             const bldgPos = pt.clone().addScaledVector(normal, bldgDist);
 
@@ -3930,7 +3932,7 @@
             const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
             const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
             const FENCE_GAP_RADIUS = 18.0; // meters either side of a house's checkpoint
-            const blockedByHouse = (side === houseCheckpointSide) && (distToHouse < FENCE_GAP_RADIUS);
+            const blockedByHouse = !isOpenRoad && (side === houseCheckpointSide) && (distToHouse < FENCE_GAP_RADIUS);
 
             if (!blockedByHouse) {
               // createRoadMesh's paved shoulder verge extends to
@@ -4256,7 +4258,7 @@
           }
 
           // Roadside Kirana General Store (shutter, signboard, crates)
-          if (i % 38 === 0 && side === 1) {
+          if (!isOpenRoad && i % 38 === 0 && side === 1) {
             const kiranaDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.8);
             const kiranaPos = pt.clone().addScaledVector(normal, kiranaDist);
 
@@ -4318,7 +4320,7 @@
           // own low-poly style rather than an imported asset (checked a
           // Unity Asset Store monument pack for this — paid, FBX/Unity
           // format, no fit for a single-file browser Three.js project).
-          if (i % 400 === 0 && i > 50 && side === 1) {
+          if (!isOpenRoad && i % 400 === 0 && i > 50 && side === 1) {
             const monDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 9.0);
             const monPos = pt.clone().addScaledVector(normal, monDist);
 
@@ -4448,7 +4450,7 @@
             const nearestHouseCheckpoint = Math.round(i / 24) * 24;
             const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
             const ROCK_HOUSE_GAP = 14.0; // meters — house obstacle radius (3.5) plus porch & driveway clearance
-            const nearHouseZone = distToHouse < ROCK_HOUSE_GAP;
+            const nearHouseZone = !isOpenRoad && distToHouse < ROCK_HOUSE_GAP;
 
             const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(2.0, 24.0));
             const rockPos = pt.clone().addScaledVector(normal, rockDist);
@@ -4459,21 +4461,6 @@
               const rock = new THREE.Mesh(rockGeom, rockMat);
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
               rock.rotation.set(rotX, rotY, 0);
-              // The rock geometry (DodecahedronGeometry) is a 12-sided
-              // polyhedron, not a sphere — its true distance from center to
-              // lowest point varies with rotation (anywhere from the
-              // face-center inradius to the vertex circumradius, ~1.27 to
-              // ~2.24 for radius 1.6). Randomly rotating every rock while
-              // using one FIXED "+0.8" offset assumed a single, specific
-              // orientation, so most rotations put the actual bottom
-              // surface well above or below where +0.8 assumed it was —
-              // visibly floating (or buried) rocks with no per-instance
-              // pattern, matching the reported screenshots exactly.
-              // Compute the true lowest point directly from the shared
-              // geometry's 20 vertices (cheap — no extra Mesh/Box3 object
-              // per rock, which would add up over ~450 rocks) rotated by
-              // this instance's actual rotation, and offset by exactly
-              // that so the rock always sits flush regardless of orientation.
               const rotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
               const posAttr = rockGeom.attributes.position;
               let minY = Infinity;
@@ -4492,7 +4479,7 @@
         });
 
         // 7. 3D Procedural Forest Cabins & Mountain Cottages (Delivery Drop Points)
-        if (i % 24 === 0) {
+        if (!isOpenRoad && i % 24 === 0) {
           const cityOrders = CONFIG.ORDERS_BY_CITY[this.cityKey] || CONFIG.ORDERS_BY_CITY.mumbai;
           const orderIdx = Math.floor(i / 24) % cityOrders.length;
           const order = cityOrders[orderIdx];
@@ -6402,13 +6389,13 @@
       this.scorePopupContainer = document.getElementById('score-popup-container');
 
       this.gameState = 'menu';
-      this.selectedCity = 'mumbai';
-      this.selectedSeason = 'autumn';
+      this.selectedCity = 'desert';
+      this.selectedSeason = 'desert';
       this.selectedTimeOfDay = 'day'; // 'dawn', 'day', 'dusk', 'night'
       this.selectedRoadTerrain = 'asphalt'; // 'asphalt', 'gravel', 'mud', 'sand'
       this.weather = 'clear'; // 'clear', 'rain' — see SLOWROADS_PARITY_LOG.md item 4
       this.selectedSeed = '5927cd04';
-      this.selectedVehicle = 'sportscoupe';
+      this.selectedVehicle = 'musclecoupe';
       this.selectedDifficulty = 'medium';
       this.activeDockPanel = null;
       this.activeCameraMode = 'chase';
@@ -8090,10 +8077,14 @@
         // map" knobs — regenerate variety within this one city/world.
         el.innerHTML = `
           <div class="dock-panel-grid">
-            <div class="dock-panel-col">
-              <span class="dock-panel-label">WORLD</span>
-              <div class="dock-stepper-box">
-                <span class="dock-stepper-val">${CONFIG.CITIES[this.selectedCity].name.toUpperCase()}</span>
+            <div class="dock-panel-col" style="grid-column: span 2;">
+              <span class="dock-panel-label">SELECT MAP & ENVIRONMENT</span>
+              <div class="dock-btn-row">
+                <button class="dock-sq-btn ${this.selectedCity === 'desert' ? 'active-sq' : ''}" data-city="desert">🏜️ DESERT CANYON</button>
+                <button class="dock-sq-btn ${this.selectedCity === 'mountains' ? 'active-sq' : ''}" data-city="mountains">⛰️ GHATS PASS</button>
+                <button class="dock-sq-btn ${this.selectedCity === 'highlands' ? 'active-sq' : ''}" data-city="highlands">🌾 HIGHLANDS</button>
+                <button class="dock-sq-btn ${this.selectedCity === 'lunar' ? 'active-sq' : ''}" data-city="lunar">🌕 LUNAR MOON</button>
+                <button class="dock-sq-btn ${this.selectedCity === 'mumbai' ? 'active-sq' : ''}" data-city="mumbai">🏙️ MUMBAI COAST</button>
               </div>
             </div>
             <div class="dock-panel-col">
@@ -8115,6 +8106,16 @@
             <button id="dp-gen-btn" class="btn-generate-dock">APPLY & REGEN</button>
           </div>
         `;
+        el.querySelectorAll('[data-city]').forEach(b => {
+          b.onclick = () => {
+            this.selectedCity = b.dataset.city;
+            const cCfg = CONFIG.CITIES[this.selectedCity];
+            if (cCfg && cCfg.season) this.selectedSeason = cCfg.season;
+            this.buildWorldAndScene();
+            this.renderDockPanelContent('world');
+            sound.playTone(750, 'sine', 0.12);
+          };
+        });
         el.querySelectorAll('[data-rt]').forEach(b => {
           b.onclick = () => {
             this.selectedRoadTerrain = b.dataset.rt;
