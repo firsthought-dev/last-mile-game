@@ -42,7 +42,10 @@
 ## 🎨 3. 3D Models & Visual Assets
 
 - **Kenney Car Kit ([kenney.nl](https://kenney.nl)):**
-  - Low-poly CC0 (Public Domain) 3D vehicles: Sports Sedan, Light Commercial Pickup Truck, and Delivery Van.
+  - Low-poly CC0 (Public Domain) 3D vehicles: Sports Sedan, Light Commercial Pickup Truck, and Delivery Van. (No longer in the player vehicle roster as of this session — kept for the NPC/mini-truck asset and unreferenced in the menu.)
+- **⚠️ Player vehicles — Sports Coupe & Muscle Coupe (source/license unverified):**
+  - Both supplied directly by the project owner as local files; original source and license terms are not known ("not sure / found it somewhere" when asked). Not CC0-verified — do not treat as freely redistributable. Converted to glTF via a local Blender headless pipeline for this engine.
+  - The Muscle Coupe's source file referenced a specific real car manufacturer/trim in its filename and metadata, and had that name embossed as 3D lettering directly in the body mesh (not just a filename/material-name reference). Per explicit instruction: verified zero occurrences of the manufacturer or trim name in the converted glTF's node/mesh/material/scene names, renamed one incidental real-brand material reference (a brake-caliper maker) to a generic name, and added opaque cover geometry in-engine over the two locations where brand lettering was embossed (confirmed removed via live in-game screenshot, not assumed from the source edit alone). No filename, comment, or in-game name anywhere in this project references the original real vehicle.
 - **Procedural In-Engine 3D Architecture:**
   - Handcrafted procedural Three.js geometry generators for Indian Havelis, Wadas, Kirana shops, Chai Tapris, bus stops, repair bays, streetlamps, milestones, and city landmarks (Gateway of India, India Gate, Howrah Bridge, Shaniwar Wada, Vidhana Soudha).
 - **Procedural Animated Characters:**

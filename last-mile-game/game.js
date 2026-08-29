@@ -112,6 +112,100 @@
   ChotaHathiAsset.load();
 
   // --------------------------------------------------------------------------
+  // 0e. SECOND PLAYER VEHICLE: user-supplied sports coupe (source/license
+  // unverified — user confirmed "not sure / found it somewhere" when asked;
+  // flagged in SLOWROADS_PARITY_LOG.md and CREDITS_AND_REFERENCES.md rather
+  // than treated as silently CC0-equivalent). Converted from the supplied
+  // FBX via Blender (headless, this session): FBX->glTF export, textures
+  // downscaled from 2048px to 1024px, and the 'car paint' material's Base
+  // Color re-wired to its actual image node (the exporter dropped it
+  // originally — Blender's importer left an unrelated flat factor already
+  // connected on several materials, which made the fix loop wrongly think
+  // they were already textured and skip them). The 'car paint' material
+  // itself has no diffuse texture in the source file at all (by design —
+  // same reason Kenney's sedan/truck 'body' mesh has no texture, it's meant
+  // to be tinted per-vehicle), so it's recolored here exactly like those.
+  // Model's front (headlights) faces local -Z, opposite this game's +Z-
+  // forward convention — rotated 180° on load to correct it.
+  // --------------------------------------------------------------------------
+  const SportsCoupeAsset = {
+    template: null,
+    loading: false,
+    pendingControllers: [],
+    load() {
+      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
+      this.loading = true;
+      new THREE.GLTFLoader().load('assets/models/sports-coupe.glb?t=' + Date.now(), (gltf) => {
+        const paintMat = new THREE.MeshStandardMaterial({ color: 0x1c2430, metalness: 0.6, roughness: 0.35 }); // Slate charcoal gloss
+        gltf.scene.traverse((child) => {
+          if (!child.isMesh) return;
+          child.castShadow = true;
+          if (child.material && child.material.name === 'car paint') child.material = paintMat;
+        });
+        gltf.scene.rotation.y = Math.PI;
+        this.template = gltf.scene;
+        this.pendingControllers.forEach((vc) => vc.buildModel());
+        this.pendingControllers.length = 0;
+      }, undefined, (err) => {
+        console.warn('SportsCoupeAsset: failed to load sports-coupe.glb, falling back to procedural model', err);
+      });
+    },
+    clone() {
+      return this.template ? this.template.clone(true) : null;
+    }
+  };
+  SportsCoupeAsset.load();
+
+  // --------------------------------------------------------------------------
+  // 0f. THIRD PLAYER VEHICLE: user-supplied muscle coupe (source/license
+  // unverified, same as SportsCoupeAsset above — flagged, not treated as
+  // CC0-equivalent). The source file's name/metadata referenced a specific
+  // real car manufacturer and trim — explicitly stripped per user
+  // instruction: verified zero occurrences of that name (or the model
+  // trim's name) anywhere in the converted glTF's node/mesh/material/scene
+  // names before this file was ever copied into the project, and renamed
+  // the one remaining real-brand reference found ('Brembo', a brake-caliper
+  // maker) to a generic material name. No filename, code comment, or
+  // in-game vehicle name anywhere below references the real source car.
+  // Converted via the same Blender headless FBX->glTF pipeline, decimated
+  // 50% (263k->131k tris) since the raw source was heavier than needed for
+  // a single real-time hero vehicle. Model's front (headlights) already
+  // faces local +Z matching this game's forward convention — no rotation
+  // needed (checked per-model, not assumed from the other asset above).
+  // --------------------------------------------------------------------------
+  const MuscleCoupeAsset = {
+    template: null,
+    loading: false,
+    pendingControllers: [],
+    load() {
+      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
+      this.loading = true;
+      new THREE.GLTFLoader().load('assets/models/muscle-coupe.glb?t=' + Date.now(), (gltf) => {
+        gltf.scene.traverse((child) => {
+          if (!child.isMesh) return;
+          child.castShadow = true;
+        });
+        // Corrected via live raycast verification, not the earlier
+        // hand-derived Blender-axis math (which was wrong): the model was
+        // actually mounted backwards — a camera positioned to see the
+        // car's actual driving-forward face was hitting geometry at local
+        // -Z, not +Z, meaning this needs the same 180° correction as
+        // SportsCoupeAsset after all.
+        gltf.scene.rotation.y = Math.PI;
+        this.template = gltf.scene;
+        this.pendingControllers.forEach((vc) => vc.buildModel());
+        this.pendingControllers.length = 0;
+      }, undefined, (err) => {
+        console.warn('MuscleCoupeAsset: failed to load muscle-coupe.glb, falling back to procedural model', err);
+      });
+    },
+    clone() {
+      return this.template ? this.template.clone(true) : null;
+    }
+  };
+  MuscleCoupeAsset.load();
+
+  // --------------------------------------------------------------------------
   // 1. DETERMINISTIC PRNG
   // --------------------------------------------------------------------------
   class PRNG {
@@ -910,13 +1004,18 @@
         skyBottom: 0xfde047,
         fog: 0xfbd38d,
         fogDensity: 0.0016,
-        grassColor: 0x78350f,
-        grassLight: 0xb45309,
-        cliffColor: 0x451a03,
+        // Desaturated per Master Prompt section 3 — slowroads' reference
+        // reads as lighting-blended/muted regardless of season, never this
+        // saturated. Values below are the same hues at ~45-50% saturation
+        // (computed via HSL desaturation, not hand-picked), matching the
+        // "muted grey-green, not saturated green" reference standard.
+        grassColor: 0x5d3c29,
+        grassLight: 0x895833,
+        cliffColor: 0x341f13,
         // Kept visually distinct from grassColor/grassLight/cliffColor above —
         // the old palette shared 0xb45309 with grassLight, which let dense
         // clusters of trees blend into the hillside into one flat mass.
-        treeLeaves: [0xdc2626, 0xea580c, 0xeab308, 0x991b1b]
+        treeLeaves: [0xb46c6c, 0xb97b5a, 0xbaa156, 0x8a4848]
       },
       // Spring/Summer are green-first by design — foliage should read as
       // living trees rather than a rainbow. Autumn keeps its fire tones,
@@ -928,12 +1027,14 @@
         skyBottom: 0xbae6fd,
         fog: 0xbae6fd,
         fogDensity: 0.0015,
-        grassColor: 0x15803d,
-        grassLight: 0x22c55e,
-        cliffColor: 0x3f3f46,
+        // Desaturated per Master Prompt section 3 — see autumn's comment
+        // above for the rationale/method.
+        grassColor: 0x2f6543,
+        grassLight: 0x4a9c68,
+        cliffColor: 0x404044,
         // Mostly fresh green with one soft cherry-blossom pink accent for
         // seasonal character — no longer a scattershot of unrelated hues.
-        treeLeaves: [0x22c55e, 0x16a34a, 0x4ade80, 0xf9a8d4]
+        treeLeaves: [0x5baa78, 0x469062, 0x86bf9b, 0xecd3e0]
       },
       summer: {
         id: 'summer',
@@ -942,12 +1043,14 @@
         skyBottom: 0xfef08a,
         fog: 0xfde047,
         fogDensity: 0.0014,
-        grassColor: 0x65a30d,
-        grassLight: 0x84cc16,
-        cliffColor: 0x78350f,
+        // Desaturated per Master Prompt section 3 — see autumn's comment
+        // for rationale/method.
+        grassColor: 0x5e7d32,
+        grassLight: 0x7a9e43,
+        cliffColor: 0x5d3c29,
         // Deep lush summer greens — no orange/brown outliers pulling the
         // canopy toward autumn colors.
-        treeLeaves: [0x166534, 0x15803d, 0x22c55e, 0x14532d]
+        treeLeaves: [0x366247, 0x3c7652, 0x5baa78, 0x30553f]
       },
       winter: {
         id: 'winter',
@@ -956,10 +1059,12 @@
         skyBottom: 0xbfdbfe,
         fog: 0xdbeafe,
         fogDensity: 0.0016,
-        grassColor: 0xe2e8f0,
-        grassLight: 0xf8fafc,
-        cliffColor: 0x1e293b,
-        treeLeaves: [0x14532d, 0x166534, 0x15803d, 0x0f766e]
+        // Winter's snow-white grass/light already read as fairly desaturated
+        // (near-white), so only the cliff/tree tones needed muting.
+        grassColor: 0xe5e8ec,
+        grassLight: 0xf9fafb,
+        cliffColor: 0x252a33,
+        treeLeaves: [0x30553f, 0x366247, 0x3c7652, 0x356e69]
       }
     },
 
@@ -978,8 +1083,15 @@
         skyTop: 0x4338ca,
         skyHorizon: 0xf97316,
         skyBottom: 0xfde047,
-        fog: 0xfde047,
-        fogDensity: 0.0017,
+        // Fog color matched to the sky's HORIZON band, not its base —
+        // distant terrain sits near the horizon in view, so fogging it
+        // toward the base color left a visible mismatch band where terrain
+        // faded into a different hue than the sky right behind it.
+        // Density raised from a near-invisible 0.0017 to something that
+        // actually dissolves distant geometry into atmosphere (slowroads.io
+        // reference read as noticeably hazier at any real draw distance).
+        fog: 0xf97316,
+        fogDensity: 0.0055,
         sunColor: 0xffedd5,
         sunIntensity: 1.15,
         sunPos: [220, 90, -120],
@@ -994,8 +1106,8 @@
         skyTop: 0x0284c7,
         skyHorizon: 0x38bdf8,
         skyBottom: 0xbae6fd,
-        fog: 0xbae6fd,
-        fogDensity: 0.0015,
+        fog: 0x38bdf8,
+        fogDensity: 0.0048,
         sunColor: 0xfffdf5,
         sunIntensity: 1.25,
         sunPos: [120, 260, 100],
@@ -1011,7 +1123,7 @@
         skyHorizon: 0x7c3aed,
         skyBottom: 0xf43f5e,
         fog: 0x7c3aed,
-        fogDensity: 0.0018,
+        fogDensity: 0.0058,
         sunColor: 0xf97316,
         sunIntensity: 1.05,
         sunPos: [-220, 75, -140],
@@ -1027,7 +1139,7 @@
         skyHorizon: 0x0f172a,
         skyBottom: 0x1e293b,
         fog: 0x0f172a,
-        fogDensity: 0.0022,
+        fogDensity: 0.0065,
         sunColor: 0x93c5fd,
         sunIntensity: 0.45,
         sunPos: [-60, 190, -100],
@@ -1048,7 +1160,8 @@
     VEHICLES: {
       swift: { id: 'swift', name: 'Raftaar GT Hatch', maxSpeed: 44.0, accel: 18.0, drag: 0.80, brake: 30.0 },
       chotahathi: { id: 'chotahathi', name: 'Gaja 500 Mini Truck', maxSpeed: 30.0, accel: 12.0, drag: 0.85, brake: 26.0 },
-      scooter: { id: 'scooter', name: 'Vayu Volt Scooter', maxSpeed: 34.0, accel: 16.0, drag: 0.90, brake: 24.0 },
+      sportscoupe: { id: 'sportscoupe', name: 'Sports Coupe', maxSpeed: 50.0, accel: 20.0, drag: 0.78, brake: 32.0 },
+      musclecoupe: { id: 'musclecoupe', name: 'Muscle Coupe', maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0 },
       cycle: { id: 'cycle', name: 'Pawan Pedaler Bike', maxSpeed: 22.0, accel: 10.0, drag: 0.95, brake: 20.0 }
     },
 
@@ -1208,6 +1321,219 @@
       this._cache.rock = tex;
       return tex;
     }
+  };
+
+  // Setting `flatShading: false` on a material does nothing by itself if
+  // the geometry has no smooth normal data to interpolate — and Three.js's
+  // primitive polyhedra (DodecahedronGeometry etc.) are built non-indexed,
+  // with each triangle's 3 vertices duplicated and given that triangle's
+  // own flat face normal. There is nothing smooth stored on the geometry
+  // for flatShading:false to blend between, so the material flag alone is
+  // a no-op — confirmed directly: reading a rock's normal attribute showed
+  // 9 consecutive vertices sharing one identical flat normal despite
+  // flatShading already being off (see SLOWROADS_PARITY_LOG.md item 2's
+  // correction). This welds coincident positions (the geometry stays
+  // non-indexed — every duplicate vertex at a shared corner just gets
+  // written the same averaged normal, which reads identically to a
+  // properly indexed+smoothed mesh) and averages their face normals, the
+  // same effect `BufferGeometryUtils.mergeVertices()` + computeVertexNormals
+  // would give, without adding that as a new script dependency.
+  function smoothFaceNormals(geometry, precision = 4) {
+    geometry.computeVertexNormals(); // baseline: flat per-triangle normals
+    const pos = geometry.attributes.position;
+    const norm = geometry.attributes.normal;
+    const groups = new Map();
+    for (let i = 0; i < pos.count; i++) {
+      const key = `${pos.getX(i).toFixed(precision)},${pos.getY(i).toFixed(precision)},${pos.getZ(i).toFixed(precision)}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(i);
+    }
+    const avg = new THREE.Vector3();
+    const tmp = new THREE.Vector3();
+    for (const indices of groups.values()) {
+      avg.set(0, 0, 0);
+      for (const i of indices) avg.add(tmp.set(norm.getX(i), norm.getY(i), norm.getZ(i)));
+      avg.normalize();
+      for (const i of indices) norm.setXYZ(i, avg.x, avg.y, avg.z);
+    }
+    norm.needsUpdate = true;
+    return geometry;
+  }
+
+  // --------------------------------------------------------------------------
+  // Billboard trees — replaces the ConeGeometry/DodecahedronGeometry
+  // primitive trees per SHIPLYP_VISUAL_ENHANCEMENT_BRIEF.md section 3.3.
+  // Even with correct smooth shading (see smoothFaceNormals above), a
+  // primitive-geometry tree still reads as a stacked cone or a round ball —
+  // the actual gap against slowroads.io's trees is silhouette and texture
+  // detail (individual needle/leaf-cluster edges), not shading smoothness.
+  // No real-world alpha-cut tree photo was available to source reliably —
+  // authored instead, procedurally, at build time (not runtime): a
+  // needle-cluster pine silhouette and an irregular-blob broadleaf
+  // silhouette, both with a real alpha channel, both with the trunk baked
+  // into the same sprite so no separate trunk mesh is needed.
+  // Cross-billboard technique (two perpendicular textured planes sharing
+  // one alpha-cut texture) — a standard Y-axis-locked impostor: gives
+  // reasonable coverage from any horizontal viewing angle without a
+  // per-frame camera-facing update for every tree in the scene (hundreds
+  // of them; this project's own history flags exactly this kind of
+  // per-frame-cost-vs-one-time-cost tradeoff, see the world-floor segment
+  // count note in createWorldFloor). Actually CHEAPER than the geometry it
+  // replaces: 2 flat planes (4 triangles) vs. up to 3 stacked cones
+  // (30+ triangles) per tree.
+  const TreeBillboardFactory = {
+    _textures: null,
+    _loader: null,
+    load() {
+      if (this._textures) return this._textures;
+      this._loader = this._loader || new THREE.TextureLoader();
+      // Do NOT set tex.encoding here. Assigning THREE.sRGBEncoding on a
+      // texture synchronously right after calling .load() — before the
+      // image itself has finished the async fetch — rendered these
+      // textures as solid black (confirmed directly: same mesh, same
+      // material, only removing this line fixed it; a plain color
+      // material on the same geometry rendered fine, isolating the bug to
+      // this specific texture setup, not the billboard mesh/material
+      // itself). The renderer's own outputEncoding (sRGBEncoding, set in
+      // initThree) already handles the final display color correctly
+      // without this.
+      const load = (url) => this._loader.load(url);
+      this._textures = {
+        pine: load('assets/textures/tree_pine.webp'),
+        broadleaf: load('assets/textures/tree_broadleaf.webp')
+      };
+      return this._textures;
+    },
+    _geomCache: null,
+    _matCache: null,
+    // worldHeight: the tree's total height in world units (trunk included,
+    // since it's baked into the sprite) at scale 1.
+    //
+    // Geometry AND material are cached/shared per (kind, worldHeight) /
+    // (kind, tintHex) — see buildInstancedBatches below for why this
+    // matters more than it sounds: individual THREE.Mesh instances (the
+    // original version of this factory) are one draw call each regardless
+    // of shared geometry, and clustering trees (4-8x instance count) pushed
+    // that to 8556 separate tree meshes, at ~22 FPS. InstancedMesh is the
+    // actual fix — draw calls collapse to one per (kind, worldHeight, tint)
+    // bucket regardless of instance count.
+    getGeometry(kind, worldHeight) {
+      this._geomCache = this._geomCache || new Map();
+      const key = `${kind}:${worldHeight}`;
+      let geom = this._geomCache.get(key);
+      if (!geom) {
+        const aspect = kind === 'pine' ? (512 / 900) : (512 / 768);
+        geom = new THREE.PlaneGeometry(worldHeight * aspect, worldHeight);
+        geom.translate(0, worldHeight / 2, 0); // pivot at the base, matching how the old trunk-based groups were positioned
+        this._geomCache.set(key, geom);
+      }
+      return geom;
+    },
+    getMaterial(kind, tintHex) {
+      this._matCache = this._matCache || new Map();
+      const textures = this.load();
+      const tex = kind === 'pine' ? textures.pine : textures.broadleaf;
+      const tint = tintHex != null ? tintHex : 0xffffff;
+      const key = `${kind}:${tint}`;
+      let mat = this._matCache.get(key);
+      if (!mat) {
+        mat = new THREE.MeshLambertMaterial({
+          map: tex,
+          transparent: true,
+          alphaTest: 0.35, // hard cutout, not blended — avoids draw-order/sorting issues between the two crossed planes
+          side: THREE.DoubleSide,
+          color: tint // subtle per-tint seasonal variation without needing separate texture files per season
+        });
+        this._matCache.set(key, mat);
+      }
+      return mat;
+    },
+    // `descriptors`: [{ kind, worldHeight, pos, scale, rotY, tintHex }, ...]
+    // (already overlap/road-clearance-filtered by the caller). Groups by
+    // (kind, worldHeight, tintHex) and builds one InstancedMesh PER PLANE
+    // per group (2 planes per cross-billboard) — e.g. 2 kinds x 2 heights x
+    // ~4 tints x 2 planes = ~32 draw calls total for potentially thousands
+    // of trees, instead of 2 draw calls per tree.
+    buildInstancedBatches(descriptors) {
+      const group = new THREE.Group();
+      const buckets = new Map();
+      for (const d of descriptors) {
+        const key = `${d.kind}:${d.worldHeight}:${d.tintHex}`;
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(d);
+      }
+
+      const dummy = new THREE.Object3D();
+      for (const [key, items] of buckets) {
+        const [kind, worldHeightStr, tintStr] = key.split(':');
+        const worldHeight = Number(worldHeightStr);
+        const tintHex = Number(tintStr);
+        const geom = this.getGeometry(kind, worldHeight);
+        const mat = this.getMaterial(kind, tintHex);
+
+        for (const planeRotY of [0, Math.PI / 2]) {
+          const inst = new THREE.InstancedMesh(geom, mat, items.length);
+          inst.instanceMatrix.setUsage(THREE.StaticDrawUsage); // trees never move once placed
+          for (let i = 0; i < items.length; i++) {
+            const d = items[i];
+            dummy.position.copy(d.pos);
+            dummy.rotation.set(0, d.rotY + planeRotY, 0);
+            dummy.scale.setScalar(d.scale);
+            dummy.updateMatrix();
+            inst.setMatrixAt(i, dummy.matrix);
+          }
+          inst.instanceMatrix.needsUpdate = true;
+          inst.frustumCulled = false; // per-instance culling isn't computed for InstancedMesh by default in this three version; cheap enough at this triangle count
+          group.add(inst);
+        }
+      }
+      return group;
+    }
+  };
+
+  // Real sourced CC0 photo textures (ambientcg.com — Grass005, Rock064,
+  // Asphalt033, WoodSiding013) replacing the flat-color / canvas-noise
+  // materials for the ground/rock/road/fence, per
+  // SLOWROADS_PARITY_LOG.md item 6. Same lazy-load-and-cache shape as
+  // TreeBillboardFactory, same rule learned from that bug: never assign
+  // `.encoding` synchronously right after `.load()` — that rendered the
+  // tree sprites solid black because the image hadn't finished its async
+  // fetch yet when the assignment ran.
+  const RealTextureFactory = {
+    _cache: null,
+    _loader: null,
+    _get(key, url) {
+      this._cache = this._cache || new Map();
+      this._loader = this._loader || new THREE.TextureLoader();
+      let tex = this._cache.get(key);
+      if (!tex) {
+        tex = this._loader.load(url);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        this._cache.set(key, tex);
+      }
+      return tex;
+    },
+    grassColor() { return this._get('grassColor', 'assets/textures/grass_color.webp'); },
+    // Separate cache key/instance (NOT texture.clone() of grassColor()) —
+    // the world floor needs its own `.repeat` scale, different from the
+    // terrain ribbon's. Cloning a texture before its async image load
+    // completes copies `.image` as undefined at that instant, and the
+    // clone never receives the original's later load callback — confirmed
+    // directly: `floorMesh.material.map.image` was `undefined` at runtime
+    // despite the source texture rendering correctly elsewhere. Loading
+    // the same URL again is cheap (the browser's own HTTP cache dedupes
+    // the actual network fetch) and gives a fully independent, properly
+    // self-loading Texture instance instead.
+    grassColorFloor() { return this._get('grassColorFloor', 'assets/textures/grass_color.webp'); },
+    grassNormal() { return this._get('grassNormal', 'assets/textures/grass_normal.webp'); },
+    rockColor() { return this._get('rockColor', 'assets/textures/rock_color.webp'); },
+    rockNormal() { return this._get('rockNormal', 'assets/textures/rock_normal.webp'); },
+    roadColor() { return this._get('roadColor', 'assets/textures/road_color.webp'); },
+    roadNormal() { return this._get('roadNormal', 'assets/textures/road_normal.webp'); },
+    woodColor() { return this._get('woodColor', 'assets/textures/wood_color.webp'); },
+    woodNormal() { return this._get('woodNormal', 'assets/textures/wood_normal.webp'); },
+    stoneColor() { return this._get('stoneColor', 'assets/textures/stone_color.webp'); },
+    stoneNormal() { return this._get('stoneNormal', 'assets/textures/stone_normal.webp'); }
   };
 
   // --------------------------------------------------------------------------
@@ -1599,22 +1925,48 @@
       // BUGFIX_LOG.md's vehicle-sinks-into-road entry (Pattern 2, 4th
       // occurrence).
       this.roadSpacedPoints = points;
+      // Per-point banking angle + frame vectors, cached alongside
+      // roadSpacedPoints so createLaneMarkingMeshes() (built right after
+      // this) computes its decal ribbons from the EXACT same values the
+      // road surface itself used, not a second recomputation that can
+      // silently diverge (see the points-array comment above — same
+      // failure class).
+      this.roadBankingAngles = new Array(tubularSegments + 1);
+      this.roadNormals = new Array(tubularSegments + 1);
+      this.roadBinormals = new Array(tubularSegments + 1);
+      this.roadBankedUp = new Array(tubularSegments + 1);
       const tCfg = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
       const baseTarmac = new THREE.Color(tCfg.color);
       const vergeColor = new THREE.Color(tCfg.color).multiplyScalar(0.72);
-      const whiteLine = new THREE.Color(0xf8fafc);
 
-      // 7-Point Cross-Section with Painted Road Stripes
+      // Lane paint used to be baked into this ribbon's own vertex colors —
+      // first as a single column (a bright line that was actually a smooth
+      // color gradient bleeding across most of the lane, since Gouraud
+      // interpolation spreads linearly across a whole triangle), then as
+      // tightly-paired columns to narrow that bleed. Both attempts still
+      // rode on THIS mesh's own vertex density (1200 segments over ~5km,
+      // ~4.2m apart), so the painted line's apparent width and position
+      // wobbled with however much the banking/curvature happened to shift
+      // between one road vertex and the next — worse on sharper curves,
+      // which is exactly the unevenness reported. Checked slowroads.io's
+      // own shipped assets directly (network tab, live CDN): their lane
+      // paint (road_paint_dashed.webp, road_paint_solid.webp, etc.) are
+      // separate decal textures, not part of the base road material at
+      // all. This ribbon goes back to a plain 7-point tarmac/verge cross
+      // section with no paint baked in; createLaneMarkingMeshes() below
+      // adds the actual lines as their own thin, independent ribbon
+      // meshes with a fixed physical width that can't drift with the
+      // base road's vertex spacing.
+      const laneHalf = roadWidth * 0.5;
       const offsets = [
-        -roadWidth * 0.5 - shoulderWidth, // 0: Left Verge Outer
-        -roadWidth * 0.5,                  // 1: Left Solid Edge Stripe
-        -roadWidth * 0.46,                 // 2: Left Lane Tarmac
-        0.0,                               // 3: Center Yellow Divider
-        roadWidth * 0.46,                  // 4: Right Lane Tarmac
-        roadWidth * 0.5,                   // 5: Right Solid Edge Stripe
-        roadWidth * 0.5 + shoulderWidth    // 6: Right Verge Outer
+        -laneHalf - shoulderWidth, // 0: Left Verge Outer
+        -laneHalf,                  // 1: Left Tarmac Edge
+        -laneHalf * 0.46 / 0.5,     // 2: Left Lane Tarmac
+        0.0,                        // 3: Center
+        laneHalf * 0.46 / 0.5,      // 4: Right Lane Tarmac
+        laneHalf,                   // 5: Right Tarmac Edge
+        laneHalf + shoulderWidth    // 6: Right Verge Outer
       ];
-
       for (let i = 0; i <= tubularSegments; i++) {
         const pt = points[i];
 
@@ -1641,6 +1993,10 @@
         const bankingAngle = THREE.MathUtils.clamp(curvatureY * 0.25, -0.14, 0.14);
         const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
         const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
+        this.roadBankingAngles[i] = bankingAngle;
+        this.roadNormals[i] = normal.clone();
+        this.roadBinormals[i] = binormal.clone();
+        this.roadBankedUp[i] = bankedUp.clone();
 
         for (let j = 0; j < offsets.length; j++) {
           const off = offsets[j];
@@ -1672,27 +2028,20 @@
           normals.push(bankedUp.x, bankedUp.y, bankedUp.z);
           uvs.push(off * 0.5, i * 0.3);
 
-          // Assign sharp vertex colors for asphalt and highway paint
+          // Plain tarmac/verge only — paint is a separate decal mesh now
+          // (see createLaneMarkingMeshes), not baked into this ribbon.
           if (j === 0 || j === 6) {
             colors.push(vergeColor.r, vergeColor.g, vergeColor.b);
-          } else if (j === 1 || j === 5) {
-            colors.push(whiteLine.r, whiteLine.g, whiteLine.b);
-          } else if (j === 3) {
-            // Was a bright yellow dashed center line — under strong
-            // daylight + ACES tonemapping it crossed the bloom threshold
-            // and blew out into large soft glowing blobs across the road
-            // instead of reading as a crisp lane marking, defeating its
-            // own purpose. Removed rather than just dimmed, per request.
-            colors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
           } else {
             colors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
           }
         }
 
         if (i < tubularSegments) {
-          const row1 = i * 7;
-          const row2 = (i + 1) * 7;
-          for (let j = 0; j < 6; j++) {
+          const cols = offsets.length;
+          const row1 = i * cols;
+          const row2 = (i + 1) * cols;
+          for (let j = 0; j < cols - 1; j++) {
             indices.push(row1 + j, row1 + j + 1, row2 + j);
             indices.push(row1 + j + 1, row2 + j + 1, row2 + j);
           }
@@ -1706,17 +2055,156 @@
       geom.setIndex(indices);
       geom.computeVertexNormals();
 
+      // Real photo asphalt (ambientcg Asphalt033) replacing the procedural
+      // canvas-noise texture — SLOWROADS_PARITY_LOG.md item 6. Lane paint is
+      // no longer part of this vertexColors buffer — see
+      // createLaneMarkingMeshes() for the decal ribbons that render it.
+      //
+      // normalMap deliberately NOT wired in here — confirmed by direct
+      // test (removing it live fixed a fully solid-black road instantly):
+      // this ribbon's UV layout is custom per-vertex generated
+      // (`off*0.5, i*0.3`, not a standard 0-1 planar UV), and
+      // MeshStandardMaterial's auto-computed screen-space tangent basis
+      // goes unstable on it, corrupting the perturbed normal and zeroing
+      // out the lighting entirely. Same risk applies to the terrain ribbon
+      // below (same custom-UV pattern) — normalMap skipped there too.
+      const roadTex = RealTextureFactory.roadColor();
       const roadMaterial = new THREE.MeshStandardMaterial({
         vertexColors: true,
         side: THREE.DoubleSide,
         roughness: 0.85,
         metalness: 0.05,
-        map: TextureFactory.asphalt(this.prng)
+        map: roadTex
       });
 
       this.roadMesh = new THREE.Mesh(geom, roadMaterial);
       this.roadMesh.receiveShadow = true;
       return this.roadMesh;
+    }
+
+    // Lane paint as dedicated thin decal ribbons, separate from the base
+    // road surface — see the comment in createRoadMesh for why (matches
+    // slowroads.io's own actual technique: their shipped assets include
+    // standalone road_paint_dashed / road_paint_solid_left / _right
+    // textures, not paint baked into the base road material, confirmed
+    // directly from their live CDN network requests). Must run AFTER
+    // createRoadMesh, which populates roadSpacedPoints/roadBankingAngles/
+    // roadNormals/roadBankedUp.
+    //
+    // Each ribbon has a fixed physical width the whole length of the
+    // road, independent of the base mesh's own vertex spacing — the
+    // previous vertex-color approach's "uneven width" bug came from the
+    // paint being interpolated across the base ribbon's comparatively
+    // coarse (~4.2m) vertex spacing, so its apparent width/position
+    // wobbled with however much banking shifted between one base-mesh
+    // vertex and the next, worst on sharp curves. These ribbons still
+    // follow the same points/banking arrays (so they bank and curve
+    // exactly with the road), but their cross-section width is fixed by
+    // this function's own offsets, not by the base mesh's column spacing.
+    createLaneMarkingMeshes(roadTerrainKey = 'asphalt') {
+      const points = this.roadSpacedPoints;
+      const bankingAngles = this.roadBankingAngles;
+      const normals = this.roadNormals;
+      const binormals = this.roadBinormals;
+      const bankedUps = this.roadBankedUp;
+      if (!points || !bankingAngles) return new THREE.Group();
+
+      const tubularSegments = points.length - 1;
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.5;
+      // Muted pale colors, not pure white/yellow — those crossed the
+      // 0.94 post-ACES-tonemap bloom threshold (bloomPass, ~line 5691)
+      // and blew out into soft glowing blobs under strong daylight,
+      // which is what got the original stripes removed entirely.
+      const edgeLineColor = new THREE.Color(0x9aa0a8);
+      const centerLineColor = new THREE.Color(0xb9a968);
+      // Real-world lane paint is roughly 10-15cm wide; half-width here.
+      const stripeHalfW = 0.06;
+      // ~4.2m per segment (1200 segments / ~5km route) — getSpacedPoints
+      // is arc-length-uniform so segment index doubles as a distance
+      // proxy. A period of 3 segments gives a ~12.6m on/off cycle, close
+      // to a real dashed-line cadence (dash ~3-4m, gap ~8-9m).
+      const dashPeriod = 3;
+      // Lifted further above the road surface than the old baked-in
+      // paint (0.12) needed to be, since this is now a separate coplanar
+      // mesh riding on top of it — needs its own clearance to win the
+      // depth test cleanly rather than z-fighting with the asphalt.
+      const paintLift = 0.02;
+
+      const buildRibbon = (lateralOffset, color, dashed) => {
+        const positions = [];
+        const colors = [];
+        const normalsOut = [];
+        const indices = [];
+        let vertCount = 0;
+
+        for (let i = 0; i <= tubularSegments; i++) {
+          const pt = points[i];
+          const bankingAngle = bankingAngles[i];
+          const normal = normals[i];
+          const binormal = binormals[i];
+          const bankedUp = bankedUps[i];
+          // Exactly createRoadMesh's bankedNormal, reconstructed from the
+          // same cached normal/binormal rather than a second cos/sin call
+          // on its own — the earlier version of this ribbon builder
+          // wrongly substituted bankedUp for binormal here, which put the
+          // decal at the wrong lateral position (and buried it under the
+          // road, see the lift fix below) instead of tracing the road's
+          // actual surface. Confirmed by rendering nothing visible at all.
+          const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
+
+          const dashOn = !dashed || (Math.floor(i / dashPeriod) % 2 === 0);
+          const rowColor = dashOn ? color : null;
+
+          [-stripeHalfW, stripeHalfW].forEach((edgeOff) => {
+            const off = lateralOffset + edgeOff;
+            // Reuses the exact banked frame the road surface computed at
+            // this same point — see the cached arrays above. The base
+            // tarmac surface itself sits at pt + bankedNormal*off +
+            // bankedUp*0.12 (createRoadMesh's non-verge branch) — this
+            // decal needs that SAME 0.12 base lift plus its own clearance
+            // on top, not just paintLift alone (which by itself sat the
+            // decal ~0.10m below the actual road surface, invisible under it).
+            const p = pt.clone()
+              .addScaledVector(bankedNormal, off)
+              .addScaledVector(bankedUp, 0.12 + paintLift);
+            positions.push(p.x, p.y, p.z);
+            normalsOut.push(bankedUp.x, bankedUp.y, bankedUp.z);
+            const c = rowColor || color;
+            // When a dash is "off", push the road's own tarmac-adjacent
+            // alpha via vertex color alpha isn't available without a
+            // 4th channel — instead this row is simply skipped from the
+            // index buffer below (no triangles emitted for an off dash),
+            // which is a cleaner "gap" than color-fading to tarmac would
+            // be, and can't mismatch the base road's actual tarmac color
+            // per terrain type.
+            colors.push(c.r, c.g, c.b);
+          });
+          vertCount += 2;
+
+          if (dashed && !dashOn) continue; // no triangles for this row — real gap, not a color fade
+          if (i > 0 && (!dashed || (Math.floor((i - 1) / dashPeriod) % 2 === 0))) {
+            const row1 = (i - 1) * 2;
+            const row2 = i * 2;
+            indices.push(row1, row1 + 1, row2);
+            indices.push(row1 + 1, row2 + 1, row2);
+          }
+        }
+
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geom.setAttribute('normal', new THREE.Float32BufferAttribute(normalsOut, 3));
+        geom.setIndex(indices);
+        const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+        return new THREE.Mesh(geom, mat);
+      };
+
+      const group = new THREE.Group();
+      group.add(buildRibbon(0, centerLineColor, true));
+      group.add(buildRibbon(-roadHalf, edgeLineColor, false));
+      group.add(buildRibbon(roadHalf, edgeLineColor, false));
+      this.laneMarkingsGroup = group;
+      return group;
     }
 
     // Scans the finished curve at the SAME sampling rate createTerrainMesh
@@ -1838,6 +2326,20 @@
       const grassCol = new THREE.Color(season.grassColor);
       const grassLight = new THREE.Color(season.grassLight);
       const cliffCol = new THREE.Color(season.cliffColor);
+      // Master Prompt section 3: roadside ground is two-layered in the
+      // reference — a narrow vivid green strip right at the road edge,
+      // then dominant pale khaki/straw beyond it — not one flat grass
+      // color across the whole shoulder. Applied below to the existing
+      // shoulder-verge zone (roadHalf..9.0m): a ~1.2m vivid-green band
+      // right at the road edge, blending into a pale khaki/straw tone for
+      // the rest of the shoulder. "Visible blade detail" from the spec is
+      // approximated here with per-vertex noise variation on the khaki
+      // band, not new blade geometry — an actual billboard-grass-clump
+      // asset pass (matching TreeBillboardFactory's approach) would be
+      // needed for real geometric detail; disclosed as not done, not
+      // silently skipped.
+      const vividGreen = new THREE.Color(0x4a7c3f);
+      const khaki = new THREE.Color(0xc9bb84);
 
       const points = this.tunnelPoints || this.curve.getSpacedPoints(tubularSegments);
 
@@ -1855,23 +2357,69 @@
 
         const up = new THREE.Vector3(0, 1, 0);
         const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
+        const binormal = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+
+        // Mirrors createRoadMesh's own banking calc exactly (same points
+        // array, same index, same formula) — this is the actual cause of
+        // terrain visibly clipping through the road on curves. createRoadMesh
+        // tilts the road's interior surface up to ±0.14rad on bends
+        // (banking), but this terrain slab directly underneath it was
+        // always pinned to the flat, unbanked `pt.y - 0.18`. On a banked
+        // curve the real road surface sits well over a meter above or below
+        // that flat height at the outer/inner edge, so the flat slab either
+        // floats visibly above the low side of the road or — the reported
+        // bug — pokes up through it on the high side. The vehicle's own
+        // ground-following has a separate fix for this same divergence
+        // (see the `bankedYOffset` comment in `update()`), but that only
+        // corrects where the CAR sits, not where this mesh renders, so the
+        // visual clipping remained even after the car stopped sinking.
+        let curvatureY = 0;
+        if (i < tubularSegments - 1) {
+          const nextTang = new THREE.Vector3().subVectors(points[i + 2], points[i]).normalize();
+          curvatureY = (nextTang.x - tangent.x) * 10.0;
+        }
+        const bankingAngle = THREE.MathUtils.clamp(curvatureY * 0.25, -0.14, 0.14);
 
         for (let j = 0; j < sliceCount; j++) {
           const latDist = lateralSlices[j];
           const absDist = Math.abs(latDist);
+          // Pure-vertical banking correction at this lateral offset — same
+          // formula as the vehicle's `bankedYOffset`, which only nudges Y,
+          // matching how this loop already places X/Z via the unbanked
+          // `normal` and only ever adjusts `finalY`.
+          const bankedYOffset = latDist * binormal.y * Math.sin(bankingAngle);
 
           const worldPos = pt.clone().addScaledVector(normal, latDist);
           let finalY = pt.y;
 
           if (absDist <= roadHalf) {
-            // 1. Under Asphalt: strictly 0.18m below road surface
-            finalY = pt.y - 0.18;
+            // 1. Under Asphalt: strictly 0.18m below road surface, banked
+            // the same amount the road surface directly above it is.
+            finalY = pt.y - 0.18 + bankedYOffset;
             colors.push(grassLight.r, grassLight.g, grassLight.b);
           } else if (absDist <= 9.0) {
-            // 2. Road Shoulder Verge: gentle downward slope from road edge
+            // 2. Road Shoulder Verge: gentle downward slope from road edge.
+            // Banking fades out across the shoulder (full at the road edge,
+            // zero by the embankment) since the shoulder isn't a rigid part
+            // of the tilted road surface, just meets it.
             const t = (absDist - roadHalf) / (9.0 - roadHalf);
-            finalY = pt.y - 0.18 - t * 0.32;
-            colors.push(grassLight.r * 0.95, grassLight.g * 0.95, grassLight.b * 0.95);
+            finalY = pt.y - 0.18 - t * 0.32 + bankedYOffset * (1 - t);
+            // Two-layer roadside ground (Master Prompt section 3): a
+            // narrow vivid-green band right at the road edge (first ~1.2m
+            // of shoulder), blending into pale khaki/straw for the rest —
+            // replaces the old single grassLight*0.95 tone across the
+            // whole shoulder.
+            const GREEN_BAND_T = 1.2 / (9.0 - roadHalf);
+            if (t <= GREEN_BAND_T) {
+              colors.push(vividGreen.r, vividGreen.g, vividGreen.b);
+            } else {
+              const bandT = THREE.MathUtils.smoothstep(t, GREEN_BAND_T, GREEN_BAND_T + 0.15);
+              const bladeNoise = 0.88 + this.simplex.noise2D(worldPos.x * 0.5, worldPos.z * 0.5) * 0.18;
+              const r = THREE.MathUtils.lerp(vividGreen.r, khaki.r * bladeNoise, bandT);
+              const g = THREE.MathUtils.lerp(vividGreen.g, khaki.g * bladeNoise, bandT);
+              const b = THREE.MathUtils.lerp(vividGreen.b, khaki.b * bladeNoise, bandT);
+              colors.push(r, g, b);
+            }
           } else {
             // 3. Embankment Carving: Smooth terrain transition from road edge to raw hills
             // Road is carved into terrain with embankments (cut/fill slopes)
@@ -1906,7 +2454,13 @@
 
           positions.push(worldPos.x, finalY, worldPos.z);
           normals.push(0, 1, 0);
-          uvs.push(worldPos.x * 0.15, worldPos.z * 0.15);
+          // 0.15 -> 0.45: at 0.15 each texture tile stretched across ~6.7m
+          // of ground, so individual grass blades read as smeared/blown-up
+          // rather than fine detail at normal driving distance — user
+          // asked directly for denser-looking grass. Tripling the tiling
+          // frequency shrinks each tile to ~2.2m, closer to how fine real
+          // turf actually reads from a moving vehicle.
+          uvs.push(worldPos.x * 0.45, worldPos.z * 0.45);
 
           if (i < tubularSegments && j < sliceCount - 1) {
             const row1 = i * sliceCount + j;
@@ -1925,12 +2479,18 @@
       geom.setIndex(indices);
       geom.computeVertexNormals();
 
+      // Real photo grass (ambientcg Grass005) replacing the procedural
+      // canvas-noise texture — SLOWROADS_PARITY_LOG.md item 6. vertexColors
+      // still multiplies over this (grass-green in the flat bands, the
+      // cliffCol grey-brown in steep bands per the embankment logic above)
+      // exactly as it did over the old texture — same mechanism, just a
+      // real photo underneath instead of procedural speckle noise.
       const terrainMat = new THREE.MeshStandardMaterial({
         vertexColors: true,
         side: THREE.DoubleSide,
         roughness: 0.95,
         metalness: 0.0,
-        map: TextureFactory.grass(this.prng)
+        map: RealTextureFactory.grassColor() // normalMap deliberately omitted — see the road material's comment above, same custom-UV instability risk
       });
 
       this.terrainMesh = new THREE.Mesh(geom, terrainMat);
@@ -2291,12 +2851,15 @@
       geom.computeVertexNormals();
       geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
-      // Own clone of the shared grass texture so this mesh's repeat count
-      // (driven by its own, much larger, world-space size) doesn't fight
-      // with the terrain ribbon's repeat setting on the cached original.
-      const floorGrassTex = TextureFactory.grass(this.prng).clone();
-      floorGrassTex.needsUpdate = true;
-      floorGrassTex.repeat.set(size * 0.15, size * 0.15);
+      // Own clone of the shared real grass texture so this mesh's repeat
+      // count (driven by its own, much larger, world-space size) doesn't
+      // fight with the terrain ribbon's repeat setting on the cached
+      // original. SLOWROADS_PARITY_LOG.md item 6.
+      const floorGrassTex = RealTextureFactory.grassColorFloor();
+      // Matches the terrain ribbon's 0.45 tiling density (see that comment)
+      // so the background floor and the close-up ribbon read as the same
+      // grass at the seam, not two different densities.
+      floorGrassTex.repeat.set(size * 0.45, size * 0.45);
 
       const floorMat = new THREE.MeshStandardMaterial({
         vertexColors: true,
@@ -2324,24 +2887,34 @@
       const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
 
       // Reusable Low-Poly Foliage & Prop Geometries
-      const trunkGeom = new THREE.CylinderGeometry(0.25, 0.45, 2.8, 6);
-      const pineLeavesGeom = new THREE.ConeGeometry(2.4, 5.0, 6);
-      const decLeavesGeom = new THREE.DodecahedronGeometry(2.4, 0);
+      // Pine/broadleaf tree canopy geometry retired — trees are now
+      // TreeBillboardFactory sprites (see SLOWROADS_PARITY_LOG.md item 5),
+      // trunk baked into the sprite art, so trunkGeom/trunkMat/
+      // pineLeavesGeom/decLeavesGeom no longer have any callers.
       const bushGeom = new THREE.DodecahedronGeometry(1.2, 0);
-      const rockGeom = new THREE.DodecahedronGeometry(1.6, 0);
+      // detail 1 (not 0): flat-normal duplicate vertices only welding to a
+      // SHARED smooth normal (via smoothFaceNormals below) isn't enough on
+      // its own either — at detail 0 a dodecahedron's 12 faces are each so
+      // large that even perfect normal averaging only shows a gradient
+      // right at the face edges, reading as "still basically flat" in the
+      // middle of every face. Detail 1 subdivides each face so there's
+      // enough vertex density for the averaged gradient to actually be
+      // visible across the surface, not just at seams.
+      const rockGeom = smoothFaceNormals(new THREE.DodecahedronGeometry(1.6, 1));
       const poleGeom = new THREE.CylinderGeometry(0.1, 0.12, 6.5, 6);
       const crossbarGeom = new THREE.BoxGeometry(1.8, 0.12, 0.12);
 
-      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, flatShading: true, roughness: 0.9 });
-      const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a6065, flatShading: true, roughness: 0.8, map: TextureFactory.rock(this.prng) });
+      // Rocks are an organic shape — flat shading on round primitives reads
+      // as faceted "gem" geometry (see SLOWROADS_PARITY_LOG.md item 2)
+      // where smooth shading reads as an actual rounded surface at the same
+      // triangle count. Man-made props (poles, buildings, vehicles below)
+      // keep flatShading — that's a deliberate low-poly look, not the bug.
+      // Real photo rock (ambientcg Rock064) + its normal map, actually
+      // wired into normalMap this time — SLOWROADS_PARITY_LOG.md item 6
+      // (the brief explicitly called out "loading it and not using it
+      // doesn't count").
+      const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a6065, roughness: 0.8, map: RealTextureFactory.rockColor(), normalMap: RealTextureFactory.rockNormal() });
       const poleMat = new THREE.MeshStandardMaterial({ color: 0x4a4e52, flatShading: true, roughness: 0.6, metalness: 0.3 });
-
-      const potholeGeom = new THREE.CircleGeometry(1.3, 12);
-      potholeGeom.rotateX(-Math.PI / 2);
-      const potholeMat = new THREE.MeshBasicMaterial({ color: 0x0a0c10 });
-
-      const rumbleGeom = new THREE.BoxGeometry(CONFIG.ROAD_WIDTH * 0.82, 0.08, 0.45);
-      const rumbleMat = new THREE.MeshLambertMaterial({ color: 0xfca311 });
 
       // Low-poly pedestrian/animal road-crosser builder — same flat-shaded
       // block-figure style as the porch resident so crossers read as part
@@ -2522,126 +3095,56 @@
           return dx * dx + dz * dz < tunnelClearanceSq;
         });
 
-        // 1. Potholes & Rumble Strips on Road
-        if (i % 26 === 0) {
-          const potOffset = (this.prng.next() - 0.5) * (CONFIG.ROAD_WIDTH * 0.62);
-          const potPos = pt.clone().addScaledVector(normal, potOffset);
-          potPos.y += 0.17;
-          // Every pothole used to share one fixed-size geometry — visually
-          // identical and identical -14% damage regardless of how big the
-          // hole actually looked. Scaling the shared unit geometry per
-          // instance (cheap — no new geometry allocation) gives real size
-          // variety, and both the hit radius and damage now scale with it
-          // so a small crack barely matters while a real crater hurts.
-          const potSize = this.prng.range(0.55, 2.0);
-          const potMesh = new THREE.Mesh(potholeGeom, potholeMat);
-          potMesh.position.copy(potPos);
-          potMesh.scale.set(potSize, potSize, 1);
-          this.foliageGroup.add(potMesh);
-          this.potholes.push({ pos: potPos, radius: 1.6 * potSize, hitRecently: false, sizeFactor: potSize });
-        }
-
-        if (i % 65 === 0) {
-          const rumblePos = pt.clone();
-          rumblePos.y += 0.17;
-          const rumbleMesh = new THREE.Mesh(rumbleGeom, rumbleMat);
-          rumbleMesh.position.copy(rumblePos);
-          rumbleMesh.lookAt(rumblePos.clone().add(normal));
-          this.foliageGroup.add(rumbleMesh);
-          this.potholes.push({ pos: rumblePos, radius: 2.2, isRumble: true, hitRecently: false });
-        }
-
-        // 1b. Pedestrians and stray dogs/cats crossing the road. Spawned
-        // as a start/end pair straddling the road on this point's normal
-        // so updateCrossers can walk them straight across; sparsity (the
-        // prng roll) keeps crossings occasional rather than a wall of NPCs.
-        // Skipped inside a tunnel bore entirely — no road-crossing NPCs,
-        // no shoulder walkers, no guardrails in there (see below); a bored
-        // tunnel is a straight, empty, lit corridor, not a village stretch.
-        if (i % 33 === 0 && this.prng.next() > 0.45 && !inTunnel) {
-          const kindRoll = this.prng.next();
-          const kind = kindRoll < 0.55 ? 'pedestrian' : (kindRoll < 0.8 ? 'dog' : 'cat');
-          const crossHalf = CONFIG.ROAD_WIDTH * 0.62 + 3.0;
-          const side = this.prng.next() > 0.5 ? 1 : -1;
-          const latStart = side * crossHalf;
-          const latEnd = -side * crossHalf;
-          const startPos = pt.clone().addScaledVector(normal, latStart);
-          const endPos = pt.clone().addScaledVector(normal, latEnd);
-          startPos.y = this.groundHeightAt(pt, startPos, latStart) + 0.15;
-          endPos.y = this.groundHeightAt(pt, endPos, latEnd) + 0.15;
-
-          const mesh = buildCrosserMesh(kind);
-          const initialProgress = this.prng.next() * 0.3; // stagger so they don't all step off in lockstep
-          const initialLat = THREE.MathUtils.lerp(latStart, latEnd, initialProgress);
-          mesh.position.x = THREE.MathUtils.lerp(startPos.x, endPos.x, initialProgress);
-          mesh.position.z = THREE.MathUtils.lerp(startPos.z, endPos.z, initialProgress);
-          mesh.position.y = this.groundHeightAt(pt, mesh.position, initialLat) + 0.15;
-          mesh.lookAt(endPos.x, mesh.position.y, endPos.z);
-          this.foliageGroup.add(mesh);
-
-          this.crossers.push({
-            mesh,
-            kind,
-            start: startPos,
-            end: endPos,
-            // Fixed reference point + normal so updateCrossers can recompute
-            // ground height at the crosser's *current* lateral position each
-            // frame (via groundHeightAt) instead of linearly interpolating
-            // between the start/end heights — a straight Y lerp cut through
-            // the actual road surface mid-crossing wherever the road profile
-            // between those two points isn't flat (banked/curved sections),
-            // which is why crossers were sinking through the road.
-            pt: pt.clone(),
-            normal: normal.clone(),
-            latStart,
-            latEnd,
-            progress: initialProgress,
-            speed: mesh.userData.walkSpeed,
-            hitRadius: mesh.userData.hitRadius,
-            struck: false,
-            legPhase: this.prng.next() * Math.PI * 2
-          });
-        }
-
-        // Shoulder pedestrians who patrol UP AND DOWN the roadside instead
-        // of crossing — reuses the exact same updateCrossers loop (it only
-        // ever lerps mesh position between `start`/`end` and ping-pongs at
-        // either end), just with both endpoints offset along the road
-        // TANGENT at a fixed lateral distance instead of straddling the
-        // road on the NORMAL. latStart === latEnd here on purpose: no
-        // lateral movement, they stay on the shoulder the whole patrol.
-        if (i % 47 === 0 && this.prng.next() > 0.5 && !inTunnel) {
+        // Shoulder pedestrians who patrol UP AND DOWN the roadside — this is
+        // now the ONLY pedestrian mechanic (potholes, rumble strips, and
+        // road-crossing pedestrians/dogs/cats were removed per the
+        // slowroads-style pivot: no hazards, no road-crossing NPCs, just a
+        // populated roadside). Reuses updateCrossers (it only ever lerps
+        // mesh position between `start`/`end` and ping-pongs at either
+        // end), with both endpoints offset along the road TANGENT at a
+        // fixed lateral distance instead of straddling the road on the
+        // NORMAL. latStart === latEnd here on purpose: no lateral movement,
+        // they stay on the shoulder the whole patrol. Density raised
+        // significantly (i%47->i%16, probability 0.5->0.2, plus a 2-4
+        // person cluster per spawn point) per explicit "quite a few" density
+        // instruction — this is now a much denser roll than the original
+        // sparse solo-walker spacing.
+        if (i % 16 === 0 && this.prng.next() > 0.2 && !inTunnel) {
+          const clusterSize = Math.floor(this.prng.range(2, 5));
           const walkSide = this.prng.next() > 0.5 ? 1 : -1;
-          const walkLat = walkSide * (CONFIG.ROAD_WIDTH * 0.5 + 3.5 + this.prng.range(0, 3.0));
-          const walkRange = this.prng.range(12.0, 24.0);
+          for (let c = 0; c < clusterSize; c++) {
+            const walkLat = walkSide * (CONFIG.ROAD_WIDTH * 0.5 + 3.5 + this.prng.range(0, 4.0));
+            const walkRange = this.prng.range(10.0, 22.0);
+            const tangentJitter = this.prng.range(-6.0, 6.0);
 
-          const walkMesh = buildCrosserMesh('pedestrian');
-          const startPos = pt.clone().addScaledVector(tangent, -walkRange).addScaledVector(normal, walkLat);
-          const endPos = pt.clone().addScaledVector(tangent, walkRange).addScaledVector(normal, walkLat);
-          startPos.y = this.groundHeightAt(pt, startPos, walkLat) + 0.15;
-          endPos.y = this.groundHeightAt(pt, endPos, walkLat) + 0.15;
+            const walkMesh = buildCrosserMesh('pedestrian');
+            const startPos = pt.clone().addScaledVector(tangent, tangentJitter - walkRange).addScaledVector(normal, walkLat);
+            const endPos = pt.clone().addScaledVector(tangent, tangentJitter + walkRange).addScaledVector(normal, walkLat);
+            startPos.y = this.groundHeightAt(pt, startPos, walkLat) + 0.15;
+            endPos.y = this.groundHeightAt(pt, endPos, walkLat) + 0.15;
 
-          const initialProgress = this.prng.next();
-          walkMesh.position.lerpVectors(startPos, endPos, initialProgress);
-          walkMesh.position.y = this.groundHeightAt(pt, walkMesh.position, walkLat) + 0.15;
-          walkMesh.lookAt(endPos.x, walkMesh.position.y, endPos.z);
-          this.foliageGroup.add(walkMesh);
+            const initialProgress = this.prng.next();
+            walkMesh.position.lerpVectors(startPos, endPos, initialProgress);
+            walkMesh.position.y = this.groundHeightAt(pt, walkMesh.position, walkLat) + 0.15;
+            walkMesh.lookAt(endPos.x, walkMesh.position.y, endPos.z);
+            this.foliageGroup.add(walkMesh);
 
-          this.crossers.push({
-            mesh: walkMesh,
-            kind: 'pedestrian',
-            start: startPos,
-            end: endPos,
-            pt: pt.clone(),
-            normal: normal.clone(),
-            latStart: walkLat,
-            latEnd: walkLat,
-            progress: initialProgress,
-            speed: walkMesh.userData.walkSpeed * 0.75, // ambling shoulder pace, slower than a road-crossing dash
-            hitRadius: walkMesh.userData.hitRadius,
-            struck: false,
-            legPhase: this.prng.next() * Math.PI * 2
-          });
+            this.crossers.push({
+              mesh: walkMesh,
+              kind: 'pedestrian',
+              start: startPos,
+              end: endPos,
+              pt: pt.clone(),
+              normal: normal.clone(),
+              latStart: walkLat,
+              latEnd: walkLat,
+              progress: initialProgress,
+              speed: walkMesh.userData.walkSpeed * 0.75, // ambling shoulder pace, slower than a road-crossing dash
+              hitRadius: walkMesh.userData.hitRadius,
+              struck: false,
+              legPhase: this.prng.next() * Math.PI * 2
+            });
+          }
         }
 
         // 2. Roadside Chevron Turn Warning Signs (Yellow/Black <<< >>> on metal poles)
@@ -2838,51 +3341,43 @@
 
           if (spawnTree) {
           // Winter forces evergreen-only canopy — broadleaf trees would be
-          // bare in winter, and we don't model leafless geometry, so we
-          // simply keep the forest all-pine rather than showing full green
-          // canopies that would look wrong for the season.
+          // bare in winter, and there's no leafless sprite variant, so the
+          // forest stays all-pine rather than showing full green canopies
+          // that would look wrong for the season.
           const isPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
-          const leafColHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
-          const leavesMat = new THREE.MeshStandardMaterial({ color: leafColHex, flatShading: true });
 
-          const tree = new THREE.Group();
-          const trunk = new THREE.Mesh(trunkGeom, trunkMat);
-          trunk.position.y = 1.4;
-          tree.add(trunk);
+          // Cluster, not a single tree: a lone cross-billboard reads as a
+          // flat cardboard cutout the instant you're close enough to see
+          // it edge-on — direct side-by-side comparison against a real
+          // slowroads screenshot confirmed this ("playdoh level"). Real
+          // forests never present one isolated card; they're dense
+          // overlapping stands where no single flat plane is ever alone
+          // enough to read as flat. 3-6 trees per spawn point, offset in a
+          // tight radius, same species per cluster (matches how real
+          // conifer/broadleaf stands actually group) with scale/rotation
+          // variance so it doesn't look stamped.
+          const clusterCount = Math.floor(this.prng.range(3, 7));
+          for (let ci = 0; ci < clusterCount; ci++) {
+            const leafColHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
+            const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 5.0, 0, (this.prng.next() - 0.5) * 5.0);
+            const cPos = nearPos.clone().add(cOffset);
+            cPos.y = calcTerrainY(cPos, side * nearDist);
 
-          if (isPine) {
-            // Multi-Tiered Forest Pine Tree (3 stacked conical crowns)
-            const tierMat1 = new THREE.MeshStandardMaterial({ color: leafColHex, flatShading: true });
-            const tierMat2 = new THREE.MeshStandardMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.9), flatShading: true });
-            const tierMat3 = new THREE.MeshStandardMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.8), flatShading: true });
-
-            const crown1 = new THREE.Mesh(new THREE.ConeGeometry(2.4, 2.2, 7), tierMat1);
-            crown1.position.y = 2.4;
-            const crown2 = new THREE.Mesh(new THREE.ConeGeometry(1.8, 1.9, 7), tierMat2);
-            crown2.position.y = 3.6;
-            const crown3 = new THREE.Mesh(new THREE.ConeGeometry(1.2, 1.6, 7), tierMat3);
-            crown3.position.y = 4.7;
-
-            tree.add(crown1);
-            tree.add(crown2);
-            tree.add(crown3);
-          } else {
-            const leaves = new THREE.Mesh(decLeavesGeom, leavesMat);
-            leaves.position.y = 3.4;
-            tree.add(leaves);
+            const scale = this.prng.range(0.8, 1.6);
+            // Deferred, not added directly: buildings (cabins in particular)
+            // are placed later in this same loop iteration, so a tree
+            // registered immediately here has no way to know about a
+            // cabin that hasn't spawned yet — the two would silently overlap
+            // (reported directly: a tree canopy clipping straight through a
+            // delivery cabin's roof). Queue a lightweight descriptor (not a
+            // built mesh — see buildInstancedBatches) and resolve overlaps
+            // in one pass after every prop for the whole route is placed.
+            pendingTrees.push({
+              kind: isPine ? 'pine' : 'broadleaf', worldHeight: 7.0, tintHex: leafColHex,
+              pos: cPos.clone(), scale, rotY: this.prng.next() * Math.PI * 2,
+              radius: 1.1 * scale
+            });
           }
-
-          const scale = this.prng.range(0.9, 1.7);
-          tree.scale.set(scale, scale, scale);
-          tree.position.copy(nearPos);
-          // Deferred, not added directly: buildings (cabins in particular)
-          // are placed later in this same loop iteration, so a tree built
-          // and registered immediately here has no way to know about a
-          // cabin that hasn't spawned yet — the two would silently overlap
-          // (reported directly: a tree canopy clipping straight through a
-          // delivery cabin's roof). Queue it and resolve overlaps in one
-          // pass after every prop for the whole route has been placed.
-          pendingTrees.push({ tree, pos: nearPos.clone(), radius: 1.3 * scale });
           } // end spawnTree
 
           // Background-fill trees: the near-road pass above only plants out
@@ -2904,31 +3399,26 @@
             const bgDist = side * this.prng.range(24.0, 90.0);
             const bgPos = pt.clone().addScaledVector(normal, bgDist);
             bgPos.y = calcTerrainY(bgPos, bgDist);
-
             const bgIsPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
-            const bgLeafHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
-            const bgLeavesMat = new THREE.MeshStandardMaterial({ color: bgLeafHex, flatShading: true });
-            const bgScale = this.prng.range(0.8, 1.5); // background trees can run larger — read fine from a distance, and vary the treeline silhouette
-            const bgTree = new THREE.Group();
-            const bgTrunk = new THREE.Mesh(trunkGeom, trunkMat);
-            bgTrunk.position.y = 1.4;
-            bgTree.add(bgTrunk);
-            if (bgIsPine) {
-              const bgTier1 = new THREE.Mesh(new THREE.ConeGeometry(2.2, 3.4, 7), bgLeavesMat);
-              bgTier1.position.y = 3.6;
-              const bgTier2 = new THREE.Mesh(new THREE.ConeGeometry(1.7, 2.8, 7), bgLeavesMat);
-              bgTier2.position.y = 5.6;
-              const bgTier3 = new THREE.Mesh(new THREE.ConeGeometry(1.2, 2.2, 7), bgLeavesMat);
-              bgTier3.position.y = 7.2;
-              bgTree.add(bgTier1, bgTier2, bgTier3);
-            } else {
-              const bgCanopy = new THREE.Mesh(new THREE.DodecahedronGeometry(2.4, 0), bgLeavesMat);
-              bgCanopy.position.y = 4.6;
-              bgTree.add(bgCanopy);
+
+            // Same clustering fix as the near-road pass — a dense treeline
+            // reads as a continuous hillside forest instead of scattered
+            // isolated cards, and background trees can afford a slightly
+            // bigger cluster since they're cheap (2 planes each) and read
+            // fine from range.
+            const bgClusterCount = Math.floor(this.prng.range(4, 9));
+            for (let ci = 0; ci < bgClusterCount; ci++) {
+              const bgLeafHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
+              const bgOffset = new THREE.Vector3((this.prng.next() - 0.5) * 9.0, 0, (this.prng.next() - 0.5) * 9.0);
+              const cBgPos = bgPos.clone().add(bgOffset);
+              cBgPos.y = calcTerrainY(cBgPos, bgDist);
+              const bgScale = this.prng.range(0.8, 1.5); // background trees can run larger — read fine from a distance, and vary the treeline silhouette
+              pendingTrees.push({
+                kind: bgIsPine ? 'pine' : 'broadleaf', worldHeight: 9.0, tintHex: bgLeafHex,
+                pos: cBgPos.clone(), scale: bgScale, rotY: this.prng.next() * Math.PI * 2,
+                radius: 1.1 * bgScale
+              });
             }
-            bgTree.scale.setScalar(bgScale);
-            bgTree.position.copy(bgPos);
-            pendingTrees.push({ tree: bgTree, pos: bgPos.clone(), radius: 1.3 * bgScale });
           }
 
           // City Skyline: procedural skyscrapers set well back beyond the
@@ -3156,25 +3646,107 @@
               // planted in.
               const fenceDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 2.2);
               const fencePos = pt.clone().addScaledVector(normal, fenceDist);
-              fencePos.y = calcTerrainY(fencePos, fenceDist) + 0.05;
-
               const railLen = FENCE_STEP * avgSegStep + 0.6; // slight overlap so segments tile without gaps
-              const fenceGroup = new THREE.Group();
-              const fPostMat = new THREE.MeshLambertMaterial({ color: 0x54361e });
-              const fRailMat = new THREE.MeshLambertMaterial({ color: 0x6e472a });
 
-              // 2 vertical posts
-              [-railLen / 2, railLen / 2].forEach(px => {
-                const fPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6), fPostMat);
-                fPost.position.set(px, 0.6, 0);
-                fenceGroup.add(fPost);
-              });
-              // 2 horizontal split rails
-              [0.45, 0.85].forEach(ry => {
-                const fRail = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.08, 0.08), fRailMat);
-                fRail.position.set(0, ry, 0);
-                fenceGroup.add(fRail);
-              });
+              // Sample true ground height at BOTH ends of this short (~6m)
+              // segment, not just its center — with a fence group spawned
+              // this frequently (FENCE_STEP=1), anchoring every segment's
+              // entire flat rail to one single center-point height meant
+              // adjacent segments didn't line up wherever the road grade
+              // changed even slightly, reading as a visibly stepped/uneven
+              // top rail (confirmed directly: sampling consecutive segment
+              // anchor heights in this game showed 0.46->0.48->0.67->0.96->
+              // 1.32m over a handful of segments; compared against
+              // slowroads.io's own reference fence, which reads as one
+              // continuously ground-following line, not stepped). Real
+              // fences follow the ground at each post and let the rail
+              // between them tilt slightly to match — that's the fix here,
+              // not a flat plate per segment.
+              // `calcTerrainY` is a closure bound to THIS iteration's `pt`
+              // (sampledPoints[i]) — correct for endA (near pt), but wrong
+              // for endB (near the NEXT sample point): groundHeightAt uses
+              // its `pt` argument as the road-elevation reference for the
+              // shoulder-drop formula, so calling it with the wrong `pt`
+              // silently computed endB's height relative to the wrong
+              // road-height baseline. That mismatch — not the segment-
+              // anchoring approach itself — is what left a real gap after
+              // the first pass at this fix. endB needs the actual next
+              // sample point as its reference, not the closure's captured
+              // one.
+              const nextPt = sampledPoints[Math.min(i + 1, sampledPoints.length - 1)];
+              const endA = fencePos.clone().addScaledVector(tangent, -railLen / 2);
+              const endB = fencePos.clone().addScaledVector(tangent, railLen / 2);
+              const yA = calcTerrainY(endA, fenceDist) + 0.05;
+              const yB = this.groundHeightAt(nextPt, endB, fenceDist) + 0.05;
+              fencePos.y = (yA + yB) / 2;
+              const offsetA = yA - fencePos.y;
+              const offsetB = yB - fencePos.y;
+              const tiltAngle = Math.atan2(yB - yA, railLen);
+
+              const fenceGroup = new THREE.Group();
+
+              // Master Prompt section 3: "one of the largest, most obvious
+              // gaps against the reference" was having no dry-stone-wall
+              // barrier material at all — only ever the wood split-rail.
+              // Long contiguous stretches (not isolated single segments,
+              // which would read as a glitch sandwiched between wood)
+              // alternate to a stacked fieldstone wall instead, reusing the
+              // same real rock photo texture already wired in for boulder
+              // props (RealTextureFactory.rockColor/rockNormal).
+              const useStoneWall = Math.floor(i / 40) % 3 === 2;
+
+              if (useStoneWall) {
+                const stoneTex = RealTextureFactory.rockColor();
+                const stoneNormal = RealTextureFactory.rockNormal();
+                // Dark exposed-stone face, pixel-verified against the
+                // reference (~#404046) — see SLOWROADS_PARITY_LOG.md.
+                const stoneMat = new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true });
+                const rowHeights = [0.22, 0.44, 0.64, 0.8];
+                rowHeights.forEach((ry, rowIdx) => {
+                  // Slight width/depth jitter per row so the wall doesn't
+                  // read as a perfectly extruded box — real dry-stone walls
+                  // taper and bulge course to course.
+                  const jitter = 1.0 - rowIdx * 0.04;
+                  const wallRow = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.22, 0.32 * jitter), stoneMat);
+                  // Same terrain-following tilt as the wood fence's rails
+                  // (see the tiltAngle/offsetA/offsetB comment above) — a
+                  // flat-level course would show the same stepped-height
+                  // artifact between adjacent segments the user pointed out
+                  // for the wood fence, on this new stone variant too.
+                  wallRow.position.set(0, ry, 0);
+                  wallRow.rotation.z = tiltAngle;
+                  wallRow.castShadow = true;
+                  fenceGroup.add(wallRow);
+                });
+              } else {
+                // Real wood-grain photo texture (ambientcg WoodSiding013)
+                // replacing flat brown color — SLOWROADS_PARITY_LOG.md item 7.
+                // Same map on both post/rail materials (only the base color
+                // tint differs) since it's one continuous split-rail fence,
+                // not two different wood types.
+                const fWoodTex = RealTextureFactory.woodColor();
+                const fWoodNormal = RealTextureFactory.woodNormal();
+                const fPostMat = new THREE.MeshStandardMaterial({ color: 0x8a7a68, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 });
+                const fRailMat = new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 });
+
+                // 2 vertical posts — each sits at its OWN end's ground
+                // offset (offsetA/offsetB), not both assumed level with the
+                // segment's center — see the tiltAngle comment above.
+                [[-railLen / 2, offsetA], [railLen / 2, offsetB]].forEach(([px, offset]) => {
+                  const fPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6), fPostMat);
+                  fPost.position.set(px, offset + 0.6, 0);
+                  fenceGroup.add(fPost);
+                });
+                // 2 horizontal split rails — tilted to actually connect the
+                // two posts' (potentially different) heights instead of
+                // sitting perfectly flat regardless of slope.
+                [0.45, 0.85].forEach(ry => {
+                  const fRail = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.08, 0.08), fRailMat);
+                  fRail.position.set(0, ry, 0);
+                  fRail.rotation.z = tiltAngle;
+                  fenceGroup.add(fRail);
+                });
+              }
 
               fenceGroup.position.copy(fencePos);
               // The rail spans the group's local X axis. lookAt(pos+tangent)
@@ -3817,17 +4389,26 @@
       // stalls, cabins, monuments, skyline) has been placed and registered
       // in this.obstacles — a tree queued anywhere in the loop above can
       // now see buildings regardless of which ran first for a given index.
-      pendingTrees.forEach(({ tree, pos, radius }) => {
+      // Filter first, build InstancedMesh batches after — building the
+      // actual mesh per descriptor here (the original approach) meant one
+      // THREE.Mesh draw call per tree regardless of shared geometry;
+      // clustering pushed that to 8556 separate draw calls at ~22 FPS.
+      // buildInstancedBatches collapses all accepted trees into ~32 draw
+      // calls total (one InstancedMesh per kind/height/tint/plane bucket)
+      // regardless of instance count.
+      const acceptedTrees = [];
+      pendingTrees.forEach((d) => {
         const overlapsBuilding = this.obstacles.some(o =>
-          o.type === 'building' && o.pos.distanceTo(pos) < (o.radius + radius + 1.0)
+          o.type === 'building' && o.pos.distanceTo(d.pos) < (o.radius + d.radius + 1.0)
         );
         if (overlapsBuilding) return;
         // Same hairpin/switchback risk as skyscrapers, just at a shorter
         // offset — the curve can loop back near a tree's local placement.
-        if (!clearsRoad(pos, CONFIG.ROAD_WIDTH * 0.55 + radius)) return;
-        this.foliageGroup.add(tree);
-        this.obstacles.push({ pos, radius, type: 'tree' });
+        if (!clearsRoad(d.pos, CONFIG.ROAD_WIDTH * 0.55 + d.radius)) return;
+        acceptedTrees.push(d);
+        this.obstacles.push({ pos: d.pos, radius: d.radius, type: 'tree' });
       });
+      this.foliageGroup.add(TreeBillboardFactory.buildInstancedBatches(acceptedTrees));
 
       // Resolve fence overlaps against the now-complete obstacle list
       // (buildings/shops/skyscrapers/rocks/trees). The house-checkpoint
@@ -3867,81 +4448,18 @@
         this.foliageGroup.add(fenceGroup);
       });
 
-      // Add Real-Time Road Traffic (Rickshaws, BEST Buses, Mini-Trucks, Kaali-Peeli Cabs)
-      let trafficSpawnIndex = 0;
-      for (let i = 8; i < sampledPoints.length - 8; i += 30) {
-        const trafficGroup = new THREE.Group();
-        const isBus = (i % 60 === 0);
-        const isTruck = !isBus && (i % 90 === 0);
-
-        if (isBus) {
-          // BEST Red Double-Decker / Single Bus
-          const busGeom = new THREE.BoxGeometry(2.4, 2.6, 6.5);
-          const busMat = new THREE.MeshStandardMaterial({ color: 0xd90429, flatShading: true });
-          const bus = new THREE.Mesh(busGeom, busMat);
-          bus.position.y = 1.4;
-          trafficGroup.add(bus);
-        } else if (isTruck && IndianTruckAsset.template) {
-          // Tata Ace-style Mini-Truck (teal-green/white livery)
-          trafficGroup.add(IndianTruckAsset.clone());
-        } else {
-          // Bajaj Auto Rickshaw (Yellow & Green)
-          const autoGeom = new THREE.BoxGeometry(1.4, 1.3, 2.4);
-          const autoMat = new THREE.MeshStandardMaterial({ color: 0xfca311, flatShading: true });
-          const autoBody = new THREE.Mesh(autoGeom, autoMat);
-          autoBody.position.y = 0.8;
-          trafficGroup.add(autoBody);
-        }
-
-        const u = i / sampledPoints.length;
-        // Was `i % 2` — but i starts at 8 and steps by 30 (both even), so
-        // i%2 was 0 on every single iteration; every "alternating" lane
-        // assignment was actually always the same lane. Alternates on an
-        // independent counter instead, which actually increments by 1
-        // each spawn regardless of i's step size.
-        const laneOffset = (trafficSpawnIndex % 2 === 0 ? 1.8 : -1.8);
-        trafficSpawnIndex++;
-        // Both lanes previously only ever incremented splineU forward —
-        // laneOffset put them visually on either side of the centerline,
-        // but every vehicle traveled the same direction along the route
-        // regardless of lane, so there was never any oncoming traffic.
-        // The opposite lane now travels splineU backward instead.
-        const direction = laneOffset > 0 ? 1 : -1;
-        this.trafficVehicles.push({
-          mesh: trafficGroup,
-          splineU: u,
-          speed: 12.0 + (i % 5) * 2.0,
-          laneOffset: laneOffset,
-          direction: direction
-        });
-
-        this.foliageGroup.add(trafficGroup);
-      }
-
+      // NPC/traffic vehicles (rickshaws/buses/mini-trucks) removed per the
+      // slowroads-style pivot — open road, no AI traffic. `trafficVehicles`
+      // stays an always-empty array (see updateTraffic below) rather than
+      // being deleted outright, since it's still a harmless no-op read from
+      // the animate() loop and the minimap draw call.
       scene.add(this.foliageGroup);
     }
 
     updateTraffic(dt) {
-      if (!this.curve) return;
-      const totalLen = this.curve.getLength();
-
-      this.trafficVehicles.forEach(tv => {
-        const dir = tv.direction || 1;
-        tv.splineU += (dir * tv.speed * dt) / totalLen;
-        if (tv.splineU >= 0.98) tv.splineU = 0.02;
-        if (tv.splineU <= 0.02) tv.splineU = 0.98;
-
-        const pt = this.curve.getPointAt(tv.splineU);
-        const tangent = this.curve.getTangentAt(tv.splineU).normalize();
-        const up = new THREE.Vector3(0, 1, 0);
-        const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
-
-        const pos = pt.clone().addScaledVector(normal, tv.laneOffset);
-        pos.y = this.groundHeightAt(pt, pos, tv.laneOffset) + 0.15;
-        tv.mesh.position.copy(pos);
-        const fwdHeading = tangent.clone().multiplyScalar(dir);
-        tv.mesh.lookAt(pos.clone().add(fwdHeading));
-      });
+      // No-op: NPC traffic vehicles removed. Kept as a stable call target
+      // (animate() still calls this every frame) rather than also editing
+      // every call site.
     }
 
     // How far off the road centerline the vehicle may legally drift at
@@ -4030,6 +4548,20 @@
       // that reads it (camera, GPS, autopilot, fence clamp, off-road-lost
       // detection) still gets a meaningful road-relative value.
       this.heading = 0;
+      // Direction the car is ACTUALLY travelling, as distinct from `heading`
+      // (the direction the body/wheels are pointed). Real cars — and,
+      // verified directly from slowroads.io's own shipped bundle, their
+      // vehicle model too — let these two diverge under grip loss: tap the
+      // brakes into a turn and the tail can still be sliding one way while
+      // the nose points another. Before this, `forward` for movement was
+      // computed straight from `heading` every frame, so the car always
+      // moved exactly where it was pointed with zero momentum carry-through
+      // — a big part of why turning felt like a kart on rails rather than a
+      // car with weight. See `update()`'s steering block for how this
+      // reconverges toward `heading` at a grip-scaled rate each frame.
+      this.velocityHeading = 0;
+      this.currentPitch = 0; // smoothed chassis dive/squat — see update()'s pitch/roll block
+      this.currentRoll = 0;  // smoothed chassis roll — same reason
       this.lateralOffset = 0; // still maintained (derived) for banking/ground-height/fence-clamp math
       this.lateralVelocity = 0; // unused by movement now; kept only so any external reset code touching it doesn't throw
       this.grip = 1.0;
@@ -4363,57 +4895,94 @@
           this.wheels.push(w);
         });
 
-      } else if (this.vehicleType === 'scooter') {
+      } else if (this.vehicleType === 'sportscoupe' && SportsCoupeAsset.template) {
         // ====================================================================
-        // 3. VAYU VOLT SPORTS SCOOTER (Electric Courier Scooter)
+        // 3. SPORTS COUPE (user-supplied model, see SportsCoupeAsset comment
+        // above for source/conversion notes) — replaces the flat-primitive
+        // "Volt Scooter" as the second vehicle.
         // ====================================================================
-        const apronMat = new THREE.MeshStandardMaterial({ color: 0x10b981, flatShading: true }); // Neon Mint Electric
-        const apronGeom = new THREE.BoxGeometry(0.52, 0.85, 0.42);
-        const apron = new THREE.Mesh(apronGeom, apronMat);
-        apron.position.set(0, 0.78, 0.42);
+        const carModel = SportsCoupeAsset.clone();
+        this.mesh.add(carModel);
+        carModel.traverse((child) => {
+          if (child.isMesh && child.name && /(rim|tyre|caliper|disc)$/i.test(child.name)) {
+            this.wheels.push(child);
+          }
+        });
 
-        const led = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.1, 0.08), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-        led.position.set(0, 1.05, 0.64);
+      } else if (this.vehicleType === 'sportscoupe') {
+        // Procedural fallback, used only until SportsCoupeAsset finishes
+        // loading, then auto-rebuilt (same pattern as 'swift' above).
+        if (SportsCoupeAsset.pendingControllers.indexOf(this) === -1) {
+          SportsCoupeAsset.pendingControllers.push(this);
+        }
+        const bodyGeom = new THREE.BoxGeometry(1.92, 0.7, 4.5);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1c2430, flatShading: true });
+        const body = new THREE.Mesh(bodyGeom, bodyMat);
+        body.position.y = 0.6;
+        body.castShadow = true;
+        this.mesh.add(body);
 
-        const barGeom = new THREE.CylinderGeometry(0.035, 0.035, 0.82, 8);
-        barGeom.rotateZ(Math.PI / 2);
-        const barMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
-        const bar = new THREE.Mesh(barGeom, barMat);
-        bar.position.set(0, 1.32, 0.42);
-
-        const floorGeom = new THREE.BoxGeometry(0.5, 0.12, 0.85);
-        const floor = new THREE.Mesh(floorGeom, apronMat);
-        floor.position.set(0, 0.32, 0.0);
-
-        const seatGeom = new THREE.BoxGeometry(0.48, 0.38, 0.95);
-        const seatMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
-        const seat = new THREE.Mesh(seatGeom, seatMat);
-        seat.position.set(0, 0.65, -0.55);
-
-        // Rear Thermal Courier Delivery Backpack
-        const bagGeom = new THREE.BoxGeometry(0.58, 0.65, 0.58);
-        const bagMat = new THREE.MeshLambertMaterial({ color: 0xff9f1c });
-        const bag = new THREE.Mesh(bagGeom, bagMat);
-        bag.position.set(0, 1.15, -0.68);
-
-        // Tail Light
-        const tailGeom = new THREE.BoxGeometry(0.24, 0.08, 0.06);
-        const tailMat = new THREE.MeshBasicMaterial({ color: 0xef233c });
-        const tail = new THREE.Mesh(tailGeom, tailMat);
-        tail.position.set(0, 0.65, -1.05);
-
-        this.mesh.add(apron);
-        this.mesh.add(led);
-        this.mesh.add(bar);
-        this.mesh.add(floor);
-        this.mesh.add(seat);
-        this.mesh.add(bag);
-        this.mesh.add(tail);
-
-        const wheelGeom = new THREE.CylinderGeometry(0.3, 0.3, 0.14, 14);
+        const wheelGeom = new THREE.CylinderGeometry(0.32, 0.32, 0.22, 14);
         wheelGeom.rotateZ(Math.PI / 2);
         const wheelMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
-        [[0, 0.3, 0.78], [0, 0.3, -0.85]].forEach(p => {
+        [[-0.95, 0.32, 1.5], [0.95, 0.32, 1.5], [-0.95, 0.32, -1.5], [0.95, 0.32, -1.5]].forEach(p => {
+          const w = new THREE.Mesh(wheelGeom, wheelMat);
+          w.position.set(...p);
+          this.mesh.add(w);
+          this.wheels.push(w);
+        });
+
+      } else if (this.vehicleType === 'musclecoupe' && MuscleCoupeAsset.template) {
+        // ====================================================================
+        // 4. MUSCLE COUPE (user-supplied model, see MuscleCoupeAsset comment
+        // above for source/conversion/brand-scrubbing notes)
+        // ====================================================================
+        const carModel = MuscleCoupeAsset.clone();
+        this.mesh.add(carModel);
+        carModel.traverse((child) => {
+          if (child.isMesh && child.name && /^(wheel|brakes)_/i.test(child.name)) {
+            this.wheels.push(child);
+          }
+        });
+        // Blank cover plates over two front badges — the source model has
+        // real brand/trim names embossed directly into the body mesh's
+        // geometry (confirmed live via screenshot: legible "CHALLENGER"
+        // script above the grille and a separate "SRT" plate below it —
+        // not just metadata), and the file has zero texture data (verified
+        // via a raw glTF JSON scan), so neither is a decal that can be
+        // swapped out; deleting by material slot in Blender missed it
+        // entirely (wrong slot). These opaque plates physically occlude
+        // both without risking a hole in the mesh. Positions are exact —
+        // found by raycasting the actual rendered geometry from the real
+        // in-game camera, not estimated from the source file's own
+        // coordinate system (an earlier estimate was wrong: this vehicle
+        // also needed the 180° rotation fix above, which the geometry-based
+        // raycast caught and a coordinate-math guess had missed).
+        const badgeMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
+        const scriptCover = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.16, 0.03), badgeMat);
+        scriptCover.position.set(0, 0.826, -2.46);
+        this.mesh.add(scriptCover);
+        const plateCover = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.13, 0.03), badgeMat);
+        plateCover.position.set(0, 0.729, -2.42);
+        this.mesh.add(plateCover);
+
+      } else if (this.vehicleType === 'musclecoupe') {
+        // Procedural fallback, used only until MuscleCoupeAsset finishes
+        // loading, then auto-rebuilt.
+        if (MuscleCoupeAsset.pendingControllers.indexOf(this) === -1) {
+          MuscleCoupeAsset.pendingControllers.push(this);
+        }
+        const bodyGeom = new THREE.BoxGeometry(2.0, 0.75, 4.9);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x8a1f1f, flatShading: true });
+        const body = new THREE.Mesh(bodyGeom, bodyMat);
+        body.position.y = 0.62;
+        body.castShadow = true;
+        this.mesh.add(body);
+
+        const wheelGeom = new THREE.CylinderGeometry(0.36, 0.36, 0.24, 14);
+        wheelGeom.rotateZ(Math.PI / 2);
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+        [[-1.0, 0.36, 1.6], [1.0, 0.36, 1.6], [-1.0, 0.36, -1.6], [1.0, 0.36, -1.6]].forEach(p => {
           const w = new THREE.Mesh(wheelGeom, wheelMat);
           w.position.set(...p);
           this.mesh.add(w);
@@ -4563,7 +5132,7 @@
 
       let climateGrip = terrainGrip;
       if (isRain) {
-        if (this.vehicleType === 'cycle' || this.vehicleType === 'scooter') climateGrip *= 0.48;
+        if (this.vehicleType === 'cycle') climateGrip *= 0.48;
         else climateGrip *= 0.68;
       }
 
@@ -4656,6 +5225,19 @@
         // car's steering behaves backing up.
         const baseTurnRate = 1.55; // rad/s at full effect
         const turnRateLimit = baseTurnRate * (isDrifting ? 1.4 : 1.0) * climateGrip;
+        // Speed-sensitive turn rate: ramps up from a dead stop only (can't
+        // spin in place, but gets enough at a crawl for tight maneuvers),
+        // then holds flat to top speed. A high-speed falloff was tried here
+        // (real cars need a smaller wheel angle to hold the same yaw rate
+        // at 130 km/h than at 30 km/h) but reverted — this game's road
+        // curves were generated assuming this flat-rate turn response, and
+        // nerfing it at speed meant the car could no longer physically
+        // complete curves it used to handle fine, running off-road on
+        // ordinary bends. Confirmed directly: a sustained turn that stayed
+        // on-road before ran the car into the terrain at the same speed
+        // and input after adding the falloff. The genuine slip/momentum
+        // feel now comes from `velocityHeading` diverging from `heading`
+        // below, not from also throttling the turn rate itself.
         const speedScale = THREE.MathUtils.clamp(Math.abs(this.speed) / 6.0, 0.22, 1.0);
         const reverseFlip = this.speed < -0.05 ? -1 : 1;
         const turnRate = turnRateLimit * speedScale * reverseFlip;
@@ -4673,13 +5255,33 @@
         }
       }
 
-      // 3. Move freely along the car's own heading (position + orientation
-      // are now true, independent state — not derived from a spline
-      // parameter — so the car can actually turn, reverse, and maneuver
-      // off the road instead of only drifting sideways within a lane).
+      // 2b. Reconverge velocityHeading (actual travel direction) toward
+      // heading (where the body/wheels point) at a grip-scaled rate. This
+      // is what actually lets the two diverge in the first place: under
+      // full grip the convergence is fast enough to be indistinguishable
+      // from the old always-equal behavior, but low terrainGrip/climateGrip
+      // (rain, gravel, mud, sand) or holding the drift key slows it down,
+      // so a hard steering input at speed genuinely swings the nose before
+      // the travel direction catches up — a real slide, not just a wheel
+      // animation. Autodrive gets a fast fixed rate regardless of surface
+      // grip so the autopilot's own pure-pursuit path-following (which
+      // already targets `heading` directly) doesn't visibly wobble.
+      let headingDelta = this.heading - this.velocityHeading;
+      headingDelta = Math.atan2(Math.sin(headingDelta), Math.cos(headingDelta));
+      const convergeRate = this.isAutodrive
+        ? 14.0
+        : 9.0 * climateGrip * driftGripMult;
+      this.velocityHeading += headingDelta * (1 - Math.exp(-convergeRate * dt));
+
+      // 3. Move freely along the car's actual direction of travel (not
+      // necessarily the same as `heading`, its visual orientation — see
+      // above). Position + orientation are true, independent state — not
+      // derived from a spline parameter — so the car can actually turn,
+      // reverse, and maneuver off the road instead of only drifting
+      // sideways within a lane.
       const moveDist = this.speed * dt;
       this.distanceTraveled += Math.abs(moveDist) * 0.001;
-      const forward = new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
+      const forward = new THREE.Vector3(Math.sin(this.velocityHeading), 0, Math.cos(this.velocityHeading));
       const proposedPos = this.mesh.position.clone().addScaledVector(forward, moveDist);
 
       // Everything below (ground height, banking, the fence lateral clamp)
@@ -4801,113 +5403,40 @@
       // not just along the curve.
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
 
-      // Dynamic Chassis Pitch (dive on braking, squat on acceleration)
+      // Dynamic Chassis Pitch (dive on braking, squat on acceleration).
+      // `accelRatio` is a raw per-frame instantaneous derivative — noisy by
+      // nature, and especially spiky the instant throttle is first pressed
+      // (the exponential accel curve's biggest single-frame jump happens
+      // right at that moment). Applying it straight to `rotateX` with zero
+      // smoothing meant the whole chassis visibly snapped to a pitch angle
+      // in one frame instead of easing into it — reported directly as an
+      // "ugly snap" right when pressing accelerate. Smoothed both pitch and
+      // roll through persistent `currentPitch`/`currentRoll` state instead
+      // of applying the instantaneous target directly, same lerp pattern
+      // already used for `steerAngle` elsewhere in this function.
       const accelRatio = (this.speed - (this.lastSpeed || this.speed)) / Math.max(0.01, dt);
       this.lastSpeed = this.speed;
       const targetPitch = THREE.MathUtils.clamp(-accelRatio * 0.004, -0.06, 0.06);
-      this.mesh.rotateX(targetPitch);
+      this.currentPitch = THREE.MathUtils.lerp(this.currentPitch, targetPitch, 1 - Math.exp(-8.0 * dt));
+      this.mesh.rotateX(this.currentPitch);
 
       // Dynamic Chassis Roll (centrifugal roll against turn + bank) — now
       // purely cosmetic since steerAngle no longer drives orientation.
-      const turnRoll = -this.steerAngle * (this.speed / this.maxSpeed) * 0.35;
-      this.mesh.rotateZ(turnRoll);
+      const targetRoll = -this.steerAngle * (this.speed / this.maxSpeed) * 0.35;
+      this.currentRoll = THREE.MathUtils.lerp(this.currentRoll, targetRoll, 1 - Math.exp(-8.0 * dt));
+      this.mesh.rotateZ(this.currentRoll);
 
       this.wheels.forEach(w => w.rotateX((this.speed * dt) / 0.38));
 
       const carPos = this.mesh.position;
 
-      // 4. Pothole Collision & Health Degradation
-      if (world.potholes) {
-        world.potholes.forEach(p => {
-          const d = carPos.distanceTo(p.pos);
-          if (d < p.radius) {
-            if (!p.hitRecently) {
-              p.hitRecently = true;
-              this.speed *= 0.65;
-              // Clamped: hitting several potholes in quick succession (easy
-              // at high speed) used to stack this kick unbounded, since
-              // normal steering only lerps toward a ±0.42 limit but this
-              // was a raw += with no ceiling. steerAngle feeds directly
-              // into the chassis's visual yaw (mesh.rotateY) every frame,
-              // and the camera reads its forward direction straight off
-              // that mesh — so an unclamped steerAngle could swing the
-              // camera to point at near-ground terrain at a steep angle,
-              // reading as a giant close-up terrain fill with the car
-              // rendering as a flattened silhouette.
-              this.steerAngle = THREE.MathUtils.clamp(this.steerAngle + (Math.random() - 0.5) * 0.45, -0.9, 0.9);
-
-              // Two-wheelers have no suspension/cage to absorb a pothole at
-              // speed — a fast hit throws the rider off outright instead of
-              // just chipping health like a car's shock absorbers would.
-              // Bigger holes are more dangerous both ways: they knock a
-              // two-wheeler off at a lower speed, and they chip more
-              // health off a car. sizeFactor spans ~0.55-2.0.
-              const sizeFactor = p.sizeFactor || 1.0;
-              const isTwoWheeler = this.vehicleType === 'scooter' || this.vehicleType === 'cycle';
-              const baseSpillThreshold = this.vehicleType === 'scooter' ? 14.0 : 10.0; // m/s
-              const spillSpeedThreshold = baseSpillThreshold / Math.max(0.6, sizeFactor);
-              const isSpill = isTwoWheeler && Math.abs(this.speed) > spillSpeedThreshold;
-              const damage = Math.round(14 * sizeFactor);
-
-              if (isSpill) {
-                this.health = 0;
-                this.speed = 0;
-                if (window.game) window.game.crashReason = `${this.vehicleType === 'scooter' ? 'SCOOTER' : 'BICYCLE'} SPILL: Thrown off at speed hitting a pothole`;
-              } else {
-                this.health = Math.max(0, this.health - damage);
-              }
-              sound.playPothole();
-
-              const app = document.getElementById('game-app');
-              if (app) {
-                app.classList.add('screen-shake');
-                setTimeout(() => app.classList.remove('screen-shake'), 350);
-              }
-              if (window.game) {
-                window.game.spawnPotholeSplash(carPos, Math.round(16 * sizeFactor));
-                window.game.addNotification(
-                  isSpill ? '💥 THROWN OFF! Pothole ended your run' : `⚠️ POTHOLE HIT! Health -${damage}%`,
-                  isSpill ? 'danger' : 'warning',
-                  3500
-                );
-                window.game.updateHUDStats();
-              }
-              setTimeout(() => { p.hitRecently = false; }, 1500);
-            }
-          }
-        });
-      }
-
-      // 5. Overhead Speed Camera Detection & E-Challans
-      if (world.speedCameras) {
-        world.speedCameras.forEach(cam => {
-          const d = carPos.distanceTo(cam.pos);
-          if (d < 5.2 && !cam.triggeredRecently) {
-            if (this.speed > cam.speedLimit) {
-              cam.triggeredRecently = true;
-              sound.playSpeedCam();
-
-              // Screen camera photo flash
-              const flash = document.getElementById('speed-cam-flash');
-              if (flash) {
-                flash.classList.remove('flash-active');
-                void flash.offsetWidth;
-                flash.classList.add('flash-active');
-              }
-
-              // Deduct fine
-              if (window.game) {
-                window.game.earnings = Math.max(0, window.game.earnings - 150);
-                window.game.updateHUDStats();
-                const overKmh = Math.round(this.speed * 3.6);
-                window.game.addNotification(`🚨 E-CHALLAN! Overspeeding ${overKmh} km/h (-₹150)`, 'danger', 4000);
-              }
-
-              setTimeout(() => { cam.triggeredRecently = false; }, 4000);
-            }
-          }
-        });
-      }
+      // Speed camera / E-Challan fine system removed — caught live during
+      // verification driving at 114 km/h (a normal speed for this game, not
+      // a punishable one): fired a "-₹150 E-CHALLAN" notification, which is
+      // courier-fine framing the slowroads-style pivot doesn't want. The
+      // gantry props/`world.speedCameras` spawn logic is left in place
+      // (still a visible roadside structure — decorative overhead gantry),
+      // only the speed-triggered fine/flash/notification behavior is gone.
 
       // 6. Roadside Garage Pitstop Repair Bay
       if (world.repairBays) {
@@ -4947,6 +5476,7 @@
       // rewrite), not mesh.lookAt — set it to match the tangent so a reset
       // still faces down the road.
       this.heading = Math.atan2(tangent.x, tangent.z);
+      this.velocityHeading = this.heading; // avoid resuming with a stale slide angle after a teleport
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
       this.speed = preserveSpeed ? prevSpeed : 0;
       this.steerAngle = 0;
@@ -4974,6 +5504,7 @@
       // See resetToSpline — matches the on-road ground-following formula.
       this.mesh.position.y += 0.07;
       this.heading = Math.atan2(tangent.x, tangent.z);
+      this.velocityHeading = this.heading;
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
       this.speed = 0;
       this.steerAngle = 0;
@@ -4986,6 +5517,143 @@
           h.intensity = active ? 3.6 : 0.0;
         });
       }
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // 6B. RAIN — a bounded particle volume that rides with the camera
+  // --------------------------------------------------------------------------
+  // Mechanics reused from slowroads' snow EXACTLY (soft round point-
+  // sprites, perspective-attenuated size, volume tied to vehicle position
+  // so it keeps falling/recentering regardless of speed, respawn on exit)
+  // — confirmed directly by re-checking the reference at idle, ~70km/h,
+  // and ~104km/h: snow stays vertical round dots with only slight wind
+  // drift at every speed tested, no streaking or lean at any velocity.
+  // Slowroads has no rain to copy directly (Overcast + any non-winter
+  // season produces zero precipitation there).
+  //
+  // Two explicit, deliberate differences from snow, per direct
+  // instruction (not present in the slowroads reference, added anyway):
+  // faster fall speed + higher count (rain is denser than snow), and a
+  // speed-proportional backward bend — perfectly vertical at rest,
+  // leaning further back as the vehicle's own speed increases. This is
+  // real physics (a raindrop falls straight in the world frame; in a
+  // frame moving forward at speed v it acquires an apparent backward
+  // horizontal velocity of v, the same reason rain looks slanted through
+  // a moving car's windshield) even though slowroads' own snow doesn't
+  // model it for the vehicle it rides with.
+  //
+  // THREE.Points (not InstancedMesh) — camera-facing sprites are the
+  // correct primitive for a round dot with size falloff; a streak needed
+  // real 3D geometry to read as a line from any angle, a round dot doesn't.
+  // The soft circular alpha falloff is generated on a canvas at runtime
+  // (matching what a live capture of slowroads showed — no snowflake
+  // texture asset was ever downloaded there, so it's some form of
+  // procedural point rendering, not a bundled sprite).
+  class RainSystem {
+    constructor(scene) {
+      this.scene = scene;
+      this.count = 1200; // denser than snow — explicit spec
+      this.fallSpeed = 9.0; // m/s — real rain terminal velocity range, noticeably faster than snow's ~2 m/s per spec ("will fall on the ground faster")
+      this.bendFactor = 0.35; // horizontal drift rate as a fraction of vehicle speed — 0 at rest (perfectly vertical), increasing smoothly with speed
+      this.boxHalfWidth = 22.0;
+      this.boxHeight = 18.0;
+      this.boxDepth = 46.0;
+
+      const geom = new THREE.BufferGeometry();
+      this.positions = new Float32Array(this.count * 3);
+      for (let i = 0; i < this.count; i++) {
+        this.positions[i * 3] = (Math.random() - 0.5) * 2 * this.boxHalfWidth;
+        this.positions[i * 3 + 1] = Math.random() * this.boxHeight;
+        this.positions[i * 3 + 2] = (Math.random() - 0.5) * this.boxDepth;
+      }
+      geom.setAttribute('position', new THREE.BufferAttribute(this.positions.slice(), 3));
+
+      const mat = new THREE.PointsMaterial({
+        color: 0xd8e2ec,
+        // 0.22 (matching a literal raindrop's real-world diameter) rendered
+        // essentially invisible on screen at any normal camera distance —
+        // confirmed directly: bumping to 2.0 live made drops suddenly
+        // obvious, 0.6 was the smallest size that stayed clearly visible
+        // without reading as a blurry blob. Visual size, not physical
+        // accuracy, is what actually matters here.
+        size: 0.6,
+        map: this._makeSoftDotTexture(),
+        transparent: true,
+        opacity: 0.65,
+        depthWrite: false,
+        sizeAttenuation: true // near-camera particles read larger/blurrier, distant ones shrink to pinpricks — matches the reference's perspective-scaled look
+      });
+      this.points = new THREE.Points(geom, mat);
+      this.points.frustumCulled = false;
+      this.points.visible = false;
+      scene.add(this.points);
+    }
+
+    // Soft, round, gaussian-blur-like falloff — no bundled image asset,
+    // generated once at runtime the same way the reference appears to.
+    _makeSoftDotTexture() {
+      const size = 64;
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const ctx = c.getContext('2d');
+      const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+      grad.addColorStop(0.5, 'rgba(255,255,255,0.4)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+      return new THREE.CanvasTexture(c);
+    }
+
+    setActive(active) {
+      this.points.visible = !!active;
+    }
+
+    // `center` is the point the volume rides around (the vehicle position)
+    // — passed unconditionally every frame regardless of vehicle speed, so
+    // the volume keeps falling/recentering even while idling, matching the
+    // reference (tied to position, not speed). `forward`/`speed`: the
+    // vehicle's current heading and speed, driving the backward bend —
+    // at speed 0 the bend term is exactly 0 (perfectly vertical fall);
+    // each particle accumulates horizontal drift only for as long as it's
+    // actually been falling, which is what makes a constant-angle lean
+    // happen naturally rather than needing to compute an angle directly —
+    // exactly how it works physically.
+    update(dt, center, forward, speed) {
+      if (!this.points.visible) return;
+      const fall = this.fallSpeed * dt;
+      const bendX = -forward.x * speed * this.bendFactor * dt;
+      const bendZ = -forward.z * speed * this.bendFactor * dt;
+      for (let i = 0; i < this.count; i++) {
+        let y = this.positions[i * 3 + 1] - fall;
+        let x = this.positions[i * 3] + bendX;
+        let z = this.positions[i * 3 + 2] + bendZ;
+        if (y < 0) {
+          y = this.boxHeight;
+          x = (Math.random() - 0.5) * 2 * this.boxHalfWidth;
+          z = (Math.random() - 0.5) * this.boxDepth;
+        }
+        // Keep the bend-accumulated drift bounded to the box, same wrap
+        // used for the old fixed-drift version, so a long fast drive
+        // doesn't walk particles arbitrarily far from the vehicle.
+        if (x < -this.boxHalfWidth) x = this.boxHalfWidth;
+        if (x > this.boxHalfWidth) x = -this.boxHalfWidth;
+        if (z < -this.boxDepth / 2) z = this.boxDepth / 2;
+        if (z > this.boxDepth / 2) z = -this.boxDepth / 2;
+        this.positions[i * 3] = x;
+        this.positions[i * 3 + 1] = y;
+        this.positions[i * 3 + 2] = z;
+      }
+      const posAttr = this.points.geometry.getAttribute('position');
+      for (let i = 0; i < this.count; i++) {
+        posAttr.setXYZ(i,
+          center.x + this.positions[i * 3],
+          center.y + this.positions[i * 3 + 1],
+          center.z + this.positions[i * 3 + 2]
+        );
+      }
+      posAttr.needsUpdate = true;
     }
   }
 
@@ -5006,8 +5674,9 @@
       this.selectedSeason = 'autumn';
       this.selectedTimeOfDay = 'day'; // 'dawn', 'day', 'dusk', 'night'
       this.selectedRoadTerrain = 'asphalt'; // 'asphalt', 'gravel', 'mud', 'sand'
+      this.weather = 'clear'; // 'clear', 'rain' — see SLOWROADS_PARITY_LOG.md item 4
       this.selectedSeed = '5927cd04';
-      this.selectedVehicle = 'swift';
+      this.selectedVehicle = 'sportscoupe';
       this.selectedDifficulty = 'medium';
       this.activeDockPanel = null;
       this.activeCameraMode = 'chase';
@@ -5111,6 +5780,32 @@
       this.sunLight.castShadow = true;
       this.sunLight.shadow.mapSize.width = 2048;
       this.sunLight.shadow.mapSize.height = 2048;
+      // Directional-light shadow cameras never auto-fit the scene — this
+      // was left at Three's default orthographic frustum (-5..5 on each
+      // axis, i.e. a 10x10 unit box) fixed at world origin, since neither
+      // the frustum size nor the light's target was ever set. The result:
+      // the car only ever cast a visible ground shadow within ~5 units of
+      // the route's spawn point — everywhere else (which is most of a
+      // multi-km drive) it rendered with NO contact shadow at all, which
+      // reads as the car floating/pasted onto the scene rather than
+      // sitting on the road. Widened the frustum to comfortably cover the
+      // car and its immediate surroundings, and target/position now
+      // recenter on the vehicle every frame (see updateCamera) so the
+      // shadow always renders near wherever the car actually is, not just
+      // near the spawn point.
+      this.sunLight.shadow.camera.left = -30;
+      this.sunLight.shadow.camera.right = 30;
+      this.sunLight.shadow.camera.top = 30;
+      this.sunLight.shadow.camera.bottom = -30;
+      this.sunLight.shadow.camera.near = 1;
+      this.sunLight.shadow.camera.far = 500;
+      this.sunLight.shadow.bias = -0.0015;
+      this.sunLight.target = new THREE.Object3D();
+      this.scene.add(this.sunLight.target);
+      // Fixed offset from whatever the light is currently tracking —
+      // preserves the original (150, 250, 100) sun angle/direction, just
+      // recentered on the vehicle each frame instead of pinned to origin.
+      this.sunOffset = new THREE.Vector3(150, 250, 100);
       this.scene.add(this.sunLight);
 
       // Cheap procedural sky/ground gradient env map: gives PBR materials
@@ -5128,6 +5823,8 @@
       } catch (e) {
         console.warn('Post-processing initialization failed (headless mode):', e);
       }
+
+      this.rain = new RainSystem(this.scene);
     }
 
     // A tiny gradient "sky" scene captured with PMREM equirect rendering.
@@ -5242,7 +5939,11 @@
       if (this.sunLight) {
         this.sunLight.color.setHex(tod.sunColor);
         this.sunLight.intensity = tod.sunIntensity;
-        this.sunLight.position.set(...tod.sunPos);
+        // Direction only — actual position is recentered on the vehicle
+        // every frame (see updateCamera) so the shadow-camera frustum
+        // stays near the car instead of pinned at world origin.
+        this.sunOffset = new THREE.Vector3(...tod.sunPos);
+        this.sunLight.position.copy(this.sunOffset);
       }
 
       if (this.world) {
@@ -5252,11 +5953,13 @@
         if (this.world.floorMesh) this.scene.remove(this.world.floorMesh);
         if (this.world.foliageGroup) this.scene.remove(this.world.foliageGroup);
         if (this.world.tunnelGroup) this.scene.remove(this.world.tunnelGroup);
+        if (this.world.laneMarkingsGroup) this.scene.remove(this.world.laneMarkingsGroup);
       }
 
       this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
       this.scene.add(this.world.createSkyDome(season, this.selectedTimeOfDay));
       this.scene.add(this.world.createRoadMesh(this.selectedRoadTerrain));
+      this.scene.add(this.world.createLaneMarkingMeshes(this.selectedRoadTerrain));
       this.scene.add(this.world.createWorldFloor(season));
       this.scene.add(this.world.createTerrainMesh(season));
       this.scene.add(this.world.createTunnelMeshes());
@@ -5475,26 +6178,15 @@
         if (k === 'm') this.toggleRadioMute();
         if (k === 'n') this.toggleSfxMute();
         if (k === 'l') this.cycleRadioChannel();
-        if (k === 'v') this.toggleStatusPanel();
-        if (k === 'e') this.toggleOnFoot();
+        if (k === 'p') this.toggleWeather();
         if (k === 'h' || k === '?') this.openSettingsModal('controls');
         if (k === 'escape') this.openSettingsModal('gameplay');
-        if (k === ' ' && this.gameState === 'playing') {
-          if (this.onFoot) this.tryWalkDelivery();
-          else this.tossParcel3D();
-        }
-        if ((k === 'enter' || k === ' ') && this.gameState === 'menu') this.startDrive();
+        if (k === 'enter' && this.gameState === 'menu') this.startDrive();
       });
 
       window.addEventListener('keyup', e => onKey(e, false));
       window.addEventListener('mousemove', () => this.resetInactivity());
-      window.addEventListener('mousedown', e => {
-        this.resetInactivity();
-        if (this.gameState === 'playing' && e.target.tagName === 'CANVAS') {
-          if (this.onFoot) this.tryWalkDelivery();
-          else this.tossParcel3D();
-        }
-      });
+      window.addEventListener('mousedown', () => this.resetInactivity());
 
       this.initTouchControls();
     }
@@ -5542,15 +6234,6 @@
       bindHoldButton('touch-steer-right', () => { this.keys.right = this.keys.d = true; }, () => { this.keys.right = this.keys.d = false; });
       bindHoldButton('touch-pedal-gas', () => { this.keys.up = this.keys.w = true; }, () => { this.keys.up = this.keys.w = false; });
       bindHoldButton('touch-pedal-brake', () => { this.keys.down = this.keys.s = true; }, () => { this.keys.down = this.keys.s = false; });
-
-      // Discrete tap, not a held flag — mirrors the SPACE keydown handler
-      // (fires once on press, not continuously while held).
-      bindHoldButton('touch-action-btn', () => {
-        if (this.gameState === 'menu') { this.startDrive(); return; }
-        if (this.gameState !== 'playing') return;
-        if (this.onFoot) this.tryWalkDelivery();
-        else this.tossParcel3D();
-      });
     }
 
     // Low-poly courier avatar for on-foot delivery, matching the crosser
@@ -5581,7 +6264,7 @@
     // them instead; that's a separate follow-up feature).
     toggleOnFoot() {
       if (!this.vehicle || !this.world || this.gameState !== 'playing') return;
-      const isCarOrTruck = this.selectedVehicle === 'swift' || this.selectedVehicle === 'chotahathi';
+      const isCarOrTruck = this.selectedVehicle === 'sportscoupe' || this.selectedVehicle === 'musclecoupe' || this.selectedVehicle === 'chotahathi';
       if (!isCarOrTruck) {
         this.addNotification('🛵 Two-wheelers stay mounted — toss from the saddle instead', 'neutral', 2500);
         return;
@@ -6033,8 +6716,14 @@
     // meter instead of an instant fail, and decays back down when clean —
     // so a couple of unlucky hits doesn't end the run outright, but a
     // reckless streak eventually lands you in jail.
+    // The WANTED-level / fine / jail escalation was entirely the courier-
+    // game's police-pursuit framing (Master Prompt section 1: remove the
+    // WANTED system). Pedestrians/animals are still part of the world as
+    // scenery/traffic (Master Prompt section 1 keeps world population),
+    // so a hit still registers as a real collision — it just no longer
+    // escalates into a fine/arrest modal, which was delivery-specific.
     checkCrosserCollisions() {
-      if (!this.vehicle || !this.world || !this.world.crossers || this.isJailed) return;
+      if (!this.vehicle || !this.world || !this.world.crossers) return;
       const carPos = this.vehicle.mesh.position;
 
       for (let i = this.world.crossers.length - 1; i >= 0; i--) {
@@ -6045,79 +6734,10 @@
           c.struck = true;
           this.world.foliageGroup.remove(c.mesh);
           this.world.crossers.splice(i, 1);
-
-          this.wantedLevel = Math.min(this.maxWantedLevel, this.wantedLevel + 1);
-          this.wantedDecayTimer = 0;
-          this.updateWantedHUD();
-
-          const box = document.getElementById('wanted-meter');
-          if (box) {
-            box.classList.remove('wanted-pulse');
-            void box.offsetWidth;
-            box.classList.add('wanted-pulse');
-          }
-
-          const label = c.kind === 'pedestrian' ? 'PEDESTRIAN' : (c.kind === 'dog' ? 'DOG' : 'CAT');
-          this.addNotification(`🚨 HIT A ${label}! Wanted level ${this.wantedLevel}/${this.maxWantedLevel}`, 'danger', 3000);
           sound.playCrash();
-
-          if (this.wantedLevel >= this.maxWantedLevel) {
-            this.triggerJail();
-          }
           break; // one hit per frame is plenty
         }
       }
-
-      // Clean-driving decay: wanted level drops one star after a stretch
-      // of no new hits, so a single early mistake doesn't dog the whole run.
-      if (this.wantedLevel > 0) {
-        this.wantedDecayTimer += 1 / 60;
-        if (this.wantedDecayTimer > 12.0) {
-          this.wantedLevel = Math.max(0, this.wantedLevel - 1);
-          this.wantedDecayTimer = 0;
-          this.updateWantedHUD();
-        }
-      }
-    }
-
-    triggerJail() {
-      if (this.isJailed) return;
-      this.isJailed = true;
-      this.gameState = 'jailed';
-      sound.playCrash();
-      sound.suspendForMenu();
-
-      const fine = 120;
-      this.earnings = Math.max(0, this.earnings - fine);
-      this.updateHUDStats();
-
-      this.modalContainer.innerHTML = `
-        <div class="modal-backdrop">
-          <div class="recovery-card">
-            <div class="recovery-badge failed">🚔 ARRESTED</div>
-            <h2 class="recovery-title">TOO MANY HIT-AND-RUNS</h2>
-            <p class="recovery-desc">
-              Traffic police pulled you over after repeated collisions with pedestrians and animals.
-              <br><br>
-              <strong>Fine Paid:</strong> -₹${fine}
-            </p>
-            <button id="btn-jail-release" class="btn-resume-drive">
-              <span>⚡ PAY FINE & RESUME DISPATCH</span>
-            </button>
-          </div>
-        </div>
-      `;
-
-      document.getElementById('btn-jail-release')?.addEventListener('click', () => {
-        this.isJailed = false;
-        this.wantedLevel = 0;
-        this.wantedDecayTimer = 0;
-        this.updateWantedHUD();
-        this.modalContainer.innerHTML = '';
-        this.gameState = 'playing';
-        if (this.vehicle) this.vehicle.speed = 0;
-        sound.resumeForGameplay();
-      });
     }
 
     initHUD() {
@@ -6291,7 +6911,10 @@
 
       if (radioHudBtn) {
         radioHudBtn.classList.toggle('muted', sound.radioMuted);
-        radioHudBtn.textContent = sound.radioMuted ? 'RADIO OFF' : 'RADIO';
+        const audioLabel = document.getElementById('label-audio');
+        const audioDot = document.getElementById('dot-audio');
+        if (audioLabel) audioLabel.textContent = sound.radioMuted ? 'AUDIO: OFF' : 'AUDIO: ON';
+        if (audioDot) audioDot.classList.toggle('dot-off', sound.radioMuted);
       }
       if (sfxHudBtn) {
         sfxHudBtn.classList.toggle('muted', sound.sfxMuted);
@@ -6391,12 +7014,40 @@
     }
 
     toggleCameraMode() {
-      const modes = ['chase', 'hood', 'sky'];
+      // Camera set audited against slowroads.io's own 5 modes (Chase, Far
+      // Chase, First-Person, Bonnet, Bumper — see SLOWROADS_PARITY_LOG.md
+      // section 1.2b): Shiplyp had chase/hood/sky, missing a pulled-back
+      // chase variant and any true in-cabin view, and "hood" was actually
+      // sitting at bumper height, mislabeled. Renamed to match what it
+      // actually is rather than adding a redundant near-duplicate "bonnet".
+      const modes = ['chase', 'far-chase', 'first-person', 'hood', 'sky'];
       const curIdx = modes.indexOf(this.activeCameraMode || 'chase');
       this.activeCameraMode = modes[(curIdx + 1) % modes.length];
-      const names = { chase: 'ELEVATED CHASE CAM', hood: 'HOOD BUMPER CAM', sky: 'HIGH PANORAMIC CAM' };
+      const names = {
+        chase: 'ELEVATED CHASE CAM',
+        'far-chase': 'FAR CHASE CAM',
+        'first-person': 'FIRST-PERSON CAM',
+        hood: 'BUMPER CAM',
+        sky: 'HIGH PANORAMIC CAM'
+      };
+      const shortNames = {
+        chase: 'CHASE',
+        'far-chase': 'FAR CHASE',
+        'first-person': 'FPV',
+        hood: 'BUMPER',
+        sky: 'SKY'
+      };
+      const camLabel = document.getElementById('label-cam');
+      if (camLabel) camLabel.textContent = `CAM: ${shortNames[this.activeCameraMode]}`;
       this.showScorePopup(0, `📹 ${names[this.activeCameraMode]}`);
       sound.playTone(800, 'sine', 0.08);
+    }
+
+    toggleWeather() {
+      this.weather = this.weather === 'rain' ? 'clear' : 'rain';
+      if (this.rain) this.rain.setActive(this.weather === 'rain');
+      this.showScorePopup(0, this.weather === 'rain' ? '🌧️ RAIN' : '☀️ CLEAR SKIES');
+      sound.playTone(600, 'sine', 0.08);
     }
 
     applyWindowGlow(tod) {
@@ -6418,7 +7069,11 @@
       if (this.sunLight) {
         this.sunLight.color.setHex(tod.sunColor);
         this.sunLight.intensity = tod.sunIntensity;
-        this.sunLight.position.set(...tod.sunPos);
+        // Direction only — actual position is recentered on the vehicle
+        // every frame (see updateCamera) so the shadow-camera frustum
+        // stays near the car instead of pinned at world origin.
+        this.sunOffset = new THREE.Vector3(...tod.sunPos);
+        this.sunLight.position.copy(this.sunOffset);
       }
       if (this.scene) {
         this.scene.background = new THREE.Color(tod.skyBottom);
@@ -6440,9 +7095,9 @@
       }
       this.applyWindowGlow(tod);
 
-      const hudTod = document.getElementById('btn-hud-tod');
+      const hudTodLabel = document.getElementById('label-tod');
       const dockTod = document.getElementById('btn-dock-tod');
-      if (hudTod) hudTod.textContent = tod.icon;
+      if (hudTodLabel) hudTodLabel.textContent = (tod.id || todKey).toUpperCase();
       if (dockTod) dockTod.textContent = tod.icon;
 
       this.showScorePopup(0, `${tod.icon} ${tod.name.toUpperCase()}`);
@@ -6679,7 +7334,10 @@
       this.updateHUDStats();
       if (this.vehicle) {
         const carPos = this.vehicle.mesh.position;
-        const carForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
+        // Recenter uses the car's actual direction of travel, not its
+        // visual heading — see the comment in updateCamera() below for why.
+        const vh = this.vehicle.velocityHeading;
+        const carForward = new THREE.Vector3(Math.sin(vh), 0, Math.cos(vh));
         this.camera.position.copy(carPos.clone().addScaledVector(carForward, -6.8).add(new THREE.Vector3(0, 3.0, 0)));
         this.camLookTarget = carPos.clone().addScaledVector(carForward, 28.0).add(new THREE.Vector3(0, 0.8, 0));
         this.camera.lookAt(this.camLookTarget);
@@ -6710,25 +7368,29 @@
       this.dockEl.style.display = 'none';
       if (this.dockPanelEl) this.dockPanelEl.style.display = 'none';
 
-      const cityList = [
-        { id: 'mumbai', name: 'Mumbai' },
-        { id: 'delhi', name: 'Delhi' },
-        { id: 'kolkata', name: 'Kolkata' },
-        { id: 'pune', name: 'Pune' },
-        { id: 'bangalore', name: 'Bengaluru' }
+      // Master Prompt section 1: no region/difficulty/delivery selection —
+      // pick a world (location) and road style, and a vehicle, then drive.
+      // Section 2.1: vehicle roster cut to 2 (was 4) — chotahathi (cargo
+      // mini-truck) and cycle (courier bike) were both framed entirely
+      // around delivery capacity/speed tradeoffs that no longer apply.
+      // Single world (Mumbai), per direct instruction: concentrate on one
+      // map and keep expanding on it rather than spreading effort across
+      // 5 shallow ones. No world picker in the menu at all now — there's
+      // nothing to pick. selectedCity stays 'mumbai' (set in the
+      // constructor) and CONFIG.CITIES still holds the other 4 entries
+      // undisturbed, so a picker can come back later without rebuilding
+      // this from scratch if a second world is ever actually built out.
+
+      const roadStyleList = [
+        { id: 'asphalt', name: 'Asphalt' },
+        { id: 'gravel', name: 'Gravel' },
+        { id: 'mud', name: 'Mud' },
+        { id: 'sand', name: 'Sand' }
       ];
 
       const vehList = [
-        { id: 'swift', name: 'Raftaar GT Hatch', stat: '160 km/h • Sports EV' },
-        { id: 'chotahathi', name: 'Gaja 500 Mini-Truck', stat: '110 km/h • Cargo Deck' },
-        { id: 'scooter', name: 'Vayu Volt Scooter', stat: '120 km/h • Thermal Backpack' },
-        { id: 'cycle', name: 'Pawan Pedaler Bike', stat: '80 km/h • Carrier Rack' }
-      ];
-
-      const diffList = [
-        { id: 'easy', name: 'Relaxed Shift', stat: '55s • Roadside Curbs' },
-        { id: 'medium', name: 'City Standard', stat: '36s • Winding Hills • 1.5x' },
-        { id: 'hard', name: 'Rush Hour Pro', stat: '22s • Hidden Havelis • 2.5x' }
+        { id: 'sportscoupe', name: 'Sports Coupe', stat: '180 km/h • Gasoline' },
+        { id: 'musclecoupe', name: 'Muscle Coupe', stat: '194 km/h • Gasoline' }
       ];
 
       this.modalContainer.innerHTML = `
@@ -6737,36 +7399,23 @@
             <div class="hub-brand-header">
               <h1 class="hub-brand-title">SHIP<span>LYP</span></h1>
             </div>
-            <p class="hub-tagline">Last Mile Courier • India Dispatch OS</p>
+            <p class="hub-tagline">Endless Driving • India Roads</p>
 
-            <!-- 1. Select Region -->
-            <div class="hub-city-selector">
-              <span class="hub-section-label">SELECT DISPATCH REGION</span>
-              <div class="hub-city-pills">
-                ${cityList.map(c => `
-                  <button class="city-pill-btn ${this.selectedCity === c.id ? 'active-city' : ''}" data-city="${c.id}">
-                    <span class="city-pill-name">${c.name.toUpperCase()}</span>
-                  </button>
-                `).join('')}
-              </div>
-            </div>
-
-            <!-- 2. Select Difficulty Tier -->
+            <!-- 2. Select Road Style -->
             <div class="hub-difficulty-selector">
-              <span class="hub-section-label">SELECT DELIVERY DIFFICULTY & TIMERS</span>
+              <span class="hub-section-label">SELECT ROAD STYLE</span>
               <div class="hub-difficulty-grid">
-                ${diffList.map(d => `
-                  <button class="diff-card-btn ${d.id} ${this.selectedDifficulty === d.id ? `active-diff ${d.id}` : ''}" data-diff="${d.id}">
-                    <span class="diff-card-title">${d.name.toUpperCase()}</span>
-                    <span class="diff-card-stat">${d.stat}</span>
+                ${roadStyleList.map(r => `
+                  <button class="diff-card-btn ${this.selectedRoadTerrain === r.id ? 'active-diff' : ''}" data-rt="${r.id}">
+                    <span class="diff-card-title">${r.name.toUpperCase()}</span>
                   </button>
                 `).join('')}
               </div>
             </div>
 
-            <!-- 3. Select Courier Vehicle -->
+            <!-- 3. Select Vehicle -->
             <div class="hub-vehicle-selector">
-              <span class="hub-section-label">SELECT COURIER FLEET VEHICLE</span>
+              <span class="hub-section-label">SELECT VEHICLE</span>
               <div class="hub-vehicle-grid">
                 ${vehList.map(v => `
                   <button class="vehicle-card-btn ${this.selectedVehicle === v.id ? 'active-veh' : ''}" data-veh="${v.id}">
@@ -6778,33 +7427,22 @@
             </div>
 
             <button id="btn-start-dispatch" class="btn-launch-dispatch">
-              <span>START COURIER DISPATCH</span>
+              <span>DRIVE</span>
             </button>
 
             <div class="hub-footer-links">
               <button id="btn-hub-mute" class="hub-link-btn"><span>${sound.muted ? 'UNMUTE [M]' : 'MUTE [M]'}</span></button>
-              <button id="btn-hub-fleet" class="hub-link-btn">FLEET TUNING</button>
-              <button id="btn-hub-log" class="hub-link-btn">COURIER LOG</button>
+              <button id="btn-hub-fleet" class="hub-link-btn">SETTINGS</button>
             </div>
           </div>
         </div>
       `;
 
-      this.modalContainer.querySelectorAll('.city-pill-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          this.selectedCity = btn.dataset.city;
-          this.selectedSeason = CONFIG.CITIES[this.selectedCity].season;
-          this.modalContainer.querySelectorAll('.city-pill-btn').forEach(b => b.classList.remove('active-city'));
-          btn.classList.add('active-city');
-          sound.playTone(600, 'sine', 0.08);
-        });
-      });
 
       this.modalContainer.querySelectorAll('.diff-card-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.preventDefault();
-          this.selectedDifficulty = btn.dataset.diff;
+          this.selectedRoadTerrain = btn.dataset.rt;
           this.modalContainer.querySelectorAll('.diff-card-btn').forEach(b => {
             b.classList.remove('active-diff');
           });
@@ -6837,25 +7475,23 @@
         e.preventDefault();
         this.openSettingsModal('gameplay');
       });
-      document.getElementById('btn-hub-log')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        this.openSettingsModal('profile');
-      });
     }
 
     renderDockPanelContent(type) {
       const el = this.dockPanelEl;
 
       if (type === 'world') {
-        const cityKeys = Object.keys(CONFIG.CITIES);
+        // Single map, per direct instruction — the world/city stepper's
+        // prev/next used to cycle 5 cities; now there's one, so this is a
+        // static readout instead of dead-end arrows. ROAD SURFACE and
+        // ROUTE SEED below are the actual "keep expanding on the same
+        // map" knobs — regenerate variety within this one city/world.
         el.innerHTML = `
           <div class="dock-panel-grid">
             <div class="dock-panel-col">
-              <span class="dock-panel-label">CITY ROUTE</span>
+              <span class="dock-panel-label">WORLD</span>
               <div class="dock-stepper-box">
-                <button id="dp-c-prev" class="stepper-arrow">&lt;</button>
                 <span class="dock-stepper-val">${CONFIG.CITIES[this.selectedCity].name.toUpperCase()}</span>
-                <button id="dp-c-next" class="stepper-arrow">&gt;</button>
               </div>
             </div>
             <div class="dock-panel-col">
@@ -6877,18 +7513,6 @@
             <button id="dp-gen-btn" class="btn-generate-dock">APPLY & REGEN</button>
           </div>
         `;
-        document.getElementById('dp-c-prev').onclick = () => {
-          let idx = (cityKeys.indexOf(this.selectedCity) - 1 + cityKeys.length) % cityKeys.length;
-          this.selectedCity = cityKeys[idx];
-          this.selectedSeason = CONFIG.CITIES[this.selectedCity].season;
-          this.renderDockPanelContent('world');
-        };
-        document.getElementById('dp-c-next').onclick = () => {
-          let idx = (cityKeys.indexOf(this.selectedCity) + 1) % cityKeys.length;
-          this.selectedCity = cityKeys[idx];
-          this.selectedSeason = CONFIG.CITIES[this.selectedCity].season;
-          this.renderDockPanelContent('world');
-        };
         el.querySelectorAll('[data-rt]').forEach(b => {
           b.onclick = () => {
             this.selectedRoadTerrain = b.dataset.rt;
@@ -6950,12 +7574,10 @@
         el.innerHTML = `
           <div class="dock-panel-grid">
             <div class="dock-panel-col">
-              <span class="dock-panel-label">COURIER FLEET</span>
+              <span class="dock-panel-label">VEHICLE</span>
               <div class="dock-btn-row">
-                <button class="dock-sq-btn ${this.selectedVehicle === 'swift' ? 'active-sq' : ''}" data-v="swift">HATCH</button>
-                <button class="dock-sq-btn ${this.selectedVehicle === 'chotahathi' ? 'active-sq' : ''}" data-v="chotahathi">TRUCK</button>
-                <button class="dock-sq-btn ${this.selectedVehicle === 'scooter' ? 'active-sq' : ''}" data-v="scooter">SCOOTER</button>
-                <button class="dock-sq-btn ${this.selectedVehicle === 'cycle' ? 'active-sq' : ''}" data-v="cycle">BIKE</button>
+                <button class="dock-sq-btn ${this.selectedVehicle === 'sportscoupe' ? 'active-sq' : ''}" data-v="sportscoupe">COUPE</button>
+                <button class="dock-sq-btn ${this.selectedVehicle === 'musclecoupe' ? 'active-sq' : ''}" data-v="musclecoupe">MUSCLE</button>
               </div>
             </div>
           </div>
@@ -6977,9 +7599,9 @@
           <div class="settings-modal">
             <div class="settings-header-tabs">
               <button class="tab-link ${tab === 'home' ? 'active-tab' : ''}" data-tab="home">HUB</button>
-              <button class="tab-link ${tab === 'gameplay' ? 'active-tab' : ''}" data-tab="gameplay">• FLEET TUNING •</button>
+              <button class="tab-link ${tab === 'gameplay' ? 'active-tab' : ''}" data-tab="gameplay">• VEHICLE TUNING •</button>
               <button class="tab-link ${tab === 'controls' ? 'active-tab' : ''}" data-tab="controls">CONTROLS</button>
-              <button class="tab-link ${tab === 'profile' ? 'active-tab' : ''}" data-tab="profile">EARNINGS</button>
+              <button class="tab-link ${tab === 'profile' ? 'active-tab' : ''}" data-tab="profile">TRIP</button>
             </div>
 
             <div class="settings-body">
@@ -7008,31 +7630,24 @@
                 </div>
               ` : tab === 'controls' ? `
                 <div class="settings-section-title"><span>🚗 DRIVING & MOVEMENT</span></div>
-                <div class="settings-row"><span class="settings-label">Accelerate / Walk Forward</span><span class="slider-val">W / ↑</span></div>
-                <div class="settings-row"><span class="settings-label">Brake / Reverse / Walk Back</span><span class="slider-val">S / ↓</span></div>
+                <div class="settings-row"><span class="settings-label">Accelerate</span><span class="slider-val">W / ↑</span></div>
+                <div class="settings-row"><span class="settings-label">Brake / Reverse</span><span class="slider-val">S / ↓</span></div>
                 <div class="settings-row"><span class="settings-label">Steer / Turn Left & Right</span><span class="slider-val">A / D or ← / →</span></div>
-
-                <div class="settings-section-title" style="margin-top: 14px;"><span>📦 PARCEL ACTIONS & COURIER MODE</span></div>
-                <div class="settings-row"><span class="settings-label">Toss 3D Parcel (Vehicle)</span><span class="slider-val">[SPACE] or Click</span></div>
-                <div class="settings-row"><span class="settings-label">Doorstep Delivery (On Foot)</span><span class="slider-val">[SPACE] or Click</span></div>
-                <div class="settings-row"><span class="settings-label">Hop Out / Enter Vehicle</span><span class="slider-val">[E]</span></div>
 
                 <div class="settings-section-title" style="margin-top: 14px;"><span>🛠️ ASSISTS, CAMERA & ENVIRONMENT</span></div>
                 <div class="settings-row"><span class="settings-label">AI Autopilot Cruise</span><span class="slider-val">[F]</span></div>
                 <div class="settings-row"><span class="settings-label">Return to Road (Recenter)</span><span class="slider-val">[R]</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Camera View</span><span class="slider-val">[C]</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Time of Day</span><span class="slider-val">[T]</span></div>
-                <div class="settings-row"><span class="settings-label">Delivery Status Manifest</span><span class="slider-val">[V]</span></div>
+                <div class="settings-row"><span class="settings-label">Toggle Rain</span><span class="slider-val">[P]</span></div>
 
-                <div class="settings-section-title" style="margin-top: 14px;"><span>📻 DHABA FM & AUDIO CONTROLS</span></div>
+                <div class="settings-section-title" style="margin-top: 14px;"><span>📻 RADIO & AUDIO CONTROLS</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Radio Stations</span><span class="slider-val">[L]</span></div>
                 <div class="settings-row"><span class="settings-label">Mute / Unmute Radio</span><span class="slider-val">[M]</span></div>
                 <div class="settings-row"><span class="settings-label">Mute / Unmute SFX & Engine</span><span class="slider-val">[N]</span></div>
                 <div class="settings-row"><span class="settings-label">Controls & Settings Menu</span><span class="slider-val">[H] or [ESC]</span></div>
               ` : `
-                <div class="settings-section-title"><span>SHIPLYP COURIER SUMMARY</span></div>
-                <div class="settings-row"><span class="settings-label">Total Delivery Earnings</span><span class="slider-val" style="color: #2ec4b6; font-weight: 700;">₹ ${this.earnings}</span></div>
-                <div class="settings-row"><span class="settings-label">Delivered Porches</span><span class="slider-val">${this.deliveriesMade}</span></div>
+                <div class="settings-section-title"><span>TRIP SUMMARY</span></div>
                 <div class="settings-row"><span class="settings-label">Distance Driven</span><span class="slider-val">${this.vehicle.distanceTraveled.toFixed(1)} KM</span></div>
               `}
             </div>
@@ -7170,19 +7785,91 @@
 
       if (!this.vehicle || !this.vehicle.mesh) return;
 
+      // Recenter the sun + its shadow-camera frustum on the vehicle every
+      // frame — see the setup comment in initThree for why this matters
+      // (without it the car only casts a shadow within ~5 units of the
+      // route's spawn point). Direction is preserved (sunOffset is a
+      // fixed vector from the current time-of-day config); only the
+      // recentering point moves.
+      if (this.sunLight && this.sunOffset) {
+        const vp = this.vehicle.mesh.position;
+        this.sunLight.position.set(vp.x + this.sunOffset.x, vp.y + this.sunOffset.y, vp.z + this.sunOffset.z);
+        this.sunLight.target.position.copy(vp);
+        this.sunLight.target.updateMatrixWorld();
+      }
+
+      // First-Person mode showed a solid pink fill along the frame edge —
+      // the eye position sits inside the car's own solid body geometry
+      // (there's no modeled cabin cavity to place a camera inside), so the
+      // near side of the frustum renders the inside of that mesh. Pushing
+      // the eye position further out risks re-clipping on bumps/roll at
+      // some point in the frame even if a static test spot looks clear —
+      // the standard fix most driving games use instead: hide the car's
+      // own mesh while in first-person, the same way you don't render your
+      // own head in a real cockpit view.
+      this.vehicle.mesh.visible = this.activeCameraMode !== 'first-person';
+
       const carPos = this.vehicle.mesh.position;
-      const carForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
+      // Rigidly-mounted views (hood/first-person) track the car's actual
+      // visual orientation — a dashcam bolted to the body should show
+      // exactly where the body/wheels point, slip and all, same as a real
+      // dashcam would during a slide.
+      const bodyForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
+      // Free-following views (chase/far-chase/sky) instead track the car's
+      // actual direction of TRAVEL, not its visual heading — these two can
+      // now genuinely diverge (see VehicleController's velocityHeading).
+      // Chasing the visual heading here made the camera look ahead of
+      // where the car was actually going for the full duration of any
+      // sustained turn, which read as the world subtly swinging out from
+      // under the car rather than the car turning — reported directly as
+      // "turning mechanics... completely off" at higher speeds, where the
+      // slip angle is largest. Matches slowroads.io's own approach,
+      // verified from their shipped code: their camera explicitly blends
+      // toward motion direction rather than body heading for exactly this
+      // reason.
+      const vh = this.vehicle.velocityHeading;
+      const carForward = new THREE.Vector3(Math.sin(vh), 0, Math.cos(vh));
 
       if (!this.camLookTarget) {
         this.camLookTarget = carPos.clone().addScaledVector(carForward, 18.0);
       }
 
       if (this.activeCameraMode === 'hood') {
-        // Hood Bumper Cam - rigidly bolted to vehicle hood
-        const hoodPos = carPos.clone().addScaledVector(carForward, 1.35).add(new THREE.Vector3(0, 0.82, 0));
+        // Bumper Cam - rigidly bolted at bumper height (see toggleCameraMode
+        // comment — this was labeled "hood" but sits at bumper height)
+        const hoodPos = carPos.clone().addScaledVector(bodyForward, 1.35).add(new THREE.Vector3(0, 0.82, 0));
         this.camera.position.copy(hoodPos);
-        const lookTarget = hoodPos.clone().addScaledVector(carForward, 35.0);
+        const lookTarget = hoodPos.clone().addScaledVector(bodyForward, 35.0);
         this.camera.lookAt(lookTarget);
+      } else if (this.activeCameraMode === 'first-person') {
+        // True in-cabin view — driver eye height, seated near the
+        // windshield rather than out on the bumper. Rigidly bolted (no
+        // lerp/spring), same as bumper cam: a cockpit view that lags the
+        // car's own motion reads as broken, not cinematic.
+        const eyePos = carPos.clone().addScaledVector(bodyForward, 0.15).add(new THREE.Vector3(0, 1.15, 0));
+        this.camera.position.copy(eyePos);
+        const lookTarget = eyePos.clone().addScaledVector(bodyForward, 35.0);
+        this.camera.lookAt(lookTarget);
+      } else if (this.activeCameraMode === 'far-chase') {
+        // Same glued-chase behavior as the default chase cam below, just
+        // pulled back and raised further for a wider, more cinematic frame
+        // — slowroads' "Far Chase" relative to its "Chase".
+        const targetCamPos = carPos.clone()
+          .addScaledVector(carForward, -11.5)
+          .add(new THREE.Vector3(0, 4.4, 0));
+        const posLerp = Math.min(1.0, 1.0 - Math.exp(-16.0 * dt));
+        this.camera.position.lerp(targetCamPos, posLerp);
+
+        const minY = carPos.y + 2.6;
+        const maxY = carPos.y + 6.5;
+        this.camera.position.y = THREE.MathUtils.clamp(this.camera.position.y, minY, maxY);
+
+        const rawLookTarget = carPos.clone()
+          .addScaledVector(carForward, 20.0)
+          .add(new THREE.Vector3(0, 0.8, 0));
+        const lookLerp = Math.min(1.0, 1.0 - Math.exp(-22.0 * dt));
+        this.camLookTarget.lerp(rawLookTarget, lookLerp);
+        this.camera.lookAt(this.camLookTarget);
       } else if (this.activeCameraMode === 'sky') {
         // Drone Cam
         const skyPos = carPos.clone().addScaledVector(carForward, -9.5).add(new THREE.Vector3(0, 7.5, 0));
@@ -7236,7 +7923,7 @@
       // road height at this exact point — use that instead. (The chase
       // branch above already clamps to carPos.y+[1.6,4.2]; this is only a
       // backstop for the sky/drone mode, which has no such clamp.)
-      if (this.activeCameraMode !== 'hood') {
+      if (this.activeCameraMode !== 'hood' && this.activeCameraMode !== 'first-person') {
         const minClearance = carPos.y + 1.0;
         if (this.camera.position.y < minClearance) {
           this.camera.position.y = minClearance;
@@ -7350,22 +8037,7 @@
         ctx.stroke();
       }
 
-      // Draw Traffic Dots on Minimap
-      this.world.trafficVehicles.forEach(tv => {
-        const rel = tv.mesh.position.clone().sub(carPos);
-        const latDist = rel.dot(carRight);
-        const fwdDist = rel.dot(carForward);
-
-        const mx = w / 2 + latDist * 0.85;
-        const my = h / 2 - fwdDist * 0.85;
-
-        if (mx >= 6 && mx <= w - 6 && my >= 6 && my <= h - 6) {
-          ctx.fillStyle = '#ff9f1c';
-          ctx.beginPath();
-          ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      });
+      // Traffic dots removed — no NPC traffic vehicles exist anymore.
 
       // Draw Next Delivery Target Pin on Minimap
       if (nextTarget) {
@@ -7401,6 +8073,18 @@
     animate() {
       const dt = Math.min(this.clock.getDelta(), 0.1);
 
+      // Live FPS readout for the top-right status pill — smoothed over a
+      // rolling ~0.5s window (raw per-frame dt is too jittery to read).
+      this._fpsAccumTime = (this._fpsAccumTime || 0) + dt;
+      this._fpsAccumFrames = (this._fpsAccumFrames || 0) + 1;
+      if (this._fpsAccumTime >= 0.5) {
+        const fps = Math.round(this._fpsAccumFrames / this._fpsAccumTime);
+        const fpsEl = document.getElementById('hud-fps-value');
+        if (fpsEl) fpsEl.textContent = String(fps);
+        this._fpsAccumTime = 0;
+        this._fpsAccumFrames = 0;
+      }
+
       if (this.gameState === 'playing') {
         if (this.onFoot) {
           this.updateWalking(dt);
@@ -7410,6 +8094,10 @@
         this.world.updateTraffic(dt);
         this.world.updateCrossers(dt);
         this.checkCrosserCollisions();
+        if (this.rain && this.vehicle && this.vehicle.mesh) {
+          const rainForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion);
+          this.rain.update(dt, this.vehicle.mesh.position, rainForward, this.vehicle.speed);
+        }
         if (this.world.updateClouds) this.world.updateClouds(dt);
         this.updateParcels(dt);
         this.updateParticles(dt);
@@ -7420,7 +8108,13 @@
             this.spawnDust(this.vehicle.mesh.position, 1);
           }
         }
-        this.updateOrderTimer(dt);
+        // updateOrderTimer() call removed — it fired live "TIME EXPIRED"/
+        // "DELIVERY MISSED" penalty notifications and earnings deductions
+        // during driving, a real leftover from the courier loop the
+        // dispatch UI removal (Master Prompt section 1) missed since it
+        // only touched HUD markup, not this per-frame timer tick. Caught
+        // live: an actual "TIME EXPIRED! Penalty -₹25" banner appeared
+        // during a verification drive with no dispatch UI on screen.
         this.updateCamera(dt);
         this.updateGPSNavigation();
         this.updateClimateHUD();

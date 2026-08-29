@@ -48,29 +48,6 @@
 
     <!-- 1. SLOWROADS MINIMALIST HUD ARCHITECTURE -->
     <div id="in-game-hud" class="hud-overlay">
-      <!-- Top-Left: Minimal Slowroads Objective Line -->
-      <div class="slowroads-obj-box">
-        <div class="slowroads-obj-tag">DISPATCH // TARGET</div>
-        <div class="slowroads-obj-title" id="order-target-name">Kulkarni Wada (Doorstep 4B)</div>
-        <div class="slowroads-obj-meta">
-          <span id="order-cargo-desc">2x Hot Dabba & Filter Coffee</span>
-          <span class="meta-sep">/</span>
-          <span id="waypoint-distance-text" class="meta-dist">180m</span>
-          <span class="meta-sep">/</span>
-          <span id="order-timer-clock" class="meta-timer">00:32.4</span>
-        </div>
-      </div>
-
-      <!-- Wanted Meter: fills as pedestrians/animals get hit; hits max = jail -->
-      <div id="wanted-meter" class="wanted-meter-box">
-        <span class="wanted-meter-label">WANTED</span>
-        <div class="wanted-meter-stars">
-          <span class="wanted-star" data-i="0">★</span>
-          <span class="wanted-star" data-i="1">★</span>
-          <span class="wanted-star" data-i="2">★</span>
-        </div>
-      </div>
-
       <!-- Top-Right: Slowroads Minimal Audio Bar & System Controls -->
       <div class="slowroads-top-bar">
         <div class="slowroads-radio-pill" id="cassette-radio-card">
@@ -90,52 +67,28 @@
         </div>
 
         <div class="slowroads-sys-btns">
-          <button id="btn-hud-tod" class="slowroads-icon-btn" title="Cycle Time of Day [T]">TOD</button>
-          <button id="btn-hud-camera" class="slowroads-icon-btn" title="Camera Mode [C]">CAM</button>
-          <button id="btn-hud-radio-mute" class="slowroads-icon-btn" title="Toggle Radio [M]">RADIO</button>
+          <button id="btn-hud-radio-mute" class="slowroads-status-pill" title="Toggle Radio [M]"><span class="status-dot" id="dot-audio"></span><span id="label-audio">AUDIO: ON</span></button>
+          <button id="btn-hud-camera" class="slowroads-status-pill" title="Camera Mode [C]"><span id="label-cam">CAM: CHASE</span></button>
           <button id="btn-hud-sfx-mute" class="slowroads-icon-btn" title="Toggle SFX [N]">SFX</button>
           <button id="btn-hud-sound" class="slowroads-icon-btn" title="Toggle All Audio" style="display:none;">MUTE</button>
-          <button id="btn-hud-status" class="slowroads-icon-btn" title="Delivery Status [V]">STATUS</button>
         </div>
-      </div>
-
-      <!-- Delivery Status Panel (toggleable, non-blocking) -->
-      <div id="delivery-status-panel" class="delivery-status-panel"></div>
-
-      <!-- Speed Camera Flash Screen Overlay -->
-      <div id="speed-cam-flash" class="speed-cam-flash"></div>
-
-      <!-- Delivery Dropzone Reticle (Appears Only When Close < 35m) -->
-      <div id="toss-reticle-banner" class="slowroads-toss-banner">
-        <span class="toss-key-tag">SPACE</span>
-        <span class="toss-msg">DROP CARGO</span>
+        <div class="slowroads-sys-btns">
+          <div class="slowroads-status-pill" id="hud-fps-pill"><span id="hud-fps-value">60</span> FPS</div>
+          <button id="btn-hud-tod" class="slowroads-status-pill" title="Cycle Time of Day [T]"><span id="label-tod">DAY</span></button>
+        </div>
       </div>
 
       <!-- Touch Controls: shown only on touch/coarse-pointer devices (see
            applyTouchControlVisibility in game.js). Wired to the exact same
-           this.keys.* flags the keyboard handlers set, so every downstream
-           system (steering, throttle, delivery toss) needs no separate
-           mobile-specific path. -->
+           this.keys.* flags the keyboard handlers set. -->
       <div id="touch-controls" class="touch-controls" aria-hidden="true">
         <div class="touch-steer-cluster">
           <button id="touch-steer-left" class="touch-btn touch-steer-btn" aria-label="Steer Left">◀</button>
           <button id="touch-steer-right" class="touch-btn touch-steer-btn" aria-label="Steer Right">▶</button>
         </div>
-        <button id="touch-action-btn" class="touch-btn touch-action-btn" aria-label="Toss / Drop Cargo">TOSS</button>
         <div class="touch-pedal-cluster">
           <button id="touch-pedal-gas" class="touch-btn touch-pedal-btn touch-pedal-gas" aria-label="Accelerate">▲</button>
           <button id="touch-pedal-brake" class="touch-btn touch-pedal-btn touch-pedal-brake" aria-label="Brake / Reverse">▼</button>
-        </div>
-      </div>
-
-      <!-- Bottom-Left: Minimalist Radar Minimap -->
-      <div class="slowroads-radar-box">
-        <div class="radar-header-row">
-          <span class="radar-tag">RADAR</span>
-          <span id="gps-next-dist" class="radar-dist">180m</span>
-        </div>
-        <div class="radar-canvas-housing">
-          <canvas id="gps-minimap-canvas" width="116" height="116"></canvas>
         </div>
       </div>
 
@@ -194,17 +147,16 @@
 
       <div class="dock-bar-glass">
         <div class="dock-nav-items">
-          <button class="dock-tab-btn" data-panel="world">ROUTES</button>
+          <button class="dock-tab-btn" data-panel="world">WORLD</button>
           <button class="dock-tab-btn" data-panel="style">ENVIRONMENT</button>
-          <button class="dock-tab-btn" data-panel="vehicle">VEHICLES</button>
+          <button class="dock-tab-btn" data-panel="vehicle">VEHICLE</button>
         </div>
 
         <div class="dock-icons-right">
           <button id="btn-dock-tod" class="dock-icon" title="Time of Day [T]">TOD</button>
           <button id="btn-dock-camera" class="dock-icon" title="Switch Camera Mode [C]">CAM</button>
           <button id="btn-dock-sound" class="dock-icon" title="Mute/Unmute Audio [M]">AUDIO</button>
-          <button id="btn-dock-status" class="dock-icon" title="Delivery Status [V]">STATUS</button>
-          <button id="btn-dock-settings" class="dock-icon" title="Dispatch Tuning">CONFIG</button>
+          <button id="btn-dock-settings" class="dock-icon" title="Settings">CONFIG</button>
         </div>
       </div>
     </div>
