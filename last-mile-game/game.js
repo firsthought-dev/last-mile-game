@@ -1082,12 +1082,12 @@
     // see BUGFIX_LOG.md Pattern 1/3), bore a tunnel through it instead of
     // trying to out-clamp the noise. Turns an unfixable visual bug into an
     // intentional set piece rather than chasing a 4th root cause.
-    TUNNEL_OVERHEAD_THRESHOLD: 7.5,  // terrain clears road by 7.5m -> bores highway tunnel
-    TUNNEL_MIN_RUN: 8,               // min contiguous samples for a zone
+    TUNNEL_OVERHEAD_THRESHOLD: 14.0, // terrain clears road by 14.0m -> bores mountain tunnel
+    TUNNEL_MIN_RUN: 12,              // min contiguous samples for a zone
     TUNNEL_PAD: 4,                   // portal buffer on each end
     TUNNEL_HALF_WIDTH: 6.2,          // wide 2-lane arched bore
     TUNNEL_WALL_COLOR: 0x334155,     // modern reinforced concrete
-    TUNNEL_LIGHT_SPACING: 6,         // frequent amber sodium fixtures
+    TUNNEL_LIGHT_SPACING: 8,         // fixture spacing
 
     SEASONS: {
       autumn: {
@@ -2861,7 +2861,7 @@
           group.add(portalGroup);
         });
 
-        // 3. Overhead Warm Sodium Tube Light Fixtures & Lamps
+        // 3. Overhead Warm Sodium Tube Light Fixtures (Pure Emissive Bloom - 0 PointLight overhead)
         const fixtureGeom = new THREE.BoxGeometry(0.55, 0.22, 3.2);
         const fixtureMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4, metalness: 0.8 });
         const tubeGeom = new THREE.CylinderGeometry(0.08, 0.08, 2.8, 12);
@@ -2869,13 +2869,13 @@
         const sodiumMat = new THREE.MeshStandardMaterial({
           color: 0xffedd5,
           emissive: 0xffb347,
-          emissiveIntensity: 2.5,
+          emissiveIntensity: 2.8,
           roughness: 0.2
         });
 
         const apexHeight = wallHeight + archRadius;
-        const lampSpacing = CONFIG.TUNNEL_LIGHT_SPACING || 6;
-        for (let i = zone.start + 1; i < zone.end; i += lampSpacing) {
+        const lampSpacing = 8;
+        for (let i = zone.start + 2; i < zone.end - 1; i += lampSpacing) {
           const pt = points[i];
           const prev = points[Math.max(zone.start, i - 1)];
           const next = points[Math.min(zone.end, i + 1)];
@@ -2892,10 +2892,6 @@
           fixture.position.copy(fixturePos);
           fixture.lookAt(fixturePos.clone().add(tangent));
           group.add(fixture);
-
-          const lamp = new THREE.PointLight(0xffb347, 3.8, 22.0, 2.0);
-          lamp.position.set(fixturePos.x, fixturePos.y - 0.35, fixturePos.z);
-          group.add(lamp);
         }
       }
 
