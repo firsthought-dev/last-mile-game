@@ -1255,6 +1255,137 @@
   }
 
   // --------------------------------------------------------------------------
+  // Billboard trees — replaces the ConeGeometry/DodecahedronGeometry
+  // primitive trees per SHIPLYP_VISUAL_ENHANCEMENT_BRIEF.md section 3.3.
+  // Even with correct smooth shading (see smoothFaceNormals above), a
+  // primitive-geometry tree still reads as a stacked cone or a round ball —
+  // the actual gap against slowroads.io's trees is silhouette and texture
+  // detail (individual needle/leaf-cluster edges), not shading smoothness.
+  // No real-world alpha-cut tree photo was available to source reliably —
+  // authored instead, procedurally, at build time (not runtime): a
+  // needle-cluster pine silhouette and an irregular-blob broadleaf
+  // silhouette, both with a real alpha channel, both with the trunk baked
+  // into the same sprite so no separate trunk mesh is needed.
+  // Cross-billboard technique (two perpendicular textured planes sharing
+  // one alpha-cut texture) — a standard Y-axis-locked impostor: gives
+  // reasonable coverage from any horizontal viewing angle without a
+  // per-frame camera-facing update for every tree in the scene (hundreds
+  // of them; this project's own history flags exactly this kind of
+  // per-frame-cost-vs-one-time-cost tradeoff, see the world-floor segment
+  // count note in createWorldFloor). Actually CHEAPER than the geometry it
+  // replaces: 2 flat planes (4 triangles) vs. up to 3 stacked cones
+  // (30+ triangles) per tree.
+  const TreeBillboardFactory = {
+    _textures: null,
+    _loader: null,
+    load() {
+      if (this._textures) return this._textures;
+      this._loader = this._loader || new THREE.TextureLoader();
+      // Do NOT set tex.encoding here. Assigning THREE.sRGBEncoding on a
+      // texture synchronously right after calling .load() — before the
+      // image itself has finished the async fetch — rendered these
+      // textures as solid black (confirmed directly: same mesh, same
+      // material, only removing this line fixed it; a plain color
+      // material on the same geometry rendered fine, isolating the bug to
+      // this specific texture setup, not the billboard mesh/material
+      // itself). The renderer's own outputEncoding (sRGBEncoding, set in
+      // initThree) already handles the final display color correctly
+      // without this.
+      const load = (url) => this._loader.load(url);
+      this._textures = {
+        pine: load('assets/textures/tree_pine.webp'),
+        broadleaf: load('assets/textures/tree_broadleaf.webp')
+      };
+      return this._textures;
+    },
+    _geomCache: null,
+    _matCache: null,
+    // worldHeight: the tree's total height in world units (trunk included,
+    // since it's baked into the sprite) at scale 1.
+    //
+    // Geometry AND material are cached/shared per (kind, worldHeight) /
+    // (kind, tintHex) — see buildInstancedBatches below for why this
+    // matters more than it sounds: individual THREE.Mesh instances (the
+    // original version of this factory) are one draw call each regardless
+    // of shared geometry, and clustering trees (4-8x instance count) pushed
+    // that to 8556 separate tree meshes, at ~22 FPS. InstancedMesh is the
+    // actual fix — draw calls collapse to one per (kind, worldHeight, tint)
+    // bucket regardless of instance count.
+    getGeometry(kind, worldHeight) {
+      this._geomCache = this._geomCache || new Map();
+      const key = `${kind}:${worldHeight}`;
+      let geom = this._geomCache.get(key);
+      if (!geom) {
+        const aspect = kind === 'pine' ? (512 / 900) : (512 / 768);
+        geom = new THREE.PlaneGeometry(worldHeight * aspect, worldHeight);
+        geom.translate(0, worldHeight / 2, 0); // pivot at the base, matching how the old trunk-based groups were positioned
+        this._geomCache.set(key, geom);
+      }
+      return geom;
+    },
+    getMaterial(kind, tintHex) {
+      this._matCache = this._matCache || new Map();
+      const textures = this.load();
+      const tex = kind === 'pine' ? textures.pine : textures.broadleaf;
+      const tint = tintHex != null ? tintHex : 0xffffff;
+      const key = `${kind}:${tint}`;
+      let mat = this._matCache.get(key);
+      if (!mat) {
+        mat = new THREE.MeshLambertMaterial({
+          map: tex,
+          transparent: true,
+          alphaTest: 0.35, // hard cutout, not blended — avoids draw-order/sorting issues between the two crossed planes
+          side: THREE.DoubleSide,
+          color: tint // subtle per-tint seasonal variation without needing separate texture files per season
+        });
+        this._matCache.set(key, mat);
+      }
+      return mat;
+    },
+    // `descriptors`: [{ kind, worldHeight, pos, scale, rotY, tintHex }, ...]
+    // (already overlap/road-clearance-filtered by the caller). Groups by
+    // (kind, worldHeight, tintHex) and builds one InstancedMesh PER PLANE
+    // per group (2 planes per cross-billboard) — e.g. 2 kinds x 2 heights x
+    // ~4 tints x 2 planes = ~32 draw calls total for potentially thousands
+    // of trees, instead of 2 draw calls per tree.
+    buildInstancedBatches(descriptors) {
+      const group = new THREE.Group();
+      const buckets = new Map();
+      for (const d of descriptors) {
+        const key = `${d.kind}:${d.worldHeight}:${d.tintHex}`;
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(d);
+      }
+
+      const dummy = new THREE.Object3D();
+      for (const [key, items] of buckets) {
+        const [kind, worldHeightStr, tintStr] = key.split(':');
+        const worldHeight = Number(worldHeightStr);
+        const tintHex = Number(tintStr);
+        const geom = this.getGeometry(kind, worldHeight);
+        const mat = this.getMaterial(kind, tintHex);
+
+        for (const planeRotY of [0, Math.PI / 2]) {
+          const inst = new THREE.InstancedMesh(geom, mat, items.length);
+          inst.instanceMatrix.setUsage(THREE.StaticDrawUsage); // trees never move once placed
+          for (let i = 0; i < items.length; i++) {
+            const d = items[i];
+            dummy.position.copy(d.pos);
+            dummy.rotation.set(0, d.rotY + planeRotY, 0);
+            dummy.scale.setScalar(d.scale);
+            dummy.updateMatrix();
+            inst.setMatrixAt(i, dummy.matrix);
+          }
+          inst.instanceMatrix.needsUpdate = true;
+          inst.frustumCulled = false; // per-instance culling isn't computed for InstancedMesh by default in this three version; cheap enough at this triangle count
+          group.add(inst);
+        }
+      }
+      return group;
+    }
+  };
+
+  // --------------------------------------------------------------------------
   // 5. SLOW ROADS PROCEDURAL TERRAIN & DUAL-GRID ARCHITECTURE
   // --------------------------------------------------------------------------
   class ProceduralWorld {
@@ -2368,8 +2499,11 @@
       const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
 
       // Reusable Low-Poly Foliage & Prop Geometries
-      const trunkGeom = new THREE.CylinderGeometry(0.25, 0.45, 2.8, 6);
-      const pineLeavesGeom = new THREE.ConeGeometry(2.4, 5.0, 10);
+      // Pine/broadleaf tree canopy geometry retired — trees are now
+      // TreeBillboardFactory sprites (see SLOWROADS_PARITY_LOG.md item 5),
+      // trunk baked into the sprite art, so trunkGeom/trunkMat/
+      // pineLeavesGeom/decLeavesGeom no longer have any callers.
+      const bushGeom = new THREE.DodecahedronGeometry(1.2, 0);
       // detail 1 (not 0): flat-normal duplicate vertices only welding to a
       // SHARED smooth normal (via smoothFaceNormals below) isn't enough on
       // its own either — at detail 0 a dodecahedron's 12 faces are each so
@@ -2378,18 +2512,15 @@
       // middle of every face. Detail 1 subdivides each face so there's
       // enough vertex density for the averaged gradient to actually be
       // visible across the surface, not just at seams.
-      const decLeavesGeom = smoothFaceNormals(new THREE.DodecahedronGeometry(2.4, 1));
-      const bushGeom = new THREE.DodecahedronGeometry(1.2, 0);
       const rockGeom = smoothFaceNormals(new THREE.DodecahedronGeometry(1.6, 1));
       const poleGeom = new THREE.CylinderGeometry(0.1, 0.12, 6.5, 6);
       const crossbarGeom = new THREE.BoxGeometry(1.8, 0.12, 0.12);
 
-      // Trunks/rocks are organic shapes — flat shading on round primitives
-      // reads as faceted "gem" geometry (see SLOWROADS_PARITY_LOG.md item 2)
+      // Rocks are an organic shape — flat shading on round primitives reads
+      // as faceted "gem" geometry (see SLOWROADS_PARITY_LOG.md item 2)
       // where smooth shading reads as an actual rounded surface at the same
       // triangle count. Man-made props (poles, buildings, vehicles below)
       // keep flatShading — that's a deliberate low-poly look, not the bug.
-      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.9 });
       const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a6065, roughness: 0.8, map: TextureFactory.rock(this.prng) });
       const poleMat = new THREE.MeshStandardMaterial({ color: 0x4a4e52, flatShading: true, roughness: 0.6, metalness: 0.3 });
 
@@ -2895,51 +3026,43 @@
 
           if (spawnTree) {
           // Winter forces evergreen-only canopy — broadleaf trees would be
-          // bare in winter, and we don't model leafless geometry, so we
-          // simply keep the forest all-pine rather than showing full green
-          // canopies that would look wrong for the season.
+          // bare in winter, and there's no leafless sprite variant, so the
+          // forest stays all-pine rather than showing full green canopies
+          // that would look wrong for the season.
           const isPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
-          const leafColHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
-          const leavesMat = new THREE.MeshStandardMaterial({ color: leafColHex });
 
-          const tree = new THREE.Group();
-          const trunk = new THREE.Mesh(trunkGeom, trunkMat);
-          trunk.position.y = 1.4;
-          tree.add(trunk);
+          // Cluster, not a single tree: a lone cross-billboard reads as a
+          // flat cardboard cutout the instant you're close enough to see
+          // it edge-on — direct side-by-side comparison against a real
+          // slowroads screenshot confirmed this ("playdoh level"). Real
+          // forests never present one isolated card; they're dense
+          // overlapping stands where no single flat plane is ever alone
+          // enough to read as flat. 3-6 trees per spawn point, offset in a
+          // tight radius, same species per cluster (matches how real
+          // conifer/broadleaf stands actually group) with scale/rotation
+          // variance so it doesn't look stamped.
+          const clusterCount = Math.floor(this.prng.range(3, 7));
+          for (let ci = 0; ci < clusterCount; ci++) {
+            const leafColHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
+            const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 5.0, 0, (this.prng.next() - 0.5) * 5.0);
+            const cPos = nearPos.clone().add(cOffset);
+            cPos.y = calcTerrainY(cPos, side * nearDist);
 
-          if (isPine) {
-            // Multi-Tiered Forest Pine Tree (3 stacked conical crowns)
-            const tierMat1 = new THREE.MeshStandardMaterial({ color: leafColHex });
-            const tierMat2 = new THREE.MeshStandardMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.9) });
-            const tierMat3 = new THREE.MeshStandardMaterial({ color: new THREE.Color(leafColHex).multiplyScalar(0.8) });
-
-            const crown1 = new THREE.Mesh(new THREE.ConeGeometry(2.4, 2.2, 10), tierMat1);
-            crown1.position.y = 2.4;
-            const crown2 = new THREE.Mesh(new THREE.ConeGeometry(1.8, 1.9, 10), tierMat2);
-            crown2.position.y = 3.6;
-            const crown3 = new THREE.Mesh(new THREE.ConeGeometry(1.2, 1.6, 10), tierMat3);
-            crown3.position.y = 4.7;
-
-            tree.add(crown1);
-            tree.add(crown2);
-            tree.add(crown3);
-          } else {
-            const leaves = new THREE.Mesh(decLeavesGeom, leavesMat);
-            leaves.position.y = 3.4;
-            tree.add(leaves);
+            const scale = this.prng.range(0.8, 1.6);
+            // Deferred, not added directly: buildings (cabins in particular)
+            // are placed later in this same loop iteration, so a tree
+            // registered immediately here has no way to know about a
+            // cabin that hasn't spawned yet — the two would silently overlap
+            // (reported directly: a tree canopy clipping straight through a
+            // delivery cabin's roof). Queue a lightweight descriptor (not a
+            // built mesh — see buildInstancedBatches) and resolve overlaps
+            // in one pass after every prop for the whole route is placed.
+            pendingTrees.push({
+              kind: isPine ? 'pine' : 'broadleaf', worldHeight: 7.0, tintHex: leafColHex,
+              pos: cPos.clone(), scale, rotY: this.prng.next() * Math.PI * 2,
+              radius: 1.1 * scale
+            });
           }
-
-          const scale = this.prng.range(0.9, 1.7);
-          tree.scale.set(scale, scale, scale);
-          tree.position.copy(nearPos);
-          // Deferred, not added directly: buildings (cabins in particular)
-          // are placed later in this same loop iteration, so a tree built
-          // and registered immediately here has no way to know about a
-          // cabin that hasn't spawned yet — the two would silently overlap
-          // (reported directly: a tree canopy clipping straight through a
-          // delivery cabin's roof). Queue it and resolve overlaps in one
-          // pass after every prop for the whole route has been placed.
-          pendingTrees.push({ tree, pos: nearPos.clone(), radius: 1.3 * scale });
           } // end spawnTree
 
           // Background-fill trees: the near-road pass above only plants out
@@ -2961,35 +3084,26 @@
             const bgDist = side * this.prng.range(24.0, 90.0);
             const bgPos = pt.clone().addScaledVector(normal, bgDist);
             bgPos.y = calcTerrainY(bgPos, bgDist);
-
             const bgIsPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
-            const bgLeafHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
-            const bgLeavesMat = new THREE.MeshStandardMaterial({ color: bgLeafHex });
-            const bgScale = this.prng.range(0.8, 1.5); // background trees can run larger — read fine from a distance, and vary the treeline silhouette
-            const bgTree = new THREE.Group();
-            const bgTrunk = new THREE.Mesh(trunkGeom, trunkMat);
-            bgTrunk.position.y = 1.4;
-            bgTree.add(bgTrunk);
-            if (bgIsPine) {
-              const bgTier1 = new THREE.Mesh(new THREE.ConeGeometry(2.2, 3.4, 10), bgLeavesMat);
-              bgTier1.position.y = 3.6;
-              const bgTier2 = new THREE.Mesh(new THREE.ConeGeometry(1.7, 2.8, 10), bgLeavesMat);
-              bgTier2.position.y = 5.6;
-              const bgTier3 = new THREE.Mesh(new THREE.ConeGeometry(1.2, 2.2, 10), bgLeavesMat);
-              bgTier3.position.y = 7.2;
-              bgTree.add(bgTier1, bgTier2, bgTier3);
-            } else {
-              // Reuses the shared, already-smoothed decLeavesGeom instead of
-              // allocating a fresh un-smoothed DodecahedronGeometry(2.4, 0)
-              // per background tree — was silently bypassing the flat-
-              // shading fix above for every one of these.
-              const bgCanopy = new THREE.Mesh(decLeavesGeom, bgLeavesMat);
-              bgCanopy.position.y = 4.6;
-              bgTree.add(bgCanopy);
+
+            // Same clustering fix as the near-road pass — a dense treeline
+            // reads as a continuous hillside forest instead of scattered
+            // isolated cards, and background trees can afford a slightly
+            // bigger cluster since they're cheap (2 planes each) and read
+            // fine from range.
+            const bgClusterCount = Math.floor(this.prng.range(4, 9));
+            for (let ci = 0; ci < bgClusterCount; ci++) {
+              const bgLeafHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
+              const bgOffset = new THREE.Vector3((this.prng.next() - 0.5) * 9.0, 0, (this.prng.next() - 0.5) * 9.0);
+              const cBgPos = bgPos.clone().add(bgOffset);
+              cBgPos.y = calcTerrainY(cBgPos, bgDist);
+              const bgScale = this.prng.range(0.8, 1.5); // background trees can run larger — read fine from a distance, and vary the treeline silhouette
+              pendingTrees.push({
+                kind: bgIsPine ? 'pine' : 'broadleaf', worldHeight: 9.0, tintHex: bgLeafHex,
+                pos: cBgPos.clone(), scale: bgScale, rotY: this.prng.next() * Math.PI * 2,
+                radius: 1.1 * bgScale
+              });
             }
-            bgTree.scale.setScalar(bgScale);
-            bgTree.position.copy(bgPos);
-            pendingTrees.push({ tree: bgTree, pos: bgPos.clone(), radius: 1.3 * bgScale });
           }
 
           // City Skyline: procedural skyscrapers set well back beyond the
@@ -3878,17 +3992,26 @@
       // stalls, cabins, monuments, skyline) has been placed and registered
       // in this.obstacles — a tree queued anywhere in the loop above can
       // now see buildings regardless of which ran first for a given index.
-      pendingTrees.forEach(({ tree, pos, radius }) => {
+      // Filter first, build InstancedMesh batches after — building the
+      // actual mesh per descriptor here (the original approach) meant one
+      // THREE.Mesh draw call per tree regardless of shared geometry;
+      // clustering pushed that to 8556 separate draw calls at ~22 FPS.
+      // buildInstancedBatches collapses all accepted trees into ~32 draw
+      // calls total (one InstancedMesh per kind/height/tint/plane bucket)
+      // regardless of instance count.
+      const acceptedTrees = [];
+      pendingTrees.forEach((d) => {
         const overlapsBuilding = this.obstacles.some(o =>
-          o.type === 'building' && o.pos.distanceTo(pos) < (o.radius + radius + 1.0)
+          o.type === 'building' && o.pos.distanceTo(d.pos) < (o.radius + d.radius + 1.0)
         );
         if (overlapsBuilding) return;
         // Same hairpin/switchback risk as skyscrapers, just at a shorter
         // offset — the curve can loop back near a tree's local placement.
-        if (!clearsRoad(pos, CONFIG.ROAD_WIDTH * 0.55 + radius)) return;
-        this.foliageGroup.add(tree);
-        this.obstacles.push({ pos, radius, type: 'tree' });
+        if (!clearsRoad(d.pos, CONFIG.ROAD_WIDTH * 0.55 + d.radius)) return;
+        acceptedTrees.push(d);
+        this.obstacles.push({ pos: d.pos, radius: d.radius, type: 'tree' });
       });
+      this.foliageGroup.add(TreeBillboardFactory.buildInstancedBatches(acceptedTrees));
 
       // Resolve fence overlaps against the now-complete obstacle list
       // (buildings/shops/skyscrapers/rocks/trees). The house-checkpoint
