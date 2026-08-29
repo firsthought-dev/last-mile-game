@@ -4719,15 +4719,17 @@
     getLateralClamp(splineProgress, side) {
       const TOTAL_POINTS = 800; // matches createFoliageAndProps' getSpacedPoints(800)
       const i = Math.round(splineProgress * TOTAL_POINTS);
-      const avgSegStep = this.curve.getLength() / TOTAL_POINTS;
+      const avgSegStep = (this.curve ? this.curve.getLength() : 5000) / TOTAL_POINTS;
       const nearestHouseCheckpoint = Math.round(i / 24) * 24;
       const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
       const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
       const FENCE_GAP_RADIUS = 18.0;
       const hasGap = (side === houseCheckpointSide) && (distToHouse < FENCE_GAP_RADIUS);
-      if (hasGap) return 9.0; // full shoulder range through the open gate to the house
-      const FENCE_LATERAL_DIST = CONFIG.ROAD_WIDTH * 0.5 + 2.2; // matches the fence's own placement distance
-      return FENCE_LATERAL_DIST - 0.4; // small margin so the car stops short of the posts, not visually inside them
+      if (hasGap) return 8.0; // full shoulder range through the open gate to the house
+      const FENCE_LATERAL_DIST = CONFIG.ROAD_WIDTH * 0.5 + 2.2; // 5.9m
+      const CAR_HALF_WIDTH = 1.05; // accounts for 1.9m chassis width + side mirrors
+      const BARRIER_MARGIN = 0.15; // clearance buffer so car panels/mirrors glance along fence without penetrating posts
+      return FENCE_LATERAL_DIST - CAR_HALF_WIDTH - BARRIER_MARGIN; // 4.70m from centerline
     }
 
     updateCrossers(dt) {
