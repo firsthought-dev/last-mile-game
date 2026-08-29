@@ -1823,6 +1823,9 @@
         curZ += Math.cos(curAngle) * stepDist;
       }
 
+      this.angleHistory = angleHistory;
+      this.repulsors = repulsors;
+      this.lastScoutAngle = curAngle;
       this.curve = new THREE.CatmullRomCurve3(this.splineNodes, false, 'centripetal');
       this.computeTunnelZones();
 
@@ -1838,6 +1841,107 @@
         if (n.z > maxZ) maxZ = n.z;
       }
       this.worldBounds = { minX, maxX, minZ, maxZ };
+    }
+
+    // Incremental Forward Highway Spline Scout (Infinite Highway Streaming)
+    extendSpline(count = 50) {
+      const stepDist = 10.0;
+      let windingWeight = 0.55;
+      let maxGrade = 0.08;
+
+      if (this.cityKey === 'pune') {
+        windingWeight = 0.85;
+        maxGrade = 0.12;
+      } else if (this.cityKey === 'mumbai') {
+        windingWeight = 0.60;
+        maxGrade = 0.07;
+      } else if (this.cityKey === 'delhi') {
+        windingWeight = 0.35;
+        maxGrade = 0.05;
+      } else if (this.cityKey === 'kolkata') {
+        windingWeight = 0.48;
+        maxGrade = 0.06;
+      } else {
+        windingWeight = 0.65;
+        maxGrade = 0.09;
+      }
+
+      const candidateDeltas = [-0.30, -0.15, 0.0, 0.15, 0.30];
+      let lastNode = this.splineNodes[this.splineNodes.length - 1];
+      let curX = lastNode.x, curY = lastNode.y, curZ = lastNode.z;
+      let curAngle = this.lastScoutAngle || 0;
+
+      for (let i = 0; i < count; i++) {
+        const macroNoise = this.simplex.noise2D(curX * 0.0006, curZ * 0.0006) * 1.8;
+        const targetBias = macroNoise * windingWeight;
+
+        let bestAngle = curAngle;
+        let bestScore = Infinity;
+        let bestCandidateY = curY;
+
+        for (let k = 0; k < candidateDeltas.length; k++) {
+          const delta = candidateDeltas[k];
+          const candAngle = curAngle + delta;
+
+          let angleViolated = false;
+          if (this.angleHistory && this.angleHistory.length >= 5) {
+            const sumTurn5 = Math.abs(candAngle - this.angleHistory[this.angleHistory.length - 5]);
+            if (sumTurn5 > 1.57) angleViolated = true;
+          }
+          if (this.angleHistory && this.angleHistory.length >= 15) {
+            const sumTurn15 = Math.abs(candAngle - this.angleHistory[this.angleHistory.length - 15]);
+            if (sumTurn15 > 2.79) angleViolated = true;
+          }
+          if (this.angleHistory && this.angleHistory.length >= 30) {
+            const sumTurn30 = Math.abs(candAngle - this.angleHistory[this.angleHistory.length - 30]);
+            if (sumTurn30 > 3.49) angleViolated = true;
+          }
+
+          if (angleViolated) continue;
+
+          const candX = curX + Math.sin(candAngle) * stepDist;
+          const candZ = curZ + Math.cos(candAngle) * stepDist;
+
+          const rawTerrainY = this.getRawTerrainHeight(candX, candZ);
+          let candY = THREE.MathUtils.lerp(curY, rawTerrainY + 0.6, 0.25);
+          const slopeGrade = Math.abs(candY - curY) / stepDist;
+
+          let repulsorForce = 0;
+          if (this.repulsors) {
+            for (let r = Math.max(0, this.repulsors.length - 30); r < this.repulsors.length; r++) {
+              const d = this.repulsors[r].distanceTo(new THREE.Vector2(candX, candZ));
+              if (d < 50.0) {
+                repulsorForce += (50.0 - d) * 3.0;
+              }
+            }
+          }
+
+          const angleCost = Math.abs(candAngle - curAngle - targetBias * 0.2);
+          const slopeCost = Math.max(0, slopeGrade - maxGrade) * 35.0 + slopeGrade * 5.0;
+          const score = slopeCost * 1.5 + angleCost * 2.0 + repulsorForce;
+
+          if (score < bestScore) {
+            bestScore = score;
+            bestAngle = candAngle;
+            bestCandidateY = candY;
+          }
+        }
+
+        curAngle = THREE.MathUtils.lerp(curAngle, bestAngle, 0.45);
+        const yDelta = Math.max(-maxGrade * stepDist, Math.min(maxGrade * stepDist, bestCandidateY - curY));
+        curY += yDelta;
+        curX += Math.sin(curAngle) * stepDist;
+        curZ += Math.cos(curAngle) * stepDist;
+
+        this.splineNodes.push(new THREE.Vector3(curX, curY, curZ));
+        this.angleHistory.push(curAngle);
+        if (this.splineNodes.length % 8 === 0) {
+          this.repulsors.push(new THREE.Vector2(curX, curZ));
+        }
+      }
+
+      this.lastScoutAngle = curAngle;
+      this.curve = new THREE.CatmullRomCurve3(this.splineNodes, false, 'centripetal');
     }
 
     createSkyDome(season, todKey = 'day') {
@@ -4661,6 +4765,235 @@
             leg.rotation.x = (idx % 2 === 0 ? swing : -swing);
           });
         }
+      }
+    }
+
+    // Infinite Highway Streaming Engine (Slow Roads Parity)
+    updateStreaming(carPos, scene, season, difficulty = 'medium', roadTerrainKey = 'asphalt') {
+      if (!this.curve || !this.splineNodes || this.splineNodes.length < 10) return;
+
+      const lastNode = this.splineNodes[this.splineNodes.length - 1];
+      const distToEnd = carPos.distanceTo(lastNode);
+
+      // When the car gets within 1600m of the forward scout horizon, scout another 1000m ahead
+      if (distToEnd < 1600) {
+        const oldLength = this.splineNodes.length;
+        this.extendSpline(100); // add 1000m of new highway nodes
+        const newLength = this.splineNodes.length;
+
+        // Recompute banking and spaced points for the extended highway
+        const totalSegments = newLength * 3;
+        this.roadSpacedPoints = this.curve.getSpacedPoints(totalSegments);
+        this.roadBankingAngles = new Float32Array(totalSegments + 1);
+        this.roadNormals = new Array(totalSegments + 1);
+        this.roadBinormals = new Array(totalSegments + 1);
+        this.roadBankedUp = new Array(totalSegments + 1);
+
+        for (let i = 0; i <= totalSegments; i++) {
+          const pt = this.roadSpacedPoints[i];
+          let tangent;
+          if (i === 0) tangent = new THREE.Vector3().subVectors(this.roadSpacedPoints[1], this.roadSpacedPoints[0]).normalize();
+          else if (i === totalSegments) tangent = new THREE.Vector3().subVectors(this.roadSpacedPoints[totalSegments], this.roadSpacedPoints[totalSegments - 1]).normalize();
+          else tangent = new THREE.Vector3().subVectors(this.roadSpacedPoints[i + 1], this.roadSpacedPoints[i - 1]).normalize();
+
+          const worldUp = new THREE.Vector3(0, 1, 0);
+          const normal = new THREE.Vector3().crossVectors(tangent, worldUp).normalize();
+          const binormal = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+
+          let curvature = 0;
+          if (i < totalSegments) {
+            const nextTang = (i < totalSegments - 1)
+              ? new THREE.Vector3().subVectors(this.roadSpacedPoints[i + 2], this.roadSpacedPoints[i]).normalize()
+              : new THREE.Vector3().subVectors(this.roadSpacedPoints[totalSegments], this.roadSpacedPoints[totalSegments - 1]).normalize();
+            curvature = tangent.x * nextTang.z - tangent.z * nextTang.x;
+          }
+
+          const bankingAngle = THREE.MathUtils.clamp(curvature * 2.2, -0.10, 0.10);
+          const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
+          this.roadBankingAngles[i] = bankingAngle;
+          this.roadNormals[i] = normal.clone();
+          this.roadBinormals[i] = binormal.clone();
+          this.roadBankedUp[i] = bankedUp.clone();
+        }
+
+        // Generate forward extension meshes for road, lane markings, terrain, and roadside props
+        this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, roadTerrainKey);
+      }
+    }
+
+    buildExtensionMeshes(scene, oldNodeCount, newNodeCount, season, difficulty = 'medium', roadTerrainKey = 'asphalt') {
+      const startSeg = Math.max(0, (oldNodeCount - 1) * 3);
+      const endSeg = (newNodeCount) * 3;
+      const points = this.roadSpacedPoints;
+      if (!points || points.length <= endSeg) return;
+
+      const roadWidth = CONFIG.ROAD_WIDTH;
+      const shoulderWidth = CONFIG.ROAD_SHOULDER_WIDTH;
+      const laneHalf = roadWidth * 0.5;
+      const offsets = [
+        -laneHalf - shoulderWidth,
+        -laneHalf,
+        -laneHalf * 0.46 / 0.5,
+        0.0,
+        laneHalf * 0.46 / 0.5,
+        laneHalf,
+        laneHalf + shoulderWidth
+      ];
+
+      const baseTarmac = new THREE.Color(0x3a3d40);
+      const vergeColor = new THREE.Color(0x2d3033);
+
+      // 1. Road extension mesh
+      const roadGeom = new THREE.BufferGeometry();
+      const rPositions = [], rNormals = [], rUvs = [], rColors = [], rIndices = [];
+
+      for (let i = startSeg; i <= endSeg; i++) {
+        const pt = points[i];
+        const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
+        const binormal = this.roadBinormals[i] || new THREE.Vector3(0, 1, 0);
+        const bankingAngle = this.roadBankingAngles[i] || 0;
+        const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
+        const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
+
+        for (let j = 0; j < offsets.length; j++) {
+          const off = offsets[j];
+          const isVerge = (j === 0 || j === 6);
+          const p = pt.clone().addScaledVector(isVerge ? normal : bankedNormal, off);
+          if (isVerge) {
+            p.y = this.groundHeightAt(pt, p, off) + CONFIG.ROAD_VERGE_LIFT;
+          } else {
+            p.addScaledVector(bankedUp, 0.12);
+          }
+          rPositions.push(p.x, p.y, p.z);
+          rNormals.push(bankedUp.x, bankedUp.y, bankedUp.z);
+          rUvs.push(off * 0.5, i * 0.3);
+          if (isVerge) {
+            rColors.push(vergeColor.r, vergeColor.g, vergeColor.b);
+          } else {
+            rColors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
+          }
+        }
+
+        if (i < endSeg) {
+          const cols = offsets.length;
+          const row1 = (i - startSeg) * cols;
+          const row2 = (i - startSeg + 1) * cols;
+          for (let j = 0; j < cols - 1; j++) {
+            rIndices.push(row1 + j, row1 + j + 1, row2 + j);
+            rIndices.push(row1 + j + 1, row2 + j + 1, row2 + j);
+          }
+        }
+      }
+
+      roadGeom.setAttribute('position', new THREE.Float32BufferAttribute(rPositions, 3));
+      roadGeom.setAttribute('color', new THREE.Float32BufferAttribute(rColors, 3));
+      roadGeom.setAttribute('normal', new THREE.Float32BufferAttribute(rNormals, 3));
+      roadGeom.setAttribute('uv', new THREE.Float32BufferAttribute(rUvs, 2));
+      roadGeom.setIndex(rIndices);
+      roadGeom.computeVertexNormals();
+
+      const roadMesh = new THREE.Mesh(roadGeom, this.roadMesh ? this.roadMesh.material : new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.85, metalness: 0.05, map: RealTextureFactory.roadColor() }));
+      roadMesh.receiveShadow = true;
+      scene.add(roadMesh);
+
+      // 2. Terrain ribbon extension mesh
+      const lateralSlices = [
+        -45.0, -30.0, -18.0, -9.0, -laneHalf - shoulderWidth,
+        laneHalf + shoulderWidth, 9.0, 18.0, 30.0, 45.0
+      ];
+      const sliceCount = lateralSlices.length;
+      const tGeom = new THREE.BufferGeometry();
+      const tPositions = [], tNormals = [], tUvs = [], tColors = [], tIndices = [];
+      const grassCol = new THREE.Color(season.grassColor);
+      const grassLight = new THREE.Color(season.grassLight);
+      const cliffCol = new THREE.Color(season.cliffColor);
+      const vividGreen = new THREE.Color(0x4a7c3f);
+      const khaki = new THREE.Color(0xc9bb84);
+
+      for (let i = startSeg; i <= endSeg; i++) {
+        const pt = points[i];
+        const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
+        const binormal = this.roadBinormals[i] || new THREE.Vector3(0, 1, 0);
+        const bankingAngle = this.roadBankingAngles[i] || 0;
+
+        for (let j = 0; j < sliceCount; j++) {
+          const latDist = lateralSlices[j];
+          const absDist = Math.abs(latDist);
+          const bankedYOffset = latDist * binormal.y * Math.sin(bankingAngle);
+          const worldPos = pt.clone().addScaledVector(normal, latDist);
+          let finalY = pt.y;
+
+          if (absDist <= laneHalf) {
+            finalY = pt.y - 0.18 + bankedYOffset;
+            tColors.push(grassLight.r, grassLight.g, grassLight.b);
+          } else if (absDist <= 9.0) {
+            const t = (absDist - laneHalf) / (9.0 - laneHalf);
+            finalY = pt.y - 0.18 - t * 0.32 + bankedYOffset * (1 - t);
+            const GREEN_BAND_T = 1.2 / (9.0 - laneHalf);
+            if (t <= GREEN_BAND_T) {
+              tColors.push(vividGreen.r, vividGreen.g, vividGreen.b);
+            } else {
+              const bandT = THREE.MathUtils.smoothstep(t, GREEN_BAND_T, GREEN_BAND_T + 0.15);
+              const bladeNoise = 0.88 + this.simplex.noise2D(worldPos.x * 0.5, worldPos.z * 0.5) * 0.18;
+              tColors.push(
+                THREE.MathUtils.lerp(vividGreen.r, khaki.r * bladeNoise, bandT),
+                THREE.MathUtils.lerp(vividGreen.g, khaki.g * bladeNoise, bandT),
+                THREE.MathUtils.lerp(vividGreen.b, khaki.b * bladeNoise, bandT)
+              );
+            }
+          } else {
+            const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
+            const blendFactor = THREE.MathUtils.smoothstep(absDist, 9.0, 45.0);
+            const shoulderDrop = pt.y - 0.5;
+            finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
+            const slope = Math.abs(finalY - pt.y) / absDist;
+            const col = (slope > 0.45) ? cliffCol : (this.simplex.noise2D(worldPos.x * 0.05, worldPos.z * 0.05) > 0.2 ? grassCol : grassLight);
+            tColors.push(col.r, col.g, col.b);
+          }
+
+          tPositions.push(worldPos.x, finalY, worldPos.z);
+          tNormals.push(0, 1, 0);
+          tUvs.push(latDist * 0.05, i * 0.3);
+        }
+
+        if (i < endSeg) {
+          const row1 = (i - startSeg) * sliceCount;
+          const row2 = (i - startSeg + 1) * sliceCount;
+          for (let j = 0; j < sliceCount - 1; j++) {
+            tIndices.push(row1 + j, row1 + j + 1, row2 + j);
+            tIndices.push(row1 + j + 1, row2 + j + 1, row2 + j);
+          }
+        }
+      }
+
+      tGeom.setAttribute('position', new THREE.Float32BufferAttribute(tPositions, 3));
+      tGeom.setAttribute('color', new THREE.Float32BufferAttribute(tColors, 3));
+      tGeom.setAttribute('normal', new THREE.Float32BufferAttribute(tNormals, 3));
+      tGeom.setAttribute('uv', new THREE.Float32BufferAttribute(tUvs, 2));
+      tGeom.setIndex(tIndices);
+      tGeom.computeVertexNormals();
+
+      const terrainMesh = new THREE.Mesh(tGeom, this.terrainMesh ? this.terrainMesh.material : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0.02, map: RealTextureFactory.grassColor() }));
+      terrainMesh.receiveShadow = true;
+      scene.add(terrainMesh);
+
+      // 3. Roadside Props (Trees, rocks, streetlights) along the new segment
+      const newTrees = [];
+      for (let i = startSeg; i <= endSeg; i += 6) {
+        const pt = points[i];
+        const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
+        [-1, 1].forEach(side => {
+          const lat = (12.0 + (this.prng ? this.prng.next() : Math.random()) * 28.0) * side;
+          const p = pt.clone().addScaledVector(normal, lat);
+          p.y = this.groundHeightAt(pt, p, lat);
+          const scale = 3.5 + (this.prng ? this.prng.next() : Math.random()) * 3.5;
+          newTrees.push({ pos: p, scale, radius: 2.2 });
+          this.obstacles.push({ pos: p, radius: 2.2, type: 'tree' });
+        });
+      }
+      if (newTrees.length > 0) {
+        const treeBatch = TreeBillboardFactory.buildInstancedBatches(newTrees);
+        scene.add(treeBatch);
       }
     }
   }
@@ -8018,10 +8351,11 @@
       // Draw Spline Road Ahead on Radar
       if (this.world.curve) {
         const curU = this.vehicle.splineProgress;
+        const totalLen = Math.max(100, this.world.curve.getLength());
         const pts = [];
 
         for (let i = -4; i <= 36; i++) {
-          const sampleU = (curU + i * 0.0022 + 1.0) % 1.0;
+          const sampleU = THREE.MathUtils.clamp(curU + (i * 6.0) / totalLen, 0, 1);
           const pt = this.world.curve.getPointAt(sampleU);
           const rel = pt.clone().sub(carPos);
 
@@ -8104,6 +8438,12 @@
             sound.updateDrivingAmbience(this.vehicle.speed, this.vehicle.maxSpeed, (this.vehicle.speed - (this.vehicle.lastSpeed || this.vehicle.speed)) / Math.max(0.01, dt));
           }
         }
+
+        // Infinite Forward Highway Chunk Streaming (Slow Roads Parity)
+        if (this.world && this.world.updateStreaming && this.vehicle && this.vehicle.mesh) {
+          this.world.updateStreaming(this.vehicle.mesh.position, this.scene, CONFIG.SEASONS[this.selectedSeason], this.selectedDifficulty, this.selectedRoadTerrain);
+        }
+
         this.world.updateTraffic(dt);
         this.world.updateCrossers(dt);
         this.checkCrosserCollisions();
@@ -8121,22 +8461,14 @@
             this.spawnDust(this.vehicle.mesh.position, 1);
           }
         }
-        // updateOrderTimer() call removed — it fired live "TIME EXPIRED"/
-        // "DELIVERY MISSED" penalty notifications and earnings deductions
-        // during driving, a real leftover from the courier loop the
-        // dispatch UI removal (Master Prompt section 1) missed since it
-        // only touched HUD markup, not this per-frame timer tick. Caught
-        // live: an actual "TIME EXPIRED! Penalty -₹25" banner appeared
-        // during a verification drive with no dispatch UI on screen.
         this.updateCamera(dt);
         this.updateGPSNavigation();
         this.updateClimateHUD();
         this.updateHealthHUD();
 
-        // Infinite Highway District Transition (Option B)
-        // When vehicle reaches the end of the scenic 5km route corridor (u >= 0.96),
-        // smoothly transition to the next highway district with fresh orders and bonus cash!
-        if (!this.onFoot && this.vehicle.splineProgress >= 0.96 && !this.districtTransitioning) {
+        // Infinite Highway District Milestones (Seamless progression every 5 km)
+        const nextDistrictThreshold = (this.currentDistrict || 1) * 5.0;
+        if (!this.onFoot && this.vehicle.distanceTraveled >= nextDistrictThreshold && !this.districtTransitioning) {
           this.districtTransitioning = true;
           this.currentDistrict = (this.currentDistrict || 1) + 1;
           const bonus = 150;
@@ -8145,21 +8477,10 @@
           this.addNotification(`🏙️ ENTERED DISTRICT ${this.currentDistrict}! Highway Bonus +₹${bonus}`, 'success', 4000);
           this.showScorePopup(bonus, `DISTRICT ${this.currentDistrict} REACHED!`);
 
-          // Smoothly reset vehicle to route start preserving speed & momentum
-          this.vehicle.resetToSpline(this.world.curve, 0.008, true);
+          // Smoothly cycle time of day across highway districts
+          this.cycleTimeOfDay();
 
-          // Reset order targets for continuous delivery gameplay
-          if (this.world.deliveryTargets) {
-            this.world.deliveryTargets.forEach(t => {
-              t.delivered = false;
-              t.missed = false;
-              if (t.mesh) t.mesh.visible = true;
-            });
-            this.activeOrderIndex = 0;
-            this.updateActiveOrderCard();
-          }
-
-          setTimeout(() => { this.districtTransitioning = false; }, 3500);
+          setTimeout(() => { this.districtTransitioning = false; }, 5000);
         }
 
         // Automatic Breakdown & Stuck Recovery Detection — skipped while on
