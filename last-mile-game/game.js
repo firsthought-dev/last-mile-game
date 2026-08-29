@@ -5830,9 +5830,12 @@
       const halfWheelbase = 1.45, halfTrack = 0.8;
 
       // Road surface slab sits at groundY + bankedYOffset + 0.12 (from createRoadMesh's slab offset).
-      // Since the 3D vehicle model's tire bottoms sit at local Y = 0.00, placing vehiclePos.y at
-      // groundY + bankedYOffset + 0.12 rests the tires flush onto the tarmac with 0 floating gap.
+      // Base ride height buffer (+0.08m) ensures the tire tread profile rests firmly atop the asphalt
+      // and dynamic pitch/roll compensation prevents the front/rear or outer tires from dipping below the road plane on grades.
       const roadSlabLift = 0.12;
+      const rideHeightBuffer = 0.08;
+      const dynamicPitchDrop = Math.abs(Math.sin(this.currentPitch || 0)) * halfWheelbase;
+      const dynamicRollDrop = Math.abs(Math.sin(this.currentRoll || 0)) * halfTrack;
 
       // Surface elevation bump on gravel / mud
       let terrainBump = 0;
@@ -5840,7 +5843,7 @@
         terrainBump = Math.sin(Date.now() * 0.035 * (this.speed / 10)) * 0.04;
       }
 
-      vehiclePos.y = groundY + bankedYOffset + roadSlabLift + terrainBump;
+      vehiclePos.y = groundY + bankedYOffset + roadSlabLift + rideHeightBuffer + dynamicPitchDrop + dynamicRollDrop + terrainBump;
       this.mesh.position.copy(vehiclePos);
 
       // 4. Chassis orientation now comes directly from `heading` (the
@@ -5941,8 +5944,8 @@
       const pt = curve.getPointAt(this.splineProgress);
       const tangent = curve.getTangentAt(this.splineProgress).normalize();
       this.mesh.position.copy(pt);
-      // Matches groundHeightAt(pt.y - 0.18) + roadSlabLift(0.12) = pt.y - 0.06
-      this.mesh.position.y = pt.y - 0.06;
+      // Matches groundHeightAt(pt.y - 0.18) + roadSlabLift(0.12) + rideHeightBuffer(0.08) = pt.y + 0.02
+      this.mesh.position.y = pt.y + 0.02;
       this.heading = Math.atan2(tangent.x, tangent.z);
       this.velocityHeading = this.heading;
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
@@ -5972,7 +5975,7 @@
       const pt = curve.getPointAt(bestU);
       const tangent = curve.getTangentAt(bestU).normalize();
       this.mesh.position.copy(pt);
-      this.mesh.position.y = pt.y - 0.06;
+      this.mesh.position.y = pt.y + 0.02;
       this.heading = Math.atan2(tangent.x, tangent.z);
       this.velocityHeading = this.heading;
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
