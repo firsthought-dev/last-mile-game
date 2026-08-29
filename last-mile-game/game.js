@@ -5872,34 +5872,72 @@
       const tangent = proj.tangent;
       const roadRight = proj.normal;
 
-      // Follow the actual carved road/shoulder surface, not the spline centerline height
-      const groundY = world.groundHeightAt(proj.pt, vehiclePos, latDist);
+      // 4-Wheel Contact Ground Plane Evaluation (Slow Roads Exact Parity)
+      const halfWheelbase = 1.45;
+      const halfTrack = 0.82;
+      const carHeading = this.heading;
+      const carFwd = new THREE.Vector3(Math.sin(carHeading), 0, Math.cos(carHeading));
+      const carRight = new THREE.Vector3(-Math.cos(carHeading), 0, Math.sin(carHeading));
 
-      const bankPts = world.roadSpacedPoints;
-      const bankAngles = world.roadBankingAngles;
-      let bankingAngle = 0, bankTangent = tangent;
-      if (bankAngles && bankPts && bankPts.length > 2) {
-        const segs = bankPts.length - 1;
-        const rawIdx = THREE.MathUtils.clamp(proj.u * segs, 0, segs - 1);
-        const i0 = Math.floor(rawIdx), i1 = Math.min(i0 + 1, segs - 1);
-        const frac = rawIdx - i0;
-        bankingAngle = THREE.MathUtils.lerp(bankAngles[i0] || 0, bankAngles[i1] || 0, frac);
-        const tan0 = (i0 < segs - 1) ? new THREE.Vector3().subVectors(bankPts[i0 + 1], bankPts[Math.max(0, i0 - 1)]).normalize() : tangent;
-        const tan1 = (i1 < segs - 1) ? new THREE.Vector3().subVectors(bankPts[i1 + 1], bankPts[Math.max(0, i1 - 1)]).normalize() : tangent;
-        bankTangent = tan0.clone().lerp(tan1, frac).normalize();
+      // Model faces local -Z: front axle is at -halfWheelbase along carFwd, rear axle is at +halfWheelbase
+      const wheelOffsets = [
+        { fwd: -halfWheelbase, right: -halfTrack }, // Front-Left
+        { fwd: -halfWheelbase, right: halfTrack },  // Front-Right
+        { fwd: halfWheelbase, right: -halfTrack },  // Rear-Left
+        { fwd: halfWheelbase, right: halfTrack }   // Rear-Right
+      ];
+
+      const wheelWorldPos = wheelOffsets.map(o => {
+        const wp = vehiclePos.clone().addScaledVector(carFwd, o.fwd).addScaledVector(carRight, o.right);
+        const wProj = this.projectToRoad(wp, world.curve, this.splineProgress);
+        const wGroundY = world.groundHeightAt(wProj.pt, wp, wProj.latDist);
+        return { wp, wProj, y: wGroundY };
+      });
+
+      const yFL = wheelWorldPos[0].y;
+      const yFR = wheelWorldPos[1].y;
+      const yRL = wheelWorldPos[2].y;
+      const yRR = wheelWorldPos[3].y;
+
+      const avgFrontY = (yFL + yFR) * 0.5;
+      const avgRearY = (yRL + yRR) * 0.5;
+      const avgLeftY = (yFL + yRL) * 0.5;
+      const avgRightY = (yFR + yRR) * 0.5;
+      const trueGroundCenterY = (yFL + yFR + yRL + yRR) * 0.25;
+
+      // True road grade pitch along car's actual heading orientation:
+      // Front rising (avgFrontY > avgRearY) produces positive rotateX (tilts front UP)
+      const trueRoadPitch = Math.atan2(avgFrontY - avgRearY, halfWheelbase * 2.0);
+      // True road cross-slope roll across car's track width:
+      // Right dropping (avgRightY < avgLeftY) produces negative rotateZ (rolls right)
+      const trueRoadRoll = Math.atan2(avgRightY - avgLeftY, halfTrack * 2.0);
+
+      // Controlled throttle dive/squat (Slow Roads parity):
+      let throttlePitch = 0;
+      if (keys.w || keys.up) {
+        throttlePitch = 0.008; // subtle rear squat on acceleration
+      } else if (keys.s || keys.down) {
+        throttlePitch = -0.012; // subtle front dive on braking
       }
-      const binormal = new THREE.Vector3().crossVectors(roadRight, bankTangent).normalize();
-      const bankedYOffset = latDist * binormal.y * Math.sin(bankingAngle);
+      const targetPitch = trueRoadPitch + throttlePitch;
 
-      const halfWheelbase = 1.45, halfTrack = 0.8;
+      // Centrifugal roll during hard steering
+      const steerRoll = -this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.18;
+      const targetRoll = trueRoadRoll + steerRoll;
 
-      // Road surface slab sits at groundY + bankedYOffset + 0.12 (from createRoadMesh's slab offset).
-      // Base ride height buffer (+0.08m) ensures the tire tread profile rests firmly atop the asphalt
-      // and dynamic pitch/roll compensation prevents the front/rear or outer tires from dipping below the road plane on grades.
-      const roadSlabLift = 0.12;
-      const rideHeightBuffer = 0.08;
-      const dynamicPitchDrop = Math.abs(Math.sin(this.currentPitch || 0)) * halfWheelbase;
-      const dynamicRollDrop = Math.abs(Math.sin(this.currentRoll || 0)) * halfTrack;
+      // 2nd-Order Spring-Mass-Damper Suspension Filter
+      const subDt = Math.min(dt, 0.05);
+      const omegaPitch = 16.0;
+      const zetaPitch = 0.90;
+      const pitchAccel = (omegaPitch * omegaPitch) * (targetPitch - this.currentPitch) - 2.0 * zetaPitch * omegaPitch * this.pitchVelocity;
+      this.pitchVelocity += pitchAccel * subDt;
+      this.currentPitch += this.pitchVelocity * subDt;
+
+      const omegaRoll = 16.0;
+      const zetaRoll = 0.90;
+      const rollAccel = (omegaRoll * omegaRoll) * (targetRoll - this.currentRoll) - 2.0 * zetaRoll * omegaRoll * this.rollVelocity;
+      this.rollVelocity += rollAccel * subDt;
+      this.currentRoll += this.rollVelocity * subDt;
 
       // Surface elevation bump on gravel / mud
       let terrainBump = 0;
@@ -5907,63 +5945,13 @@
         terrainBump = Math.sin(Date.now() * 0.035 * (this.speed / 10)) * 0.04;
       }
 
-      vehiclePos.y = groundY + bankedYOffset + roadSlabLift + rideHeightBuffer + dynamicPitchDrop + dynamicRollDrop + terrainBump;
+      // Exact tire contact height (road slab lift 0.12 + 0.02 cushion)
+      vehiclePos.y = trueGroundCenterY + 0.14 + terrainBump;
       this.mesh.position.copy(vehiclePos);
 
-      // 4. Chassis orientation now comes directly from `heading` (the
-      // car's own true state) instead of being derived from the road
-      // tangent via lookAt — this is precisely what lets it point anywhere,
-      // not just along the curve.
+      // Set chassis orientation: heading yaw + true 4-wheel pitch & roll
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
-
-      // True Road Grade Pitch & Terrain Cross-Slope Roll (Slow Roads Parity).
-      // Samples true road spline elevations ahead and behind the vehicle along its wheelbase,
-      // ensuring the car sits completely level on flat roads and tilts naturally with topography.
-      let roadGradePitch = 0;
-      if (world.curve) {
-        const uStep = halfWheelbase / 5000;
-        const uFwd = (this.splineProgress + uStep + 1.0) % 1.0;
-        const uBwd = (this.splineProgress - uStep + 1.0) % 1.0;
-        const ptFwd = world.curve.getPointAt(uFwd);
-        const ptBwd = world.curve.getPointAt(uBwd);
-        const horizDist = Math.max(0.1, Math.hypot(ptFwd.x - ptBwd.x, ptFwd.z - ptBwd.z));
-        // Model faces local -Z away from Chase Cam: positive rotateX tilts front (-Z) UP, negative tilts front DOWN.
-        // When road rises ahead (ptFwd.y > ptBwd.y), front tilts UP (+rotateX).
-        roadGradePitch = THREE.MathUtils.clamp(Math.atan2(ptFwd.y - ptBwd.y, horizDist), -0.15, 0.15);
-      }
-
-      // Cross-slope roll from shoulder/terrain drop
-      const leftTrackY = world.groundHeightAt(proj.pt, vehiclePos, latDist - halfTrack);
-      const rightTrackY = world.groundHeightAt(proj.pt, vehiclePos, latDist + halfTrack);
-      const terrainRoll = THREE.MathUtils.clamp(Math.atan2(rightTrackY - leftTrackY, halfTrack * 2), -0.15, 0.15);
-
-      // Controlled throttle dive/squat (Slow Roads parity):
-      // On acceleration (keys.w): squat rear / tilt front up (+0.010 rad).
-      // On active braking (keys.s): dive front down (-0.015 rad).
-      let throttlePitch = 0;
-      if (keys.w || keys.up) {
-        throttlePitch = 0.010;
-      } else if (keys.s || keys.down) {
-        throttlePitch = -0.015;
-      }
-      const targetPitch = roadGradePitch + throttlePitch;
-
-      // 2nd-Order Spring-Mass-Damper Suspension Filter
-      const subDt = Math.min(dt, 0.05);
-      const omegaPitch = 14.0; // Natural angular frequency
-      const zetaPitch = 0.88;  // Damping ratio
-      const pitchAccel = (omegaPitch * omegaPitch) * (targetPitch - this.currentPitch) - 2.0 * zetaPitch * omegaPitch * this.pitchVelocity;
-      this.pitchVelocity += pitchAccel * subDt;
-      this.currentPitch += this.pitchVelocity * subDt;
       this.mesh.rotateX(this.currentPitch);
-
-      // Dynamic Chassis Roll (centrifugal roll against turn + bank + terrain cross-slope)
-      const targetRoll = -this.steerAngle * (this.speed / this.maxSpeed) * 0.28 + terrainRoll;
-      const omegaRoll = 15.5;
-      const zetaRoll = 0.88;
-      const rollAccel = (omegaRoll * omegaRoll) * (targetRoll - this.currentRoll) - 2.0 * zetaRoll * omegaRoll * this.rollVelocity;
-      this.rollVelocity += rollAccel * subDt;
-      this.currentRoll += this.rollVelocity * subDt;
       this.mesh.rotateZ(this.currentRoll);
 
       this.wheels.forEach(w => w.rotateX((this.speed * dt) / 0.38));
@@ -8337,8 +8325,14 @@
       // backstop for the sky/drone mode, which has no such clamp.)
       if (this.activeCameraMode !== 'hood' && this.activeCameraMode !== 'first-person') {
         const minClearance = carPos.y + 1.0;
-        if (this.camera.position.y < minClearance) {
-          this.camera.position.y = minClearance;
+        let camMinY = minClearance;
+        if (this.world && this.world.curve && this.vehicle && this.vehicle.projectToRoad) {
+          const camProj = this.vehicle.projectToRoad(this.camera.position, this.world.curve, this.vehicle.splineProgress);
+          const camGroundY = this.world.groundHeightAt(camProj.pt, this.camera.position, camProj.latDist);
+          camMinY = Math.max(minClearance, camGroundY + 0.9);
+        }
+        if (this.camera.position.y < camMinY) {
+          this.camera.position.y = camMinY;
         }
       }
 
