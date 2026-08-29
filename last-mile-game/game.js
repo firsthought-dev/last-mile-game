@@ -1928,7 +1928,6 @@
       const tCfg = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
       const baseTarmac = new THREE.Color(tCfg.color);
       const vergeColor = new THREE.Color(tCfg.color).multiplyScalar(0.72);
-      const whiteLine = new THREE.Color(0xf8fafc);
 
       // 7-Point Cross-Section with Painted Road Stripes
       const offsets = [
@@ -2002,7 +2001,12 @@
           if (j === 0 || j === 6) {
             colors.push(vergeColor.r, vergeColor.g, vergeColor.b);
           } else if (j === 1 || j === 5) {
-            colors.push(whiteLine.r, whiteLine.g, whiteLine.b);
+            // Was a near-white "Solid Edge Stripe" — same blowout problem
+            // as the old yellow center line below: under strong daylight +
+            // ACES tonemapping it read as a soft glowing white band curving
+            // along the road edge rather than a crisp paint stripe.
+            // Removed rather than dimmed, per direct user report + screenshot.
+            colors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
           } else if (j === 3) {
             // Was a bright yellow dashed center line — under strong
             // daylight + ACES tonemapping it crossed the bloom threshold
@@ -3499,9 +3503,43 @@
               // planted in.
               const fenceDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 2.2);
               const fencePos = pt.clone().addScaledVector(normal, fenceDist);
-              fencePos.y = calcTerrainY(fencePos, fenceDist) + 0.05;
-
               const railLen = FENCE_STEP * avgSegStep + 0.6; // slight overlap so segments tile without gaps
+
+              // Sample true ground height at BOTH ends of this short (~6m)
+              // segment, not just its center — with a fence group spawned
+              // this frequently (FENCE_STEP=1), anchoring every segment's
+              // entire flat rail to one single center-point height meant
+              // adjacent segments didn't line up wherever the road grade
+              // changed even slightly, reading as a visibly stepped/uneven
+              // top rail (confirmed directly: sampling consecutive segment
+              // anchor heights in this game showed 0.46->0.48->0.67->0.96->
+              // 1.32m over a handful of segments; compared against
+              // slowroads.io's own reference fence, which reads as one
+              // continuously ground-following line, not stepped). Real
+              // fences follow the ground at each post and let the rail
+              // between them tilt slightly to match — that's the fix here,
+              // not a flat plate per segment.
+              // `calcTerrainY` is a closure bound to THIS iteration's `pt`
+              // (sampledPoints[i]) — correct for endA (near pt), but wrong
+              // for endB (near the NEXT sample point): groundHeightAt uses
+              // its `pt` argument as the road-elevation reference for the
+              // shoulder-drop formula, so calling it with the wrong `pt`
+              // silently computed endB's height relative to the wrong
+              // road-height baseline. That mismatch — not the segment-
+              // anchoring approach itself — is what left a real gap after
+              // the first pass at this fix. endB needs the actual next
+              // sample point as its reference, not the closure's captured
+              // one.
+              const nextPt = sampledPoints[Math.min(i + 1, sampledPoints.length - 1)];
+              const endA = fencePos.clone().addScaledVector(tangent, -railLen / 2);
+              const endB = fencePos.clone().addScaledVector(tangent, railLen / 2);
+              const yA = calcTerrainY(endA, fenceDist) + 0.05;
+              const yB = this.groundHeightAt(nextPt, endB, fenceDist) + 0.05;
+              fencePos.y = (yA + yB) / 2;
+              const offsetA = yA - fencePos.y;
+              const offsetB = yB - fencePos.y;
+              const tiltAngle = Math.atan2(yB - yA, railLen);
+
               const fenceGroup = new THREE.Group();
 
               // Master Prompt section 3: "one of the largest, most obvious
@@ -3527,7 +3565,13 @@
                   // taper and bulge course to course.
                   const jitter = 1.0 - rowIdx * 0.04;
                   const wallRow = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.22, 0.32 * jitter), stoneMat);
+                  // Same terrain-following tilt as the wood fence's rails
+                  // (see the tiltAngle/offsetA/offsetB comment above) — a
+                  // flat-level course would show the same stepped-height
+                  // artifact between adjacent segments the user pointed out
+                  // for the wood fence, on this new stone variant too.
                   wallRow.position.set(0, ry, 0);
+                  wallRow.rotation.z = tiltAngle;
                   wallRow.castShadow = true;
                   fenceGroup.add(wallRow);
                 });
@@ -3542,16 +3586,21 @@
                 const fPostMat = new THREE.MeshStandardMaterial({ color: 0x8a7a68, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 });
                 const fRailMat = new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 });
 
-                // 2 vertical posts
-                [-railLen / 2, railLen / 2].forEach(px => {
+                // 2 vertical posts — each sits at its OWN end's ground
+                // offset (offsetA/offsetB), not both assumed level with the
+                // segment's center — see the tiltAngle comment above.
+                [[-railLen / 2, offsetA], [railLen / 2, offsetB]].forEach(([px, offset]) => {
                   const fPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6), fPostMat);
-                  fPost.position.set(px, 0.6, 0);
+                  fPost.position.set(px, offset + 0.6, 0);
                   fenceGroup.add(fPost);
                 });
-                // 2 horizontal split rails
+                // 2 horizontal split rails — tilted to actually connect the
+                // two posts' (potentially different) heights instead of
+                // sitting perfectly flat regardless of slope.
                 [0.45, 0.85].forEach(ry => {
                   const fRail = new THREE.Mesh(new THREE.BoxGeometry(railLen, 0.08, 0.08), fRailMat);
                   fRail.position.set(0, ry, 0);
+                  fRail.rotation.z = tiltAngle;
                   fenceGroup.add(fRail);
                 });
               }
