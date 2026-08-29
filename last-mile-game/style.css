@@ -641,6 +641,61 @@ html, body {
   background: rgba(239, 35, 60, 0.15);
 }
 
+/* Full-label status pills ("AUDIO: ON", "CAM: CHASE", "60 FPS") — added
+   to match a reference HUD screenshot the user supplied showing labeled
+   pills with a colored status dot, rather than the bare icon-abbreviation
+   buttons (RADIO/CAM/TOD) this HUD used before. Reuses the same dark
+   glass pill look already established by .slowroads-icon-btn so it stays
+   visually consistent with the rest of this bar, just with room for a
+   full label and an optional status dot. */
+.slowroads-status-pill {
+  background: rgba(8, 12, 18, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+button.slowroads-status-pill {
+  cursor: pointer;
+}
+
+div.slowroads-status-pill {
+  cursor: default;
+}
+
+.slowroads-status-pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00d4bf;
+  box-shadow: 0 0 6px rgba(0, 212, 191, 0.8);
+  flex-shrink: 0;
+}
+
+.status-dot.dot-off {
+  background: rgba(255, 255, 255, 0.3);
+  box-shadow: none;
+}
+
 /* --- Floating Toss Directive Reticle (< 35m from Doorstep) --- */
 .slowroads-toss-banner {
   position: absolute;
