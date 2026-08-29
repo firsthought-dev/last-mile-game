@@ -531,8 +531,9 @@
       this.audioEl.volume = 0.70;
       this.audioEl.muted = this.radioMuted;
 
-      // Radio only auto-resumes if the player has explicitly turned it on before
-      this.userWantsRadio = localStorage.getItem('shiplyp_radio_pref') === 'on';
+      // Radio only plays when explicitly started by the player (never autoplay on load)
+      this.userWantsRadio = false;
+      try { localStorage.removeItem('shiplyp_radio_pref'); } catch (e) {}
 
       this.audioEl.addEventListener('ended', () => {
         const trk = this.activePlaylist[this.currentTrackIndex];
@@ -5882,10 +5883,8 @@
       this.initThree();
       this.buildWorldAndScene();
       this.initEvents();
-      this.initHUD();
-
-      // Launch with Landing Page / Dispatch Hub on initial load
-      this.renderDispatchHub();
+      // Launch directly into driving behind the car (Slow Roads Parity)
+      this.startDrive();
 
       this.clock = new THREE.Clock();
       requestAnimationFrame(this.animate.bind(this));
@@ -7378,31 +7377,13 @@
       this.updateHUDStats();
       if (this.vehicle) {
         const carPos = this.vehicle.mesh.position;
-        // Recenter uses the car's actual direction of travel, not its
-        // visual heading — see the comment in updateCamera() below for why.
         const vh = this.vehicle.velocityHeading;
         const carForward = new THREE.Vector3(Math.sin(vh), 0, Math.cos(vh));
-        this.camera.position.copy(carPos.clone().addScaledVector(carForward, -6.8).add(new THREE.Vector3(0, 3.0, 0)));
-        this.camLookTarget = carPos.clone().addScaledVector(carForward, 28.0).add(new THREE.Vector3(0, 0.8, 0));
+        this.camera.position.copy(carPos.clone().addScaledVector(carForward, -7.8).add(new THREE.Vector3(0, 2.6, 0)));
+        this.camLookTarget = carPos.clone().addScaledVector(carForward, 20.0).add(new THREE.Vector3(0, 0.85, 0));
         this.camera.lookAt(this.camLookTarget);
       }
-      sound.ensure();
-      sound.playTone(523, 'sine', 0.2);
       this.updateAudioHUDButtons();
-
-      // Resume radio on the player's saved channel only if they previously opted in
-      if (!sound.radioPlaying && !sound.radioMuted && sound.userWantsRadio) {
-        sound.toggleRadio();
-        const btnPlay = document.getElementById('btn-radio-play');
-        const radioCard = document.getElementById('cassette-radio-card');
-        const radioTitleEl = document.getElementById('radio-track-title');
-        const btnChannel = document.getElementById('btn-radio-channel');
-        if (btnPlay) btnPlay.textContent = 'PAUSE';
-        if (radioCard) radioCard.classList.add('playing');
-        if (btnChannel) btnChannel.textContent = sound.getChannelDisplayName();
-        const trk = sound.realTracks[sound.currentTrackIndex];
-        if (trk && radioTitleEl) radioTitleEl.textContent = sound._formatTrackTitle(trk);
-      }
     }
 
     renderDispatchHub() {
