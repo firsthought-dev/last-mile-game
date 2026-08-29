@@ -2098,10 +2098,11 @@
       starGeom.setAttribute('color', new THREE.Float32BufferAttribute(starColors, 3));
       const starMat = new THREE.PointsMaterial({
         vertexColors: true,
-        size: 3.2,
+        size: 4.8,
         sizeAttenuation: false,
         transparent: true,
-        opacity: (tod.night || this.seasonKey === 'space' ? 0.95 : (tod.id === 'dusk' ? 0.55 : 0.0))
+        blending: THREE.AdditiveBlending,
+        opacity: (tod.night || this.seasonKey === 'space' ? 1.0 : (tod.id === 'dusk' ? 0.65 : 0.0))
       });
       this.starMesh = new THREE.Points(starGeom, starMat);
       this.skyMesh.add(this.starMesh);
@@ -5993,33 +5994,7 @@
       this.mesh.add(headR);
       this.mesh.add(headR.target);
 
-      // Volumetric Forward Headlight Beam Cones (Slow Roads signature forward light beam)
-      const beamGeom = new THREE.ConeGeometry(3.6, 26, 16, 1, true);
-      beamGeom.rotateX(-Math.PI / 2);
-      beamGeom.translate(0, 0, 13);
-      const beamMat = new THREE.MeshBasicMaterial({
-        color: 0xfff3d6,
-        transparent: true,
-        opacity: 0.28,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide
-      });
-
-      const beamL = new THREE.Mesh(beamGeom, beamMat);
-      beamL.position.set(-0.55, 0.55, 1.0);
-      beamL.rotation.x = -0.06;
-      beamL.rotation.y = 0.04;
-      this.mesh.add(beamL);
-
-      const beamR = new THREE.Mesh(beamGeom, beamMat);
-      beamR.position.set(0.55, 0.55, 1.0);
-      beamR.rotation.x = -0.06;
-      beamR.rotation.y = -0.04;
-      this.mesh.add(beamR);
-
       this.headlights = [headL, headR];
-      this.headlightBeams = [beamL, beamR];
       this.scene.add(this.mesh);
     }
 
@@ -6502,12 +6477,6 @@
         this.headlights.forEach(h => {
           h.visible = !!active;
           h.intensity = active ? 3.6 : 0.0;
-        });
-      }
-      if (this.headlightBeams) {
-        this.headlightBeams.forEach(b => {
-          b.visible = !!active;
-          b.material.opacity = active ? 0.35 : 0.0;
         });
       }
     }
@@ -7544,10 +7513,10 @@
         this.weatherMesh = null;
       }
 
-      const isSnow = (this.selectedSeason === 'winter' || this.selectedWeather === 'blizzard');
-      const isRain = (this.selectedSeason === 'summer' || this.selectedSeason === 'autumn' || this.selectedWeather === 'rain');
+      const isSnow = (this.selectedSeason === 'winter' && this.selectedWeather !== 'clear') || (this.selectedWeather === 'blizzard');
+      const isRain = (this.selectedWeather === 'rain');
 
-      if (!isSnow && !isRain && this.selectedWeather !== 'blizzard') return;
+      if (!isSnow && !isRain) return;
 
       const COUNT = 1600;
       const geom = new THREE.BufferGeometry();
