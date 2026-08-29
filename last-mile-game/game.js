@@ -1754,7 +1754,7 @@
           const t = (absDist - roadHalf) / (SHOULDER_TRANSITION - roadHalf);
           const baseShoulderY = pt.y - 0.18 - t * 0.32;
           const bankedYOffset = latDist * Math.sin(bankingAngle) * (1 - t);
-          return baseShoulderY + 0.12 + bankedYOffset;
+          return baseShoulderY + bankedYOffset;
         } else if (absDist <= EMBANKMENT_BLEND) {
           const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
           const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
@@ -2206,8 +2206,11 @@
       this.roadBinormals = new Array(tubularSegments + 1);
       this.roadBankedUp = new Array(tubularSegments + 1);
       const tCfg = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
+      const seasonCfg = CONFIG.SEASONS[this.seasonKey] || CONFIG.SEASONS.autumn;
       const baseTarmac = new THREE.Color(tCfg.color);
-      const vergeColor = new THREE.Color(tCfg.color).multiplyScalar(0.72);
+      // Soft organic transition: verge color blends base tarmac with the shoulder terrain ground tone
+      const shoulderSoilColor = new THREE.Color(seasonCfg.grassLight).lerp(baseTarmac, 0.40);
+      const vergeColor = shoulderSoilColor.clone();
 
       // Lane paint used to be baked into this ribbon's own vertex colors —
       // first as a single column (a bright line that was actually a smooth
@@ -2597,20 +2600,8 @@
       const grassCol = new THREE.Color(season.grassColor);
       const grassLight = new THREE.Color(season.grassLight);
       const cliffCol = new THREE.Color(season.cliffColor);
-      // Master Prompt section 3: roadside ground is two-layered in the
-      // reference — a narrow vivid green strip right at the road edge,
-      // then dominant pale khaki/straw beyond it — not one flat grass
-      // color across the whole shoulder. Applied below to the existing
-      // shoulder-verge zone (roadHalf..9.0m): a ~1.2m vivid-green band
-      // right at the road edge, blending into a pale khaki/straw tone for
-      // the rest of the shoulder. "Visible blade detail" from the spec is
-      // approximated here with per-vertex noise variation on the khaki
-      // band, not new blade geometry — an actual billboard-grass-clump
-      // asset pass (matching TreeBillboardFactory's approach) would be
-      // needed for real geometric detail; disclosed as not done, not
-      // silently skipped.
-      const vividGreen = new THREE.Color(0x4a7c3f);
-      const khaki = new THREE.Color(0xc9bb84);
+      // Biome-aware shoulder soil color matching createRoadMesh's verge color
+      const shoulderSoilColor = new THREE.Color(season.grassLight).lerp(new THREE.Color(0x2a2824), 0.35);
 
       const points = this.tunnelPoints || this.curve.getSpacedPoints(tubularSegments);
 
@@ -2649,33 +2640,22 @@
           let finalY = pt.y;
 
           if (absDist <= roadHalf) {
-            // 1. Under Asphalt: strictly 0.18m below road surface, banked
-            // the same amount the road surface directly above it is.
+            // 1. Under Asphalt: strictly 0.18m below road surface, banked with the road
             finalY = pt.y - 0.18 + bankedYOffset;
-            colors.push(grassLight.r, grassLight.g, grassLight.b);
+            colors.push(shoulderSoilColor.r, shoulderSoilColor.g, shoulderSoilColor.b);
           } else if (absDist <= 9.0) {
-            // 2. Road Shoulder Verge: gentle downward slope from road edge.
-            // Banking fades out across the shoulder (full at the road edge,
-            // zero by the embankment) since the shoulder isn't a rigid part
-            // of the tilted road surface, just meets it.
+            // 2. Road Shoulder Verge: gentle downward slope matching groundHeightAt()
             const t = (absDist - roadHalf) / (9.0 - roadHalf);
             finalY = pt.y - 0.18 - t * 0.32 + bankedYOffset * (1 - t);
-            // Two-layer roadside ground (Master Prompt section 3): a
-            // narrow vivid-green band right at the road edge (first ~1.2m
-            // of shoulder), blending into pale khaki/straw for the rest —
-            // replaces the old single grassLight*0.95 tone across the
-            // whole shoulder.
-            const GREEN_BAND_T = 1.2 / (9.0 - roadHalf);
-            if (t <= GREEN_BAND_T) {
-              colors.push(vividGreen.r, vividGreen.g, vividGreen.b);
-            } else {
-              const bandT = THREE.MathUtils.smoothstep(t, GREEN_BAND_T, GREEN_BAND_T + 0.15);
-              const bladeNoise = 0.88 + this.simplex.noise2D(worldPos.x * 0.5, worldPos.z * 0.5) * 0.18;
-              const r = THREE.MathUtils.lerp(vividGreen.r, khaki.r * bladeNoise, bandT);
-              const g = THREE.MathUtils.lerp(vividGreen.g, khaki.g * bladeNoise, bandT);
-              const b = THREE.MathUtils.lerp(vividGreen.b, khaki.b * bladeNoise, bandT);
-              colors.push(r, g, b);
-            }
+
+            // Natural organic shoulder blending into biome landscape:
+            // Starts at shoulderSoilColor at road edge (t=0), feathering outward into season grass/sand
+            const blendT = THREE.MathUtils.smoothstep(t, 0.05, 0.95);
+            const bladeNoise = 0.88 + this.simplex.noise2D(worldPos.x * 0.08, worldPos.z * 0.08) * 0.24;
+            const r = THREE.MathUtils.lerp(shoulderSoilColor.r, grassCol.r * bladeNoise, blendT);
+            const g = THREE.MathUtils.lerp(shoulderSoilColor.g, grassCol.g * bladeNoise, blendT);
+            const b = THREE.MathUtils.lerp(shoulderSoilColor.b, grassCol.b * bladeNoise, blendT);
+            colors.push(r, g, b);
           } else {
             // 3. Embankment Carving: Smooth terrain transition from road edge to raw hills
             const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
