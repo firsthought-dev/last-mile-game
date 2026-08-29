@@ -791,6 +791,95 @@
       setTimeout(() => this.playTone(1046, 'sine', 0.3, 0.25), 300);
     }
 
+    // Procedural Driving Ambience (Engine load pitch & wind noise filter)
+    _initAmbience() {
+      if (this._ambienceInitialized || !this.ctx) return;
+      this._ambienceInitialized = true;
+      const ctx = this.ctx;
+
+      try {
+        // 1. Warm Engine Hum (dual harmonic oscillators + lowpass filter)
+        this.engineGain = ctx.createGain();
+        this.engineGain.gain.setValueAtTime(0, ctx.currentTime);
+        this.engineFilter = ctx.createBiquadFilter();
+        this.engineFilter.type = 'lowpass';
+        this.engineFilter.frequency.setValueAtTime(260, ctx.currentTime);
+
+        this.engineOsc1 = ctx.createOscillator();
+        this.engineOsc1.type = 'triangle';
+        this.engineOsc1.frequency.setValueAtTime(55, ctx.currentTime);
+
+        this.engineOsc2 = ctx.createOscillator();
+        this.engineOsc2.type = 'sine';
+        this.engineOsc2.frequency.setValueAtTime(110, ctx.currentTime);
+
+        this.engineOsc1.connect(this.engineFilter);
+        this.engineOsc2.connect(this.engineFilter);
+        this.engineFilter.connect(this.engineGain);
+        this.engineGain.connect(this.masterFilter || ctx.destination);
+
+        this.engineOsc1.start();
+        this.engineOsc2.start();
+
+        // 2. Continuous Wind Noise (pink noise buffer with velocity bandpass)
+        const bufferSize = ctx.sampleRate * 2;
+        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        let b0 = 0, b1 = 0, b2 = 0;
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.96900 * b2 + white * 0.1538520;
+          output[i] = (b0 + b1 + b2 + white * 0.05) * 0.09;
+        }
+        this.windNoise = ctx.createBufferSource();
+        this.windNoise.buffer = noiseBuffer;
+        this.windNoise.loop = true;
+
+        this.windFilter = ctx.createBiquadFilter();
+        this.windFilter.type = 'bandpass';
+        this.windFilter.frequency.setValueAtTime(400, ctx.currentTime);
+        this.windFilter.Q.setValueAtTime(0.8, ctx.currentTime);
+
+        this.windGain = ctx.createGain();
+        this.windGain.gain.setValueAtTime(0, ctx.currentTime);
+
+        this.windNoise.connect(this.windFilter);
+        this.windFilter.connect(this.windGain);
+        this.windGain.connect(this.masterFilter || ctx.destination);
+        this.windNoise.start();
+      } catch (err) {
+        console.warn('Ambience audio initialization deferred:', err);
+      }
+    }
+
+    updateDrivingAmbience(speed, maxSpeed, accelRatio) {
+      if (this.suspended || this.sfxMuted || !this.ctx) {
+        if (this.engineGain && this.ctx) this.engineGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        if (this.windGain && this.ctx) this.windGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        return;
+      }
+      this._initAmbience();
+      const now = this.ctx.currentTime;
+      const speedRatio = Math.min(1.0, Math.abs(speed || 0) / (maxSpeed || 40));
+
+      // RPM pitch curve with virtual 4-gear cycles
+      const gearCycle = (speedRatio * 3.6) % 1.0;
+      const rpmFreq = 46 + gearCycle * 52 + speedRatio * 38;
+      if (this.engineOsc1) this.engineOsc1.frequency.setTargetAtTime(rpmFreq, now, 0.06);
+      if (this.engineOsc2) this.engineOsc2.frequency.setTargetAtTime(rpmFreq * 1.5, now, 0.06);
+
+      const targetEngineVol = 0.02 + (Math.abs(accelRatio || 0) > 0.5 ? 0.035 : 0.008) + speedRatio * 0.035;
+      if (this.engineGain) this.engineGain.gain.setTargetAtTime(targetEngineVol, now, 0.08);
+
+      // Wind noise volume and aerodynamic cutoff scaling
+      const windVol = Math.pow(speedRatio, 1.8) * 0.07;
+      const windCutoff = 320 + speedRatio * 1150;
+      if (this.windGain) this.windGain.gain.setTargetAtTime(windVol, now, 0.1);
+      if (this.windFilter) this.windFilter.frequency.setTargetAtTime(windCutoff, now, 0.1);
+    }
+
     // Soothing polyphonic English Synth Radio engine
     startSynthRadio(trackObj) {
       this.stopSynthRadio();
@@ -3368,7 +3457,7 @@
             const cPos = nearPos.clone().add(cOffset);
             cPos.y = calcTerrainY(cPos, side * nearDist);
 
-            const scale = this.prng.range(0.8, 1.6);
+            const scale = this.prng.range(0.85, 1.45);
             // Deferred, not added directly: buildings (cabins in particular)
             // are placed later in this same loop iteration, so a tree
             // registered immediately here has no way to know about a
@@ -3377,10 +3466,11 @@
             // delivery cabin's roof). Queue a lightweight descriptor (not a
             // built mesh — see buildInstancedBatches) and resolve overlaps
             // in one pass after every prop for the whole route is placed.
+            // Scaled to realistic mature conifer/broadleaf height (16.0m baseline).
             pendingTrees.push({
-              kind: isPine ? 'pine' : 'broadleaf', worldHeight: 7.0, tintHex: leafColHex,
+              kind: isPine ? 'pine' : 'broadleaf', worldHeight: 16.0, tintHex: leafColHex,
               pos: cPos.clone(), scale, rotY: this.prng.next() * Math.PI * 2,
-              radius: 1.1 * scale
+              radius: 1.8 * scale
             });
           }
           } // end spawnTree
@@ -3417,11 +3507,11 @@
               const bgOffset = new THREE.Vector3((this.prng.next() - 0.5) * 9.0, 0, (this.prng.next() - 0.5) * 9.0);
               const cBgPos = bgPos.clone().add(bgOffset);
               cBgPos.y = calcTerrainY(cBgPos, bgDist);
-              const bgScale = this.prng.range(0.8, 1.5); // background trees can run larger — read fine from a distance, and vary the treeline silhouette
+              const bgScale = this.prng.range(0.9, 1.55); // background trees can run larger — read fine from a distance, and vary the treeline silhouette
               pendingTrees.push({
-                kind: bgIsPine ? 'pine' : 'broadleaf', worldHeight: 9.0, tintHex: bgLeafHex,
+                kind: bgIsPine ? 'pine' : 'broadleaf', worldHeight: 22.0, tintHex: bgLeafHex,
                 pos: cBgPos.clone(), scale: bgScale, rotY: this.prng.next() * Math.PI * 2,
-                radius: 1.1 * bgScale
+                radius: 2.2 * bgScale
               });
             }
           }
@@ -3717,10 +3807,11 @@
               _fenceDummy.updateMatrix();
               const groupMatrix = _fenceDummy.matrix;
 
-              const useStoneWall = Math.floor(i / 40) % 3 === 2;
-              const matrices = { posts: [], rails: [], stoneRows: [] };
+              const barrierStyle = Math.floor(i / 35) % 4; // 0,2: wood, 1: stone, 3: concrete
+              const matrices = { posts: [], rails: [], stoneRows: [], concreteRows: [] };
 
-              if (useStoneWall) {
+              if (barrierStyle === 1) {
+                // Dry-stone wall (4 courses)
                 const rowHeights = [0.22, 0.44, 0.64, 0.8];
                 rowHeights.forEach((ry, rowIdx) => {
                   const jitter = 1.0 - rowIdx * 0.04;
@@ -3731,7 +3822,19 @@
                   );
                   matrices.stoneRows.push(groupMatrix.clone().multiply(local));
                 });
+              } else if (barrierStyle === 3) {
+                // Modern Concrete Highway Barrier (Jersey Barrier profile)
+                [0.26, 0.62].forEach((ry, rIdx) => {
+                  const bScaleZ = rIdx === 0 ? 1.0 : 0.75;
+                  const local = new THREE.Matrix4().compose(
+                    new THREE.Vector3(0, ry, 0),
+                    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                    new THREE.Vector3(railLen, 1, bScaleZ)
+                  );
+                  matrices.concreteRows.push(groupMatrix.clone().multiply(local));
+                });
               } else {
+                // Wood split-rail fence
                 [[-railLen / 2, offsetA], [railLen / 2, offsetB]].forEach(([px, offset]) => {
                   const local = new THREE.Matrix4().makeTranslation(px, offset + 0.6, 0);
                   matrices.posts.push(groupMatrix.clone().multiply(local));
@@ -4434,12 +4537,14 @@
         const acceptedPosts = [];
         const acceptedRails = [];
         const acceptedStoneRows = [];
+        const acceptedConcreteRows = [];
         pendingFences.forEach(({ matrices, pos, radius }) => {
           const overlaps = this.obstacles.some(o => o.pos.distanceTo(pos) < (o.radius + radius));
           if (overlaps) return;
           acceptedPosts.push(...matrices.posts);
           acceptedRails.push(...matrices.rails);
           acceptedStoneRows.push(...matrices.stoneRows);
+          if (matrices.concreteRows) acceptedConcreteRows.push(...matrices.concreteRows);
         });
 
         const buildFenceBatch = (matrices, geom, mat, castShadow) => {
@@ -4466,16 +4571,21 @@
           new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
           false
         );
-        // Master Prompt section 3's dry-stone-wall barrier variant (see the
-        // original per-segment comment this replaced) — same real rock
+        // Master Prompt section 3's dry-stone-wall barrier variant — same real rock
         // texture, now one InstancedMesh for all rows/segments combined
-        // instead of 4 individual Mesh objects per wall segment.
         const stoneTex = RealTextureFactory.rockColor();
         const stoneNormal = RealTextureFactory.rockNormal();
         buildFenceBatch(
           acceptedStoneRows,
           new THREE.BoxGeometry(1, 0.22, 0.32),
           new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
+          true
+        );
+        // Modern Highway Concrete Barrier (Jersey barrier variant)
+        buildFenceBatch(
+          acceptedConcreteRows,
+          new THREE.BoxGeometry(1, 0.35, 0.26),
+          new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.88, metalness: 0.05 }),
           true
         );
       }
@@ -4592,8 +4702,10 @@
       // car with weight. See `update()`'s steering block for how this
       // reconverges toward `heading` at a grip-scaled rate each frame.
       this.velocityHeading = 0;
-      this.currentPitch = 0; // smoothed chassis dive/squat — see update()'s pitch/roll block
-      this.currentRoll = 0;  // smoothed chassis roll — same reason
+      this.currentPitch = 0; // smoothed chassis dive/squat — 2nd-order spring-damper
+      this.pitchVelocity = 0; // angular pitch velocity for 2nd-order suspension
+      this.currentRoll = 0;  // smoothed chassis roll — 2nd-order spring-damper
+      this.rollVelocity = 0;  // angular roll velocity for 2nd-order suspension
       this.lateralOffset = 0; // still maintained (derived) for banking/ground-height/fence-clamp math
       this.lateralVelocity = 0; // unused by movement now; kept only so any external reset code touching it doesn't throw
       this.grip = 1.0;
@@ -4934,6 +5046,7 @@
         // "Volt Scooter" as the second vehicle.
         // ====================================================================
         const carModel = SportsCoupeAsset.clone();
+        carModel.scale.setScalar(0.92);
         this.mesh.add(carModel);
         carModel.traverse((child) => {
           if (child.isMesh && child.name && /(rim|tyre|caliper|disc)$/i.test(child.name)) {
@@ -4947,17 +5060,17 @@
         if (SportsCoupeAsset.pendingControllers.indexOf(this) === -1) {
           SportsCoupeAsset.pendingControllers.push(this);
         }
-        const bodyGeom = new THREE.BoxGeometry(1.92, 0.7, 4.5);
+        const bodyGeom = new THREE.BoxGeometry(1.82, 0.65, 4.3);
         const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1c2430, flatShading: true });
         const body = new THREE.Mesh(bodyGeom, bodyMat);
-        body.position.y = 0.6;
+        body.position.y = 0.55;
         body.castShadow = true;
         this.mesh.add(body);
 
-        const wheelGeom = new THREE.CylinderGeometry(0.32, 0.32, 0.22, 14);
+        const wheelGeom = new THREE.CylinderGeometry(0.30, 0.30, 0.22, 14);
         wheelGeom.rotateZ(Math.PI / 2);
         const wheelMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
-        [[-0.95, 0.32, 1.5], [0.95, 0.32, 1.5], [-0.95, 0.32, -1.5], [0.95, 0.32, -1.5]].forEach(p => {
+        [[-0.90, 0.30, 1.4], [0.90, 0.30, 1.4], [-0.90, 0.30, -1.4], [0.90, 0.30, -1.4]].forEach(p => {
           const w = new THREE.Mesh(wheelGeom, wheelMat);
           w.position.set(...p);
           this.mesh.add(w);
@@ -4968,34 +5081,25 @@
         // ====================================================================
         // 4. MUSCLE COUPE (user-supplied model, see MuscleCoupeAsset comment
         // above for source/conversion/brand-scrubbing notes)
+        // Scaled to real-world dimensions (0.82x brings width from 2.31m to ~1.89m,
+        // fitting cleanly within the 3.7m road lane).
         // ====================================================================
         const carModel = MuscleCoupeAsset.clone();
+        const scaleFactor = 0.82;
+        carModel.scale.setScalar(scaleFactor);
         this.mesh.add(carModel);
         carModel.traverse((child) => {
           if (child.isMesh && child.name && /^(wheel|brakes)_/i.test(child.name)) {
             this.wheels.push(child);
           }
         });
-        // Blank cover plates over two front badges — the source model has
-        // real brand/trim names embossed directly into the body mesh's
-        // geometry (confirmed live via screenshot: legible "CHALLENGER"
-        // script above the grille and a separate "SRT" plate below it —
-        // not just metadata), and the file has zero texture data (verified
-        // via a raw glTF JSON scan), so neither is a decal that can be
-        // swapped out; deleting by material slot in Blender missed it
-        // entirely (wrong slot). These opaque plates physically occlude
-        // both without risking a hole in the mesh. Positions are exact —
-        // found by raycasting the actual rendered geometry from the real
-        // in-game camera, not estimated from the source file's own
-        // coordinate system (an earlier estimate was wrong: this vehicle
-        // also needed the 180° rotation fix above, which the geometry-based
-        // raycast caught and a coordinate-math guess had missed).
+        // Blank cover plates over two front badges — scaled proportionally
         const badgeMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
-        const scriptCover = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.16, 0.03), badgeMat);
-        scriptCover.position.set(0, 0.826, -2.46);
+        const scriptCover = new THREE.Mesh(new THREE.BoxGeometry(0.55 * scaleFactor, 0.16 * scaleFactor, 0.03), badgeMat);
+        scriptCover.position.set(0, 0.826 * scaleFactor, -2.46 * scaleFactor);
         this.mesh.add(scriptCover);
-        const plateCover = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.13, 0.03), badgeMat);
-        plateCover.position.set(0, 0.729, -2.42);
+        const plateCover = new THREE.Mesh(new THREE.BoxGeometry(0.4 * scaleFactor, 0.13 * scaleFactor, 0.03), badgeMat);
+        plateCover.position.set(0, 0.729 * scaleFactor, -2.42 * scaleFactor);
         this.mesh.add(plateCover);
 
       } else if (this.vehicleType === 'musclecoupe') {
@@ -5473,28 +5577,32 @@
       const wheelPitch = THREE.MathUtils.clamp(-Math.atan2(frontAxleY - rearAxleY, halfWheelbase * 2), -0.2, 0.2);
       const wheelRoll = THREE.MathUtils.clamp(Math.atan2(rightTrackY - leftTrackY, halfTrack * 2), -0.2, 0.2);
 
-      // Dynamic Chassis Pitch (dive on braking, squat on acceleration).
-      // `accelRatio` is a raw per-frame instantaneous derivative — noisy by
-      // nature, and especially spiky the instant throttle is first pressed
-      // (the exponential accel curve's biggest single-frame jump happens
-      // right at that moment). Applying it straight to `rotateX` with zero
-      // smoothing meant the whole chassis visibly snapped to a pitch angle
-      // in one frame instead of easing into it — reported directly as an
-      // "ugly snap" right when pressing accelerate. Smoothed both pitch and
-      // roll through persistent `currentPitch`/`currentRoll` state instead
-      // of applying the instantaneous target directly, same lerp pattern
-      // already used for `steerAngle` elsewhere in this function.
+      // 2nd-Order Spring-Mass-Damper Suspension Filter (Slow Roads Parity).
+      // Simulates real vehicle chassis inertia, suspension spring stiffness,
+      // and hydraulic shock damping:
+      // d^2(theta)/dt^2 = omega^2 * (target - theta) - 2 * zeta * omega * d(theta)/dt
+      // Provides authentic body weight transfer, dive rebound, and settling
+      // without rigid instant snapping or uncontrolled oscillation.
+      const subDt = Math.min(dt, 0.05);
+
       const accelRatio = (this.speed - (this.lastSpeed || this.speed)) / Math.max(0.01, dt);
       this.lastSpeed = this.speed;
-      const targetPitch = THREE.MathUtils.clamp(-accelRatio * 0.004, -0.06, 0.06) + wheelPitch;
-      this.currentPitch = THREE.MathUtils.lerp(this.currentPitch, targetPitch, 1 - Math.exp(-8.0 * dt));
+      const targetPitch = THREE.MathUtils.clamp(-accelRatio * 0.0035, -0.055, 0.055) + wheelPitch;
+
+      const omegaPitch = 14.0; // Natural angular frequency (~2.2 Hz)
+      const zetaPitch = 0.86;  // Damping ratio (slightly underdamped for authentic body settling)
+      const pitchAccel = (omegaPitch * omegaPitch) * (targetPitch - this.currentPitch) - 2.0 * zetaPitch * omegaPitch * this.pitchVelocity;
+      this.pitchVelocity += pitchAccel * subDt;
+      this.currentPitch += this.pitchVelocity * subDt;
       this.mesh.rotateX(this.currentPitch);
 
-      // Dynamic Chassis Roll (centrifugal roll against turn + bank, now
-      // also real terrain cross-slope via wheelRoll above) — still purely
-      // cosmetic since steerAngle no longer drives orientation.
-      const targetRoll = -this.steerAngle * (this.speed / this.maxSpeed) * 0.35 + wheelRoll;
-      this.currentRoll = THREE.MathUtils.lerp(this.currentRoll, targetRoll, 1 - Math.exp(-8.0 * dt));
+      // Dynamic Chassis Roll (centrifugal roll against turn + bank + real terrain cross-slope)
+      const targetRoll = -this.steerAngle * (this.speed / this.maxSpeed) * 0.32 + wheelRoll;
+      const omegaRoll = 15.5; // Natural roll frequency
+      const zetaRoll = 0.88;  // Roll damping ratio
+      const rollAccel = (omegaRoll * omegaRoll) * (targetRoll - this.currentRoll) - 2.0 * zetaRoll * omegaRoll * this.rollVelocity;
+      this.rollVelocity += rollAccel * subDt;
+      this.currentRoll += this.rollVelocity * subDt;
       this.mesh.rotateZ(this.currentRoll);
 
       this.wheels.forEach(w => w.rotateX((this.speed * dt) / 0.38));
@@ -6091,146 +6199,15 @@
     }
 
     toggleStatusPanel() {
-      this.isStatusPanelOpen = !this.isStatusPanelOpen;
-      const panel = document.getElementById('delivery-status-panel');
-      if (!panel) return;
-      panel.classList.toggle('open', this.isStatusPanelOpen);
-      if (this.isStatusPanelOpen) this.renderStatusPanel();
+      // Legacy delivery status panel pruned for Slow Roads cruising parity
     }
 
-    refreshStatusPanel() {
-      if (this.isStatusPanelOpen) this.renderStatusPanel();
-    }
+    refreshStatusPanel() {}
 
-    renderStatusPanel() {
-      const panel = document.getElementById('delivery-status-panel');
-      if (!panel) return;
-
-      const cityOrders = CONFIG.ORDERS_BY_CITY[this.selectedCity] || CONFIG.ORDERS_BY_CITY.mumbai;
-      const current = cityOrders[this.activeOrderIndex % cityOrders.length];
-      const upcoming = [1, 2, 3].map(off => cityOrders[(this.activeOrderIndex + off) % cityOrders.length]);
-
-      const delivered = this.deliveryHistory.filter(h => h.status === 'delivered').length;
-      const missed = this.deliveryHistory.filter(h => h.status === 'missed').length;
-
-      const historyRows = this.deliveryHistory.length
-        ? this.deliveryHistory.slice(0, 25).map(h => `
-            <div class="status-history-row ${h.status}">
-              <span class="status-history-icon">${h.status === 'delivered' ? '✅' : '❌'}</span>
-              <span class="status-history-name">${h.name}</span>
-              <span class="status-history-amount ${h.status}">${h.amount >= 0 ? '+' : ''}₹${h.amount}</span>
-            </div>`).join('')
-        : `<div class="status-history-empty">No deliveries yet — get rolling!</div>`;
-
-      panel.innerHTML = `
-        <div class="status-panel-header">
-          <span class="status-panel-title">DELIVERY STATUS</span>
-          <button id="btn-status-close" class="status-panel-close" title="Close [V]">✕</button>
-        </div>
-
-        <div class="status-panel-section">
-          <div class="status-section-tag">CURRENT DISPATCH</div>
-          <div class="status-current-card">
-            <span class="status-current-name">${current ? current.name : '—'}</span>
-            <span class="status-current-cargo">${current ? current.cargo : ''}</span>
-          </div>
-        </div>
-
-        <div class="status-panel-section">
-          <div class="status-section-tag">UPCOMING</div>
-          <div class="status-upcoming-list">
-            ${upcoming.map((o, i) => `
-              <div class="status-upcoming-row">
-                <span class="status-upcoming-idx">#${i + 2}</span>
-                <span class="status-upcoming-name">${o ? o.name : '—'}</span>
-                <span class="status-upcoming-reward">₹${o ? o.reward : 0}</span>
-              </div>`).join('')}
-          </div>
-        </div>
-
-        <div class="status-panel-section status-panel-totals">
-          <div class="status-total-pill delivered"><span>${delivered}</span> DELIVERED</div>
-          <div class="status-total-pill missed"><span>${missed}</span> MISSED</div>
-          <div class="status-total-pill earnings"><span>₹${this.earnings}</span> EARNED</div>
-        </div>
-
-        <div class="status-panel-section status-panel-history">
-          <div class="status-section-tag">HISTORY</div>
-          <div class="status-history-list">${historyRows}</div>
-        </div>
-      `;
-
-      document.getElementById('btn-status-close')?.addEventListener('click', () => this.toggleStatusPanel());
-    }
+    renderStatusPanel() {}
 
     updateOrderTimer(dt) {
-      if (this.gameState !== 'playing') return;
-
-      this.orderTimer -= dt;
-      const clockEl = document.getElementById('order-timer-clock');
-      const barEl = document.getElementById('order-timer-bar');
-
-      if (this.orderTimer <= 0) {
-        // Order Timed Out (Late Delivery Penalty)
-        const cityOrdersForMiss = CONFIG.ORDERS_BY_CITY[this.selectedCity] || CONFIG.ORDERS_BY_CITY.mumbai;
-        const missedOrder = cityOrdersForMiss[this.activeOrderIndex % cityOrdersForMiss.length];
-
-        this.orderTimer = this.maxOrderTimer;
-        this.streakCount = 1;
-        this.earnings = Math.max(0, this.earnings - 25);
-        this.missedCount = (this.missedCount || 0) + 1;
-        sound.playTone(220, 'sawtooth', 0.3, 0.35);
-
-        this.showScoreBanner(`⚠️ TIME EXPIRED! (LATE)`, `Penalty -₹25 • Customer Rating 1★`);
-        this.addNotification('❌ DELIVERY MISSED! Time expired (-₹25)', 'danger', 3500);
-
-        this.deliveryHistory.unshift({
-          name: missedOrder?.name || 'Delivery',
-          status: 'missed',
-          amount: -25,
-          orderIndex: this.activeOrderIndex
-        });
-
-        // Retire this order's house so it stops being a candidate for the
-        // "nearest undelivered target" search (used by both the HUD arrow
-        // and the actual cargo-toss hit test). Left unmarked, a missed
-        // house stays live forever — on a winding/looping road it can end
-        // up geometrically closer than the player's real current target,
-        // silently stealing every toss aimed at the house they're actually
-        // standing next to.
-        const missedTarget = this.world?.deliveryTargets?.[this.activeOrderIndex];
-        if (missedTarget) {
-          missedTarget.delivered = true;
-          if (missedTarget.ring) missedTarget.ring.material.color.setHex(0x64748b);
-        }
-
-        this.activeOrderIndex++;
-        this.updateActiveOrderCard();
-        this.updateHUDStats();
-        this.refreshStatusPanel();
-      } else {
-        const mins = Math.floor(this.orderTimer / 60);
-        const secs = Math.floor(this.orderTimer % 60);
-        const ms = Math.floor((this.orderTimer % 1) * 10);
-        const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${ms}`;
-
-        if (clockEl) {
-          clockEl.textContent = timeStr;
-          if (this.orderTimer <= 6.0) {
-            clockEl.classList.add('urgent');
-            if (Math.floor(this.orderTimer * 4) % 4 === 0) sound.playTone(880, 'sine', 0.04, 0.15);
-          } else {
-            clockEl.classList.remove('urgent');
-          }
-        }
-
-        if (barEl) {
-          const pct = Math.max(0, Math.min(100, (this.orderTimer / this.maxOrderTimer) * 100));
-          barEl.style.width = `${pct}%`;
-          if (this.orderTimer <= 6.0) barEl.classList.add('urgent');
-          else barEl.classList.remove('urgent');
-        }
-      }
+      // Penalty timer disabled for peaceful open-world driving
     }
 
     initEvents() {
@@ -7924,75 +7901,78 @@
       }
 
       if (this.activeCameraMode === 'hood') {
-        // Bumper Cam - rigidly bolted at bumper height (see toggleCameraMode
-        // comment — this was labeled "hood" but sits at bumper height)
-        const hoodPos = carPos.clone().addScaledVector(bodyForward, 1.35).add(new THREE.Vector3(0, 0.82, 0));
+        // Bumper Cam - rigidly bolted at forward bumper height
+        const hoodPos = carPos.clone().addScaledVector(bodyForward, 1.35).add(new THREE.Vector3(0, 0.65, 0));
         this.camera.position.copy(hoodPos);
         const lookTarget = hoodPos.clone().addScaledVector(bodyForward, 35.0);
         this.camera.lookAt(lookTarget);
+        this.camera.fov = 68;
+        this.camera.updateProjectionMatrix();
       } else if (this.activeCameraMode === 'first-person') {
-        // True in-cabin view — driver eye height, seated near the
-        // windshield rather than out on the bumper. Rigidly bolted (no
-        // lerp/spring), same as bumper cam: a cockpit view that lags the
-        // car's own motion reads as broken, not cinematic.
-        const eyePos = carPos.clone().addScaledVector(bodyForward, 0.15).add(new THREE.Vector3(0, 1.15, 0));
+        // True in-cabin view — driver eye height, seated near the windshield.
+        // Rigidly bolted, car mesh hidden to prevent clipping.
+        const eyePos = carPos.clone().addScaledVector(bodyForward, 0.12).add(new THREE.Vector3(0, 1.05, 0));
         this.camera.position.copy(eyePos);
         const lookTarget = eyePos.clone().addScaledVector(bodyForward, 35.0);
         this.camera.lookAt(lookTarget);
+        this.camera.fov = 70;
+        this.camera.updateProjectionMatrix();
       } else if (this.activeCameraMode === 'far-chase') {
-        // Same glued-chase behavior as the default chase cam below, just
-        // pulled back and raised further for a wider, more cinematic frame
-        // — slowroads' "Far Chase" relative to its "Chase".
+        // Pulled back and raised further for wide panoramic framing — Slow Roads Far Chase
         const targetCamPos = carPos.clone()
-          .addScaledVector(carForward, -11.5)
-          .add(new THREE.Vector3(0, 4.4, 0));
-        const posLerp = Math.min(1.0, 1.0 - Math.exp(-16.0 * dt));
+          .addScaledVector(carForward, -15.2)
+          .add(new THREE.Vector3(0, 5.2, 0));
+        const posLerp = Math.min(1.0, 1.0 - Math.exp(-14.0 * dt));
         this.camera.position.lerp(targetCamPos, posLerp);
 
-        const minY = carPos.y + 2.6;
-        const maxY = carPos.y + 6.5;
+        const minY = carPos.y + 2.5;
+        const maxY = carPos.y + 7.5;
         this.camera.position.y = THREE.MathUtils.clamp(this.camera.position.y, minY, maxY);
 
         const rawLookTarget = carPos.clone()
-          .addScaledVector(carForward, 20.0)
-          .add(new THREE.Vector3(0, 0.8, 0));
-        const lookLerp = Math.min(1.0, 1.0 - Math.exp(-22.0 * dt));
+          .addScaledVector(carForward, 30.0)
+          .add(new THREE.Vector3(0, 1.0, 0));
+        const lookLerp = Math.min(1.0, 1.0 - Math.exp(-20.0 * dt));
         this.camLookTarget.lerp(rawLookTarget, lookLerp);
         this.camera.lookAt(this.camLookTarget);
+
+        const speedRatio = Math.min(1.0, Math.abs(this.vehicle.speed) / (this.vehicle.maxSpeed || 40));
+        const targetFOV = 68.0 + speedRatio * 8.0;
+        this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFOV, 0.1);
+        this.camera.updateProjectionMatrix();
       } else if (this.activeCameraMode === 'sky') {
-        // Drone Cam
-        const skyPos = carPos.clone().addScaledVector(carForward, -9.5).add(new THREE.Vector3(0, 7.5, 0));
-        this.camera.position.lerp(skyPos, Math.min(1.0, 1.0 - Math.exp(-14.0 * dt)));
-        const rawLookTarget = carPos.clone().addScaledVector(carForward, 18.0).add(new THREE.Vector3(0, 0.5, 0));
-        this.camLookTarget.lerp(rawLookTarget, Math.min(1.0, 1.0 - Math.exp(-18.0 * dt)));
+        // Panoramic High Follow Drone Cam
+        const skyPos = carPos.clone().addScaledVector(carForward, -14.0).add(new THREE.Vector3(0, 10.5, 0));
+        this.camera.position.lerp(skyPos, Math.min(1.0, 1.0 - Math.exp(-12.0 * dt)));
+        const rawLookTarget = carPos.clone().addScaledVector(carForward, 24.0).add(new THREE.Vector3(0, 0.5, 0));
+        this.camLookTarget.lerp(rawLookTarget, Math.min(1.0, 1.0 - Math.exp(-16.0 * dt)));
         this.camera.lookAt(this.camLookTarget);
       } else {
-        // Slow Roads Glued Chase Cam
-        // 6.8m behind car, 2.7m above car (tight, cinematic, dynamic)
+        // Slow Roads Default Chase Cam (10.8m behind car, 3.6m above, wide 68 deg FOV)
         const targetCamPos = carPos.clone()
-          .addScaledVector(carForward, -6.8)
-          .add(new THREE.Vector3(0, 2.7, 0));
+          .addScaledVector(carForward, -10.8)
+          .add(new THREE.Vector3(0, 3.6, 0));
 
         // High responsiveness spring-lerp (keeps camera tightly bound to vehicle at any speed)
-        const posLerp = Math.min(1.0, 1.0 - Math.exp(-16.0 * dt));
+        const posLerp = Math.min(1.0, 1.0 - Math.exp(-14.0 * dt));
         this.camera.position.lerp(targetCamPos, posLerp);
 
         // Ground clearance check relative strictly to roadbed (never launch into the sky)
-        const minY = carPos.y + 1.6;
-        const maxY = carPos.y + 4.2;
+        const minY = carPos.y + 1.8;
+        const maxY = carPos.y + 5.5;
         this.camera.position.y = THREE.MathUtils.clamp(this.camera.position.y, minY, maxY);
 
-        // Look-ahead target down the road centerline
+        // Look-ahead target down the road centerline / motion direction
         const rawLookTarget = carPos.clone()
-          .addScaledVector(carForward, 18.0)
-          .add(new THREE.Vector3(0, 0.8, 0));
-        const lookLerp = Math.min(1.0, 1.0 - Math.exp(-22.0 * dt));
+          .addScaledVector(carForward, 26.0)
+          .add(new THREE.Vector3(0, 0.9, 0));
+        const lookLerp = Math.min(1.0, 1.0 - Math.exp(-20.0 * dt));
         this.camLookTarget.lerp(rawLookTarget, lookLerp);
         this.camera.lookAt(this.camLookTarget);
 
-        // Dynamic Speed FOV
+        // Dynamic Speed FOV (68 deg baseline -> 76 deg at top speed)
         const speedRatio = Math.min(1.0, Math.abs(this.vehicle.speed) / (this.vehicle.maxSpeed || 40));
-        const targetFOV = 60 + speedRatio * 8.0;
+        const targetFOV = 68.0 + speedRatio * 8.0;
         this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFOV, 0.1);
         this.camera.updateProjectionMatrix();
       }
@@ -8069,7 +8049,7 @@
         if (gpsDistEl) gpsDistEl.textContent = '0m';
       }
 
-      // Render 2D GPS Minimap Radar
+      // Render 2D Slow Roads Curvature Radar
       const canvas = document.getElementById('gps-radar-canvas') || document.getElementById('gps-minimap-canvas');
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
@@ -8078,82 +8058,80 @@
 
       ctx.clearRect(0, 0, w, h);
 
-      // Radar background compass grid
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      // Radar background concentric range rings
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(w / 2, h / 2, 28, 0, Math.PI * 2);
-      ctx.arc(w / 2, h / 2, 54, 0, Math.PI * 2);
+      ctx.arc(w / 2, h - 24, 30, Math.PI, 0);
+      ctx.arc(w / 2, h - 24, 60, Math.PI, 0);
+      ctx.arc(w / 2, h - 24, 90, Math.PI, 0);
       ctx.stroke();
 
-      // Crosshairs
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-      ctx.beginPath();
-      ctx.moveTo(w / 2, 6); ctx.lineTo(w / 2, h - 6);
-      ctx.moveTo(6, h / 2); ctx.lineTo(w - 6, h / 2);
-      ctx.stroke();
-
-      const carRight = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
+      // Motion-aligned coordinate basis (travel direction)
+      const vh = this.vehicle.velocityHeading;
+      const travelForward = new THREE.Vector3(Math.sin(vh), 0, Math.cos(vh));
+      const travelRight = new THREE.Vector3(-Math.cos(vh), 0, Math.sin(vh));
 
       // Draw Spline Road Ahead on Radar
       if (this.world.curve) {
-        ctx.strokeStyle = '#2b3d4f';
-        ctx.lineWidth = 7;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-
         const curU = this.vehicle.splineProgress;
-        for (let i = -10; i <= 40; i++) {
-          const sampleU = (curU + i * 0.0025 + 1.0) % 1.0;
+        const pts = [];
+
+        for (let i = -4; i <= 36; i++) {
+          const sampleU = (curU + i * 0.0022 + 1.0) % 1.0;
           const pt = this.world.curve.getPointAt(sampleU);
           const rel = pt.clone().sub(carPos);
 
-          const latDist = rel.dot(carRight);
-          const fwdDist = rel.dot(carForward);
+          const latDist = rel.dot(travelRight);
+          const fwdDist = rel.dot(travelForward);
 
-          const mx = w / 2 + latDist * 0.85;
-          const my = h / 2 - fwdDist * 0.85;
-
-          if (i === -10) ctx.moveTo(mx, my);
-          else ctx.lineTo(mx, my);
+          const mx = w / 2 + latDist * 0.95;
+          const my = (h - 24) - fwdDist * 0.95;
+          pts.push({ x: mx, y: my, fwdDist });
         }
-        ctx.stroke();
 
-        // Inner road surface stripe
-        ctx.strokeStyle = '#00d4bf';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        if (pts.length > 1) {
+          // 1. Dark asphalt road underlay
+          ctx.strokeStyle = '#1e293b';
+          ctx.lineWidth = 8;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length; i++) {
+            ctx.lineTo(pts[i].x, pts[i].y);
+          }
+          ctx.stroke();
+
+          // 2. Glowing Cyan / Sage Centerline with distance fade
+          const grad = ctx.createLinearGradient(w / 2, h - 24, w / 2, 8);
+          grad.addColorStop(0, '#38bdf8');
+          grad.addColorStop(0.7, '#2dd4bf');
+          grad.addColorStop(1, 'rgba(45, 212, 191, 0.1)');
+
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = 2.2;
+          ctx.shadowColor = '#38bdf8';
+          ctx.shadowBlur = 6;
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length; i++) {
+            ctx.lineTo(pts[i].x, pts[i].y);
+          }
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
       }
 
-      // Traffic dots removed — no NPC traffic vehicles exist anymore.
-
-      // Draw Next Delivery Target Pin on Minimap
-      if (nextTarget) {
-        const rel = nextTarget.pos.clone().sub(carPos);
-        const latDist = rel.dot(carRight);
-        const fwdDist = rel.dot(carForward);
-
-        const mx = Math.max(10, Math.min(w - 10, w / 2 + latDist * 0.85));
-        const my = Math.max(10, Math.min(h - 10, h / 2 - fwdDist * 0.85));
-
-        ctx.fillStyle = '#2ec4b6';
-        ctx.shadowColor = '#2ec4b6';
-        ctx.shadowBlur = 10;
-        ctx.beginPath();
-        ctx.arc(mx, my, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-
-      // Draw Player Car Marker (Center Glowing Triangle pointing Up)
+      // Draw Player Car Chevron Marker at (w/2, h - 24)
       ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = '#00d4bf';
+      ctx.shadowColor = '#38bdf8';
       ctx.shadowBlur = 8;
       ctx.beginPath();
-      ctx.moveTo(w / 2, h / 2 - 7);
-      ctx.lineTo(w / 2 - 4.5, h / 2 + 5);
-      ctx.lineTo(w / 2 + 4.5, h / 2 + 5);
+      ctx.moveTo(w / 2, h - 31);
+      ctx.lineTo(w / 2 - 4.5, h - 19);
+      ctx.lineTo(w / 2, h - 22);
+      ctx.lineTo(w / 2 + 4.5, h - 19);
       ctx.closePath();
       ctx.fill();
       ctx.shadowBlur = 0;
@@ -8179,6 +8157,9 @@
           this.updateWalking(dt);
         } else {
           this.vehicle.update(dt, this.keys, this.world, this.selectedSeason, this.selectedRoadTerrain);
+          if (sound && sound.updateDrivingAmbience) {
+            sound.updateDrivingAmbience(this.vehicle.speed, this.vehicle.maxSpeed, (this.vehicle.speed - (this.vehicle.lastSpeed || this.vehicle.speed)) / Math.max(0.01, dt));
+          }
         }
         this.world.updateTraffic(dt);
         this.world.updateCrossers(dt);
