@@ -2081,14 +2081,17 @@
         const normal = new THREE.Vector3().crossVectors(tangent, worldUp).normalize();
         const binormal = new THREE.Vector3().crossVectors(normal, tangent).normalize();
 
-        // Dynamic Curvature Banking Angle
-        let curvatureY = 0;
-        if (i < tubularSegments - 1) {
-          const nextTang = new THREE.Vector3().subVectors(points[i + 2], points[i]).normalize();
-          curvatureY = (nextTang.x - tangent.x) * 10.0;
+        // Dynamic Curvature Banking Angle (true 3D signed horizontal curvature)
+        let curvature = 0;
+        if (i < tubularSegments) {
+          const nextTang = (i < tubularSegments - 1)
+            ? new THREE.Vector3().subVectors(points[i + 2], points[i]).normalize()
+            : new THREE.Vector3().subVectors(points[tubularSegments], points[tubularSegments - 1]).normalize();
+          // Signed horizontal curvature (independent of world compass direction/quadrant)
+          curvature = tangent.x * nextTang.z - tangent.z * nextTang.x;
         }
 
-        const bankingAngle = THREE.MathUtils.clamp(curvatureY * 0.25, -0.14, 0.14);
+        const bankingAngle = THREE.MathUtils.clamp(curvature * 2.2, -0.10, 0.10);
         const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
         const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
         this.roadBankingAngles[i] = bankingAngle;
@@ -2457,26 +2460,11 @@
         const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
         const binormal = new THREE.Vector3().crossVectors(normal, tangent).normalize();
 
-        // Mirrors createRoadMesh's own banking calc exactly (same points
-        // array, same index, same formula) — this is the actual cause of
-        // terrain visibly clipping through the road on curves. createRoadMesh
-        // tilts the road's interior surface up to ±0.14rad on bends
-        // (banking), but this terrain slab directly underneath it was
-        // always pinned to the flat, unbanked `pt.y - 0.18`. On a banked
-        // curve the real road surface sits well over a meter above or below
-        // that flat height at the outer/inner edge, so the flat slab either
-        // floats visibly above the low side of the road or — the reported
-        // bug — pokes up through it on the high side. The vehicle's own
-        // ground-following has a separate fix for this same divergence
-        // (see the `bankedYOffset` comment in `update()`), but that only
-        // corrects where the CAR sits, not where this mesh renders, so the
-        // visual clipping remained even after the car stopped sinking.
-        let curvatureY = 0;
-        if (i < tubularSegments - 1) {
-          const nextTang = new THREE.Vector3().subVectors(points[i + 2], points[i]).normalize();
-          curvatureY = (nextTang.x - tangent.x) * 10.0;
-        }
-        const bankingAngle = THREE.MathUtils.clamp(curvatureY * 0.25, -0.14, 0.14);
+        // Mirrors createRoadMesh's banking exactly by reading from the
+        // shared cached this.roadBankingAngles array (Single Source of Truth)
+        const bankingAngle = (this.roadBankingAngles && this.roadBankingAngles[i] !== undefined)
+          ? this.roadBankingAngles[i]
+          : 0;
 
         for (let j = 0; j < sliceCount; j++) {
           const latDist = lateralSlices[j];
@@ -5490,21 +5478,17 @@
       const groundY = world.groundHeightAt(proj.pt, vehiclePos, latDist);
 
       const bankPts = world.roadSpacedPoints;
+      const bankAngles = world.roadBankingAngles;
       let bankingAngle = 0, bankTangent = tangent;
-      if (bankPts && bankPts.length > 2) {
+      if (bankAngles && bankPts && bankPts.length > 2) {
         const segs = bankPts.length - 1;
-        const rawIdx = THREE.MathUtils.clamp(proj.u * segs, 1, segs - 2);
-        const i0 = Math.floor(rawIdx), i1 = Math.min(i0 + 1, segs - 2);
+        const rawIdx = THREE.MathUtils.clamp(proj.u * segs, 0, segs - 1);
+        const i0 = Math.floor(rawIdx), i1 = Math.min(i0 + 1, segs - 1);
         const frac = rawIdx - i0;
-        const bankingAt = (i) => {
-          const tan = new THREE.Vector3().subVectors(bankPts[i + 1], bankPts[i - 1]).normalize();
-          const nextTang = new THREE.Vector3().subVectors(bankPts[i + 2], bankPts[i]).normalize();
-          const curvatureY = (nextTang.x - tan.x) * 10.0;
-          return { angle: THREE.MathUtils.clamp(curvatureY * 0.25, -0.14, 0.14), tan };
-        };
-        const b0 = bankingAt(i0), b1 = bankingAt(i1);
-        bankingAngle = THREE.MathUtils.lerp(b0.angle, b1.angle, frac);
-        bankTangent = b0.tan.clone().lerp(b1.tan, frac).normalize();
+        bankingAngle = THREE.MathUtils.lerp(bankAngles[i0] || 0, bankAngles[i1] || 0, frac);
+        const tan0 = (i0 < segs - 1) ? new THREE.Vector3().subVectors(bankPts[i0 + 1], bankPts[Math.max(0, i0 - 1)]).normalize() : tangent;
+        const tan1 = (i1 < segs - 1) ? new THREE.Vector3().subVectors(bankPts[i1 + 1], bankPts[Math.max(0, i1 - 1)]).normalize() : tangent;
+        bankTangent = tan0.clone().lerp(tan1, frac).normalize();
       }
       const binormal = new THREE.Vector3().crossVectors(roadRight, bankTangent).normalize();
       const bankedYOffset = latDist * binormal.y * Math.sin(bankingAngle);
