@@ -1331,6 +1331,34 @@ html, body {
   background: linear-gradient(180deg, #cfd8e3 0%, #dbe2df 45%, #eef0ea 100%);
 }
 
+/* Tried making the intro backdrop translucent so the live orbiting-camera
+   showcase scene (see animate()'s menu-state branch) shows through behind
+   the menu. Reverted — the orbit camera has no framing/bounds check, so
+   it regularly swings past the edge of the generated terrain strip and
+   shows a giant flat wall / world-end artifact, which read as broken
+   rather than atmospheric. Would need a dedicated, bounded showcase
+   camera (fixed loop over a curated section of road) before trying this
+   again, not the same orbit used as a placeholder for the empty menu
+   state. */
+
+/* REMOVED: an feTurbulence dither overlay was tried here to fix reported
+   gradient banding, but it rendered as coarse, prominent grain across the
+   whole intro screen instead of an imperceptible dither (confirmed by
+   direct user report after adding it) — worse than the original banding.
+   Reverted. If banding needs fixing again, a per-pixel PNG noise texture
+   at very low opacity (not an SVG feTurbulence filter) would be safer,
+   since feTurbulence's cell size doesn't scale predictably across
+   viewports/browsers. */
+/* This gradient's stops are close, desaturated pastels — exactly the case
+   that bands hardest on wide viewports (reported directly: visible
+   stepped "layers" on the sides at a wide window, not present at a
+   narrower one). Browsers don't dither CSS gradients on their own; a
+   flat pastel span quantizes to visible 1-2px steps once it's wide
+   enough. Standard fix is a barely-there noise dither — NOT the same
+   thing as visible grain, the two look opposite once tuned right: too
+   little and the bands stay, too much and it reads as texture. 1.5%
+   opacity, feTurbulence baseFrequency 0.9 (fine grain, not blotchy) is
+   tuned to disappear as noise while still breaking up the banding. */
 .modal-backdrop::before {
   content: '';
   position: absolute;
@@ -1346,17 +1374,18 @@ html, body {
 }
 
 .shiplyp-hub-card {
+  /* Reference (slowroads.io) has no card at all on its intro screen — no
+     glass panel, border, blur, or shadow, just text and a pill button
+     floating directly on the flat gradient. Removing the backdrop-filter
+     didn't fully clear the reported grain because the panel's own edge
+     (border + box-shadow + border-radius compositing) was still creating
+     a visible seam against the gradient. Matching reference directly:
+     content sits straight on the gradient, no card chrome at all. */
   position: relative;
   z-index: 10;
   width: 740px;
   max-width: 92vw;
-  background: rgba(255, 255, 255, 0.62);
-  backdrop-filter: blur(28px);
-  -webkit-backdrop-filter: blur(28px);
-  border: 1px solid rgba(28, 36, 48, 0.08);
-  border-radius: 22px;
   padding: 34px 38px;
-  box-shadow: 0 24px 70px rgba(28, 36, 48, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.6);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1427,7 +1456,8 @@ html, body {
   color: #7c8790;
   text-transform: uppercase;
   font-weight: 700;
-  text-align: left;
+  text-align: center;
+  width: 100%;
 }
 
 .hub-city-pills {
@@ -1487,9 +1517,15 @@ html, body {
 }
 
 .hub-vehicle-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
+}
+
+.hub-vehicle-grid .vehicle-card-btn {
+  flex: 1 1 200px;
+  max-width: 260px;
 }
 
 .vehicle-card-btn {
@@ -1551,9 +1587,15 @@ html, body {
 }
 
 .hub-difficulty-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
+}
+
+.hub-difficulty-grid .diff-card-btn {
+  flex: 1 1 150px;
+  max-width: 220px;
 }
 
 .diff-card-btn {

@@ -112,39 +112,98 @@
   ChotaHathiAsset.load();
 
   // --------------------------------------------------------------------------
-  // 0d. SECOND PLAYER VEHICLE: SUV (CC0, Kenney Car Kit) — replaces the flat
-  // primitive-box "Volt Scooter" per the roster cut to 2 well-made vehicles
-  // (sedan + SUV) instead of a wider roster including a poorly-modeled
-  // two-wheeler no CC0 source had a good replacement for.
+  // 0e. SECOND PLAYER VEHICLE: user-supplied sports coupe (source/license
+  // unverified — user confirmed "not sure / found it somewhere" when asked;
+  // flagged in SLOWROADS_PARITY_LOG.md and CREDITS_AND_REFERENCES.md rather
+  // than treated as silently CC0-equivalent). Converted from the supplied
+  // FBX via Blender (headless, this session): FBX->glTF export, textures
+  // downscaled from 2048px to 1024px, and the 'car paint' material's Base
+  // Color re-wired to its actual image node (the exporter dropped it
+  // originally — Blender's importer left an unrelated flat factor already
+  // connected on several materials, which made the fix loop wrongly think
+  // they were already textured and skip them). The 'car paint' material
+  // itself has no diffuse texture in the source file at all (by design —
+  // same reason Kenney's sedan/truck 'body' mesh has no texture, it's meant
+  // to be tinted per-vehicle), so it's recolored here exactly like those.
+  // Model's front (headlights) faces local -Z, opposite this game's +Z-
+  // forward convention — rotated 180° on load to correct it.
   // --------------------------------------------------------------------------
-  const SuvAsset = {
+  const SportsCoupeAsset = {
     template: null,
     loading: false,
     pendingControllers: [],
     load() {
       if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
       this.loading = true;
-      new THREE.GLTFLoader().load('assets/models/suv.glb', (gltf) => {
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1c2430, flatShading: true }); // Slate charcoal
-        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+      new THREE.GLTFLoader().load('assets/models/sports-coupe.glb?t=' + Date.now(), (gltf) => {
+        const paintMat = new THREE.MeshStandardMaterial({ color: 0x1c2430, metalness: 0.6, roughness: 0.35 }); // Slate charcoal gloss
         gltf.scene.traverse((child) => {
           if (!child.isMesh) return;
           child.castShadow = true;
-          if (child.name === 'body') child.material = bodyMat;
-          else if (child.name.startsWith('wheel')) child.material = wheelMat;
+          if (child.material && child.material.name === 'car paint') child.material = paintMat;
         });
+        gltf.scene.rotation.y = Math.PI;
         this.template = gltf.scene;
         this.pendingControllers.forEach((vc) => vc.buildModel());
         this.pendingControllers.length = 0;
       }, undefined, (err) => {
-        console.warn('SuvAsset: failed to load suv.glb, falling back to procedural model', err);
+        console.warn('SportsCoupeAsset: failed to load sports-coupe.glb, falling back to procedural model', err);
       });
     },
     clone() {
       return this.template ? this.template.clone(true) : null;
     }
   };
-  SuvAsset.load();
+  SportsCoupeAsset.load();
+
+  // --------------------------------------------------------------------------
+  // 0f. THIRD PLAYER VEHICLE: user-supplied muscle coupe (source/license
+  // unverified, same as SportsCoupeAsset above — flagged, not treated as
+  // CC0-equivalent). The source file's name/metadata referenced a specific
+  // real car manufacturer and trim — explicitly stripped per user
+  // instruction: verified zero occurrences of that name (or the model
+  // trim's name) anywhere in the converted glTF's node/mesh/material/scene
+  // names before this file was ever copied into the project, and renamed
+  // the one remaining real-brand reference found ('Brembo', a brake-caliper
+  // maker) to a generic material name. No filename, code comment, or
+  // in-game vehicle name anywhere below references the real source car.
+  // Converted via the same Blender headless FBX->glTF pipeline, decimated
+  // 50% (263k->131k tris) since the raw source was heavier than needed for
+  // a single real-time hero vehicle. Model's front (headlights) already
+  // faces local +Z matching this game's forward convention — no rotation
+  // needed (checked per-model, not assumed from the other asset above).
+  // --------------------------------------------------------------------------
+  const MuscleCoupeAsset = {
+    template: null,
+    loading: false,
+    pendingControllers: [],
+    load() {
+      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
+      this.loading = true;
+      new THREE.GLTFLoader().load('assets/models/muscle-coupe.glb?t=' + Date.now(), (gltf) => {
+        gltf.scene.traverse((child) => {
+          if (!child.isMesh) return;
+          child.castShadow = true;
+        });
+        // Corrected via live raycast verification, not the earlier
+        // hand-derived Blender-axis math (which was wrong): the model was
+        // actually mounted backwards — a camera positioned to see the
+        // car's actual driving-forward face was hitting geometry at local
+        // -Z, not +Z, meaning this needs the same 180° correction as
+        // SportsCoupeAsset after all.
+        gltf.scene.rotation.y = Math.PI;
+        this.template = gltf.scene;
+        this.pendingControllers.forEach((vc) => vc.buildModel());
+        this.pendingControllers.length = 0;
+      }, undefined, (err) => {
+        console.warn('MuscleCoupeAsset: failed to load muscle-coupe.glb, falling back to procedural model', err);
+      });
+    },
+    clone() {
+      return this.template ? this.template.clone(true) : null;
+    }
+  };
+  MuscleCoupeAsset.load();
 
   // --------------------------------------------------------------------------
   // 1. DETERMINISTIC PRNG
@@ -1090,7 +1149,8 @@
     VEHICLES: {
       swift: { id: 'swift', name: 'Raftaar GT Hatch', maxSpeed: 44.0, accel: 18.0, drag: 0.80, brake: 30.0 },
       chotahathi: { id: 'chotahathi', name: 'Gaja 500 Mini Truck', maxSpeed: 30.0, accel: 12.0, drag: 0.85, brake: 26.0 },
-      scooter: { id: 'scooter', name: 'Vayu Volt Scooter', maxSpeed: 34.0, accel: 16.0, drag: 0.90, brake: 24.0 },
+      sportscoupe: { id: 'sportscoupe', name: 'Sports Coupe', maxSpeed: 50.0, accel: 20.0, drag: 0.78, brake: 32.0 },
+      musclecoupe: { id: 'musclecoupe', name: 'Muscle Coupe', maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0 },
       cycle: { id: 'cycle', name: 'Pawan Pedaler Bike', maxSpeed: 22.0, accel: 10.0, drag: 0.95, brake: 20.0 }
     },
 
@@ -4528,57 +4588,94 @@
           this.wheels.push(w);
         });
 
-      } else if (this.vehicleType === 'scooter') {
+      } else if (this.vehicleType === 'sportscoupe' && SportsCoupeAsset.template) {
         // ====================================================================
-        // 3. VAYU VOLT SPORTS SCOOTER (Electric Courier Scooter)
+        // 3. SPORTS COUPE (user-supplied model, see SportsCoupeAsset comment
+        // above for source/conversion notes) — replaces the flat-primitive
+        // "Volt Scooter" as the second vehicle.
         // ====================================================================
-        const apronMat = new THREE.MeshStandardMaterial({ color: 0x10b981, flatShading: true }); // Neon Mint Electric
-        const apronGeom = new THREE.BoxGeometry(0.52, 0.85, 0.42);
-        const apron = new THREE.Mesh(apronGeom, apronMat);
-        apron.position.set(0, 0.78, 0.42);
+        const carModel = SportsCoupeAsset.clone();
+        this.mesh.add(carModel);
+        carModel.traverse((child) => {
+          if (child.isMesh && child.name && /(rim|tyre|caliper|disc)$/i.test(child.name)) {
+            this.wheels.push(child);
+          }
+        });
 
-        const led = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.1, 0.08), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-        led.position.set(0, 1.05, 0.64);
+      } else if (this.vehicleType === 'sportscoupe') {
+        // Procedural fallback, used only until SportsCoupeAsset finishes
+        // loading, then auto-rebuilt (same pattern as 'swift' above).
+        if (SportsCoupeAsset.pendingControllers.indexOf(this) === -1) {
+          SportsCoupeAsset.pendingControllers.push(this);
+        }
+        const bodyGeom = new THREE.BoxGeometry(1.92, 0.7, 4.5);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1c2430, flatShading: true });
+        const body = new THREE.Mesh(bodyGeom, bodyMat);
+        body.position.y = 0.6;
+        body.castShadow = true;
+        this.mesh.add(body);
 
-        const barGeom = new THREE.CylinderGeometry(0.035, 0.035, 0.82, 8);
-        barGeom.rotateZ(Math.PI / 2);
-        const barMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
-        const bar = new THREE.Mesh(barGeom, barMat);
-        bar.position.set(0, 1.32, 0.42);
-
-        const floorGeom = new THREE.BoxGeometry(0.5, 0.12, 0.85);
-        const floor = new THREE.Mesh(floorGeom, apronMat);
-        floor.position.set(0, 0.32, 0.0);
-
-        const seatGeom = new THREE.BoxGeometry(0.48, 0.38, 0.95);
-        const seatMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
-        const seat = new THREE.Mesh(seatGeom, seatMat);
-        seat.position.set(0, 0.65, -0.55);
-
-        // Rear Thermal Courier Delivery Backpack
-        const bagGeom = new THREE.BoxGeometry(0.58, 0.65, 0.58);
-        const bagMat = new THREE.MeshLambertMaterial({ color: 0xff9f1c });
-        const bag = new THREE.Mesh(bagGeom, bagMat);
-        bag.position.set(0, 1.15, -0.68);
-
-        // Tail Light
-        const tailGeom = new THREE.BoxGeometry(0.24, 0.08, 0.06);
-        const tailMat = new THREE.MeshBasicMaterial({ color: 0xef233c });
-        const tail = new THREE.Mesh(tailGeom, tailMat);
-        tail.position.set(0, 0.65, -1.05);
-
-        this.mesh.add(apron);
-        this.mesh.add(led);
-        this.mesh.add(bar);
-        this.mesh.add(floor);
-        this.mesh.add(seat);
-        this.mesh.add(bag);
-        this.mesh.add(tail);
-
-        const wheelGeom = new THREE.CylinderGeometry(0.3, 0.3, 0.14, 14);
+        const wheelGeom = new THREE.CylinderGeometry(0.32, 0.32, 0.22, 14);
         wheelGeom.rotateZ(Math.PI / 2);
         const wheelMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
-        [[0, 0.3, 0.78], [0, 0.3, -0.85]].forEach(p => {
+        [[-0.95, 0.32, 1.5], [0.95, 0.32, 1.5], [-0.95, 0.32, -1.5], [0.95, 0.32, -1.5]].forEach(p => {
+          const w = new THREE.Mesh(wheelGeom, wheelMat);
+          w.position.set(...p);
+          this.mesh.add(w);
+          this.wheels.push(w);
+        });
+
+      } else if (this.vehicleType === 'musclecoupe' && MuscleCoupeAsset.template) {
+        // ====================================================================
+        // 4. MUSCLE COUPE (user-supplied model, see MuscleCoupeAsset comment
+        // above for source/conversion/brand-scrubbing notes)
+        // ====================================================================
+        const carModel = MuscleCoupeAsset.clone();
+        this.mesh.add(carModel);
+        carModel.traverse((child) => {
+          if (child.isMesh && child.name && /^(wheel|brakes)_/i.test(child.name)) {
+            this.wheels.push(child);
+          }
+        });
+        // Blank cover plates over two front badges — the source model has
+        // real brand/trim names embossed directly into the body mesh's
+        // geometry (confirmed live via screenshot: legible "CHALLENGER"
+        // script above the grille and a separate "SRT" plate below it —
+        // not just metadata), and the file has zero texture data (verified
+        // via a raw glTF JSON scan), so neither is a decal that can be
+        // swapped out; deleting by material slot in Blender missed it
+        // entirely (wrong slot). These opaque plates physically occlude
+        // both without risking a hole in the mesh. Positions are exact —
+        // found by raycasting the actual rendered geometry from the real
+        // in-game camera, not estimated from the source file's own
+        // coordinate system (an earlier estimate was wrong: this vehicle
+        // also needed the 180° rotation fix above, which the geometry-based
+        // raycast caught and a coordinate-math guess had missed).
+        const badgeMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
+        const scriptCover = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.16, 0.03), badgeMat);
+        scriptCover.position.set(0, 0.826, -2.46);
+        this.mesh.add(scriptCover);
+        const plateCover = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.13, 0.03), badgeMat);
+        plateCover.position.set(0, 0.729, -2.42);
+        this.mesh.add(plateCover);
+
+      } else if (this.vehicleType === 'musclecoupe') {
+        // Procedural fallback, used only until MuscleCoupeAsset finishes
+        // loading, then auto-rebuilt.
+        if (MuscleCoupeAsset.pendingControllers.indexOf(this) === -1) {
+          MuscleCoupeAsset.pendingControllers.push(this);
+        }
+        const bodyGeom = new THREE.BoxGeometry(2.0, 0.75, 4.9);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x8a1f1f, flatShading: true });
+        const body = new THREE.Mesh(bodyGeom, bodyMat);
+        body.position.y = 0.62;
+        body.castShadow = true;
+        this.mesh.add(body);
+
+        const wheelGeom = new THREE.CylinderGeometry(0.36, 0.36, 0.24, 14);
+        wheelGeom.rotateZ(Math.PI / 2);
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+        [[-1.0, 0.36, 1.6], [1.0, 0.36, 1.6], [-1.0, 0.36, -1.6], [1.0, 0.36, -1.6]].forEach(p => {
           const w = new THREE.Mesh(wheelGeom, wheelMat);
           w.position.set(...p);
           this.mesh.add(w);
@@ -4728,7 +4825,7 @@
 
       let climateGrip = terrainGrip;
       if (isRain) {
-        if (this.vehicleType === 'cycle' || this.vehicleType === 'scooter') climateGrip *= 0.48;
+        if (this.vehicleType === 'cycle') climateGrip *= 0.48;
         else climateGrip *= 0.68;
       }
 
@@ -5225,7 +5322,7 @@
       this.selectedRoadTerrain = 'asphalt'; // 'asphalt', 'gravel', 'mud', 'sand'
       this.weather = 'clear'; // 'clear', 'rain' — see SLOWROADS_PARITY_LOG.md item 4
       this.selectedSeed = '5927cd04';
-      this.selectedVehicle = 'swift';
+      this.selectedVehicle = 'sportscoupe';
       this.selectedDifficulty = 'medium';
       this.activeDockPanel = null;
       this.activeCameraMode = 'chase';
@@ -5781,7 +5878,7 @@
     // them instead; that's a separate follow-up feature).
     toggleOnFoot() {
       if (!this.vehicle || !this.world || this.gameState !== 'playing') return;
-      const isCarOrTruck = this.selectedVehicle === 'swift' || this.selectedVehicle === 'chotahathi';
+      const isCarOrTruck = this.selectedVehicle === 'sportscoupe' || this.selectedVehicle === 'musclecoupe' || this.selectedVehicle === 'chotahathi';
       if (!isCarOrTruck) {
         this.addNotification('🛵 Two-wheelers stay mounted — toss from the saddle instead', 'neutral', 2500);
         return;
@@ -6871,14 +6968,13 @@
       // Section 2.1: vehicle roster cut to 2 (was 4) — chotahathi (cargo
       // mini-truck) and cycle (courier bike) were both framed entirely
       // around delivery capacity/speed tradeoffs that no longer apply.
-      // Cut to one world, per direct instruction: concentrate on a single
-      // map and keep expanding on it (denser/richer content on this one
-      // route) rather than spreading effort across 5 shallow ones. The
-      // list stays a list (not a hardcoded single button) so a second
-      // world can be added back here later without restructuring this UI.
-      const cityList = [
-        { id: 'mumbai', name: 'Mumbai' }
-      ];
+      // Single world (Mumbai), per direct instruction: concentrate on one
+      // map and keep expanding on it rather than spreading effort across
+      // 5 shallow ones. No world picker in the menu at all now — there's
+      // nothing to pick. selectedCity stays 'mumbai' (set in the
+      // constructor) and CONFIG.CITIES still holds the other 4 entries
+      // undisturbed, so a picker can come back later without rebuilding
+      // this from scratch if a second world is ever actually built out.
 
       const roadStyleList = [
         { id: 'asphalt', name: 'Asphalt' },
@@ -6888,8 +6984,8 @@
       ];
 
       const vehList = [
-        { id: 'swift', name: 'GT Hatch', stat: '160 km/h • Sports EV' },
-        { id: 'scooter', name: 'Volt Scooter', stat: '120 km/h • Electric' }
+        { id: 'sportscoupe', name: 'Sports Coupe', stat: '180 km/h • Gasoline' },
+        { id: 'musclecoupe', name: 'Muscle Coupe', stat: '194 km/h • Gasoline' }
       ];
 
       this.modalContainer.innerHTML = `
@@ -6899,18 +6995,6 @@
               <h1 class="hub-brand-title">SHIP<span>LYP</span></h1>
             </div>
             <p class="hub-tagline">Endless Driving • India Roads</p>
-
-            <!-- 1. Select World -->
-            <div class="hub-city-selector">
-              <span class="hub-section-label">SELECT WORLD</span>
-              <div class="hub-city-pills">
-                ${cityList.map(c => `
-                  <button class="city-pill-btn ${this.selectedCity === c.id ? 'active-city' : ''}" data-city="${c.id}">
-                    <span class="city-pill-name">${c.name.toUpperCase()}</span>
-                  </button>
-                `).join('')}
-              </div>
-            </div>
 
             <!-- 2. Select Road Style -->
             <div class="hub-difficulty-selector">
@@ -6949,16 +7033,6 @@
         </div>
       `;
 
-      this.modalContainer.querySelectorAll('.city-pill-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          this.selectedCity = btn.dataset.city;
-          this.selectedSeason = CONFIG.CITIES[this.selectedCity].season;
-          this.modalContainer.querySelectorAll('.city-pill-btn').forEach(b => b.classList.remove('active-city'));
-          btn.classList.add('active-city');
-          sound.playTone(600, 'sine', 0.08);
-        });
-      });
 
       this.modalContainer.querySelectorAll('.diff-card-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -7097,8 +7171,8 @@
             <div class="dock-panel-col">
               <span class="dock-panel-label">VEHICLE</span>
               <div class="dock-btn-row">
-                <button class="dock-sq-btn ${this.selectedVehicle === 'swift' ? 'active-sq' : ''}" data-v="swift">HATCH</button>
-                <button class="dock-sq-btn ${this.selectedVehicle === 'scooter' ? 'active-sq' : ''}" data-v="scooter">SCOOTER</button>
+                <button class="dock-sq-btn ${this.selectedVehicle === 'sportscoupe' ? 'active-sq' : ''}" data-v="sportscoupe">COUPE</button>
+                <button class="dock-sq-btn ${this.selectedVehicle === 'musclecoupe' ? 'active-sq' : ''}" data-v="musclecoupe">MUSCLE</button>
               </div>
             </div>
           </div>
