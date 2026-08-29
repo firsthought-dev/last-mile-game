@@ -1196,22 +1196,15 @@
         id: 'dawn',
         name: 'Dawn Golden Hour',
         icon: '🌅',
-        skyTop: 0x4338ca,
-        skyHorizon: 0xf97316,
-        skyBottom: 0xfde047,
-        // Fog color matched to the sky's HORIZON band, not its base —
-        // distant terrain sits near the horizon in view, so fogging it
-        // toward the base color left a visible mismatch band where terrain
-        // faded into a different hue than the sky right behind it.
-        // Density raised from a near-invisible 0.0017 to something that
-        // actually dissolves distant geometry into atmosphere (slowroads.io
-        // reference read as noticeably hazier at any real draw distance).
-        fog: 0xf97316,
-        fogDensity: 0.0055,
-        sunColor: 0xffedd5,
+        skyTop: 0x7c5980,
+        skyHorizon: 0xe0a0a0,
+        skyBottom: 0xf8d7b0,
+        fog: 0xe0a0a0,
+        fogDensity: 0.0035,
+        sunColor: 0xffeedd,
         sunIntensity: 1.15,
         sunPos: [220, 90, -120],
-        ambientColor: 0xfb923c,
+        ambientColor: 0xdfba89,
         ambientIntensity: 0.45,
         night: false
       },
@@ -1219,15 +1212,15 @@
         id: 'day',
         name: 'Midday Daylight',
         icon: '☀️',
-        skyTop: 0x0284c7,
-        skyHorizon: 0x38bdf8,
-        skyBottom: 0xbae6fd,
-        fog: 0x38bdf8,
-        fogDensity: 0.0048,
+        skyTop: 0x3b7298,
+        skyHorizon: 0x8cb8d4,
+        skyBottom: 0xc6e0ee,
+        fog: 0x8cb8d4,
+        fogDensity: 0.0022,
         sunColor: 0xfffdf5,
         sunIntensity: 1.25,
         sunPos: [120, 260, 100],
-        ambientColor: 0xffffff,
+        ambientColor: 0xf1f5f9,
         ambientIntensity: 0.55,
         night: false
       },
@@ -1235,11 +1228,11 @@
         id: 'dusk',
         name: 'Sunset Golden Hour',
         icon: '🌇',
-        skyTop: 0x1e293b,
-        skyHorizon: 0xf97316,
-        skyBottom: 0xfde047,
-        fog: 0xf97316,
-        fogDensity: 0.0052,
+        skyTop: 0x383556,
+        skyHorizon: 0xd96b43,
+        skyBottom: 0xf7b267,
+        fog: 0xd96b43,
+        fogDensity: 0.0035,
         sunColor: 0xffedd5,
         sunIntensity: 1.10,
         sunPos: [-220, 75, -140],
@@ -1251,15 +1244,15 @@
         id: 'night',
         name: 'Midnight Starlight',
         icon: '🌙',
-        skyTop: 0x01040a,
-        skyHorizon: 0x070e1c,
-        skyBottom: 0x0f172a,
-        fog: 0x070e1c,
-        fogDensity: 0.0055,
+        skyTop: 0x010206,
+        skyHorizon: 0x040812,
+        skyBottom: 0x0a1424,
+        fog: 0x040812,
+        fogDensity: 0.0035,
         sunColor: 0x93c5fd,
         sunIntensity: 0.40,
         sunPos: [-60, 190, -100],
-        ambientColor: 0x0f172a,
+        ambientColor: 0x0a1424,
         ambientIntensity: 0.32,
         night: true
       }
@@ -2067,155 +2060,76 @@
 
       this.skyMesh = new THREE.Mesh(geom, skyMat);
 
-      // Add Twinkling Astronomical Starfield with Circular Glow Sprites
-      const createStarTexture = () => {
+      // Real Astrophotography Starfield (Matching natural dark sky reference)
+      const createPinpointStarTexture = () => {
         const c = document.createElement('canvas');
-        c.width = 32;
-        c.height = 32;
+        c.width = 16;
+        c.height = 16;
         const ctx = c.getContext('2d');
-        const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+        const grad = ctx.createRadialGradient(8, 8, 0, 8, 8, 8);
         grad.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)');
-        grad.addColorStop(0.25, 'rgba(235, 245, 255, 0.85)');
-        grad.addColorStop(0.55, 'rgba(180, 220, 255, 0.35)');
-        grad.addColorStop(0.85, 'rgba(120, 180, 255, 0.06)');
-        grad.addColorStop(1.0, 'rgba(120, 180, 255, 0.0)');
+        grad.addColorStop(0.2, 'rgba(240, 248, 255, 0.95)');
+        grad.addColorStop(0.45, 'rgba(210, 230, 255, 0.40)');
+        grad.addColorStop(0.75, 'rgba(180, 210, 255, 0.05)');
+        grad.addColorStop(1.0, 'rgba(180, 210, 255, 0.0)');
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(16, 16, 16, 0, Math.PI * 2);
+        ctx.arc(8, 8, 8, 0, Math.PI * 2);
         ctx.fill();
-        const t = new THREE.CanvasTexture(c);
-        return t;
+        return new THREE.CanvasTexture(c);
       };
 
       const starGeom = new THREE.BufferGeometry();
       const starPos = [];
       const starColors = [];
       const starPalette = [
-        new THREE.Color(0xffffff), // Brilliant diamond white
-        new THREE.Color(0xdbeafe), // Icy Sirius blue
-        new THREE.Color(0xfef08a), // Golden Capella yellow
-        new THREE.Color(0xfb923c), // Amber Betelgeuse orange
-        new THREE.Color(0x93c5fd)  // Deep Vega blue
+        new THREE.Color(0xffffff), // Stellar pure white (65%)
+        new THREE.Color(0xf1f5f9), // Silver starlight (15%)
+        new THREE.Color(0xdbeafe), // Icy Sirius blue (10%)
+        new THREE.Color(0xfef3c7), // Soft Capella warm (7%)
+        new THREE.Color(0xfde68a)  // Subtle amber star (3%)
       ];
 
-      const STAR_COUNT = 3200;
+      const STAR_COUNT = 4500;
       for (let s = 0; s < STAR_COUNT; s++) {
         const theta = Math.random() * Math.PI * 2;
-        const phi = Math.random() * (Math.PI / 2.12); // Full upper celestial hemisphere
-        const r = 1060 + Math.random() * 25;
+        const phi = Math.random() * (Math.PI / 2.05); // Full upper celestial dome down to horizon
+        const r = 1060 + Math.random() * 20;
         const x = r * Math.sin(phi) * Math.cos(theta);
         const y = r * Math.cos(phi);
         const z = r * Math.sin(phi) * Math.sin(theta);
         starPos.push(x, y, z);
 
         const col = starPalette[Math.floor(Math.random() * starPalette.length)];
-        const brightness = 0.65 + Math.random() * 0.35;
+        // Astrophotography stellar distribution: 85% faint micro-dots, 12% medium, 3% bright
+        const roll = Math.random();
+        let brightness;
+        if (roll < 0.85) {
+          brightness = 0.25 + Math.random() * 0.35; // Faint background stardust
+        } else if (roll < 0.97) {
+          brightness = 0.65 + Math.random() * 0.20; // Medium star
+        } else {
+          brightness = 0.90 + Math.random() * 0.10; // Prominent bright pinpoint
+        }
         starColors.push(col.r * brightness, col.g * brightness, col.b * brightness);
       }
 
       starGeom.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
       starGeom.setAttribute('color', new THREE.Float32BufferAttribute(starColors, 3));
       const starMat = new THREE.PointsMaterial({
-        map: createStarTexture(),
+        map: createPinpointStarTexture(),
         vertexColors: true,
-        size: 3.2,
+        size: 1.5,
         sizeAttenuation: false,
         transparent: true,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-        opacity: (tod.night || this.seasonKey === 'space' ? 1.0 : (tod.id === 'dusk' ? 0.65 : 0.0))
+        opacity: (tod.night || this.seasonKey === 'space' ? 1.0 : (tod.id === 'dusk' ? 0.45 : 0.0))
       });
       this.starMesh = new THREE.Points(starGeom, starMat);
       this.skyMesh.add(this.starMesh);
 
-      // Add Atmospheric Clouds
-      this.createClouds(todKey);
-
       return this.skyMesh;
-    }
-
-    createClouds(todKey = 'day') {
-      if (this.cloudGroup) {
-        this.skyMesh.remove(this.cloudGroup);
-      }
-      this.cloudGroup = new THREE.Group();
-      this.clouds = [];
-      const tod = CONFIG.TIME_OF_DAY[todKey] || CONFIG.TIME_OF_DAY.day;
-
-      // Night & Space have ZERO 3D cloud blobs — crystal-clear starry cosmos!
-      if (tod.night || this.seasonKey === 'space') {
-        return this.cloudGroup;
-      }
-
-      let cloudColor = 0xffffff;
-      let cloudOpacity = 0.65;
-      if (tod.id === 'dusk') {
-        cloudColor = 0xffcba3;
-        cloudOpacity = 0.75;
-      } else if (tod.id === 'dawn') {
-        cloudColor = 0xfff3b0;
-        cloudOpacity = 0.75;
-      }
-
-      const createCloudCardTexture = () => {
-        const c = document.createElement('canvas');
-        c.width = 256;
-        c.height = 128;
-        const ctx = c.getContext('2d');
-        const grad = ctx.createRadialGradient(128, 64, 10, 128, 64, 110);
-        grad.addColorStop(0.0, 'rgba(255, 255, 255, 0.85)');
-        grad.addColorStop(0.4, 'rgba(255, 255, 255, 0.55)');
-        grad.addColorStop(0.7, 'rgba(255, 255, 255, 0.18)');
-        grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 256, 128);
-        return new THREE.CanvasTexture(c);
-      };
-
-      const cloudMat = new THREE.MeshBasicMaterial({
-        map: createCloudCardTexture(),
-        color: cloudColor,
-        transparent: true,
-        opacity: cloudOpacity,
-        depthWrite: false,
-        side: THREE.DoubleSide
-      });
-
-      // Spawn soft horizontal cirrus cloud cards along the horizon
-      for (let c = 0; c < 8; c++) {
-        const angle = (c / 8) * Math.PI * 2 + this.prng.range(-0.3, 0.3);
-        const dist = this.prng.range(420, 750);
-        const altitude = this.prng.range(220, 360);
-
-        const cloudMesh = new THREE.Mesh(new THREE.PlaneGeometry(280, 85), cloudMat);
-        cloudMesh.position.set(
-          Math.sin(angle) * dist,
-          altitude,
-          Math.cos(angle) * dist
-        );
-        cloudMesh.lookAt(0, altitude * 0.3, 0);
-        cloudMesh.userData = {
-          speedX: this.prng.range(0.6, 1.8),
-          speedZ: this.prng.range(0.3, 1.0),
-          bounds: 900
-        };
-
-        this.clouds.push(cloudMesh);
-        this.cloudGroup.add(cloudMesh);
-      }
-
-      this.skyMesh.add(this.cloudGroup);
-      return this.cloudGroup;
-    }
-
-    updateClouds(dt) {
-      if (!this.clouds) return;
-      this.clouds.forEach(cl => {
-        cl.position.x += cl.userData.speedX * dt;
-        cl.position.z += cl.userData.speedZ * dt;
-        if (cl.position.x > cl.userData.bounds) cl.position.x = -cl.userData.bounds;
-        if (cl.position.z > cl.userData.bounds) cl.position.z = -cl.userData.bounds;
-      });
     }
 
     createRoadMesh(roadTerrainKey = 'asphalt') {
@@ -9085,7 +8999,6 @@
           const rainForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion);
           this.rain.update(dt, this.vehicle.mesh.position, rainForward, this.vehicle.speed);
         }
-        if (this.world.updateClouds) this.world.updateClouds(dt);
         this.updateParcels(dt);
         this.updateParticles(dt);
 
