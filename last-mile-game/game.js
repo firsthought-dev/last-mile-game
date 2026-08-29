@@ -4991,10 +4991,10 @@
       buildExtensionMarking(edgeOffset, edgeLineColor, false);
       buildExtensionMarking(0.0, centerLineColor, true);
 
-      // 2. Terrain ribbon extension mesh
+      // 2. Terrain ribbon extension mesh (wide horizon landscape out to ±320m)
       const lateralSlices = [
-        -45.0, -30.0, -18.0, -9.0, -laneHalf - shoulderWidth,
-        laneHalf + shoulderWidth, 9.0, 18.0, 30.0, 45.0
+        -320.0, -220.0, -140.0, -85.0, -45.0, -24.0, -12.0, -laneHalf - shoulderWidth,
+        laneHalf + shoulderWidth, 12.0, 24.0, 45.0, 85.0, 140.0, 220.0, 320.0
       ];
       const sliceCount = lateralSlices.length;
       const tGeom = new THREE.BufferGeometry();
@@ -5038,10 +5038,10 @@
             }
           } else {
             const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
-            const blendFactor = THREE.MathUtils.smoothstep(absDist, 9.0, 45.0);
+            const blendFactor = THREE.MathUtils.smoothstep(absDist, 9.0, 60.0);
             const shoulderDrop = pt.y - 0.5;
             finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
-            const slope = Math.abs(finalY - pt.y) / absDist;
+            const slope = Math.abs(finalY - pt.y) / Math.max(1.0, absDist);
             const col = (slope > 0.45) ? cliffCol : (this.simplex.noise2D(worldPos.x * 0.05, worldPos.z * 0.05) > 0.2 ? grassCol : grassLight);
             tColors.push(col.r, col.g, col.b);
           }
