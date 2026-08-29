@@ -5551,51 +5551,49 @@
       // real cross-slope) on top of the existing accel/brake dive-squat
       // and cornering lean, which previously only ever came from a single
       // road-curvature estimate at the vehicle's own center point.
-      const carFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
-      const carRt = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.mesh.quaternion);
+      // True Road Grade Pitch & Terrain Cross-Slope Roll (Slow Roads Parity).
+      // Samples true road spline elevations ahead and behind the vehicle along its wheelbase,
+      // ensuring the car sits completely level on flat roads and tilts naturally with topography.
       const halfWheelbase = 1.45, halfTrack = 0.8;
-      const wheelCorners = {
-        FL: vehiclePos.clone().addScaledVector(carFwd, halfWheelbase).addScaledVector(carRt, -halfTrack),
-        FR: vehiclePos.clone().addScaledVector(carFwd, halfWheelbase).addScaledVector(carRt, halfTrack),
-        RL: vehiclePos.clone().addScaledVector(carFwd, -halfWheelbase).addScaledVector(carRt, -halfTrack),
-        RR: vehiclePos.clone().addScaledVector(carFwd, -halfWheelbase).addScaledVector(carRt, halfTrack)
-      };
-      const wheelY = {};
-      for (const key in wheelCorners) {
-        const p = wheelCorners[key];
-        const d = p.clone().sub(proj.pt).dot(roadRight);
-        wheelY[key] = world.groundHeightAt(proj.pt, p, d);
+
+      let roadGradePitch = 0;
+      if (world.curve) {
+        const uStep = halfWheelbase / 5000;
+        const uFwd = (this.splineProgress + uStep + 1.0) % 1.0;
+        const uBwd = (this.splineProgress - uStep + 1.0) % 1.0;
+        const ptFwd = world.curve.getPointAt(uFwd);
+        const ptBwd = world.curve.getPointAt(uBwd);
+        // Positive road elevation ahead -> nose tilts up (-rotateX in Three.js coordinates)
+        roadGradePitch = THREE.MathUtils.clamp(-Math.atan2(ptFwd.y - ptBwd.y, halfWheelbase * 2), -0.15, 0.15);
       }
-      const frontAxleY = (wheelY.FL + wheelY.FR) / 2;
-      const rearAxleY = (wheelY.RL + wheelY.RR) / 2;
-      const leftTrackY = (wheelY.FL + wheelY.RL) / 2;
-      const rightTrackY = (wheelY.FR + wheelY.RR) / 2;
-      const wheelPitch = THREE.MathUtils.clamp(-Math.atan2(frontAxleY - rearAxleY, halfWheelbase * 2), -0.2, 0.2);
-      const wheelRoll = THREE.MathUtils.clamp(Math.atan2(rightTrackY - leftTrackY, halfTrack * 2), -0.2, 0.2);
 
-      // 2nd-Order Spring-Mass-Damper Suspension Filter (Slow Roads Parity).
-      // Simulates real vehicle chassis inertia, suspension spring stiffness,
-      // and hydraulic shock damping:
-      // d^2(theta)/dt^2 = omega^2 * (target - theta) - 2 * zeta * omega * d(theta)/dt
-      // Provides authentic body weight transfer, dive rebound, and settling
-      // without rigid instant snapping or uncontrolled oscillation.
+      // Cross-slope roll from shoulder/terrain drop
+      const leftTrackY = world.groundHeightAt(proj.pt, vehiclePos, latDist - halfTrack);
+      const rightTrackY = world.groundHeightAt(proj.pt, vehiclePos, latDist + halfTrack);
+      const terrainRoll = THREE.MathUtils.clamp(Math.atan2(rightTrackY - leftTrackY, halfTrack * 2), -0.15, 0.15);
+
+      // Controlled throttle dive/squat (Slow Roads parity: 0 at steady cruise, subtle under input)
+      let throttlePitch = 0;
+      if (keys.w || keys.up) {
+        throttlePitch = -0.012; // subtle squat on acceleration
+      } else if (keys.s || keys.down) {
+        throttlePitch = 0.018;  // subtle dive on active braking
+      }
+      const targetPitch = roadGradePitch + throttlePitch;
+
+      // 2nd-Order Spring-Mass-Damper Suspension Filter
       const subDt = Math.min(dt, 0.05);
-
-      const accelRatio = (this.speed - (this.lastSpeed || this.speed)) / Math.max(0.01, dt);
-      this.lastSpeed = this.speed;
-      const targetPitch = THREE.MathUtils.clamp(-accelRatio * 0.0035, -0.055, 0.055) + wheelPitch;
-
-      const omegaPitch = 14.0; // Natural angular frequency (~2.2 Hz)
-      const zetaPitch = 0.86;  // Damping ratio (slightly underdamped for authentic body settling)
+      const omegaPitch = 14.0; // Natural angular frequency
+      const zetaPitch = 0.88;  // Damping ratio
       const pitchAccel = (omegaPitch * omegaPitch) * (targetPitch - this.currentPitch) - 2.0 * zetaPitch * omegaPitch * this.pitchVelocity;
       this.pitchVelocity += pitchAccel * subDt;
       this.currentPitch += this.pitchVelocity * subDt;
       this.mesh.rotateX(this.currentPitch);
 
-      // Dynamic Chassis Roll (centrifugal roll against turn + bank + real terrain cross-slope)
-      const targetRoll = -this.steerAngle * (this.speed / this.maxSpeed) * 0.32 + wheelRoll;
-      const omegaRoll = 15.5; // Natural roll frequency
-      const zetaRoll = 0.88;  // Roll damping ratio
+      // Dynamic Chassis Roll (centrifugal roll against turn + bank + terrain cross-slope)
+      const targetRoll = -this.steerAngle * (this.speed / this.maxSpeed) * 0.28 + terrainRoll;
+      const omegaRoll = 15.5;
+      const zetaRoll = 0.88;
       const rollAccel = (omegaRoll * omegaRoll) * (targetRoll - this.currentRoll) - 2.0 * zetaRoll * omegaRoll * this.rollVelocity;
       this.rollVelocity += rollAccel * subDt;
       this.currentRoll += this.rollVelocity * subDt;
