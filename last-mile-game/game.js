@@ -2067,24 +2067,41 @@
 
       this.skyMesh = new THREE.Mesh(geom, skyMat);
 
-      // Add Twinkling Stars for Night & Dusk
+      // Add Twinkling Deep Cosmos Stars & Constellations for Night, Space & Dusk
       const starGeom = new THREE.BufferGeometry();
       const starPos = [];
-      for (let s = 0; s < 600; s++) {
+      const starColors = [];
+      const starPalette = [
+        new THREE.Color(0xffffff), // Pure white
+        new THREE.Color(0xdbeafe), // Icy diamond blue
+        new THREE.Color(0xfef08a), // Golden yellow
+        new THREE.Color(0xfb923c), // Amber / orange giant
+        new THREE.Color(0x93c5fd)  // Deep blue stellar
+      ];
+
+      const STAR_COUNT = 2500;
+      for (let s = 0; s < STAR_COUNT; s++) {
         const theta = Math.random() * Math.PI * 2;
-        const phi = Math.random() * (Math.PI / 2.3); // Upper dome only
-        const r = 1040;
+        const phi = Math.random() * (Math.PI / 2.15); // Full upper hemisphere
+        const r = 1050 + Math.random() * 35;
         const x = r * Math.sin(phi) * Math.cos(theta);
         const y = r * Math.cos(phi);
         const z = r * Math.sin(phi) * Math.sin(theta);
         starPos.push(x, y, z);
+
+        const col = starPalette[Math.floor(Math.random() * starPalette.length)];
+        const brightness = 0.55 + Math.random() * 0.45;
+        starColors.push(col.r * brightness, col.g * brightness, col.b * brightness);
       }
+
       starGeom.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+      starGeom.setAttribute('color', new THREE.Float32BufferAttribute(starColors, 3));
       const starMat = new THREE.PointsMaterial({
-        color: 0xffffff,
-        size: 2.8,
+        vertexColors: true,
+        size: 3.2,
+        sizeAttenuation: false,
         transparent: true,
-        opacity: (tod.night ? 0.95 : (tod.id === 'dusk' ? 0.45 : 0.0))
+        opacity: (tod.night || this.seasonKey === 'space' ? 0.95 : (tod.id === 'dusk' ? 0.55 : 0.0))
       });
       this.starMesh = new THREE.Points(starGeom, starMat);
       this.skyMesh.add(this.starMesh);
@@ -4193,10 +4210,26 @@
               _fenceDummy.updateMatrix();
               const groupMatrix = _fenceDummy.matrix;
 
-              const barrierStyle = Math.floor(i / 35) % 4; // 0,2: wood, 1: stone, 3: concrete
-              const matrices = { posts: [], rails: [], stoneRows: [], concreteRows: [] };
+              // Barrier Styles: 0: Galvanized Steel W-Beam Armco Guardrail, 1: Dry-stone wall, 2: Wood split-rail, 3: Concrete Jersey barrier
+              const barrierStyle = Math.floor(i / 30) % 4;
+              const matrices = { posts: [], rails: [], stoneRows: [], concreteRows: [], armcoRails: [], armcoPosts: [], armcoReflectors: [] };
 
-              if (barrierStyle === 1) {
+              if (barrierStyle === 0) {
+                // Galvanized Steel W-Beam Armco Highway Guardrail with Reflectors (Slow Roads Highway reference)
+                [[-railLen / 2, offsetA], [railLen / 2, offsetB]].forEach(([px, offset]) => {
+                  const postLocal = new THREE.Matrix4().makeTranslation(px, offset + 0.55, 0);
+                  matrices.armcoPosts.push(groupMatrix.clone().multiply(postLocal));
+
+                  const reflLocal = new THREE.Matrix4().makeTranslation(px, offset + 0.78, 0.08);
+                  matrices.armcoReflectors.push(groupMatrix.clone().multiply(reflLocal));
+                });
+                const railLocal = new THREE.Matrix4().compose(
+                  new THREE.Vector3(0, 0.65, 0),
+                  new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                  new THREE.Vector3(railLen, 1, 1)
+                );
+                matrices.armcoRails.push(groupMatrix.clone().multiply(railLocal));
+              } else if (barrierStyle === 1) {
                 // Dry-stone wall (4 courses)
                 const rowHeights = [0.22, 0.44, 0.64, 0.8];
                 rowHeights.forEach((ry, rowIdx) => {
@@ -4909,6 +4942,9 @@
         const acceptedRails = [];
         const acceptedStoneRows = [];
         const acceptedConcreteRows = [];
+        const acceptedArmcoRails = [];
+        const acceptedArmcoPosts = [];
+        const acceptedArmcoReflectors = [];
         pendingFences.forEach(({ matrices, pos, radius }) => {
           const overlaps = this.obstacles.some(o => o.pos.distanceTo(pos) < (o.radius + radius));
           if (overlaps) return;
@@ -4916,6 +4952,9 @@
           acceptedRails.push(...matrices.rails);
           acceptedStoneRows.push(...matrices.stoneRows);
           if (matrices.concreteRows) acceptedConcreteRows.push(...matrices.concreteRows);
+          if (matrices.armcoRails) acceptedArmcoRails.push(...matrices.armcoRails);
+          if (matrices.armcoPosts) acceptedArmcoPosts.push(...matrices.armcoPosts);
+          if (matrices.armcoReflectors) acceptedArmcoReflectors.push(...matrices.armcoReflectors);
         });
 
         const buildFenceBatch = (matrices, geom, mat, castShadow) => {
@@ -4958,6 +4997,25 @@
           new THREE.BoxGeometry(1, 0.35, 0.26),
           new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.88, metalness: 0.05 }),
           true
+        );
+        // Galvanized Steel W-Beam Armco Guardrails (Slow Roads Highway reference)
+        buildFenceBatch(
+          acceptedArmcoRails,
+          new THREE.BoxGeometry(1, 0.30, 0.08),
+          new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.32 }),
+          true
+        );
+        buildFenceBatch(
+          acceptedArmcoPosts,
+          new THREE.BoxGeometry(0.10, 1.1, 0.10),
+          new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.80, roughness: 0.40 }),
+          false
+        );
+        buildFenceBatch(
+          acceptedArmcoReflectors,
+          new THREE.BoxGeometry(0.04, 0.09, 0.03),
+          new THREE.MeshBasicMaterial({ color: 0xffffff }),
+          false
         );
       }
 
@@ -5935,7 +5993,33 @@
       this.mesh.add(headR);
       this.mesh.add(headR.target);
 
+      // Volumetric Forward Headlight Beam Cones (Slow Roads signature forward light beam)
+      const beamGeom = new THREE.ConeGeometry(3.6, 26, 16, 1, true);
+      beamGeom.rotateX(-Math.PI / 2);
+      beamGeom.translate(0, 0, 13);
+      const beamMat = new THREE.MeshBasicMaterial({
+        color: 0xfff3d6,
+        transparent: true,
+        opacity: 0.28,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+
+      const beamL = new THREE.Mesh(beamGeom, beamMat);
+      beamL.position.set(-0.55, 0.55, 1.0);
+      beamL.rotation.x = -0.06;
+      beamL.rotation.y = 0.04;
+      this.mesh.add(beamL);
+
+      const beamR = new THREE.Mesh(beamGeom, beamMat);
+      beamR.position.set(0.55, 0.55, 1.0);
+      beamR.rotation.x = -0.06;
+      beamR.rotation.y = -0.04;
+      this.mesh.add(beamR);
+
       this.headlights = [headL, headR];
+      this.headlightBeams = [beamL, beamR];
       this.scene.add(this.mesh);
     }
 
@@ -6420,6 +6504,12 @@
           h.intensity = active ? 3.6 : 0.0;
         });
       }
+      if (this.headlightBeams) {
+        this.headlightBeams.forEach(b => {
+          b.visible = !!active;
+          b.material.opacity = active ? 0.35 : 0.0;
+        });
+      }
     }
   }
 
@@ -6893,8 +6983,9 @@
         this.vehicle.setVehicleType(this.selectedVehicle);
       }
       this.vehicle.resetToSpline(this.world.curve, 0.008);
-      this.vehicle.setHeadlightsActive(tod.night || tod.id === 'dusk');
+      this.vehicle.setHeadlightsActive(tod.night || tod.id === 'dusk' || this.selectedSeason === 'winter');
       this.applyWindowGlow(tod);
+      this.initWeatherSystem();
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[this.selectedDifficulty];
       this.maxOrderTimer = diffCfg.timeLimit;
@@ -7443,6 +7534,92 @@
           this.particles.splice(i, 1);
         }
       }
+    }
+
+    initWeatherSystem() {
+      if (this.weatherMesh) {
+        this.scene.remove(this.weatherMesh);
+        if (this.weatherMesh.geometry) this.weatherMesh.geometry.dispose();
+        if (this.weatherMesh.material) this.weatherMesh.material.dispose();
+        this.weatherMesh = null;
+      }
+
+      const isSnow = (this.selectedSeason === 'winter' || this.selectedWeather === 'blizzard');
+      const isRain = (this.selectedSeason === 'summer' || this.selectedSeason === 'autumn' || this.selectedWeather === 'rain');
+
+      if (!isSnow && !isRain && this.selectedWeather !== 'blizzard') return;
+
+      const COUNT = 1600;
+      const geom = new THREE.BufferGeometry();
+      const positions = new Float32Array(COUNT * 3);
+      const velocities = [];
+
+      for (let i = 0; i < COUNT; i++) {
+        positions[i * 3 + 0] = (Math.random() - 0.5) * 60;
+        positions[i * 3 + 1] = Math.random() * 26;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+
+        velocities.push({
+          x: (Math.random() - 0.5) * (isSnow ? 1.4 : 0.6),
+          y: isSnow ? -(2.2 + Math.random() * 2.2) : -(16.0 + Math.random() * 8.0),
+          z: (Math.random() - 0.5) * (isSnow ? 1.4 : 0.6),
+          sway: Math.random() * Math.PI * 2
+        });
+      }
+
+      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.PointsMaterial({
+        color: isSnow ? 0xffffff : 0xbfdbfe,
+        size: isSnow ? 3.4 : 1.8,
+        sizeAttenuation: false,
+        transparent: true,
+        opacity: isSnow ? 0.88 : 0.55
+      });
+
+      this.weatherMesh = new THREE.Points(geom, mat);
+      this.weatherVelocities = velocities;
+      this.scene.add(this.weatherMesh);
+    }
+
+    updateWeatherSystem(dt) {
+      if (!this.weatherMesh || !this.vehicle || !this.vehicle.mesh) return;
+
+      const carPos = this.vehicle.mesh.position;
+      const positions = this.weatherMesh.geometry.attributes.position.array;
+      const vels = this.weatherVelocities;
+      const count = vels.length;
+
+      const BOX_HALF = 30;
+      const BOX_HEIGHT = 26;
+
+      for (let i = 0; i < count; i++) {
+        vels[i].sway += dt * 2.0;
+        const swayX = Math.sin(vels[i].sway) * 0.35;
+
+        positions[i * 3 + 0] += (vels[i].x + swayX) * dt;
+        positions[i * 3 + 1] += vels[i].y * dt;
+        positions[i * 3 + 2] += vels[i].z * dt;
+
+        const dx = positions[i * 3 + 0] - carPos.x;
+        const dy = positions[i * 3 + 1] - carPos.y;
+        const dz = positions[i * 3 + 2] - carPos.z;
+
+        if (dx < -BOX_HALF) positions[i * 3 + 0] += BOX_HALF * 2;
+        else if (dx > BOX_HALF) positions[i * 3 + 0] -= BOX_HALF * 2;
+
+        if (dz < -BOX_HALF) positions[i * 3 + 2] += BOX_HALF * 2;
+        else if (dz > BOX_HALF) positions[i * 3 + 2] -= BOX_HALF * 2;
+
+        if (dy < -1.5) {
+          positions[i * 3 + 1] = carPos.y + BOX_HEIGHT - Math.random() * 3.0;
+          positions[i * 3 + 0] = carPos.x + (Math.random() - 0.5) * (BOX_HALF * 2);
+          positions[i * 3 + 2] = carPos.z + (Math.random() - 0.5) * (BOX_HALF * 2);
+        } else if (dy > BOX_HEIGHT) {
+          positions[i * 3 + 1] = carPos.y;
+        }
+      }
+
+      this.weatherMesh.geometry.attributes.position.needsUpdate = true;
     }
 
     showScoreBanner(title, sub) {
@@ -8321,24 +8498,32 @@
         };
       } else if (type === 'style') {
         el.innerHTML = `
-          <div class="dock-panel-grid">
-            <div class="dock-panel-col">
-              <span class="dock-panel-label">TIME OF DAY [T]</span>
-              <div class="dock-btn-row">
-                <button class="dock-sq-btn ${this.selectedTimeOfDay === 'dawn' ? 'active-sq' : ''}" data-tod="dawn">DAWN</button>
-                <button class="dock-sq-btn ${this.selectedTimeOfDay === 'day' ? 'active-sq' : ''}" data-tod="day">DAY</button>
-                <button class="dock-sq-btn ${this.selectedTimeOfDay === 'dusk' ? 'active-sq' : ''}" data-tod="dusk">DUSK</button>
-                <button class="dock-sq-btn ${this.selectedTimeOfDay === 'night' ? 'active-sq' : ''}" data-tod="night">NIGHT</button>
+          <div class="dock-panel-grid" style="display: flex; gap: 24px; justify-content: flex-start; align-items: flex-start;">
+            <div class="dock-panel-col" style="flex: 1.3;">
+              <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">SEASON</span>
+              <div class="dock-btn-row" style="display: flex; gap: 8px;">
+                <button class="dock-sq-btn ${this.selectedSeason === 'spring' ? 'active-sq' : ''}" data-s="spring" title="Spring" style="font-size: 1.3rem; padding: 10px 14px;">🌱</button>
+                <button class="dock-sq-btn ${this.selectedSeason === 'summer' ? 'active-sq' : ''}" data-s="summer" title="Summer" style="font-size: 1.3rem; padding: 10px 14px;">☀️</button>
+                <button class="dock-sq-btn ${this.selectedSeason === 'autumn' ? 'active-sq' : ''}" data-s="autumn" title="Autumn" style="font-size: 1.3rem; padding: 10px 14px;">🍂</button>
+                <button class="dock-sq-btn ${this.selectedSeason === 'winter' ? 'active-sq' : ''}" data-s="winter" title="Winter Snow" style="font-size: 1.3rem; padding: 10px 14px;">❄️</button>
+                <button class="dock-sq-btn ${this.selectedSeason === 'desert' ? 'active-sq' : ''}" data-s="desert" title="Desert Canyons" style="font-size: 1.3rem; padding: 10px 14px;">🏜️</button>
+                <button class="dock-sq-btn ${this.selectedSeason === 'space' ? 'active-sq' : ''}" data-s="space" title="Lunar Space" style="font-size: 1.3rem; padding: 10px 14px;">🌕</button>
               </div>
             </div>
-            <div class="dock-panel-col">
-              <span class="dock-panel-label">SEASON & BIOME</span>
-              <div class="dock-btn-row">
-                <button class="dock-sq-btn ${this.selectedSeason === 'spring' ? 'active-sq' : ''}" data-s="spring">SPRING</button>
-                <button class="dock-sq-btn ${this.selectedSeason === 'autumn' ? 'active-sq' : ''}" data-s="autumn">AUTUMN</button>
-                <button class="dock-sq-btn ${this.selectedSeason === 'desert' ? 'active-sq' : ''}" data-s="desert">DESERT</button>
-                <button class="dock-sq-btn ${this.selectedSeason === 'space' ? 'active-sq' : ''}" data-s="space">SPACE</button>
-                <button class="dock-sq-btn ${this.selectedSeason === 'winter' ? 'active-sq' : ''}" data-s="winter">WINTER</button>
+            <div class="dock-panel-col" style="flex: 1.1;">
+              <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">TIME</span>
+              <div class="dock-btn-row" style="display: flex; gap: 8px;">
+                <button class="dock-sq-btn ${this.selectedTimeOfDay === 'dawn' ? 'active-sq' : ''}" data-tod="dawn" title="Sunrise / Dawn" style="font-size: 1.3rem; padding: 10px 14px;">🌅</button>
+                <button class="dock-sq-btn ${this.selectedTimeOfDay === 'day' ? 'active-sq' : ''}" data-tod="day" title="Midday / Sun" style="font-size: 1.3rem; padding: 10px 14px;">☀️</button>
+                <button class="dock-sq-btn ${this.selectedTimeOfDay === 'dusk' ? 'active-sq' : ''}" data-tod="dusk" title="Sunset / Dusk" style="font-size: 1.3rem; padding: 10px 14px;">🌇</button>
+                <button class="dock-sq-btn ${this.selectedTimeOfDay === 'night' ? 'active-sq' : ''}" data-tod="night" title="Starry Night" style="font-size: 1.3rem; padding: 10px 14px;">🌙</button>
+              </div>
+            </div>
+            <div class="dock-panel-col" style="flex: 0.8;">
+              <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">WEATHER</span>
+              <div class="dock-btn-row" style="display: flex; gap: 8px;">
+                <button class="dock-sq-btn ${(!this.selectedWeather || this.selectedWeather === 'clear') ? 'active-sq' : ''}" data-w="clear" title="Clear Sky" style="font-size: 1.3rem; padding: 10px 14px;">☀️</button>
+                <button class="dock-sq-btn ${this.selectedWeather === 'blizzard' ? 'active-sq' : ''}" data-w="blizzard" title="Blizzard / Snow / Rain" style="font-size: 1.3rem; padding: 10px 14px;">☁️</button>
               </div>
             </div>
           </div>
@@ -8356,6 +8541,14 @@
             this.buildWorldAndScene();
             this.renderDockPanelContent('style');
             sound.playTone(700, 'sine', 0.1);
+          };
+        });
+        el.querySelectorAll('[data-w]').forEach(b => {
+          b.onclick = () => {
+            this.selectedWeather = b.dataset.w;
+            this.initWeatherSystem();
+            this.renderDockPanelContent('style');
+            sound.playTone(680, 'sine', 0.1);
           };
         });
       } else if (type === 'vehicle') {
@@ -8931,6 +9124,9 @@
             const targetSunInt = inTunnel ? (tod.sunIntensity * 0.15) : tod.sunIntensity;
             this.sunLight.intensity = THREE.MathUtils.lerp(this.sunLight.intensity, targetSunInt, 0.08);
           }
+
+          // Dynamic Weather Particle System (Snowfall Blizzard & Rain)
+          this.updateWeatherSystem(dt);
         }
 
         // Infinite Highway District Milestones (Seamless progression every 5 km)
