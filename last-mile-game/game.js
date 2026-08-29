@@ -791,6 +791,15 @@
       setTimeout(() => this.playTone(1046, 'sine', 0.3, 0.25), 300);
     }
 
+    playBarrierScrape() {
+      if (this.suspended || this.sfxMuted || !this.ctx) return;
+      const now = this.ctx.currentTime;
+      if (this._lastScrapeTime && now - this._lastScrapeTime < 0.25) return;
+      this._lastScrapeTime = now;
+      this.playTone(180, 'triangle', 0.12, 0.18);
+      setTimeout(() => this.playTone(120, 'sine', 0.15, 0.15), 40);
+    }
+
     // Procedural Driving Ambience (Engine load pitch & wind noise filter)
     _initAmbience() {
       if (this._ambienceInitialized || !this.ctx) return;
@@ -5428,83 +5437,62 @@
       const proj = this.projectToRoad(proposedPos, world.curve, this.splineProgress);
       this.splineProgress = proj.u;
 
-      // Fences are a real physical barrier now that movement is free, not
-      // just a soft cap on an accumulating offset — clip the proposed
-      // position back to the clamp boundary along the road normal instead
-      // of just preventing the offset from growing.
-      //
-      // Bug fixed here: clamping used to snap straight to
-      // `proj.pt + normal*clampDist`, discarding the FORWARD (along-road)
-      // component of the move entirely. If the car's heading pointed
-      // mostly sideways into the fence (e.g. autopilot correcting hard, or
-      // just cornering tight against the shoulder), every frame reset to
-      // nearly the same clamped spot with ~0 net forward progress despite
-      // nonzero speed — the car froze dead in place, permanently pinned,
-      // heading and speed never recovering since projectToRoad's nearest-
-      // point search was seeded from that same frozen position each frame
-      // (a stable feedback loop, not just a slow crawl). Verified this
-      // exact freeze happening under sustained autopilot steering.
-      // Fix: decompose the proposed move into along-road (tangent) and
-      // lateral (normal) components relative to the nearest point, and
-      // only clamp the lateral one — the car now slides along the fence
-      // like a real wall instead of stopping dead against it.
+      // Slow Roads Barrier Interaction: Smooth Elastic Glancing & Inward Deflection.
+      // Rather than a rigid clamp that deadlocks forward momentum or creates harsh jitter,
+      // barrier contact deflects the vehicle heading smoothly along the road tangent
+      // with a slight inward glancing vector and soft friction, matching Slow Roads parity.
       const side = proj.latDist >= 0 ? 1 : -1;
       const clampDist = world.getLateralClamp ? world.getLateralClamp(proj.u, side) : 9.0;
       let vehiclePos = proposedPos;
       let latDist = proj.latDist;
+
       if (Math.abs(latDist) > clampDist) {
         const toProposed = proposedPos.clone().sub(proj.pt);
         const fwdComponent = toProposed.dot(proj.tangent);
-        latDist = clampDist * side;
+        // Clamped position with slight elastic cushion away from the barrier edge
+        latDist = (clampDist - 0.12) * side;
         vehiclePos = proj.pt.clone().addScaledVector(proj.tangent, fwdComponent).addScaledVector(proj.normal, latDist);
-        // Re-project after clamping so pt/tangent/normal reflect the
-        // actual (clamped) resting position, not the pre-clamp attempt.
+
+        // Re-project so pt/tangent/normal reflect the actual resting position
         const reproj = this.projectToRoad(vehiclePos, world.curve, proj.u);
         Object.assign(proj, reproj);
         this.splineProgress = proj.u;
+
+        // Slow Roads Barrier Glancing: deflect vehicle heading toward the road tangent
+        const tangentHeading = Math.atan2(proj.tangent.x, proj.tangent.z);
+        let headingDiff = tangentHeading - this.heading;
+        while (headingDiff > Math.PI) headingDiff -= Math.PI * 2;
+        while (headingDiff < -Math.PI) headingDiff += Math.PI * 2;
+
+        // Turn heading smoothly toward road tangent with inward bias
+        const inwardBias = -side * 0.12;
+        this.heading += (headingDiff + inwardBias) * Math.min(1.0, 16.0 * dt);
+        this.velocityHeading = this.heading;
+
+        // Counter-steer decay to prevent sticking permanently against the wall
+        if (this.steerAngle * side > 0) {
+          this.steerAngle *= Math.exp(-14.0 * dt);
+        }
+
+        // Soft glancing speed attenuation (smooth, not halting)
+        this.speed *= Math.max(0.6, 1.0 - 0.20 * dt);
+
+        if (sound && sound.playBarrierScrape && Math.abs(this.speed) > 4) {
+          sound.playBarrierScrape();
+        }
       }
       this.lateralOffset = latDist; // kept for the stuck-detection check in Game.animate() and any other reader
 
       const tangent = proj.tangent;
       const roadRight = proj.normal;
 
-      // Follow the actual carved road/shoulder surface, not the spline
-      // centerline height — lateralOffset can reach ±9m (the shoulder
-      // boundary), and the terrain there sits lower than the road center
-      // (see createTerrainMesh's roadHalf/shoulder formula). Using
-      // currentPos.y unconditionally let the car clip into or float above
-      // the ground the moment it drifted off-center.
+      // Follow the actual carved road/shoulder surface, not the spline centerline height
       const groundY = world.groundHeightAt(proj.pt, vehiclePos, latDist);
 
-      // createRoadMesh banks the road surface on curves (tilts it up to
-      // ±0.14rad), but this only ever used the flat, unbanked centerline
-      // height above — fine dead-center, but at any real lateral offset on
-      // a sharp bend the true (banked) surface can be well over a meter
-      // higher or lower than that, reading as the car sinking into or
-      // floating above the road on turns.
-      //
-      // This used to replicate the banking calc via curve.getTangentAt(),
-      // which LOOKS like the same idea as createRoadMesh's per-vertex
-      // curvature but is a structurally different tangent estimate — the
-      // curve's own parametric derivative vs. finite differences between
-      // points on the actual rendered points array. They silently diverge:
-      // measured a full clamp-width gap (-0.14 vs the mesh's true -0.1137
-      // rad) on an ordinary curve, big enough by itself to sink the car
-      // visibly at any real lateral offset. Compute banking from the exact
-      // same array createRoadMesh built (world.roadSpacedPoints, cached
-      // there) at the matching row index instead — same construction, not
-      // just the same formula (see BUGFIX_LOG.md Pattern 1/B17: calling an
-      // equivalent formula is not sufficient, the inputs must match too).
       const bankPts = world.roadSpacedPoints;
       let bankingAngle = 0, bankTangent = tangent;
       if (bankPts && bankPts.length > 2) {
         const segs = bankPts.length - 1;
-        // Interpolate between the two bracketing rows instead of rounding
-        // to the nearest one — on sharp curves (e.g. Kolkata) a single
-        // ~4m-wide row (1/1200 of the road) is coarse enough that a whole
-        // extra quantization step of banking angle showed up as ~0.35u of
-        // residual sink, the same stair-step class of error the
-        // projectToRoad refinement fixed earlier in this file.
         const rawIdx = THREE.MathUtils.clamp(proj.u * segs, 1, segs - 2);
         const i0 = Math.floor(rawIdx), i1 = Math.min(i0 + 1, segs - 2);
         const frac = rawIdx - i0;
@@ -5519,11 +5507,19 @@
         bankTangent = b0.tan.clone().lerp(b1.tan, frac).normalize();
       }
       const binormal = new THREE.Vector3().crossVectors(roadRight, bankTangent).normalize();
-      // roadRight (createRoadMesh's "normal") is always horizontal by
-      // construction, so only binormal's tilt contributes vertically here.
       const bankedYOffset = latDist * binormal.y * Math.sin(bankingAngle);
 
-      vehiclePos.y = groundY + bankedYOffset + 0.25;
+      // Road surface slab sits at groundY + bankedYOffset + 0.12 (from createRoadMesh's slab offset).
+      // Wheels and chassis clearance must rest the tire contact patch squarely on the tarmac.
+      const roadSlabLift = 0.12;
+      const baseRideHeight = (this.vehicleType === 'musclecoupe' || this.vehicleType === 'sportscoupe') ? 0.36 : 0.32;
+
+      // Dynamic 4-wheel ride height compensation: ensures front/rear or outer tires never sink below road plane
+      const dynamicPitchDrop = Math.abs(Math.sin(this.currentPitch || 0)) * halfWheelbase;
+      const dynamicRollDrop = Math.abs(Math.sin(this.currentRoll || 0)) * halfTrack;
+      const suspensionClearance = Math.max(0, Math.max(dynamicPitchDrop, dynamicRollDrop) * 0.35);
+
+      vehiclePos.y = groundY + bankedYOffset + roadSlabLift + baseRideHeight + suspensionClearance;
 
       // Surface elevation bump on gravel / mud
       if (roadTerrainKey === 'gravel' || roadTerrainKey === 'mud') {
@@ -7918,26 +7914,26 @@
         this.camera.fov = 70;
         this.camera.updateProjectionMatrix();
       } else if (this.activeCameraMode === 'far-chase') {
-        // Pulled back and raised further for wide panoramic framing — Slow Roads Far Chase
+        // Far Chase Cam: balanced wide framing
         const targetCamPos = carPos.clone()
-          .addScaledVector(carForward, -15.2)
-          .add(new THREE.Vector3(0, 5.2, 0));
+          .addScaledVector(carForward, -12.0)
+          .add(new THREE.Vector3(0, 4.0, 0));
         const posLerp = Math.min(1.0, 1.0 - Math.exp(-14.0 * dt));
         this.camera.position.lerp(targetCamPos, posLerp);
 
-        const minY = carPos.y + 2.5;
-        const maxY = carPos.y + 7.5;
+        const minY = carPos.y + 2.0;
+        const maxY = carPos.y + 6.2;
         this.camera.position.y = THREE.MathUtils.clamp(this.camera.position.y, minY, maxY);
 
         const rawLookTarget = carPos.clone()
-          .addScaledVector(carForward, 30.0)
-          .add(new THREE.Vector3(0, 1.0, 0));
+          .addScaledVector(carForward, 26.0)
+          .add(new THREE.Vector3(0, 0.9, 0));
         const lookLerp = Math.min(1.0, 1.0 - Math.exp(-20.0 * dt));
         this.camLookTarget.lerp(rawLookTarget, lookLerp);
         this.camera.lookAt(this.camLookTarget);
 
         const speedRatio = Math.min(1.0, Math.abs(this.vehicle.speed) / (this.vehicle.maxSpeed || 40));
-        const targetFOV = 68.0 + speedRatio * 8.0;
+        const targetFOV = 66.0 + speedRatio * 8.0;
         this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFOV, 0.1);
         this.camera.updateProjectionMatrix();
       } else if (this.activeCameraMode === 'sky') {
@@ -7948,31 +7944,31 @@
         this.camLookTarget.lerp(rawLookTarget, Math.min(1.0, 1.0 - Math.exp(-16.0 * dt)));
         this.camera.lookAt(this.camLookTarget);
       } else {
-        // Slow Roads Default Chase Cam (10.8m behind car, 3.6m above, wide 68 deg FOV)
+        // Slow Roads Default Chase Cam — intimate framing (~7.8m back, 2.6m up, 64-72 deg FOV)
         const targetCamPos = carPos.clone()
-          .addScaledVector(carForward, -10.8)
-          .add(new THREE.Vector3(0, 3.6, 0));
+          .addScaledVector(carForward, -7.8)
+          .add(new THREE.Vector3(0, 2.6, 0));
 
         // High responsiveness spring-lerp (keeps camera tightly bound to vehicle at any speed)
         const posLerp = Math.min(1.0, 1.0 - Math.exp(-14.0 * dt));
         this.camera.position.lerp(targetCamPos, posLerp);
 
-        // Ground clearance check relative strictly to roadbed (never launch into the sky)
-        const minY = carPos.y + 1.8;
-        const maxY = carPos.y + 5.5;
+        // Ground clearance check relative strictly to roadbed
+        const minY = carPos.y + 1.4;
+        const maxY = carPos.y + 4.5;
         this.camera.position.y = THREE.MathUtils.clamp(this.camera.position.y, minY, maxY);
 
         // Look-ahead target down the road centerline / motion direction
         const rawLookTarget = carPos.clone()
-          .addScaledVector(carForward, 26.0)
-          .add(new THREE.Vector3(0, 0.9, 0));
+          .addScaledVector(carForward, 20.0)
+          .add(new THREE.Vector3(0, 0.85, 0));
         const lookLerp = Math.min(1.0, 1.0 - Math.exp(-20.0 * dt));
         this.camLookTarget.lerp(rawLookTarget, lookLerp);
         this.camera.lookAt(this.camLookTarget);
 
-        // Dynamic Speed FOV (68 deg baseline -> 76 deg at top speed)
+        // Dynamic Speed FOV (64 deg baseline -> 72 deg at top speed)
         const speedRatio = Math.min(1.0, Math.abs(this.vehicle.speed) / (this.vehicle.maxSpeed || 40));
-        const targetFOV = 68.0 + speedRatio * 8.0;
+        const targetFOV = 64.0 + speedRatio * 8.0;
         this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFOV, 0.1);
         this.camera.updateProjectionMatrix();
       }
