@@ -5053,99 +5053,102 @@
   // --------------------------------------------------------------------------
   // 6B. RAIN — a bounded particle volume that rides with the camera
   // --------------------------------------------------------------------------
-  // Modeled on slowroads.io's snow system (see SLOWROADS_PARITY_LOG.md
-  // section 1.4, derived from a live capture + confirming no snowflake
-  // texture asset exists there — it's plain geometry, not a sprite sheet):
-  // a 3D volume of particles centered on the camera, evenly distributed
-  // through depth, each respawning at the top when it falls out the
-  // bottom (or drifts out of the box) rather than a 2D screen-space
-  // overlay. Slowroads has no rain to copy directly (confirmed: Overcast
-  // + any non-winter season produces zero precipitation there) — this is
-  // a new system using the same *technique*, tuned per the user's ask:
-  // faster fall speed and higher density than snow, and streak-shaped
-  // rather than round (a streak needs real velocity to read as rain
-  // instead of snow — that's the actual visual difference between the
-  // two, not just speed).
+  // CORRECTED per SHIPLYP_VISUAL_ENHANCEMENT_BRIEF.md section 3.5: the
+  // original version here used elongated streaks + a fast fall speed,
+  // reasoning that real rain at speed reads as streaks. Explicit direction
+  // overrode that — reuse slowroads' snow mechanics EXACTLY (soft round
+  // point-sprites, perspective-attenuated size, near-vertical slow fall,
+  // volume follows the vehicle regardless of its speed, respawn on exit)
+  // and vary ONLY particle count for density. Slowroads has no rain to
+  // copy directly (confirmed: Overcast + any non-winter season produces
+  // zero precipitation there) — this borrows snow's technique, tuned only
+  // by count, not speed or shape.
   //
-  // Real 3D thin boxes via InstancedMesh (not THREE.Points) so each
-  // streak reads as an actual line from any camera angle without a
-  // custom shader — Points sprites are screen-facing quads and would
-  // need GPU-side stretching along velocity to look like rain at all.
+  // THREE.Points (not InstancedMesh) — camera-facing sprites are the
+  // correct primitive for a round dot with size falloff; a streak needed
+  // real 3D geometry to read as a line from any angle, a round dot doesn't.
+  // The soft circular alpha falloff is generated on a canvas at runtime
+  // (matching what a live capture of slowroads showed — no snowflake
+  // texture asset was ever downloaded there, so it's some form of
+  // procedural point rendering, not a bundled sprite).
   class RainSystem {
     constructor(scene) {
       this.scene = scene;
-      this.count = 700; // denser than a typical snow system, per the user's explicit ask
-      this.fallSpeed = 26.0; // m/s — real rain terminal velocity range; snow in the reference capture read as ~1-2 m/s equivalent, this is deliberately far faster, not just "a little"
-      this.streakLength = 0.55;
-      this.boxHalfWidth = 22.0; // lateral spread around the vehicle
+      this.count = 900; // denser than snow would be — the one intentional difference, per spec
+      this.fallSpeed = 2.0; // m/s — matches the observed real-snow-like terminal velocity from the slowroads reference capture, not tuned for high-speed readability
+      this.boxHalfWidth = 22.0;
       this.boxHeight = 18.0;
-      this.boxDepth = 46.0; // along the direction of travel — wider than lateral since the car moves fast enough to outrun a narrow box
-      this.driftX = -1.4; // slight sideways drift, like wind-blown rain, not a perfectly vertical curtain
+      this.boxDepth = 46.0;
 
-      const geom = new THREE.BoxGeometry(0.018, this.streakLength, 0.018);
-      const mat = new THREE.MeshBasicMaterial({
-        color: 0xcfd8e3,
-        transparent: true,
-        opacity: 0.4,
-        depthWrite: false
-      });
-      this.mesh = new THREE.InstancedMesh(geom, mat, this.count);
-      this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      this.mesh.frustumCulled = false;
-      this.mesh.visible = false;
-
+      const geom = new THREE.BufferGeometry();
       this.positions = new Float32Array(this.count * 3);
-      const dummy = new THREE.Object3D();
       for (let i = 0; i < this.count; i++) {
         this.positions[i * 3] = (Math.random() - 0.5) * 2 * this.boxHalfWidth;
         this.positions[i * 3 + 1] = Math.random() * this.boxHeight;
         this.positions[i * 3 + 2] = (Math.random() - 0.5) * this.boxDepth;
-        dummy.position.set(this.positions[i * 3], this.positions[i * 3 + 1], this.positions[i * 3 + 2]);
-        dummy.updateMatrix();
-        this.mesh.setMatrixAt(i, dummy.matrix);
       }
-      scene.add(this.mesh);
+      geom.setAttribute('position', new THREE.BufferAttribute(this.positions.slice(), 3));
+
+      const mat = new THREE.PointsMaterial({
+        color: 0xd8e2ec,
+        size: 0.22,
+        map: this._makeSoftDotTexture(),
+        transparent: true,
+        opacity: 0.65,
+        depthWrite: false,
+        sizeAttenuation: true // near-camera particles read larger/blurrier, distant ones shrink to pinpricks — matches the reference's perspective-scaled look
+      });
+      this.points = new THREE.Points(geom, mat);
+      this.points.frustumCulled = false;
+      this.points.visible = false;
+      scene.add(this.points);
+    }
+
+    // Soft, round, gaussian-blur-like falloff — no bundled image asset,
+    // generated once at runtime the same way the reference appears to.
+    _makeSoftDotTexture() {
+      const size = 64;
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const ctx = c.getContext('2d');
+      const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+      grad.addColorStop(0.5, 'rgba(255,255,255,0.4)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+      return new THREE.CanvasTexture(c);
     }
 
     setActive(active) {
-      this.mesh.visible = !!active;
+      this.points.visible = !!active;
     }
 
     // `center` is the point the volume rides around (the vehicle position)
-    // — local-space particle coordinates stay in [-half, +half] ranges and
-    // get re-based onto `center` every frame, so the volume always reads
-    // as "raining around the car" rather than a fixed world-space patch
-    // the car drives in and out of.
+    // — passed unconditionally every frame regardless of vehicle speed, so
+    // the volume keeps falling/recentering even while idling, matching the
+    // reference (tied to position, not speed).
     update(dt, center) {
-      if (!this.mesh.visible) return;
-      const dummy = new THREE.Object3D();
+      if (!this.points.visible) return;
       const fall = this.fallSpeed * dt;
-      const drift = this.driftX * dt;
       for (let i = 0; i < this.count; i++) {
         let y = this.positions[i * 3 + 1] - fall;
-        let x = this.positions[i * 3] + drift;
         if (y < 0) {
           y = this.boxHeight;
-          x = (Math.random() - 0.5) * 2 * this.boxHalfWidth;
+          this.positions[i * 3] = (Math.random() - 0.5) * 2 * this.boxHalfWidth;
           this.positions[i * 3 + 2] = (Math.random() - 0.5) * this.boxDepth;
         }
-        if (x < -this.boxHalfWidth) x = this.boxHalfWidth;
-        if (x > this.boxHalfWidth) x = -this.boxHalfWidth;
-        this.positions[i * 3] = x;
         this.positions[i * 3 + 1] = y;
-
-        dummy.position.set(
-          center.x + x,
-          center.y + y,
+      }
+      const posAttr = this.points.geometry.getAttribute('position');
+      for (let i = 0; i < this.count; i++) {
+        posAttr.setXYZ(i,
+          center.x + this.positions[i * 3],
+          center.y + this.positions[i * 3 + 1],
           center.z + this.positions[i * 3 + 2]
         );
-        // Streaks tilt slightly with the drift instead of staying perfectly
-        // vertical — a static vertical rod reads as a picket fence, not rain.
-        dummy.rotation.z = -this.driftX * 0.06;
-        dummy.updateMatrix();
-        this.mesh.setMatrixAt(i, dummy.matrix);
       }
-      this.mesh.instanceMatrix.needsUpdate = true;
+      posAttr.needsUpdate = true;
     }
   }
 
