@@ -1487,6 +1487,28 @@
   }
 
   // --------------------------------------------------------------------------
+  // Faceted Rock Geometry Factory — creates low-poly angular weathered rocks
+  // matching Slow Roads reference (sharp facets, per-vertex perturbation,
+  // flat face normals, zero blurry smooth-shaded spheres).
+  // --------------------------------------------------------------------------
+  const RockGeometryFactory = {
+    createFacetedRockGeometry(seed = 1) {
+      const geom = new THREE.DodecahedronGeometry(1.2, 0);
+      const pos = geom.attributes.position;
+      const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i);
+        const noise = Math.sin(v.x * 3.5 + seed) * Math.cos(v.y * 3.5 + seed) * Math.sin(v.z * 3.5 + seed);
+        v.multiplyScalar(0.85 + 0.35 * Math.abs(noise));
+        if (v.y < 0) v.y *= 0.65;
+        pos.setXYZ(i, v.x, v.y, v.z);
+      }
+      geom.computeVertexNormals();
+      return geom;
+    }
+  };
+
+  // --------------------------------------------------------------------------
   // Billboard trees — replaces the ConeGeometry/DodecahedronGeometry
   // primitive trees per SHIPLYP_VISUAL_ENHANCEMENT_BRIEF.md section 3.3.
   // Even with correct smooth shading (see smoothFaceNormals above), a
@@ -2776,9 +2798,17 @@
       });
 
       const portalMat = new THREE.MeshStandardMaterial({
-        color: 0x1e293b, // Weathered structural concrete portal facade
-        roughness: 0.92,
-        metalness: 0.20
+        color: 0x4a4742, // Natural architectural stone & reinforced concrete
+        roughness: 0.94,
+        metalness: 0.05,
+        map: RealTextureFactory.rockColor(),
+        normalMap: RealTextureFactory.rockNormal()
+      });
+
+      const archRingMat = new THREE.MeshStandardMaterial({
+        color: 0x383532,
+        roughness: 0.88,
+        metalness: 0.1
       });
 
       const matrixMat = new THREE.MeshStandardMaterial({
@@ -2987,6 +3017,14 @@
             const tube = new THREE.Mesh(tubeGeom, sodiumMat);
             tube.position.y = -0.10;
             fixture.add(housing, tube);
+
+            // Dynamic warm sodium point illumination every 15m
+            if (i % 15 === 0 && railOffset > 0) {
+              const tunnelLight = new THREE.PointLight(0xffb347, 1.6, 24.0, 1.2);
+              tunnelLight.position.set(0, -0.3, 0);
+              fixture.add(tunnelLight);
+            }
+
             fixture.position.copy(fixturePos);
             fixture.lookAt(fixturePos.clone().add(tangent));
             group.add(fixture);
@@ -3030,44 +3068,56 @@
           portalGroup.position.copy(pt);
           portalGroup.position.y = pt.y + 0.12;
 
-          // Left & Right Massive Concrete Pillars
-          const pillarGeom = new THREE.BoxGeometry(2.8, apexHeight + 2.4, 4.2);
-          const leftPillar = new THREE.Mesh(pillarGeom, portalMat);
-          leftPillar.position.set(-(halfWidth + 1.4), (apexHeight + 2.4) * 0.5, 0);
-          const rightPillar = new THREE.Mesh(pillarGeom, portalMat);
-          rightPillar.position.set(halfWidth + 1.4, (apexHeight + 2.4) * 0.5, 0);
+          // 1. Upper Mountain Retaining Headwall (sits strictly ABOVE the portal header)
+          const upperHeadwallGeom = new THREE.BoxGeometry(halfWidth * 2 + 20.0, 7.0, 5.0);
+          const upperHeadwall = new THREE.Mesh(upperHeadwallGeom, portalMat);
+          upperHeadwall.position.set(0, apexHeight + 3.8 + 3.5, -0.5);
 
-          // 45-degree Flared Mountain Retaining Wing Walls
-          const wingGeom = new THREE.BoxGeometry(6.5, apexHeight + 1.2, 2.2);
+          // 2. Left & Right Mountain Retaining Abutments
+          const abutmentGeom = new THREE.BoxGeometry(6.5, apexHeight + 4.0, 5.0);
+          const leftAbutment = new THREE.Mesh(abutmentGeom, portalMat);
+          leftAbutment.position.set(-(halfWidth + 5.0), (apexHeight + 4.0) * 0.5, -0.5);
+          const rightAbutment = new THREE.Mesh(abutmentGeom, portalMat);
+          rightAbutment.position.set(halfWidth + 5.0, (apexHeight + 4.0) * 0.5, -0.5);
+
+          // 3. Heavy Architectural Chamfered Portal Pillars
+          const pillarGeom = new THREE.BoxGeometry(3.6, apexHeight + 3.2, 5.4);
+          const leftPillar = new THREE.Mesh(pillarGeom, archRingMat);
+          leftPillar.position.set(-(halfWidth + 1.8), (apexHeight + 3.2) * 0.5, 0.4);
+          const rightPillar = new THREE.Mesh(pillarGeom, archRingMat);
+          rightPillar.position.set(halfWidth + 1.8, (apexHeight + 3.2) * 0.5, 0.4);
+
+          // 3. Wide Flared Mountain Wing Walls (merges smoothly into roadside mountain embankments)
+          const wingGeom = new THREE.BoxGeometry(14.0, apexHeight + 4.0, 3.5);
           const leftWing = new THREE.Mesh(wingGeom, portalMat);
-          leftWing.position.set(-(halfWidth + 4.8), (apexHeight + 1.2) * 0.5, 1.8);
-          leftWing.rotation.y = 0.42;
+          leftWing.position.set(-(halfWidth + 8.8), (apexHeight + 4.0) * 0.5, 2.8);
+          leftWing.rotation.y = 0.52;
           const rightWing = new THREE.Mesh(wingGeom, portalMat);
-          rightWing.position.set(halfWidth + 4.8, (apexHeight + 1.2) * 0.5, 1.8);
-          rightWing.rotation.y = -0.42;
+          rightWing.position.set(halfWidth + 8.8, (apexHeight + 4.0) * 0.5, 2.8);
+          rightWing.rotation.y = -0.52;
 
-          // Heavy Structural Header Beam
-          const headerGeom = new THREE.BoxGeometry(halfWidth * 2 + 5.6, 2.8, 4.4);
-          const headerBeam = new THREE.Mesh(headerGeom, portalMat);
-          headerBeam.position.set(0, apexHeight + 1.4, 0);
+          // 4. Heavy Reinforced Concrete Arch Header
+          const headerGeom = new THREE.BoxGeometry(halfWidth * 2 + 7.2, 3.8, 5.6);
+          const headerBeam = new THREE.Mesh(headerGeom, archRingMat);
+          headerBeam.position.set(0, apexHeight + 2.0, 0.4);
 
-          // Overhanging Concrete Rain Visor Canopy
-          const canopyGeom = new THREE.BoxGeometry(halfWidth * 2 + 6.2, 0.45, 2.6);
-          const canopy = new THREE.Mesh(canopyGeom, portalMat);
-          canopy.position.set(0, apexHeight + 2.8, 1.6);
+          // 5. Overhanging Concrete Visor Canopy
+          const canopyGeom = new THREE.BoxGeometry(halfWidth * 2 + 8.0, 0.65, 3.2);
+          const canopy = new THREE.Mesh(canopyGeom, archRingMat);
+          canopy.position.set(0, apexHeight + 3.8, 2.2);
           canopy.rotation.x = 0.08;
 
-          // Amber Caution Clearance Hazard Bar
-          const cautionGeom = new THREE.BoxGeometry(halfWidth * 2 + 1.4, 0.45, 0.35);
+          // 6. Amber Caution Clearance Hazard Bar
+          const cautionGeom = new THREE.BoxGeometry(halfWidth * 2 + 2.2, 0.5, 0.35);
           const cautionBar = new THREE.Mesh(cautionGeom, cautionMat);
-          cautionBar.position.set(0, apexHeight - 0.1, 2.2);
+          cautionBar.position.set(0, apexHeight + 0.1, 2.8);
 
-          // Electronic LED Dot Matrix Display Board ("TUNNEL AHEAD / 70 KM/H / ⬇ ⬇")
-          const matrixGeom = new THREE.BoxGeometry(halfWidth * 1.5, 0.95, 0.25);
+          // 7. Electronic LED Dot Matrix Display Board ("TUNNEL AHEAD / 70 KM/H / ⬇ ⬇")
+          const matrixGeom = new THREE.BoxGeometry(halfWidth * 1.6, 1.1, 0.25);
           const matrixBoard = new THREE.Mesh(matrixGeom, matrixMat);
-          matrixBoard.position.set(0, apexHeight + 1.2, 2.25);
+          matrixBoard.position.set(0, apexHeight + 1.8, 2.9);
 
-          portalGroup.add(leftPillar, rightPillar, leftWing, rightWing, headerBeam, canopy, cautionBar, matrixBoard);
+          portalGroup.add(upperHeadwall, leftAbutment, rightAbutment, leftPillar, rightPillar, leftWing, rightWing, headerBeam, canopy, cautionBar, matrixBoard);
           portalGroup.lookAt(portalGroup.position.clone().add(tangent));
           group.add(portalGroup);
         });
@@ -3345,32 +3395,16 @@
       // pineLeavesGeom/decLeavesGeom no longer have any callers.
       const bushGeom = new THREE.DodecahedronGeometry(1.2, 0);
       // detail 1 (not 0): flat-normal duplicate vertices only welding to a
-      // SHARED smooth normal (via smoothFaceNormals below) isn't enough on
-      // its own either — at detail 0 a dodecahedron's 12 faces are each so
-      // large that even perfect normal averaging only shows a gradient
-      // right at the face edges, reading as "still basically flat" in the
-      // middle of every face. Detail 1 subdivides each face so there's
-      // enough vertex density for the averaged gradient to actually be
-      // visible across the surface, not just at seams.
-      const rockGeom = smoothFaceNormals(new THREE.DodecahedronGeometry(1.6, 1));
+      const rockGeom = RockGeometryFactory.createFacetedRockGeometry(42);
       const poleGeom = new THREE.CylinderGeometry(0.1, 0.12, 6.5, 6);
       const crossbarGeom = new THREE.BoxGeometry(1.8, 0.12, 0.12);
 
-      // Rocks are an organic shape — flat shading on round primitives reads
-      // as faceted "gem" geometry (see SLOWROADS_PARITY_LOG.md item 2)
-      // where smooth shading reads as an actual rounded surface at the same
-      // triangle count. Man-made props (poles, buildings, vehicles below)
-      // keep flatShading — that's a deliberate low-poly look, not the bug.
-      // Real photo rock (ambientcg Rock064) + its normal map, actually
-      // wired into normalMap this time — SLOWROADS_PARITY_LOG.md item 6
-      // (the brief explicitly called out "loading it and not using it
-      // doesn't count").
       const isOffWorld = (season.id === 'offworld' || this.cityKey === 'offworld' || !!season.isOffWorld);
       const rockMat = new THREE.MeshStandardMaterial({
-        color: isOffWorld ? 0x8a4f2b : 0x5a6065,
-        roughness: 0.85,
-        map: RealTextureFactory.rockColor(),
-        normalMap: RealTextureFactory.rockNormal()
+        color: isOffWorld ? 0x9e5830 : (season.cliffColor || 0x4a4842),
+        flatShading: true,
+        roughness: 0.92,
+        metalness: 0.04
       });
       const poleMat = new THREE.MeshStandardMaterial({
         color: isOffWorld ? 0x7a4325 : 0x4a4e52,
@@ -3796,21 +3830,29 @@
 
           // Off-World Near-Road Boulder Clusters (matching Slow Roads off-world reference)
           if (isOffWorld && !inTunnel && this.prng.next() > 0.30) {
-            const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(2.0, 32.0));
+            const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(3.5, 34.0));
             const rPos = pt.clone().addScaledVector(normal, rockDist);
             const clusterCount = Math.floor(this.prng.range(2, 5));
             for (let ci = 0; ci < clusterCount; ci++) {
-              const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 7.0, 0, (this.prng.next() - 0.5) * 7.0);
+              const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 6.0, 0, (this.prng.next() - 0.5) * 6.0);
               const cPos = rPos.clone().add(cOffset);
-              const cDist = side * (Math.abs(rockDist) + cOffset.x);
+              const rockScale = this.prng.range(0.35, 2.4);
+              const requiredClearance = CONFIG.ROAD_WIDTH * 0.5 + 1.8 + rockScale * 0.8;
+              if (!clearsRoad(cPos, requiredClearance)) continue; // STRICT ROAD CLEARANCE
+
+              const cDist = side * (Math.abs(rockDist) + Math.abs(cOffset.x));
               cPos.y = calcTerrainY(cPos, cDist);
 
-              const rockScale = this.prng.range(0.35, 2.4);
               const rock = new THREE.Mesh(rockGeom, rockMat);
-              rock.scale.setScalar(rockScale);
+              rock.scale.set(
+                rockScale * this.prng.range(0.85, 1.25),
+                rockScale * this.prng.range(0.75, 1.15),
+                rockScale * this.prng.range(0.85, 1.25)
+              );
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
               rock.rotation.set(rotX, rotY, 0);
-              rock.position.set(cPos.x, cPos.y + 0.35 * rockScale, cPos.z);
+              // Embed rock slightly into the terrain sand (30% embedded)
+              rock.position.set(cPos.x, cPos.y + 0.15 * rockScale, cPos.z);
               rock.userData.isRock = true;
               this.foliageGroup.add(rock);
               this.obstacles.push({ pos: cPos.clone(), radius: 1.2 * rockScale, type: 'rock', mesh: rock });
@@ -3846,15 +3888,20 @@
             const bgPos = pt.clone().addScaledVector(normal, bgDist);
             const bgClusterCount = Math.floor(this.prng.range(2, 6));
             for (let ci = 0; ci < bgClusterCount; ci++) {
-              const bgOffset = new THREE.Vector3((this.prng.next() - 0.5) * 15.0, 0, (this.prng.next() - 0.5) * 15.0);
+              const bgOffset = new THREE.Vector3((this.prng.next() - 0.5) * 12.0, 0, (this.prng.next() - 0.5) * 12.0);
               const cBgPos = bgPos.clone().add(bgOffset);
-              cBgPos.y = calcTerrainY(cBgPos, bgDist);
               const rockScale = this.prng.range(0.8, 3.6);
+              if (!clearsRoad(cBgPos, CONFIG.ROAD_WIDTH * 0.5 + 2.5)) continue;
+              cBgPos.y = calcTerrainY(cBgPos, bgDist);
               const rock = new THREE.Mesh(rockGeom, rockMat);
-              rock.scale.setScalar(rockScale);
+              rock.scale.set(
+                rockScale * this.prng.range(0.85, 1.25),
+                rockScale * this.prng.range(0.75, 1.15),
+                rockScale * this.prng.range(0.85, 1.25)
+              );
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
               rock.rotation.set(rotX, rotY, 0);
-              rock.position.set(cBgPos.x, cBgPos.y + 0.4 * rockScale, cBgPos.z);
+              rock.position.set(cBgPos.x, cBgPos.y + 0.2 * rockScale, cBgPos.z);
               rock.userData.isRock = true;
               this.foliageGroup.add(rock);
               this.obstacles.push({ pos: cBgPos.clone(), radius: 1.4 * rockScale, type: 'rock', mesh: rock });
