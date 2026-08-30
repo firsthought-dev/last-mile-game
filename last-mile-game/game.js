@@ -1181,11 +1181,27 @@
         cliffColor: 0x1e293b,
         treeLeaves: [0x475569, 0x334155, 0x64748b, 0x94a3b8],
         gravity: 0.45 // low lunar gravity
+      },
+      offworld: {
+        id: 'offworld',
+        name: 'Off-World Martian Dunes',
+        skyTop: 0x9e6538,     // Dusty ochre / butterscotch upper sky
+        skyHorizon: 0xd49b6a, // Warm amber atmospheric dust haze
+        skyBottom: 0xebb888,  // Glowing horizon dust mist
+        fog: 0xd49b6a,        // Amber dust fog
+        fogDensity: 0.0048,
+        grassColor: 0xad6532, // Martian red regolith / terracotta sandstone
+        grassLight: 0xd28646, // Golden ochre dune crests
+        cliffColor: 0x6a3717, // Deep dark red basalt bedrock
+        treeLeaves: [0x8a4822, 0x9b5428, 0x6e3816, 0xb86e38],
+        gravity: 0.62,        // Low Martian gravity for floating suspension
+        isOffWorld: true
       }
     },
 
     ROAD_TERRAINS: {
       asphalt: { id: 'asphalt', name: 'Asphalt Expressway', icon: '🛣️', color: 0x1e2229, roughness: 0.82, metalness: 0.05, gripMult: 1.00, paintLines: true, desc: 'Smooth highway tarmac' },
+      dirt: { id: 'dirt', name: 'Martian Dirt Trail', icon: '🪐', color: 0x7a4923, roughness: 0.95, metalness: 0.02, gripMult: 0.88, paintLines: false, desc: 'Unpaved Martian regolith tire trail' },
       gravel: { id: 'gravel', name: 'Mountain Ghats Gravel', icon: '🪨', color: 0x6b5744, roughness: 0.94, metalness: 0.02, gripMult: 0.82, paintLines: false, desc: 'Scenic mountain gravel & rally shale' },
       mud: { id: 'mud', name: 'Monsoon Mud & Slush', icon: '🌧️', color: 0x4a3322, roughness: 0.38, metalness: 0.15, gripMult: 0.68, paintLines: false, desc: 'Slippery drift clay track with wet sheen' },
       sand: { id: 'sand', name: 'Coastal Dune Sand', icon: '🏖️', color: 0xc49b66, roughness: 0.96, metalness: 0.02, gripMult: 0.72, paintLines: false, desc: 'Soft golden dune trail' }
@@ -1200,7 +1216,7 @@
         skyHorizon: 0xe0a0a0,
         skyBottom: 0xf8d7b0,
         fog: 0xe0a0a0,
-        fogDensity: 0.0035,
+        fogDensity: 0.0052,
         sunColor: 0xffeedd,
         sunIntensity: 1.15,
         sunPos: [220, 90, -120],
@@ -1216,7 +1232,7 @@
         skyHorizon: 0x8cb8d4,
         skyBottom: 0xc6e0ee,
         fog: 0x8cb8d4,
-        fogDensity: 0.0022,
+        fogDensity: 0.0048,
         sunColor: 0xfffdf5,
         sunIntensity: 1.25,
         sunPos: [120, 260, 100],
@@ -1232,7 +1248,7 @@
         skyHorizon: 0xd96b43,
         skyBottom: 0xf7b267,
         fog: 0xd96b43,
-        fogDensity: 0.0035,
+        fogDensity: 0.0052,
         sunColor: 0xffedd5,
         sunIntensity: 1.10,
         sunPos: [-220, 75, -140],
@@ -1245,10 +1261,10 @@
         name: 'Midnight Starlight',
         icon: '🌙',
         skyTop: 0x010206,
-        skyHorizon: 0x040812,
+        skyHorizon: 0x070e1c,
         skyBottom: 0x0a1424,
-        fog: 0x040812,
-        fogDensity: 0.0035,
+        fog: 0x070e1c,
+        fogDensity: 0.0058,
         sunColor: 0x93c5fd,
         sunIntensity: 0.40,
         sunPos: [-60, 190, -100],
@@ -1259,6 +1275,7 @@
     },
 
     CITIES: {
+      offworld: { id: 'offworld', name: 'Off-World Red Planet', tagline: 'Martian Regolith Dunes & Boulder Fields', season: 'offworld', openRoad: true },
       desert: { id: 'desert', name: 'Sahyadri Open Desert', tagline: 'Endless Red Rock Canyons & Dunes', season: 'desert', openRoad: true },
       mountains: { id: 'mountains', name: 'Western Ghats Open Pass', tagline: 'Rolling Foothills & Natural Arches', season: 'spring', openRoad: true },
       highlands: { id: 'highlands', name: 'Highland Dusk Highway', tagline: 'Sweeping Heather & Rolling Horizon', season: 'autumn', openRoad: true },
@@ -3348,8 +3365,19 @@
       // wired into normalMap this time — SLOWROADS_PARITY_LOG.md item 6
       // (the brief explicitly called out "loading it and not using it
       // doesn't count").
-      const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a6065, roughness: 0.8, map: RealTextureFactory.rockColor(), normalMap: RealTextureFactory.rockNormal() });
-      const poleMat = new THREE.MeshStandardMaterial({ color: 0x4a4e52, flatShading: true, roughness: 0.6, metalness: 0.3 });
+      const isOffWorld = (season.id === 'offworld' || this.cityKey === 'offworld' || !!season.isOffWorld);
+      const rockMat = new THREE.MeshStandardMaterial({
+        color: isOffWorld ? 0x8a4f2b : 0x5a6065,
+        roughness: 0.85,
+        map: RealTextureFactory.rockColor(),
+        normalMap: RealTextureFactory.rockNormal()
+      });
+      const poleMat = new THREE.MeshStandardMaterial({
+        color: isOffWorld ? 0x7a4325 : 0x4a4e52,
+        flatShading: true,
+        roughness: 0.7,
+        metalness: 0.25
+      });
 
       // Low-poly pedestrian/animal road-crosser builder — same flat-shaded
       // block-figure style as the porch resident so crossers read as part
@@ -3763,97 +3791,87 @@
 
         // 6. Dense Multi-Tiered Pine & Broadleaf Forests, Rocks, Fences & Lanterns (Left and Right)
         [-1, 1].forEach(side => {
-          // Trees previously spawned unconditionally on every point/side —
-          // a 100% spawn rate that buried the urban props (shops, houses,
-          // skyscrapers) under a wall of forest, wrong for what's supposed
-          // to read as an Indian city. Gate to ~45% so greenery still lines
-          // the road without drowning out the buildings.
-          const spawnTree = this.prng.next() > 0.55 && !inTunnel;
+          // Off-World Martian Dunes have zero trees — replaced with dense multi-scale boulder fields
+          const spawnTree = !isOffWorld && (this.prng.next() > 0.55) && !inTunnel;
 
-          // Minimum offset kept clear of the vehicle's own max lateral
-          // drift (±9m from centerline, see lateralOffset clamp in
-          // VehicleController) plus the tree canopy's ~2.4m radius —
-          // otherwise trees spawn directly inside the player's drivable
-          // area and the car ends up driving through them.
+          // Off-World Near-Road Boulder Clusters (matching Slow Roads off-world reference)
+          if (isOffWorld && !inTunnel && this.prng.next() > 0.30) {
+            const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(2.0, 32.0));
+            const rPos = pt.clone().addScaledVector(normal, rockDist);
+            const clusterCount = Math.floor(this.prng.range(2, 5));
+            for (let ci = 0; ci < clusterCount; ci++) {
+              const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 7.0, 0, (this.prng.next() - 0.5) * 7.0);
+              const cPos = rPos.clone().add(cOffset);
+              const cDist = side * (Math.abs(rockDist) + cOffset.x);
+              cPos.y = calcTerrainY(cPos, cDist);
+
+              const rockScale = this.prng.range(0.35, 2.4);
+              const rock = new THREE.Mesh(rockGeom, rockMat);
+              rock.scale.setScalar(rockScale);
+              const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
+              rock.rotation.set(rotX, rotY, 0);
+              rock.position.set(cPos.x, cPos.y + 0.35 * rockScale, cPos.z);
+              rock.userData.isRock = true;
+              this.foliageGroup.add(rock);
+              this.obstacles.push({ pos: cPos.clone(), radius: 1.2 * rockScale, type: 'rock', mesh: rock });
+            }
+          }
+
+          // Minimum offset kept clear of the vehicle's own max lateral drift
           const nearDist = CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(8.0, 18.0);
           const nearPos = pt.clone().addScaledVector(normal, side * nearDist);
           nearPos.y = calcTerrainY(nearPos, side * nearDist);
 
           if (spawnTree) {
-          // Winter forces evergreen-only canopy — broadleaf trees would be
-          // bare in winter, and there's no leafless sprite variant, so the
-          // forest stays all-pine rather than showing full green canopies
-          // that would look wrong for the season.
-          const isPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
+            const isPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
+            const clusterCount = Math.floor(this.prng.range(3, 7));
+            for (let ci = 0; ci < clusterCount; ci++) {
+              const leafColHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
+              const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 5.0, 0, (this.prng.next() - 0.5) * 5.0);
+              const cPos = nearPos.clone().add(cOffset);
+              cPos.y = calcTerrainY(cPos, side * nearDist);
 
-          // Cluster, not a single tree: a lone cross-billboard reads as a
-          // flat cardboard cutout the instant you're close enough to see
-          // it edge-on — direct side-by-side comparison against a real
-          // slowroads screenshot confirmed this ("playdoh level"). Real
-          // forests never present one isolated card; they're dense
-          // overlapping stands where no single flat plane is ever alone
-          // enough to read as flat. 3-6 trees per spawn point, offset in a
-          // tight radius, same species per cluster (matches how real
-          // conifer/broadleaf stands actually group) with scale/rotation
-          // variance so it doesn't look stamped.
-          const clusterCount = Math.floor(this.prng.range(3, 7));
-          for (let ci = 0; ci < clusterCount; ci++) {
-            const leafColHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
-            const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 5.0, 0, (this.prng.next() - 0.5) * 5.0);
-            const cPos = nearPos.clone().add(cOffset);
-            cPos.y = calcTerrainY(cPos, side * nearDist);
-
-            const scale = this.prng.range(0.85, 1.45);
-            // Deferred, not added directly: buildings (cabins in particular)
-            // are placed later in this same loop iteration, so a tree
-            // registered immediately here has no way to know about a
-            // cabin that hasn't spawned yet — the two would silently overlap
-            // (reported directly: a tree canopy clipping straight through a
-            // delivery cabin's roof). Queue a lightweight descriptor (not a
-            // built mesh — see buildInstancedBatches) and resolve overlaps
-            // in one pass after every prop for the whole route is placed.
-            // Scaled to realistic mature conifer/broadleaf height (16.0m baseline).
-            pendingTrees.push({
-              kind: isPine ? 'pine' : 'broadleaf', worldHeight: 16.0, tintHex: leafColHex,
-              pos: cPos.clone(), scale, rotY: this.prng.next() * Math.PI * 2,
-              radius: 1.8 * scale
-            });
-          }
+              const scale = this.prng.range(0.85, 1.45);
+              pendingTrees.push({
+                kind: isPine ? 'pine' : 'broadleaf', worldHeight: 16.0, tintHex: leafColHex,
+                pos: cPos.clone(), scale, rotY: this.prng.next() * Math.PI * 2,
+                radius: 1.8 * scale
+              });
+            }
           } // end spawnTree
 
-          // Background-fill trees: the near-road pass above only plants out
-          // to ~22m (nearDist tops out at roadHalf+18), while skyscrapers
-          // start no closer than 34m (bldgDist below) and only spawn on
-          // ~1-in-7 sampled points at ~85% odds — leaving a consistently
-          // bare 22-34m band, and further bare gaps between buildings
-          // beyond that, on every route. That's what read as "sparse near
-          // buildings/hills" — the background had nothing placed in it at
-          // all, not just fewer props. Fills the 24-90m band (covering the
-          // gap and scattering among/behind the buildings) at a modest,
-          // gated density so it reads as populated hillside without
-          // meaningfully changing prop-count-driven cost: 1-in-4 sampled
-          // points per side, ~55% spawn odds — roughly a third of the
-          // near-road tree density. Uses the same pendingTrees overlap
-          // resolution as every other tree, so these never overlap
-          // buildings/rocks/houses placed in the same pass.
-          if (i % 4 === 0 && this.prng.next() > 0.45 && !inTunnel) {
+          // Background props: background trees for Earth, background dunes/boulders for Off-World
+          if (isOffWorld && i % 3 === 0 && this.prng.next() > 0.25 && !inTunnel) {
+            const bgDist = side * this.prng.range(28.0, 85.0);
+            const bgPos = pt.clone().addScaledVector(normal, bgDist);
+            const bgClusterCount = Math.floor(this.prng.range(2, 6));
+            for (let ci = 0; ci < bgClusterCount; ci++) {
+              const bgOffset = new THREE.Vector3((this.prng.next() - 0.5) * 15.0, 0, (this.prng.next() - 0.5) * 15.0);
+              const cBgPos = bgPos.clone().add(bgOffset);
+              cBgPos.y = calcTerrainY(cBgPos, bgDist);
+              const rockScale = this.prng.range(0.8, 3.6);
+              const rock = new THREE.Mesh(rockGeom, rockMat);
+              rock.scale.setScalar(rockScale);
+              const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
+              rock.rotation.set(rotX, rotY, 0);
+              rock.position.set(cBgPos.x, cBgPos.y + 0.4 * rockScale, cBgPos.z);
+              rock.userData.isRock = true;
+              this.foliageGroup.add(rock);
+              this.obstacles.push({ pos: cBgPos.clone(), radius: 1.4 * rockScale, type: 'rock', mesh: rock });
+            }
+          } else if (!isOffWorld && i % 4 === 0 && this.prng.next() > 0.45 && !inTunnel) {
             const bgDist = side * this.prng.range(24.0, 90.0);
             const bgPos = pt.clone().addScaledVector(normal, bgDist);
             bgPos.y = calcTerrainY(bgPos, bgDist);
             const bgIsPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
 
-            // Same clustering fix as the near-road pass — a dense treeline
-            // reads as a continuous hillside forest instead of scattered
-            // isolated cards, and background trees can afford a slightly
-            // bigger cluster since they're cheap (2 planes each) and read
-            // fine from range.
             const bgClusterCount = Math.floor(this.prng.range(4, 9));
             for (let ci = 0; ci < bgClusterCount; ci++) {
               const bgLeafHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
               const bgOffset = new THREE.Vector3((this.prng.next() - 0.5) * 9.0, 0, (this.prng.next() - 0.5) * 9.0);
               const cBgPos = bgPos.clone().add(bgOffset);
               cBgPos.y = calcTerrainY(cBgPos, bgDist);
-              const bgScale = this.prng.range(0.9, 1.55); // background trees can run larger — read fine from a distance, and vary the treeline silhouette
+              const bgScale = this.prng.range(0.9, 1.55);
               pendingTrees.push({
                 kind: bgIsPine ? 'pine' : 'broadleaf', worldHeight: 22.0, tintHex: bgLeafHex,
                 pos: cBgPos.clone(), scale: bgScale, rotY: this.prng.next() * Math.PI * 2,
@@ -8355,6 +8373,7 @@
             <div class="dock-panel-col" style="grid-column: span 2;">
               <span class="dock-panel-label">SELECT MAP & ENVIRONMENT</span>
               <div class="dock-btn-row">
+                <button class="dock-sq-btn ${this.selectedCity === 'offworld' ? 'active-sq' : ''}" data-city="offworld">🪐 OFF-WORLD</button>
                 <button class="dock-sq-btn ${this.selectedCity === 'desert' ? 'active-sq' : ''}" data-city="desert">🏜️ DESERT CANYON</button>
                 <button class="dock-sq-btn ${this.selectedCity === 'mountains' ? 'active-sq' : ''}" data-city="mountains">⛰️ GHATS PASS</button>
                 <button class="dock-sq-btn ${this.selectedCity === 'highlands' ? 'active-sq' : ''}" data-city="highlands">🌾 HIGHLANDS</button>
@@ -8365,6 +8384,7 @@
             <div class="dock-panel-col">
               <span class="dock-panel-label">ROAD SURFACE</span>
               <div class="dock-btn-row">
+                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'dirt' ? 'active-sq' : ''}" data-rt="dirt">DIRT</button>
                 <button class="dock-sq-btn ${this.selectedRoadTerrain === 'asphalt' ? 'active-sq' : ''}" data-rt="asphalt">ASPHALT</button>
                 <button class="dock-sq-btn ${this.selectedRoadTerrain === 'gravel' ? 'active-sq' : ''}" data-rt="gravel">GRAVEL</button>
                 <button class="dock-sq-btn ${this.selectedRoadTerrain === 'mud' ? 'active-sq' : ''}" data-rt="mud">MUD</button>
@@ -8386,6 +8406,7 @@
             this.selectedCity = b.dataset.city;
             const cCfg = CONFIG.CITIES[this.selectedCity];
             if (cCfg && cCfg.season) this.selectedSeason = cCfg.season;
+            if (this.selectedCity === 'offworld') this.selectedRoadTerrain = 'dirt';
             this.buildWorldAndScene();
             this.renderDockPanelContent('world');
             sound.playTone(750, 'sine', 0.12);
@@ -8413,13 +8434,14 @@
       } else if (type === 'style') {
         el.innerHTML = `
           <div class="dock-panel-grid" style="display: flex; gap: 24px; justify-content: flex-start; align-items: flex-start;">
-            <div class="dock-panel-col" style="flex: 1.3;">
-              <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">SEASON</span>
+            <div class="dock-panel-col" style="flex: 1.4;">
+              <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">SEASON / WORLD</span>
               <div class="dock-btn-row" style="display: flex; gap: 8px;">
                 <button class="dock-sq-btn ${this.selectedSeason === 'spring' ? 'active-sq' : ''}" data-s="spring" title="Spring" style="font-size: 1.3rem; padding: 10px 14px;">🌱</button>
                 <button class="dock-sq-btn ${this.selectedSeason === 'summer' ? 'active-sq' : ''}" data-s="summer" title="Summer" style="font-size: 1.3rem; padding: 10px 14px;">☀️</button>
                 <button class="dock-sq-btn ${this.selectedSeason === 'autumn' ? 'active-sq' : ''}" data-s="autumn" title="Autumn" style="font-size: 1.3rem; padding: 10px 14px;">🍂</button>
                 <button class="dock-sq-btn ${this.selectedSeason === 'winter' ? 'active-sq' : ''}" data-s="winter" title="Winter Snow" style="font-size: 1.3rem; padding: 10px 14px;">❄️</button>
+                <button class="dock-sq-btn ${this.selectedSeason === 'offworld' ? 'active-sq' : ''}" data-s="offworld" title="Off-World Martian Dunes" style="font-size: 1.3rem; padding: 10px 14px;">🪐</button>
                 <button class="dock-sq-btn ${this.selectedSeason === 'desert' ? 'active-sq' : ''}" data-s="desert" title="Desert Canyons" style="font-size: 1.3rem; padding: 10px 14px;">🏜️</button>
                 <button class="dock-sq-btn ${this.selectedSeason === 'space' ? 'active-sq' : ''}" data-s="space" title="Lunar Space" style="font-size: 1.3rem; padding: 10px 14px;">🌕</button>
               </div>
@@ -8452,6 +8474,10 @@
         el.querySelectorAll('[data-s]').forEach(b => {
           b.onclick = () => {
             this.selectedSeason = b.dataset.s;
+            if (this.selectedSeason === 'offworld') {
+              this.selectedCity = 'offworld';
+              this.selectedRoadTerrain = 'dirt';
+            }
             this.buildWorldAndScene();
             this.renderDockPanelContent('style');
             sound.playTone(700, 'sine', 0.1);
@@ -9020,10 +9046,12 @@
           const season = CONFIG.SEASONS[this.selectedSeason] || CONFIG.SEASONS.autumn;
           const tod = CONFIG.TIME_OF_DAY[this.selectedTimeOfDay] || CONFIG.TIME_OF_DAY.day;
 
-          // Fog control: deep atmospheric clarity inside tunnels
+          // Fog control: deep atmospheric clarity inside tunnels, rich horizon silhouettes outside
           if (this.scene.fog) {
-            const targetFog = inTunnel ? 0.0003 : (tod.fogDensity || season.fogDensity || 0.0016);
+            const targetFog = inTunnel ? 0.0003 : (tod.fogDensity || 0.0048);
+            const targetFogColor = inTunnel ? new THREE.Color(0x1a1512) : new THREE.Color(tod.fog);
             this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, targetFog, 0.08);
+            this.scene.fog.color.lerp(targetFogColor, 0.08);
           }
 
           // Ambient & Sun Lighting transition
