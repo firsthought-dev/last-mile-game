@@ -8,6 +8,46 @@
   'use strict';
 
   // --------------------------------------------------------------------------
+  // ICON SET: inline stroke-SVGs (20x20, currentColor) replacing every emoji/
+  // unicode glyph used in buttons, HUD pills and toast notifications. Kept as
+  // raw path data (not an icon font) so the game stays a single-file,
+  // no-extra-request asset. UI.icon(name, size) returns an <svg> string.
+  // --------------------------------------------------------------------------
+  const UI_ICON_PATHS = {
+    sunrise: '<path d="M12 2v4M4.93 10.93l1.41 1.41M2 18h2M20 18h2M17.66 12.34l1.41-1.41M22 22H2M8 6l4-4 4 4M6 18a6 6 0 0 1 12 0"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>',
+    sunset: '<path d="M12 10V2M4.93 10.93l1.41 1.41M2 18h2M20 18h2M17.66 12.34l1.41-1.41M22 22H2M16 6l-4 4-4-4M6 18a6 6 0 0 1 12 0"/>',
+    moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+    cloud: '<path d="M7 18a4.5 4.5 0 0 1-.5-8.97A6 6 0 0 1 18 9.5a4 4 0 0 1-1 7.9H7z"/>',
+    cloudRain: '<path d="M7 15a4.5 4.5 0 0 1-.5-8.97A6 6 0 0 1 18 6.5a4 4 0 0 1-1 7.9H7z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/>',
+    wind: '<path d="M3 8h10.5a2.5 2.5 0 1 0-2.5-2.5M3 12h14.5a2.5 2.5 0 1 1-2.5 2.5M3 16h8.5a2.5 2.5 0 1 1-2.5 2.5"/>',
+    planet: '<circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="10" ry="3.2" transform="rotate(-18 12 12)"/>',
+    road: '<path d="M8 2 4 22M16 2l4 20M12 2v3M12 9.5v3M12 17v3"/>',
+    mountain: '<path d="M3 20 9 8l4 6 2-3 6 9H3z"/>',
+    waves: '<path d="M2 8q2.5-3 5 0t5 0 5 0 5 0M2 14q2.5-3 5 0t5 0 5 0 5 0M2 20q2.5-3 5 0t5 0 5 0 5 0"/>',
+    wrench: '<path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 1 5.4-5.4l-3-3z"/>',
+    car: '<path d="M4 16V9.5L6 5h12l2 4.5V16"/><path d="M2 16h20v3H2z"/><circle cx="7" cy="19" r="1.6"/><circle cx="17" cy="19" r="1.6"/>',
+    bolt: '<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/>',
+    target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/>',
+    x: '<path d="M5 5l14 14M19 5 5 19"/>',
+    package: '<path d="M3 8l9-5 9 5-9 5-9-5zM3 8v9l9 5m0-14v14m9-14v9l-9 5"/>',
+    map: '<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>',
+    scooter: '<circle cx="5.5" cy="18.5" r="2"/><circle cx="18.5" cy="18.5" r="2"/><path d="M5.5 18.5H10l2-6h4M12.5 18.5h6l-1.5-5-3-1.5M8 6h3l1 3"/>',
+    alertTriangle: '<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17.5v.1"/>',
+    chevronLeft: '<path d="M14.5 4 7 12l7.5 8"/>',
+    chevronRight: '<path d="M9.5 4 17 12l-7.5 8"/>',
+    chevronUp: '<path d="M4 14.5 12 7l8 7.5"/>',
+    chevronDown: '<path d="M4 9.5 12 17l8-7.5"/>'
+  };
+  const UI = {
+    icon(name, size = 16) {
+      const inner = UI_ICON_PATHS[name];
+      if (!inner) return '';
+      return `<svg class="ui-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+    }
+  };
+
+  // --------------------------------------------------------------------------
   // 0. LOCALIZED TRAFFIC ASSET: TATA ACE-STYLE MINI-TRUCK (CC0, Kenney Car Kit)
   // Recolored from stock to a teal-green/white Indian goods-carrier livery so
   // it reads distinctly from the yellow auto-rickshaws and red BEST buses.
@@ -1200,18 +1240,18 @@
     },
 
     ROAD_TERRAINS: {
-      asphalt: { id: 'asphalt', name: 'Asphalt Expressway', icon: '🛣️', color: 0x1e2229, roughness: 0.82, metalness: 0.05, gripMult: 1.00, paintLines: true, desc: 'Smooth highway tarmac' },
-      dirt: { id: 'dirt', name: 'Martian Dirt Trail', icon: '🪐', color: 0x7a4923, roughness: 0.95, metalness: 0.02, gripMult: 0.88, paintLines: false, desc: 'Unpaved Martian regolith tire trail' },
-      gravel: { id: 'gravel', name: 'Mountain Ghats Gravel', icon: '🪨', color: 0x6b5744, roughness: 0.94, metalness: 0.02, gripMult: 0.82, paintLines: false, desc: 'Scenic mountain gravel & rally shale' },
-      mud: { id: 'mud', name: 'Monsoon Mud & Slush', icon: '🌧️', color: 0x4a3322, roughness: 0.38, metalness: 0.15, gripMult: 0.68, paintLines: false, desc: 'Slippery drift clay track with wet sheen' },
-      sand: { id: 'sand', name: 'Coastal Dune Sand', icon: '🏖️', color: 0xc49b66, roughness: 0.96, metalness: 0.02, gripMult: 0.72, paintLines: false, desc: 'Soft golden dune trail' }
+      asphalt: { id: 'asphalt', name: 'Asphalt Expressway', icon: 'road', color: 0x1e2229, roughness: 0.82, metalness: 0.05, gripMult: 1.00, paintLines: true, desc: 'Smooth highway tarmac' },
+      dirt: { id: 'dirt', name: 'Martian Dirt Trail', icon: 'planet', color: 0x7a4923, roughness: 0.95, metalness: 0.02, gripMult: 0.88, paintLines: false, desc: 'Unpaved Martian regolith tire trail' },
+      gravel: { id: 'gravel', name: 'Mountain Ghats Gravel', icon: 'mountain', color: 0x6b5744, roughness: 0.94, metalness: 0.02, gripMult: 0.82, paintLines: false, desc: 'Scenic mountain gravel & rally shale' },
+      mud: { id: 'mud', name: 'Monsoon Mud & Slush', icon: 'cloudRain', color: 0x4a3322, roughness: 0.38, metalness: 0.15, gripMult: 0.68, paintLines: false, desc: 'Slippery drift clay track with wet sheen' },
+      sand: { id: 'sand', name: 'Coastal Dune Sand', icon: 'waves', color: 0xc49b66, roughness: 0.96, metalness: 0.02, gripMult: 0.72, paintLines: false, desc: 'Soft golden dune trail' }
     },
 
     TIME_OF_DAY: {
       dawn: {
         id: 'dawn',
         name: 'Dawn Golden Hour',
-        icon: '🌅',
+        icon: 'sunrise',
         skyTop: 0x7c5980,
         skyHorizon: 0xe0a0a0,
         skyBottom: 0xf8d7b0,
@@ -1227,7 +1267,7 @@
       day: {
         id: 'day',
         name: 'Midday Daylight',
-        icon: '☀️',
+        icon: 'sun',
         skyTop: 0x3b7298,
         skyHorizon: 0x8cb8d4,
         skyBottom: 0xc6e0ee,
@@ -1243,7 +1283,7 @@
       dusk: {
         id: 'dusk',
         name: 'Sunset Golden Hour',
-        icon: '🌇',
+        icon: 'sunset',
         skyTop: 0x383556,
         skyHorizon: 0xd96b43,
         skyBottom: 0xf7b267,
@@ -1259,7 +1299,7 @@
       night: {
         id: 'night',
         name: 'Midnight Starlight',
-        icon: '🌙',
+        icon: 'moon',
         skyTop: 0x010206,
         skyHorizon: 0x070e1c,
         skyBottom: 0x0a1424,
@@ -1493,7 +1533,7 @@
   // --------------------------------------------------------------------------
   const RockGeometryFactory = {
     createFacetedRockGeometry(seed = 1) {
-      const geom = new THREE.DodecahedronGeometry(1.2, 0);
+      const geom = new THREE.DodecahedronGeometry(1.3, 1);
       const pos = geom.attributes.position;
       const v = new THREE.Vector3();
       for (let i = 0; i < pos.count; i++) {
@@ -1504,6 +1544,16 @@
         pos.setXYZ(i, v.x, v.y, v.z);
       }
       geom.computeVertexNormals();
+
+      // Spherical UV mapping for photo-rock color and normal maps
+      const uvs = [];
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).normalize();
+        const u = 0.5 + Math.atan2(v.z, v.x) / (2 * Math.PI);
+        const vCoord = 0.5 - Math.asin(Math.max(-1, Math.min(1, v.y))) / Math.PI;
+        uvs.push(u * 2.0, vCoord * 2.0);
+      }
+      geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       return geom;
     }
   };
@@ -1674,6 +1724,8 @@
     // self-loading Texture instance instead.
     grassColorFloor() { return this._get('grassColorFloor', 'assets/textures/grass_color.webp'); },
     grassNormal() { return this._get('grassNormal', 'assets/textures/grass_normal.webp'); },
+    sandColor() { return this._get('sandColor', 'assets/textures/sand_color.webp'); },
+    sandColorFloor() { return this._get('sandColorFloor', 'assets/textures/sand_color.webp'); },
     rockColor() { return this._get('rockColor', 'assets/textures/rock_color.webp'); },
     rockNormal() { return this._get('rockNormal', 'assets/textures/rock_normal.webp'); },
     roadColor(roadTerrainKey = 'asphalt') {
@@ -2718,12 +2770,16 @@
       // cliffCol grey-brown in steep bands per the embankment logic above)
       // exactly as it did over the old texture — same mechanism, just a
       // real photo underneath instead of procedural speckle noise.
+      const isOffWorldTerrain = (season.id === 'offworld' || this.cityKey === 'offworld' || !!season.isOffWorld);
       const terrainMat = new THREE.MeshStandardMaterial({
         vertexColors: true,
         side: THREE.DoubleSide,
         roughness: 0.95,
         metalness: 0.0,
-        map: RealTextureFactory.grassColor() // normalMap deliberately omitted — see the road material's comment above, same custom-UV instability risk
+        // Martian regolith reads as sand/dune, not turf — using the grass
+        // photo here under orange vertex-color tint produced a muddy
+        // grass-under-rust look instead of dry dune sand.
+        map: isOffWorldTerrain ? RealTextureFactory.sandColor() : RealTextureFactory.grassColor() // normalMap deliberately omitted — see the road material's comment above, same custom-UV instability risk
       });
 
       this.terrainMesh = new THREE.Mesh(geom, terrainMat);
@@ -3385,7 +3441,7 @@
       this.crossers = [];
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
-      const cityCfg = CONFIG.CITIES[this.cityKey] || CONFIG.CITIES.desert;
+      const cityCfg = CONFIG.CITIES[this.cityKey] || CONFIG.CITIES.offworld;
       const isOpenRoad = !!cityCfg.openRoad;
 
       // Reusable Low-Poly Foliage & Prop Geometries
@@ -3401,10 +3457,11 @@
 
       const isOffWorld = (season.id === 'offworld' || this.cityKey === 'offworld' || !!season.isOffWorld);
       const rockMat = new THREE.MeshStandardMaterial({
-        color: isOffWorld ? 0x9e5830 : (season.cliffColor || 0x4a4842),
-        flatShading: true,
-        roughness: 0.92,
-        metalness: 0.04
+        color: isOffWorld ? 0x8a4f2b : (season.cliffColor || 0x5a6065),
+        roughness: 0.85,
+        metalness: 0.05,
+        map: RealTextureFactory.rockColor(),
+        normalMap: RealTextureFactory.rockNormal()
       });
       const poleMat = new THREE.MeshStandardMaterial({
         color: isOffWorld ? 0x7a4325 : 0x4a4e52,
@@ -6642,10 +6699,10 @@
       this.scorePopupContainer = document.getElementById('score-popup-container');
 
       this.gameState = 'menu';
-      this.selectedCity = 'desert';
-      this.selectedSeason = 'desert';
+      this.selectedCity = 'offworld';
+      this.selectedSeason = 'offworld';
       this.selectedTimeOfDay = 'day'; // 'dawn', 'day', 'dusk', 'night'
-      this.selectedRoadTerrain = 'asphalt'; // 'asphalt', 'gravel', 'mud', 'sand'
+      this.selectedRoadTerrain = 'dirt'; // Off-World only surface: unpaved Martian regolith trail
       this.weather = 'clear'; // 'clear', 'rain' — see SLOWROADS_PARITY_LOG.md item 4
       this.selectedSeed = '5927cd04';
       this.selectedVehicle = 'musclecoupe';
@@ -8418,14 +8475,9 @@
         el.innerHTML = `
           <div class="dock-panel-grid">
             <div class="dock-panel-col" style="grid-column: span 2;">
-              <span class="dock-panel-label">SELECT MAP & ENVIRONMENT</span>
+              <span class="dock-panel-label">MAP & ENVIRONMENT</span>
               <div class="dock-btn-row">
-                <button class="dock-sq-btn ${this.selectedCity === 'offworld' ? 'active-sq' : ''}" data-city="offworld">🪐 OFF-WORLD</button>
-                <button class="dock-sq-btn ${this.selectedCity === 'desert' ? 'active-sq' : ''}" data-city="desert">🏜️ DESERT CANYON</button>
-                <button class="dock-sq-btn ${this.selectedCity === 'mountains' ? 'active-sq' : ''}" data-city="mountains">⛰️ GHATS PASS</button>
-                <button class="dock-sq-btn ${this.selectedCity === 'highlands' ? 'active-sq' : ''}" data-city="highlands">🌾 HIGHLANDS</button>
-                <button class="dock-sq-btn ${this.selectedCity === 'lunar' ? 'active-sq' : ''}" data-city="lunar">🌕 LUNAR MOON</button>
-                <button class="dock-sq-btn ${this.selectedCity === 'mumbai' ? 'active-sq' : ''}" data-city="mumbai">🏙️ MUMBAI COAST</button>
+                <button class="dock-sq-btn active-sq" data-city="offworld">🪐 OFF-WORLD</button>
               </div>
             </div>
             <div class="dock-panel-col">
@@ -8482,15 +8534,9 @@
         el.innerHTML = `
           <div class="dock-panel-grid" style="display: flex; gap: 24px; justify-content: flex-start; align-items: flex-start;">
             <div class="dock-panel-col" style="flex: 1.4;">
-              <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">SEASON / WORLD</span>
+              <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">WORLD</span>
               <div class="dock-btn-row" style="display: flex; gap: 8px;">
-                <button class="dock-sq-btn ${this.selectedSeason === 'spring' ? 'active-sq' : ''}" data-s="spring" title="Spring" style="font-size: 1.3rem; padding: 10px 14px;">🌱</button>
-                <button class="dock-sq-btn ${this.selectedSeason === 'summer' ? 'active-sq' : ''}" data-s="summer" title="Summer" style="font-size: 1.3rem; padding: 10px 14px;">☀️</button>
-                <button class="dock-sq-btn ${this.selectedSeason === 'autumn' ? 'active-sq' : ''}" data-s="autumn" title="Autumn" style="font-size: 1.3rem; padding: 10px 14px;">🍂</button>
-                <button class="dock-sq-btn ${this.selectedSeason === 'winter' ? 'active-sq' : ''}" data-s="winter" title="Winter Snow" style="font-size: 1.3rem; padding: 10px 14px;">❄️</button>
-                <button class="dock-sq-btn ${this.selectedSeason === 'offworld' ? 'active-sq' : ''}" data-s="offworld" title="Off-World Martian Dunes" style="font-size: 1.3rem; padding: 10px 14px;">🪐</button>
-                <button class="dock-sq-btn ${this.selectedSeason === 'desert' ? 'active-sq' : ''}" data-s="desert" title="Desert Canyons" style="font-size: 1.3rem; padding: 10px 14px;">🏜️</button>
-                <button class="dock-sq-btn ${this.selectedSeason === 'space' ? 'active-sq' : ''}" data-s="space" title="Lunar Space" style="font-size: 1.3rem; padding: 10px 14px;">🌕</button>
+                <button class="dock-sq-btn active-sq" data-s="offworld" title="Off-World Martian Dunes" style="font-size: 1.3rem; padding: 10px 14px;">🪐</button>
               </div>
             </div>
             <div class="dock-panel-col" style="flex: 1.1;">
