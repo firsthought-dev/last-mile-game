@@ -5537,8 +5537,16 @@
       const lastNode = this.splineNodes[this.splineNodes.length - 1];
       const distToEnd = carPos.distanceTo(lastNode);
 
+      // Throttle: one chunk build per 3 s maximum. buildExtensionMeshes is a
+      // synchronous O(n) operation (full-spline resample + geometry + normals)
+      // that blocks the render thread. Without this, distToEnd < 1600 stays
+      // true across many consecutive frames during the build, stacking spikes.
+      const now = Date.now();
+      if (this._lastStreamBuild && now - this._lastStreamBuild < 3000) return;
+
       // When the car gets within 1600m of the forward scout horizon, scout another 1000m ahead
       if (distToEnd < 1600) {
+        this._lastStreamBuild = now;
         const oldLength = this.splineNodes.length;
         this.extendSpline(100); // add 1000m of new highway nodes
         const newLength = this.splineNodes.length;
@@ -8040,10 +8048,15 @@
       const positions = new Float32Array(COUNT * 3);
       const velocities = [];
 
+      // Seed particles around car's current position so weather appears
+      // immediately when toggled mid-drive, not only near world origin.
+      const spawnCenter = (this.vehicle && this.vehicle.mesh)
+        ? this.vehicle.mesh.position : new THREE.Vector3(0, 0, 0);
+
       for (let i = 0; i < COUNT; i++) {
-        positions[i * 3 + 0] = (Math.random() - 0.5) * 60;
-        positions[i * 3 + 1] = Math.random() * 26;
-        positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+        positions[i * 3 + 0] = spawnCenter.x + (Math.random() - 0.5) * 60;
+        positions[i * 3 + 1] = spawnCenter.y + Math.random() * 26;
+        positions[i * 3 + 2] = spawnCenter.z + (Math.random() - 0.5) * 60;
 
         velocities.push({
           x: (Math.random() - 0.5) * (isSnow ? 1.4 : 0.6),
@@ -8063,6 +8076,7 @@
       });
 
       this.weatherMesh = new THREE.Points(geom, mat);
+      this.weatherMesh.frustumCulled = false;
       this.weatherVelocities = velocities;
       this.scene.add(this.weatherMesh);
     }
