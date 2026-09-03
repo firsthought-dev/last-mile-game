@@ -37,7 +37,21 @@
     chevronLeft: '<path d="M14.5 4 7 12l7.5 8"/>',
     chevronRight: '<path d="M9.5 4 17 12l-7.5 8"/>',
     chevronUp: '<path d="M4 14.5 12 7l8 7.5"/>',
-    chevronDown: '<path d="M4 9.5 12 17l8-7.5"/>'
+    chevronDown: '<path d="M4 9.5 12 17l8-7.5"/>',
+    flame: '<path d="M12 22a6.5 6.5 0 0 0 6.5-6.5c0-3-2-4.5-3-6.5-.5 2-1.5 3-2.5 2 0-2.5-.5-4.5-3-7-1 2.5-3 4-3 7.5a4 4 0 0 0 1 2.5c-1.5 0-2.5-1-3-2.5-1.5 2-2 3.5-2 4C5.5 19.5 8 22 12 22z"/>',
+    camera: '<path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
+    check: '<path d="M4 12.5 9.5 18 20 6"/>',
+    refresh: '<path d="M20 11A8 8 0 0 0 6 5.3L4 7M4 4v3h3M4 13a8 8 0 0 0 14 5.7l2-2.7M20 20v-3h-3"/>',
+    lifebuoy: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M5.6 5.6l3.4 3.4M18.4 5.6l-3.4 3.4M5.6 18.4l3.4-3.4M18.4 18.4l-3.4-3.4"/>',
+    building: '<path d="M4 21V4h10v17M18 21v-9h-4M8 8h2M8 12h2M8 16h2"/>',
+    radio: '<rect x="3" y="9" width="18" height="11" rx="2"/><path d="M7 9 17 3M8 14.5h.01"/><circle cx="16" cy="14.5" r="2.5"/>',
+    play: '<path d="M6 4l14 8-14 8V4z"/>',
+    pause: '<path d="M7 4h3v16H7zM14 4h3v16h-3z"/>',
+    skipBack: '<path d="M6 5v14M18 6l-9 6 9 6V6z"/>',
+    skipForward: '<path d="M18 5v14M6 6l9 6-9 6V6z"/>',
+    volume: '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 8a5 5 0 0 1 0 8"/>',
+    aperture: '<circle cx="12" cy="12" r="9"/><path d="M12 3v9l6.5-4.2M12 12l-9 3M12 12l4.5 8"/>',
+    gauge: '<circle cx="12" cy="13" r="8"/><path d="M12 13l3.5-4.5M8 13a4 4 0 0 1 4-4"/>'
   };
   const UI = {
     icon(name, size = 16) {
@@ -1132,23 +1146,34 @@
     SEASONS: {
       autumn: {
         id: 'autumn',
-        name: 'Dusk Heather & Moorland',
-        skyTop: 0x312e81,
-        skyBottom: 0xfde047,
-        fog: 0xfbd38d,
-        fogDensity: 0.0016,
-        // Desaturated per Master Prompt section 3 — slowroads' reference
-        // reads as lighting-blended/muted regardless of season, never this
-        // saturated. Values below are the same hues at ~45-50% saturation
-        // (computed via HSL desaturation, not hand-picked), matching the
-        // "muted grey-green, not saturated green" reference standard.
-        grassColor: 0x5d3c29,
-        grassLight: 0x895833,
-        cliffColor: 0x341f13,
-        // Kept visually distinct from grassColor/grassLight/cliffColor above —
-        // the old palette shared 0xb45309 with grassLight, which let dense
-        // clusters of trees blend into the hillside into one flat mass.
-        treeLeaves: [0xb46c6c, 0xb97b5a, 0xbaa156, 0x8a4848]
+        name: 'Soothing Golden Afternoon',
+        // Soft warm-white-to-cerulean sky gradient, no saturated blue —
+        // matches the "soft overcast golden hour" brief instead of the old
+        // punchy indigo-to-yellow dusk gradient.
+        skyTop: 0x7a94ab,
+        skyHorizon: 0xe8d9bd,
+        skyBottom: 0xf3e6cf,
+        fog: 0xe3d3b8,
+        fogDensity: 0.0022,
+        // Warm desaturated greens per spec (#8B9E6A-#A8B87A range).
+        // cliffColor deliberately kept as a muted earthy brown, NOT the
+        // spec's sand tone (#C4A882) — that tan was tried first and it
+        // reads as sand/dune, not bare hillside, and since steep terrain
+        // (this color) covers a lot of ground next to the road it was
+        // visually swamping the green grass, making the whole map read as
+        // "no grass, just tan". Sand/soil tone is reserved for Off-World's
+        // dune terrain instead, where it's the correct material.
+        grassColor: 0x8b9e6a,
+        grassLight: 0xa8b87a,
+        cliffColor: 0x8a7458,
+        // Muted sage/olive canopy with a warm-brown bark accent, no pure
+        // black outlines anywhere in the set. Brighter than the target
+        // on-screen hue on purpose: this tints a photo pine/broadleaf
+        // texture via multiply, which only ever darkens the base photo —
+        // a mid-tone tint here still lands dark and saturated-looking, so
+        // the tint has to sit lighter than the desired result to land in
+        // the muted-sage range once multiplied.
+        treeLeaves: [0xb2c093, 0xc4d1a3, 0xa6b586, 0xc7ab84]
       },
       // Spring/Summer are green-first by design — foliage should read as
       // living trees rather than a rainbow. Autumn keeps its fire tones,
@@ -1224,16 +1249,31 @@
       },
       offworld: {
         id: 'offworld',
-        name: 'Off-World Martian Dunes',
-        skyTop: 0x9e6538,     // Dusty ochre / butterscotch upper sky
-        skyHorizon: 0xd49b6a, // Warm amber atmospheric dust haze
-        skyBottom: 0xebb888,  // Glowing horizon dust mist
-        fog: 0xd49b6a,        // Amber dust fog
-        fogDensity: 0.0048,
-        grassColor: 0xad6532, // Martian red regolith / terracotta sandstone
-        grassLight: 0xd28646, // Golden ochre dune crests
-        cliffColor: 0x6a3717, // Deep dark red basalt bedrock
-        treeLeaves: [0x8a4822, 0x9b5428, 0x6e3816, 0xb86e38],
+        name: 'Off-World Martian Dunes — Rosewater Horizon',
+        // "Rosewater Horizon" — brought back by direct request after the
+        // Mars-science-accurate butterscotch-only sky (real Mars dust
+        // scatters via Mie scattering, producing a uniform tan sky, not a
+        // blue-to-warm gradient — see the Wikipedia "Mars surface color"
+        // sourcing on the butterscotch version) read as flatter and less
+        // striking in play. This keeps that same warm dust-scattering
+        // logic at the horizon (still butterscotch/amber down low, not an
+        // Earth blue) but lets the upper sky drift into a soft dusty
+        // rose/mauve rather than stopping at plain tan — an artistic
+        // liberty on top of the real physics, not a claim that Mars' sky
+        // actually looks like this.
+        skyTop: 0xa8829a,     // Soft dusty rose/mauve zenith
+        skyHorizon: 0xe0b485, // Warm butterscotch/amber haze near the horizon
+        skyBottom: 0xecc99c,
+        fog: 0xe0b485,
+        fogDensity: 0.0052,
+        // Ground tones checked against the same Mars-color sourcing above:
+        // real regolith reads as "butterscotch, golden, brown, tan" up
+        // close (not the old saturated terracotta-red) — these were
+        // already in that family and didn't need correcting.
+        grassColor: 0xc4a882, // Golden-amber dune base
+        grassLight: 0xd4b896, // Pale dune crest highlight
+        cliffColor: 0x8a5a3e, // Iron-oxide rust-brown bedrock — a bit more mineral-red than plain brown, per the limonite/iron-oxide dust real Mars regolith is colored by
+        treeLeaves: [0x9c7856, 0xab8562, 0x8a6b4e, 0xb08f68],
         gravity: 0.62,        // Low Martian gravity for floating suspension
         isOffWorld: true
       }
@@ -1241,10 +1281,17 @@
 
     ROAD_TERRAINS: {
       asphalt: { id: 'asphalt', name: 'Asphalt Expressway', icon: 'road', color: 0x1e2229, roughness: 0.82, metalness: 0.05, gripMult: 1.00, paintLines: true, desc: 'Smooth highway tarmac' },
-      dirt: { id: 'dirt', name: 'Martian Dirt Trail', icon: 'planet', color: 0x7a4923, roughness: 0.95, metalness: 0.02, gripMult: 0.88, paintLines: false, desc: 'Unpaved Martian regolith tire trail' },
-      gravel: { id: 'gravel', name: 'Mountain Ghats Gravel', icon: 'mountain', color: 0x6b5744, roughness: 0.94, metalness: 0.02, gripMult: 0.82, paintLines: false, desc: 'Scenic mountain gravel & rally shale' },
-      mud: { id: 'mud', name: 'Monsoon Mud & Slush', icon: 'cloudRain', color: 0x4a3322, roughness: 0.38, metalness: 0.15, gripMult: 0.68, paintLines: false, desc: 'Slippery drift clay track with wet sheen' },
-      sand: { id: 'sand', name: 'Coastal Dune Sand', icon: 'waves', color: 0xc49b66, roughness: 0.96, metalness: 0.02, gripMult: 0.72, paintLines: false, desc: 'Soft golden dune trail' }
+      dirt: { id: 'dirt', name: 'Martian Dirt Trail', icon: 'planet', color: 0xab8a5e, roughness: 0.96, metalness: 0.0, gripMult: 0.88, paintLines: false, desc: 'Unpaved Martian regolith tire trail' },
+      gravel: { id: 'gravel', name: 'Mountain Ghats Gravel', icon: 'mountain', color: 0x8a7d6a, roughness: 0.94, metalness: 0.02, gripMult: 0.82, paintLines: false, desc: 'Scenic mountain gravel & rally shale' },
+      // roughness raised 0.38->0.58 and metalness 0.15->0.06 — at the old
+      // values the road's dark brown tint (verified correct in the vertex
+      // color data) was still getting Fresnel-washed by the now much
+      // brighter Off-World sky/ambient at typical grazing viewing angle
+      // down the road, reading as pale grey instead of dark wet mud. Still
+      // glossier than the fully matte surfaces (dirt/gravel/sand) for the
+      // "wet sheen" character, just not enough to wash out the base color.
+      mud: { id: 'mud', name: 'Monsoon Mud & Slush', icon: 'cloudRain', color: 0x4a3322, roughness: 0.58, metalness: 0.06, gripMult: 0.68, paintLines: false, desc: 'Slippery drift clay track with wet sheen' },
+      sand: { id: 'sand', name: 'Coastal Dune Sand', icon: 'waves', color: 0xd4b896, roughness: 0.96, metalness: 0.02, gripMult: 0.72, paintLines: false, desc: 'Soft golden dune trail' }
     },
 
     TIME_OF_DAY: {
@@ -1266,18 +1313,27 @@
       },
       day: {
         id: 'day',
-        name: 'Midday Daylight',
+        // Warm golden-hour palette, but with real directional shading
+        // contrast restored — the earlier "soft overcast" tuning (sun
+        // 0.85 / ambient 0.72) pushed so much of the light into the flat
+        // omnidirectional ambient term that terrain undulation stopped
+        // reading as 3D at all ("terrain looks flat" — checked directly
+        // against slowroads.io, whose dune terrain has clearly visible
+        // light/shadow gradient across every slope). Sun back up, ambient
+        // back down: same warm hue, but the directional light is doing
+        // enough of the work again to reveal depth via shading.
+        name: 'Warm Golden Hour',
         icon: 'sun',
-        skyTop: 0x3b7298,
-        skyHorizon: 0x8cb8d4,
-        skyBottom: 0xc6e0ee,
-        fog: 0x8cb8d4,
-        fogDensity: 0.0048,
-        sunColor: 0xfffdf5,
-        sunIntensity: 1.25,
+        skyTop: 0x6f8aa3,
+        skyHorizon: 0xe9dcc3,
+        skyBottom: 0xf5ead4,
+        fog: 0xe9dcc3,
+        fogDensity: 0.0026,
+        sunColor: 0xfff2df,
+        sunIntensity: 1.3,
         sunPos: [120, 260, 100],
-        ambientColor: 0xf1f5f9,
-        ambientIntensity: 0.55,
+        ambientColor: 0xfaf1e0,
+        ambientIntensity: 0.4,
         night: false
       },
       dusk: {
@@ -1732,6 +1788,12 @@
       if (roadTerrainKey === 'gravel') return this._get('roadGravel', 'assets/textures/gravel_color.webp');
       if (roadTerrainKey === 'sand') return this._get('roadSand', 'assets/textures/sand_color.webp');
       if (roadTerrainKey === 'mud') return this._get('roadMud', 'assets/textures/rock_color.webp');
+      // Off-World's only surface — was silently falling through to the
+      // generic paved-tarmac photo (road_color.webp), which is exactly
+      // backwards for a bare Martian dust trail. Same sand photo the
+      // terrain itself uses, so the tire-track ruts read as compacted
+      // sand, not asphalt with an orange tint.
+      if (roadTerrainKey === 'dirt') return this._get('roadSand', 'assets/textures/sand_color.webp');
       return this._get('roadColor', 'assets/textures/road_color.webp');
     },
     roadNormal() { return this._get('roadNormal', 'assets/textures/road_normal.webp'); },
@@ -1785,6 +1847,17 @@
       h += this.simplex.noise2D(wx * 0.006, wz * 0.006) * 16.0;
       h += this.simplex.noise2D(wx * 0.018, wz * 0.018) * 5.5;
       h += this.simplex.noise2D(wx * 0.045, wz * 0.045) * 1.5;
+      // Off-World gets its own, much gentler amplitude. This amplitude
+      // (peaks near +/-61) is mountain-pass scale, tuned for Earth hill
+      // biomes — the road's own elevation is grade-limited and smoothed,
+      // but the terrain immediately beside it (groundHeightAt's embankment
+      // blend, sampled from THIS function) is not, so at full amplitude it
+      // throws up steep walls a few meters off the shoulder — exactly the
+      // "driving through a sand canyon" feel instead of open rolling dunes
+      // like slowroads.io's own Mars reference. Flattened to ~30% for
+      // Off-World: still undulating, not a flat plain, just soft dunes
+      // instead of walled-in mountain terrain.
+      if (this.cityKey === 'offworld') h *= 0.3;
       return h;
     }
 
@@ -2097,6 +2170,15 @@
 
     createSkyDome(season, todKey = 'day') {
       const tod = CONFIG.TIME_OF_DAY[todKey] || CONFIG.TIME_OF_DAY.day;
+      // See buildWorldAndScene's matching comment — sky gradient colors
+      // were always read from `tod` only, so `season` (passed in as a
+      // param right here!) never actually reached the sky shader. Off-
+      // World gets its own gradient during daylight; night keeps the
+      // shared starry preset.
+      const useSeasonSky = season.isOffWorld && !tod.night;
+      const skyTopHex = useSeasonSky ? season.skyTop : tod.skyTop;
+      const skyHorizHex = useSeasonSky ? season.skyHorizon : tod.skyHorizon;
+      const skyBotHex = useSeasonSky ? season.skyBottom : tod.skyBottom;
       // Sky color used to be Gouraud-interpolated per-VERTEX, baked onto a
       // coarse sphere — every ring boundary was a visible kink where the
       // interpolation slope changed (the vertical blend uses a non-linear
@@ -2113,9 +2195,9 @@
 
       const skyMat = new THREE.ShaderMaterial({
         uniforms: {
-          topCol: { value: new THREE.Color(tod.skyTop) },
-          horizCol: { value: new THREE.Color(tod.skyHorizon) },
-          botCol: { value: new THREE.Color(tod.skyBottom) }
+          topCol: { value: new THREE.Color(skyTopHex) },
+          horizCol: { value: new THREE.Color(skyHorizHex) },
+          botCol: { value: new THREE.Color(skyBotHex) }
         },
         vertexShader: `
           varying vec3 vPos;
@@ -2263,6 +2345,27 @@
       const shoulderSoilColor = new THREE.Color(seasonCfg.grassLight).lerp(baseTarmac, 0.40);
       const vergeColor = shoulderSoilColor.clone();
 
+      // Off-World "road" is structurally not a road at all in the
+      // slowroads.io reference — it's two dark tire-track ruts worn into
+      // the open dune sand, with soft organic edges and no defined
+      // shoulder, not a uniform paved-looking strip. Reusing the SAME
+      // 7-point cross-section (no geometry restructure needed — the two
+      // "lane tarmac" columns already sit right about where wheel tracks
+      // would be) but repainting it: the two wheel-path columns become a
+      // dark compacted-dirt rut color, everything else (center strip and
+      // both edges) becomes light undisturbed sand blending straight into
+      // the terrain color, instead of one uniform tarmac band.
+      const isOffWorldRoad = this.cityKey === 'offworld';
+      // Corrected against the developer's own official Steam screenshots
+      // (store.steampowered.com/app/3431300, current build) — the actual
+      // Mars track is a single SUBTLE worn groove, close in value to the
+      // surrounding dirt, not two stark dark ruts with a hard-contrast
+      // light band between them. 0.32 (checked only against the older,
+      // simpler free-web build) way overshot that. 0.72 reads as "worn
+      // compacted path", not "black tire mark".
+      const trackColor = baseTarmac.clone().multiplyScalar(0.72);
+      const sandBetweenColor = new THREE.Color(seasonCfg.grassLight);
+
       // Lane paint used to be baked into this ribbon's own vertex colors —
       // first as a single column (a bright line that was actually a smooth
       // color gradient bleeding across most of the lane, since Gouraud
@@ -2282,13 +2385,26 @@
       // meshes with a fixed physical width that can't drift with the
       // base road's vertex spacing.
       const laneHalf = roadWidth * 0.5;
+      // Off-World gets a single-vehicle-track width instead of the full
+      // two-lane-plus-shoulder look — by direct request: this should read
+      // as ONE car's tire trail, not two lanes with sidewalks. Points 0
+      // and 6 (the outer verge) stay at the ORIGINAL wide laneHalf +
+      // shoulderWidth position — that's the exact lateral distance
+      // createTerrainMesh's own shoulder slice is placed at, and moving
+      // it would tear a gap open between the road ribbon and the terrain
+      // ribbon. Only the inner points (1-5, the visible track/tarmac
+      // columns) pull in narrow — everything from the narrow track out to
+      // that unchanged outer seam is painted the same sand tone as the
+      // terrain anyway (see the color block below), so it merges away
+      // rather than reading as a wide shoulder.
+      const trackHalf = isOffWorldRoad ? 1.15 : laneHalf;
       const offsets = [
         -laneHalf - shoulderWidth, // 0: Left Verge Outer
-        -laneHalf,                  // 1: Left Tarmac Edge
-        -laneHalf * 0.46 / 0.5,     // 2: Left Lane Tarmac
+        -trackHalf,                  // 1: Left Tarmac Edge
+        -trackHalf * 0.46 / 0.5,     // 2: Left Lane Tarmac
         0.0,                        // 3: Center
-        laneHalf * 0.46 / 0.5,      // 4: Right Lane Tarmac
-        laneHalf,                   // 5: Right Tarmac Edge
+        trackHalf * 0.46 / 0.5,      // 4: Right Lane Tarmac
+        trackHalf,                   // 5: Right Tarmac Edge
         laneHalf + shoulderWidth    // 6: Right Verge Outer
       ];
       for (let i = 0; i <= tubularSegments; i++) {
@@ -2355,9 +2471,36 @@
           normals.push(bankedUp.x, bankedUp.y, bankedUp.z);
           uvs.push(off * 0.5, i * 0.3);
 
-          // Plain tarmac/verge only — paint is a separate decal mesh now
-          // (see createLaneMarkingMeshes), not baked into this ribbon.
-          if (j === 0 || j === 6) {
+          if (isOffWorldRoad) {
+            // j: 0=outer verge, 1=edge, 2=LEFT WHEEL TRACK, 3=center,
+            // 4=RIGHT WHEEL TRACK, 5=edge, 6=outer verge
+            if (j === 2 || j === 4) {
+              // Track ruts also get the same noise so they don't read as
+              // a perfectly flat dark band either. Clamped to only ever
+              // darken (never brighten past base) — see the sand comment
+              // below for why.
+              const trackNoise = 0.75 + Math.max(0, this.simplex.noise2D(p.x * 0.06, p.z * 0.06)) * 0.2;
+              colors.push(trackColor.r * trackNoise, trackColor.g * trackNoise, trackColor.b * trackNoise);
+            } else {
+              // The sand-colored columns (verge + between-tracks) used to
+              // be one perfectly flat, uniform color end to end — right
+              // next to createTerrainMesh's shoulder, which has real noise
+              // variation baked into its color. That flatness is exactly
+              // what read as a hard artificial "white strip" running the
+              // whole road once directional lighting had enough contrast
+              // to show it. Clamped to 0.7-1.0 (never brighter than the
+              // base sand color) — the previous 0.85-1.10 range could push
+              // this flat, uniformly-angled ribbon's color past the
+              // bloom-pass luminance threshold under strong directional
+              // sun while the terrain's varied, curved normals rarely hit
+              // the same peak at the same spot, which is what actually
+              // read as the road "shining brighter than the terrain."
+              const sandNoise = 0.7 + Math.max(0, this.simplex.noise2D(p.x * 0.04, p.z * 0.04)) * 0.3;
+              colors.push(sandBetweenColor.r * sandNoise, sandBetweenColor.g * sandNoise, sandBetweenColor.b * sandNoise);
+            }
+          } else if (j === 0 || j === 6) {
+            // Plain tarmac/verge only — paint is a separate decal mesh now
+            // (see createLaneMarkingMeshes), not baked into this ribbon.
             colors.push(vergeColor.r, vergeColor.g, vergeColor.b);
           } else {
             colors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
@@ -2401,7 +2544,9 @@
         side: THREE.DoubleSide,
         roughness: (tCfg.roughness !== undefined) ? tCfg.roughness : 0.85,
         metalness: (tCfg.metalness !== undefined) ? tCfg.metalness : 0.05,
-        map: roadTex
+        map: roadTex,
+        normalMap: RealTextureFactory.roadNormal(),
+        normalScale: new THREE.Vector2(0.4, 0.4)
       });
 
       this.roadMesh = new THREE.Mesh(geom, roadMaterial);
@@ -2529,6 +2674,19 @@
     // tube walls). Indices are into curve.getSpacedPoints(tubularSegments),
     // so they line up 1:1 with createTerrainMesh's own `i` loop variable.
     computeTunnelZones() {
+      // No tunnels on Off-World at all — checked directly against
+      // slowroads.io's own Mars reference: the road always just climbs
+      // over the dunes, never bores through them, and there's obviously no
+      // reinforced-concrete highway tunnel (with electric lamps and a
+      // yellow road sign) on an alien dust road. That tunnel styling is
+      // Earth-highway-specific infrastructure; forcing it into Off-World
+      // (this used to guarantee at least 2 tunnels regardless of terrain)
+      // was exactly the kind of thing making it read as a reskinned Earth
+      // map instead of its own place.
+      if (this.cityKey === 'offworld') {
+        this.tunnelZones = [];
+        return;
+      }
       const tubularSegments = CONFIG.ROAD_MESH_SEGMENTS;
       const points = this.curve.getSpacedPoints(tubularSegments);
       const up = new THREE.Vector3(0, 1, 0);
@@ -2702,7 +2860,7 @@
             // Natural organic shoulder blending into biome landscape:
             // Starts at shoulderSoilColor at road edge (t=0), feathering outward into season grass/sand
             const blendT = THREE.MathUtils.smoothstep(t, 0.05, 0.95);
-            const bladeNoise = 0.88 + this.simplex.noise2D(worldPos.x * 0.08, worldPos.z * 0.08) * 0.24;
+            const bladeNoise = 0.96 + this.simplex.noise2D(worldPos.x * 0.08, worldPos.z * 0.08) * 0.06;
             const r = THREE.MathUtils.lerp(shoulderSoilColor.r, grassCol.r * bladeNoise, blendT);
             const g = THREE.MathUtils.lerp(shoulderSoilColor.g, grassCol.g * bladeNoise, blendT);
             const b = THREE.MathUtils.lerp(shoulderSoilColor.b, grassCol.b * bladeNoise, blendT);
@@ -2731,8 +2889,8 @@
               if (rawH > 22.0) {
                 colors.push(cliffCol.r, cliffCol.g, cliffCol.b);
               } else {
-                const nVal = 0.85 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.25;
-                colors.push(grassCol.r * nVal, grassCol.g * nVal, grassCol.b * nVal);
+                const nVal = 0.94 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.07;
+                colors.push(nVal, nVal, nVal);
               }
             }
           }
@@ -2763,6 +2921,7 @@
       geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       geom.setIndex(indices);
       geom.computeVertexNormals();
+      geom.computeTangents();
 
       // Real photo grass (ambientcg Grass005) replacing the procedural
       // canvas-noise texture — SLOWROADS_PARITY_LOG.md item 6. vertexColors
@@ -2779,7 +2938,9 @@
         // Martian regolith reads as sand/dune, not turf — using the grass
         // photo here under orange vertex-color tint produced a muddy
         // grass-under-rust look instead of dry dune sand.
-        map: isOffWorldTerrain ? RealTextureFactory.sandColor() : RealTextureFactory.grassColor() // normalMap deliberately omitted — see the road material's comment above, same custom-UV instability risk
+        map: isOffWorldTerrain ? RealTextureFactory.sandColor() : RealTextureFactory.grassColor(),
+        normalMap: isOffWorldTerrain ? null : RealTextureFactory.grassNormal(),
+        normalScale: new THREE.Vector2(0.6, 0.6)
       });
 
       this.terrainMesh = new THREE.Mesh(geom, terrainMat);
@@ -3454,6 +3615,18 @@
       const rockGeom = RockGeometryFactory.createFacetedRockGeometry(42);
       const poleGeom = new THREE.CylinderGeometry(0.1, 0.12, 6.5, 6);
       const crossbarGeom = new THREE.BoxGeometry(1.8, 0.12, 0.12);
+      // Thin Off-World guardrail — checked against the developer's own
+      // current official Steam screenshots (store.steampowered.com, Mars
+      // and Moon shots): both DO have a simple thin metal guardrail on one
+      // side of the road (not the earlier assumption of zero barriers,
+      // which was based on the older/simpler free web build). Kept
+      // deliberately separate from the Earth barrierStyle system below
+      // (never reused/extended) so this can't regress that system's
+      // batching — a plain low-frequency post+rail, not a fourth style
+      // added to it.
+      const owRailPostGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.65, 5);
+      const owRailBeamGeom = new THREE.BoxGeometry(1, 0.09, 0.03);
+      const owRailMat = new THREE.MeshStandardMaterial({ color: 0x6b6862, roughness: 0.6, metalness: 0.5 });
 
       const isOffWorld = (season.id === 'offworld' || this.cityKey === 'offworld' || !!season.isOffWorld);
       const rockMat = new THREE.MeshStandardMaterial({
@@ -3707,7 +3880,9 @@
         }
 
         // 2. Roadside Chevron Turn Warning Signs (Yellow/Black <<< >>> on metal poles)
-        if (i % 14 === 0 && i < sampledPoints.length - 4) {
+        // Skipped on Off-World — DOT-style highway signage doesn't belong
+        // on an alien dust road; slowroads.io's own Mars reference has none.
+        if (!isOffWorld && i % 14 === 0 && i < sampledPoints.length - 4) {
           const nextTang = new THREE.Vector3().subVectors(sampledPoints[i + 3], sampledPoints[i - 1]).normalize();
           const turnCurvature = tangent.x * nextTang.z - tangent.z * nextTang.x;
 
@@ -3885,19 +4060,55 @@
           // Off-World Martian Dunes have zero trees — replaced with dense multi-scale boulder fields
           const spawnTree = !isOffWorld && (this.prng.next() > 0.55) && !inTunnel;
 
-          // Off-World Near-Road Boulder Clusters (matching Slow Roads off-world reference)
-          if (isOffWorld && !inTunnel && this.prng.next() > 0.30) {
-            const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(3.5, 34.0));
+          // Off-World Near-Road Rock Scatter — checked directly against
+          // slowroads.io's own Off-World > Mars reference (Style panel's
+          // planet toggle): the ground there is densely peppered with tiny
+          // pebbles almost everywhere you look, not a handful of isolated
+          // rocks with big empty gaps between them. Near-certain spawn
+          // chance + more per cluster gets that same "carpeted in gravel"
+          // density; each individual rock stays pebble-sized (see the tiny
+          // scale range below) so the extra count doesn't read as clutter.
+          if (isOffWorld && !inTunnel && this.prng.next() > 0.08) {
+            // Starts much closer to the road edge (0.4m, was 3.5m) so
+            // some rocks land right along/straddling the road-terrain
+            // seam — breaks up the straight seam line visually instead of
+            // leaving a clean gap between "road edge" and "first rock".
+            const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(0.4, 34.0));
             const rPos = pt.clone().addScaledVector(normal, rockDist);
-            const clusterCount = Math.floor(this.prng.range(2, 5));
+            const clusterCount = Math.floor(this.prng.range(3, 8));
             for (let ci = 0; ci < clusterCount; ci++) {
               const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 6.0, 0, (this.prng.next() - 0.5) * 6.0);
               const cPos = rPos.clone().add(cOffset);
-              const rockScale = this.prng.range(0.35, 2.4);
-              const requiredClearance = CONFIG.ROAD_WIDTH * 0.5 + 1.8 + rockScale * 0.8;
+              // Measured directly off slowroads.io's own Mars reference by
+              // comparing rock size to the car in a screenshot: their
+              // scattered rocks read as roughly 5-30cm across, genuine
+              // pebbles, not boulders. Our rockGeom is a 1.3m-radius (2.6m
+              // diameter) dodecahedron at scale 1.0, so matching that means
+              // scale ~0.02-0.16, not 0.12-0.85 (which was still up to a
+              // 2.2m-diameter boulder at the top end — barely smaller than
+              // the car itself).
+              const rockScale = this.prng.range(0.02, 0.16);
+              // Off-World's visual track is only ~1.15m half-width (see
+              // createRoadMesh's trackHalf) — clearing the OLD full
+              // highway half-width (3.7m) here meant no rock could ever
+              // land near the actual road-terrain seam (~5.5m out),
+              // defeating the closer rockDist range above. Clear just
+              // past the tire tracks instead, so rocks can sit on the
+              // road ribbon's own sand portion and straddle the seam.
+              const requiredClearance = isOffWorld ? (1.3 + rockScale * 0.8) : (CONFIG.ROAD_WIDTH * 0.5 + 1.8 + rockScale * 0.8);
               if (!clearsRoad(cPos, requiredClearance)) continue; // STRICT ROAD CLEARANCE
 
-              const cDist = side * (Math.abs(rockDist) + Math.abs(cOffset.x));
+              // True signed lateral distance of cPos from the road centerline
+              // is the projection of (cPos - pt) onto the lateral `normal`,
+              // NOT `|rockDist| + |cOffset.x|` (the old formula) — that always
+              // added the cluster jitter regardless of its sign, so a cluster
+              // offset back toward the road still counted as farther out.
+              // groundHeightAt() blends shoulder-drop vs. raw dune height by
+              // this distance, so an overestimate could put a boulder's
+              // ground sample well above/below the dune surface actually
+              // under it — the cause of boulders floating over or sinking
+              // into sloped dune terrain.
+              const cDist = normal.dot(cOffset) + rockDist;
               cPos.y = calcTerrainY(cPos, cDist);
 
               const rock = new THREE.Mesh(rockGeom, rockMat);
@@ -3908,8 +4119,18 @@
               );
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
               rock.rotation.set(rotX, rotY, 0);
-              // Embed rock slightly into the terrain sand (30% embedded)
-              rock.position.set(cPos.x, cPos.y + 0.15 * rockScale, cPos.z);
+              // Embed the rock's actual lowest scaled/rotated vertex into the
+              // ground sample (was a flat `+0.15 * rockScale` heuristic that
+              // under-embedded large boulders relative to their true size).
+              const rotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
+              const posAttr = rockGeom.attributes.position;
+              let minY = Infinity;
+              const v = new THREE.Vector3();
+              for (let vi = 0; vi < posAttr.count; vi++) {
+                v.set(posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi)).applyMatrix4(rotMat).multiply(rock.scale);
+                if (v.y < minY) minY = v.y;
+              }
+              rock.position.set(cPos.x, cPos.y - minY, cPos.z);
               rock.userData.isRock = true;
               this.foliageGroup.add(rock);
               this.obstacles.push({ pos: cPos.clone(), radius: 1.2 * rockScale, type: 'rock', mesh: rock });
@@ -3949,7 +4170,16 @@
               const cBgPos = bgPos.clone().add(bgOffset);
               const rockScale = this.prng.range(0.8, 3.6);
               if (!clearsRoad(cBgPos, CONFIG.ROAD_WIDTH * 0.5 + 2.5)) continue;
-              cBgPos.y = calcTerrainY(cBgPos, bgDist);
+              // Same two bugs as the near-road cluster spawner had (fixed
+              // there already): (1) latDist must be the true projection of
+              // the cluster offset onto the lateral normal, not the
+              // un-jittered base bgDist, or groundHeightAt samples the
+              // wrong point on the dune slope; (2) embedding by a flat
+              // `+0.2 * rockScale` heuristic doesn't account for the
+              // rock's actual lowest vertex, so larger/irregular rocks
+              // visibly float above the sampled ground point.
+              const bgLatDist = normal.dot(bgOffset) + bgDist;
+              cBgPos.y = calcTerrainY(cBgPos, bgLatDist);
               const rock = new THREE.Mesh(rockGeom, rockMat);
               rock.scale.set(
                 rockScale * this.prng.range(0.85, 1.25),
@@ -3958,7 +4188,15 @@
               );
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
               rock.rotation.set(rotX, rotY, 0);
-              rock.position.set(cBgPos.x, cBgPos.y + 0.2 * rockScale, cBgPos.z);
+              const bgRotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
+              const bgPosAttr = rockGeom.attributes.position;
+              let bgMinY = Infinity;
+              const bgV = new THREE.Vector3();
+              for (let vi = 0; vi < bgPosAttr.count; vi++) {
+                bgV.set(bgPosAttr.getX(vi), bgPosAttr.getY(vi), bgPosAttr.getZ(vi)).applyMatrix4(bgRotMat).multiply(rock.scale);
+                if (bgV.y < bgMinY) bgMinY = bgV.y;
+              }
+              rock.position.set(cBgPos.x, cBgPos.y - bgMinY, cBgPos.z);
               rock.userData.isRock = true;
               this.foliageGroup.add(rock);
               this.obstacles.push({ pos: cBgPos.clone(), radius: 1.4 * rockScale, type: 'rock', mesh: rock });
@@ -4187,7 +4425,12 @@
           // so the gap itself reads as "turn in here" (houses always spawn
           // at i % 24 === 0, alternating sides via i % 48 — see the cabin
           // block below).
-          if (i % FENCE_STEP === 0 && !inTunnel) {
+          // Skipped entirely for Off-World: slowroads.io's own off-world
+          // reference has zero guardrails/barriers of any kind — just open
+          // dust terrain with a bare tire-track path — since there's no
+          // highway infrastructure on an alien dust road. Keeping ours had
+          // it reading as generic Earth-highway dressed in a Mars texture.
+          if (!isOffWorld && i % FENCE_STEP === 0 && !inTunnel) {
             const nearestHouseCheckpoint = Math.round(i / 24) * 24;
             const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
             const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
@@ -4337,8 +4580,37 @@
             }
           }
 
+          // Off-World thin guardrail — matches the developer's own current
+          // Mars/Moon Steam screenshots: a sparse, simple metal rail on one
+          // shoulder only, not a continuous barrier. Deliberately its own
+          // small, uninstanced prop (like the milestone markers/lamps
+          // below) rather than hooked into the Earth fence system above —
+          // that system's per-point batching is already load-bearing for
+          // every other biome, and this only needs to appear occasionally.
+          if (isOffWorld && side === -1 && i % 6 === 0 && !inTunnel) {
+            const owRailDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.2);
+            const owRailPos = pt.clone().addScaledVector(normal, owRailDist);
+            if (clearsRoad(owRailPos, CONFIG.ROAD_WIDTH * 0.5 + 1.0)) {
+              owRailPos.y = calcTerrainY(owRailPos, owRailDist);
+              const owRailGroup = new THREE.Group();
+              [-0.5, 0.5].forEach(px => {
+                const post = new THREE.Mesh(owRailPostGeom, owRailMat);
+                post.position.set(px, 0.32, 0);
+                owRailGroup.add(post);
+              });
+              const beam = new THREE.Mesh(owRailBeamGeom, owRailMat);
+              beam.position.set(0, 0.55, 0);
+              owRailGroup.add(beam);
+              owRailGroup.position.copy(owRailPos);
+              owRailGroup.lookAt(pt.x, owRailPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
+              this.foliageGroup.add(owRailGroup);
+            }
+          }
+
           // Indian Highway Milestone Markers (National Highway Standard: Yellow Dome + White Base)
-          if (i % 32 === 0 && side === 1 && !inTunnel) {
+          // Skipped on Off-World — this is literally "Indian National
+          // Highway standard" signage; obviously not relevant on Mars.
+          if (!isOffWorld && i % 32 === 0 && side === 1 && !inTunnel) {
             const stoneDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.6);
             const stonePos = pt.clone().addScaledVector(normal, stoneDist);
             stonePos.y = calcTerrainY(stonePos, stoneDist);
@@ -4376,7 +4648,10 @@
           // Modular Curved Highway Streetlamps (with amber night glow) —
           // skipped inside a tunnel bore, which supplies its own sodium
           // lamps and would otherwise have this poking through its wall.
-          if (i % 28 === 0 && side === -1 && !inTunnel) {
+          // Also skipped entirely on Off-World — no electric grid on an
+          // alien dust trail; matches slowroads.io's Mars reference having
+          // no roadside infrastructure of any kind.
+          if (!isOffWorld && i % 28 === 0 && side === -1 && !inTunnel) {
             const lampDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.8);
             const lampPos = pt.clone().addScaledVector(normal, lampDist);
             lampPos.y = calcTerrainY(lampPos, lampDist);
@@ -4426,7 +4701,11 @@
           }
 
           // Roadside Bus Shelter & Waiting Passengers
-          if (i % 72 === 0 && side === 1) {
+          // Skipped on Off-World — a transit shelter with a waiting human
+          // passenger makes no sense on an alien dust road with no bus
+          // service; matches slowroads.io's Mars reference having zero
+          // human-infrastructure props of any kind.
+          if (!isOffWorld && i % 72 === 0 && side === 1) {
             const shelterDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.2);
             const shelterPos = pt.clone().addScaledVector(normal, shelterDist);
 
@@ -4484,7 +4763,11 @@
           }
 
           // Roadside Dhaba / Chai Tapri with Customers drinking tea
-          if (i % 34 === 0 && side === -1) {
+          // Skipped on Off-World — a tea stall with customers doesn't
+          // belong on an alien dust road; this was previously the only
+          // human-populated prop that wasn't already gated by !isOpenRoad
+          // the way the Kirana store below it is.
+          if (!isOffWorld && i % 34 === 0 && side === -1) {
             const tapriDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.6);
             const tapriPos = pt.clone().addScaledVector(normal, tapriDist);
 
@@ -4696,8 +4979,9 @@
             this.obstacles.push({ pos: monPos.clone(), radius: 4.0, type: 'building' });
           }
 
-          // Firewood Log Stacks along forest verges
-          if (i % 38 === 0 && this.prng.next() > 0.5) {
+          // Firewood Log Stacks along forest verges — wooden logs implies
+          // trees/forest, which Off-World doesn't have at all.
+          if (!isOffWorld && i % 38 === 0 && this.prng.next() > 0.5) {
             const logDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(2.6, 4.5));
             const logPos = pt.clone().addScaledVector(normal, logDist);
             logPos.y = calcTerrainY(logPos, logDist);
@@ -4731,10 +5015,30 @@
             const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(2.0, 24.0));
             const rockPos = pt.clone().addScaledVector(normal, rockDist);
             const overlapsExisting = this.obstacles.some(o => o.pos.distanceTo(rockPos) < (o.radius + 1.6));
+            // Varying sizes, small pebble to large boulder — matches the
+            // Off-World cluster spawner's range instead of every rock here
+            // being the same fixed geometry size. Off-World itself gets the
+            // smaller pebble-scale range (see the dedicated cluster spawner
+            // above) to match slowroads.io's scattered-pebble Mars
+            // reference rather than large boulders.
+            const rockScale = isOffWorld ? this.prng.range(0.02, 0.16) : this.prng.range(0.4, 2.2);
+            // Curve-aware clearance: a fixed lateral offset from `pt` can
+            // still land inside the road ribbon a few meters up/down the
+            // curve where it bends back toward this lateral position — the
+            // Off-World cluster spawner already guards against this with
+            // clearsRoad(); this spawner runs on every biome (not just
+            // Off-World) and previously had no such check at all, which is
+            // why rocks could end up sitting on the road.
+            const requiredClearance = CONFIG.ROAD_WIDTH * 0.5 + 1.6 + rockScale * 0.8;
 
-            if (!nearHouseZone && !overlapsExisting) {
+            if (!nearHouseZone && !overlapsExisting && clearsRoad(rockPos, requiredClearance)) {
               const groundY = calcTerrainY(rockPos, rockDist);
               const rock = new THREE.Mesh(rockGeom, rockMat);
+              rock.scale.set(
+                rockScale * this.prng.range(0.85, 1.25),
+                rockScale * this.prng.range(0.75, 1.15),
+                rockScale * this.prng.range(0.85, 1.25)
+              );
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
               rock.rotation.set(rotX, rotY, 0);
               const rotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
@@ -4742,14 +5046,14 @@
               let minY = Infinity;
               const v = new THREE.Vector3();
               for (let vi = 0; vi < posAttr.count; vi++) {
-                v.set(posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi)).applyMatrix4(rotMat);
+                v.set(posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi)).applyMatrix4(rotMat).multiply(rock.scale);
                 if (v.y < minY) minY = v.y;
               }
               rockPos.y = groundY - minY;
               rock.position.copy(rockPos);
               rock.userData.isRock = true;
               this.foliageGroup.add(rock);
-              this.obstacles.push({ pos: rockPos.clone(), radius: 1.6, type: 'rock', mesh: rock });
+              this.obstacles.push({ pos: rockPos.clone(), radius: 1.2 * rockScale, type: 'rock', mesh: rock });
             }
           }
         });
@@ -5288,18 +5592,35 @@
       const roadWidth = CONFIG.ROAD_WIDTH;
       const shoulderWidth = CONFIG.ROAD_SHOULDER_WIDTH;
       const laneHalf = roadWidth * 0.5;
+      const isOffWorldExt = this.cityKey === 'offworld';
+      // Same single-vehicle-track narrowing as createRoadMesh — outer
+      // verge (points 0/6) stays at the wide laneHalf+shoulderWidth so it
+      // still meets the terrain ribbon's shoulder slice with no gap; only
+      // the inner track columns pull in narrow.
+      const trackHalf = isOffWorldExt ? 1.15 : laneHalf;
       const offsets = [
         -laneHalf - shoulderWidth,
-        -laneHalf,
-        -laneHalf * 0.46 / 0.5,
+        -trackHalf,
+        -trackHalf * 0.46 / 0.5,
         0.0,
-        laneHalf * 0.46 / 0.5,
-        laneHalf,
+        trackHalf * 0.46 / 0.5,
+        trackHalf,
         laneHalf + shoulderWidth
       ];
 
-      const baseTarmac = new THREE.Color(0x3a3d40);
-      const vergeColor = new THREE.Color(0x2d3033);
+      // Was hardcoded generic dark-asphalt colors (0x3a3d40/0x2d3033)
+      // regardless of roadTerrainKey/season/biome — this whole extension
+      // path runs once the world streams past its initial length (~6km),
+      // silently reverting the road to plain grey tarmac colors on every
+      // biome, undoing the Off-World tire-track/dirt-tint work the
+      // moment a drive went far enough to hit it. Mirrors createRoadMesh's
+      // actual per-terrain/per-biome color logic instead.
+      const tCfgExt = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
+      const seasonCfgExt = season || CONFIG.SEASONS.autumn;
+      const baseTarmac = new THREE.Color(tCfgExt.color);
+      const vergeColor = new THREE.Color(seasonCfgExt.grassLight || 0x4a4e52).lerp(baseTarmac, 0.40);
+      const trackColorExt = baseTarmac.clone().multiplyScalar(0.72); // matches createRoadMesh's correction — see its comment
+      const sandBetweenColorExt = new THREE.Color(seasonCfgExt.grassLight || 0xd4b896);
 
       // 1. Road extension mesh
       const roadGeom = new THREE.BufferGeometry();
@@ -5325,7 +5646,19 @@
           rPositions.push(p.x, p.y, p.z);
           rNormals.push(bankedUp.x, bankedUp.y, bankedUp.z);
           rUvs.push(off * 0.5, i * 0.3);
-          if (isVerge) {
+          if (isOffWorldExt) {
+            // Same noise-matched blending as createRoadMesh — a flat
+            // uniform color here reads as an artificial "white strip"
+            // seam against the terrain's own noise-varied shading.
+            if (j === 2 || j === 4) {
+              // Clamped to darken-only, same reasoning as createRoadMesh.
+              const tN = 0.75 + Math.max(0, this.simplex.noise2D(p.x * 0.06, p.z * 0.06)) * 0.2;
+              rColors.push(trackColorExt.r * tN, trackColorExt.g * tN, trackColorExt.b * tN);
+            } else {
+              const sN = 0.7 + Math.max(0, this.simplex.noise2D(p.x * 0.04, p.z * 0.04)) * 0.3;
+              rColors.push(sandBetweenColorExt.r * sN, sandBetweenColorExt.g * sN, sandBetweenColorExt.b * sN);
+            }
+          } else if (isVerge) {
             rColors.push(vergeColor.r, vergeColor.g, vergeColor.b);
           } else {
             rColors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
@@ -5501,23 +5834,82 @@
       terrainMesh.receiveShadow = true;
       scene.add(terrainMesh);
 
-      // 3. Roadside Props (Trees, rocks, fences) along the new segment
-      const newTrees = [];
-      for (let i = startSeg; i <= endSeg; i += 5) {
-        const pt = points[i];
-        const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
-        [-1, 1].forEach(side => {
-          const lat = (10.0 + (this.prng ? this.prng.next() : Math.random()) * 26.0) * side;
-          const p = pt.clone().addScaledVector(normal, lat);
-          p.y = this.groundHeightAt(pt, p, lat);
-          const scale = 3.5 + (this.prng ? this.prng.next() : Math.random()) * 3.5;
-          newTrees.push({ pos: p, scale, radius: 2.2 });
-          this.obstacles.push({ pos: p, radius: 2.2, type: 'tree' });
+      // 3. Roadside Props (Trees) along the new segment — this only ever
+      // spawned trees despite the comment (no rocks/fences were actually
+      // implemented here), and had no biome check at all: driving far
+      // enough on Off-World to trigger streaming (extends the world past
+      // the initial ~6km once the car gets within 1600m of the scouted
+      // horizon) silently planted Earth trees on Mars. Off-World gets a
+      // matching small-pebble rock scatter instead, at the same tiny
+      // scale established in createFoliageAndProps.
+      if (this.cityKey === 'offworld') {
+        const streamRockGeom = RockGeometryFactory.createFacetedRockGeometry(42);
+        const streamRockMat = new THREE.MeshStandardMaterial({
+          color: 0x7a5a42, roughness: 0.85, metalness: 0.05,
+          map: RealTextureFactory.rockColor(), normalMap: RealTextureFactory.rockNormal()
         });
-      }
-      if (newTrees.length > 0) {
-        const treeBatch = TreeBillboardFactory.buildInstancedBatches(newTrees);
-        scene.add(treeBatch);
+        // Same thin one-sided guardrail as createFoliageAndProps' initial
+        // build (matches the developer's own official Mars/Moon Steam
+        // screenshots) — kept here too so it doesn't disappear once a
+        // drive goes far enough to hit the streaming/extension path.
+        const owRailPostGeomExt = new THREE.CylinderGeometry(0.04, 0.04, 0.65, 5);
+        const owRailBeamGeomExt = new THREE.BoxGeometry(1, 0.09, 0.03);
+        const owRailMatExt = new THREE.MeshStandardMaterial({ color: 0x6b6862, roughness: 0.6, metalness: 0.5 });
+        for (let i = startSeg; i <= endSeg; i += 6) {
+          const pt = points[i];
+          const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
+          const owRailDist = -(CONFIG.ROAD_WIDTH * 0.5 + 1.2);
+          const owRailPos = pt.clone().addScaledVector(normal, owRailDist);
+          owRailPos.y = this.groundHeightAt(pt, owRailPos, owRailDist);
+          const owRailGroup = new THREE.Group();
+          [-0.5, 0.5].forEach(px => {
+            const post = new THREE.Mesh(owRailPostGeomExt, owRailMatExt);
+            post.position.set(px, 0.32, 0);
+            owRailGroup.add(post);
+          });
+          const beam = new THREE.Mesh(owRailBeamGeomExt, owRailMatExt);
+          beam.position.set(0, 0.55, 0);
+          owRailGroup.add(beam);
+          owRailGroup.position.copy(owRailPos);
+          owRailGroup.lookAt(pt.x, owRailPos.y, pt.z);
+          scene.add(owRailGroup);
+        }
+        for (let i = startSeg; i <= endSeg; i += 2) {
+          const pt = points[i];
+          const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
+          [-1, 1].forEach(side => {
+            if ((this.prng ? this.prng.next() : Math.random()) < 0.75) return;
+            const lat = (CONFIG.ROAD_WIDTH * 0.5 + 3.5 + (this.prng ? this.prng.next() : Math.random()) * 30.0) * side;
+            const p = pt.clone().addScaledVector(normal, lat);
+            p.y = this.groundHeightAt(pt, p, lat);
+            const rockScale = 0.02 + (this.prng ? this.prng.next() : Math.random()) * 0.14;
+            const rock = new THREE.Mesh(streamRockGeom, streamRockMat);
+            rock.scale.setScalar(rockScale);
+            rock.rotation.set(Math.random() * 3, Math.random() * 3, 0);
+            rock.position.set(p.x, p.y + 0.15 * rockScale, p.z);
+            rock.userData.isRock = true;
+            scene.add(rock);
+            this.obstacles.push({ pos: p, radius: 1.2 * rockScale, type: 'rock', mesh: rock });
+          });
+        }
+      } else {
+        const newTrees = [];
+        for (let i = startSeg; i <= endSeg; i += 5) {
+          const pt = points[i];
+          const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
+          [-1, 1].forEach(side => {
+            const lat = (10.0 + (this.prng ? this.prng.next() : Math.random()) * 26.0) * side;
+            const p = pt.clone().addScaledVector(normal, lat);
+            p.y = this.groundHeightAt(pt, p, lat);
+            const scale = 3.5 + (this.prng ? this.prng.next() : Math.random()) * 3.5;
+            newTrees.push({ pos: p, scale, radius: 2.2 });
+            this.obstacles.push({ pos: p, radius: 2.2, type: 'tree' });
+          });
+        }
+        if (newTrees.length > 0) {
+          const treeBatch = TreeBillboardFactory.buildInstancedBatches(newTrees);
+          scene.add(treeBatch);
+        }
       }
     }
   }
@@ -6476,7 +6868,7 @@
               this.health = 100;
               sound.playRepair();
               if (window.game) {
-                window.game.addNotification(`🔧 FULL SERVICE COMPLETED! Health 100%`, 'success', 3500);
+                window.game.addNotification(`${UI.icon('wrench')} FULL SERVICE COMPLETED! Health 100%`, 'success', 3500);
               }
               setTimeout(() => { bay.visitedRecently = false; }, 5000);
             }
@@ -6800,7 +7192,11 @@
       this.ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
       this.scene.add(this.ambientLight);
 
-      this.hemiLight = new THREE.HemisphereLight(0xffffff, 0x334155, 0.35);
+      // Warm soft-white sky / warm neutral ground instead of the previous
+      // cool white/slate pairing — this hemisphere light is the scene's
+      // main omnidirectional fill, so its tone sets the "soft warm
+      // ambient, not directional" feel independent of time-of-day.
+      this.hemiLight = new THREE.HemisphereLight(0xfff3e0, 0x8a7a63, 0.22);
       this.scene.add(this.hemiLight);
 
       this.sunLight = new THREE.DirectionalLight(0xfffaed, 1.2);
@@ -6920,6 +7316,51 @@
       this.bloomPass = new THREE.UnrealBloomPass(size, 0.4, 0.4, 0.94);
       this.composer.addPass(this.bloomPass);
 
+      // Global soothing color grade: lifts shadows off pure black toward a
+      // cool lavender-grey floor, pulls overall saturation down 15-20%,
+      // and pushes highlights slightly warm — approximates a soft-overcast
+      // golden-hour grade on top of whatever the scene/lighting render.
+      const ColorGradeShader = {
+        uniforms: {
+          tDiffuse: { value: null },
+          saturationMult: { value: 0.82 },  // -18% saturation
+          shadowLiftAmount: { value: 0.12 },
+          shadowFloor: { value: new THREE.Color(0x2c2836) }, // cool lavender-grey
+          warmHighlight: { value: 0.045 }                    // ~+8 deg warm hue push
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform float saturationMult;
+          uniform float shadowLiftAmount;
+          uniform vec3 shadowFloor;
+          uniform float warmHighlight;
+          varying vec2 vUv;
+          void main() {
+            vec4 texel = texture2D(tDiffuse, vUv);
+            vec3 color = texel.rgb;
+            float luma = dot(color, vec3(0.299, 0.587, 0.114));
+
+            // Lift shadows toward shadowFloor instead of true black —
+            // strongest in the dark end, fading out by mid-tones.
+            float shadowMask = 1.0 - smoothstep(0.0, 0.4, luma);
+            color = mix(color, max(color, shadowFloor), shadowMask * shadowLiftAmount);
+
+            // Reduce saturation by blending toward the pixel's own luma.
+            color = mix(vec3(luma), color, saturationMult);
+
+            // Warm push in the highlights only (red up, blue down).
+            float highlightMask = smoothstep(0.45, 1.0, luma);
+            color.r += highlightMask * warmHighlight;
+            color.b -= highlightMask * warmHighlight * 0.7;
+
+            gl_FragColor = vec4(color, texel.a);
+          }
+        `
+      };
+      this.colorGradePass = new THREE.ShaderPass(ColorGradeShader);
+      this.composer.addPass(this.colorGradePass);
+
       const VignetteShader = {
         uniforms: { tDiffuse: { value: null }, offset: { value: 1.15 }, darkness: { value: 1.1 } },
         vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -6974,9 +7415,18 @@
     buildWorldAndScene() {
       const season = CONFIG.SEASONS[this.selectedSeason];
       const tod = CONFIG.TIME_OF_DAY[this.selectedTimeOfDay] || CONFIG.TIME_OF_DAY.day;
+      // Sky/fog color always came from `tod` (shared across every biome),
+      // never `season` — every Off-World sky palette tuned into
+      // CONFIG.SEASONS.offworld this whole time was dead code; the sky
+      // was always just the generic Earth day/night preset regardless of
+      // map. Off-World gets its own sky colors during daylight (night
+      // still uses the shared starry-night preset, which suits any biome).
+      const skyBottomHex = (season.isOffWorld && !tod.night) ? season.skyBottom : tod.skyBottom;
+      const fogHex = (season.isOffWorld && !tod.night) ? season.fog : tod.fog;
+      const fogDensityVal = (season.isOffWorld && !tod.night) ? season.fogDensity : tod.fogDensity;
 
-      this.scene.background = new THREE.Color(tod.skyBottom);
-      this.scene.fog = new THREE.FogExp2(tod.fog, tod.fogDensity);
+      this.scene.background = new THREE.Color(skyBottomHex);
+      this.scene.fog = new THREE.FogExp2(fogHex, fogDensityVal);
 
       if (this.ambientLight) {
         this.ambientLight.color.setHex(tod.ambientColor);
@@ -7184,7 +7634,7 @@
       if (!this.vehicle || !this.world || this.gameState !== 'playing') return;
       const isCarOrTruck = this.selectedVehicle === 'sportscoupe' || this.selectedVehicle === 'musclecoupe' || this.selectedVehicle === 'chotahathi';
       if (!isCarOrTruck) {
-        this.addNotification('🛵 Two-wheelers stay mounted — toss from the saddle instead', 'neutral', 2500);
+        this.addNotification(`${UI.icon('scooter')} Two-wheelers stay mounted — toss from the saddle instead`, 'neutral', 2500);
         return;
       }
 
@@ -7201,12 +7651,12 @@
           this.vehicle.mesh.position.copy(this.walkerParkedVehiclePos);
         }
         this.vehicle.speed = 0;
-        this.addNotification('🚗 BACK IN VEHICLE', 'neutral', 2000);
+        this.addNotification(`${UI.icon('car')} BACK IN VEHICLE`, 'neutral', 2000);
         return;
       }
 
       if (Math.abs(this.vehicle.speed) > 1.5) {
-        this.addNotification('⚠️ STOP THE VEHICLE FIRST', 'warning', 2200);
+        this.addNotification(`${UI.icon('alertTriangle')} STOP THE VEHICLE FIRST`, 'warning', 2200);
         return;
       }
 
@@ -7241,9 +7691,9 @@
         this.walkBonusOrderIndex = this.activeOrderIndex;
         this.orderTimer += this.WALK_TIME_BONUS;
         this.maxOrderTimer += this.WALK_TIME_BONUS;
-        this.addNotification(`🚶 ON FOOT — +${this.WALK_TIME_BONUS}s DELIVERY WINDOW`, 'success', 3000);
+        this.addNotification(`${UI.icon('car')} ON FOOT — +${this.WALK_TIME_BONUS}s DELIVERY WINDOW`, 'success', 3000);
       } else {
-        this.addNotification('🚶 ON FOOT', 'neutral', 1800);
+        this.addNotification(`${UI.icon('car')} ON FOOT`, 'neutral', 1800);
       }
     }
 
@@ -7302,7 +7752,7 @@
       if (minD < hitRadius) {
         this.fulfillDelivery(nearestTarget);
       } else {
-        this.addNotification(`🚶 Get closer to the door to deliver (${Math.round(minD)}m away)`, 'warning', 2000);
+        this.addNotification(`${UI.icon('car')} Get closer to the door to deliver (${Math.round(minD)}m away)`, 'warning', 2000);
       }
     }
 
@@ -7413,10 +7863,10 @@
       this.orderTimer = this.maxOrderTimer; // Reset clock for next order
 
       sound.playCombo();
-      const bonusMsg = (this.orderTimer > this.maxOrderTimer * 0.5 ? `⚡ EXPRESS SPEED BONUS!` : `🎯 ON-TIME BULLSEYE!`);
+      const bonusMsg = (this.orderTimer > this.maxOrderTimer * 0.5 ? `${UI.icon('bolt')} EXPRESS SPEED BONUS!` : `${UI.icon('target')} ON-TIME BULLSEYE!`);
       this.spawnConfetti(target.pos, 36);
-      this.showScoreBanner(`${bonusMsg} +₹${earnedBonus}`, `🔥 ${this.streakCount}x STREAK • +${timeBonus} TIME BONUS`);
-      this.addNotification(`✅ DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
+      this.showScoreBanner(`${bonusMsg} +₹${earnedBonus}`, `${UI.icon('flame')} ${this.streakCount}x STREAK • +${timeBonus} TIME BONUS`);
+      this.addNotification(`${UI.icon('check')} DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
 
       this.deliveryHistory.unshift({
         name: target.order?.name || 'Delivery',
@@ -7678,7 +8128,7 @@
       if (earnEl) earnEl.textContent = this.earnings;
 
       const streakEl = document.getElementById('hud-streak-pill');
-      if (streakEl) streakEl.innerHTML = `<span>🔥 ${this.streakCount}x STREAK</span>`;
+      if (streakEl) streakEl.innerHTML = `<span>${UI.icon('flame')} ${this.streakCount}x STREAK</span>`;
     }
 
     updateHealthHUD() {
@@ -7701,9 +8151,9 @@
         text.textContent = `${h}%`;
       }
       if (icon) {
-        if (h <= 0) icon.textContent = '🛠️';
-        else if (h < 40) icon.textContent = '⚠️';
-        else icon.textContent = '🔧';
+        if (h <= 0) icon.innerHTML = UI.icon('wrench');
+        else if (h < 40) icon.innerHTML = UI.icon('alertTriangle');
+        else icon.innerHTML = UI.icon('wrench');
       }
     }
 
@@ -7779,14 +8229,11 @@
       // Set initial channel display from saved preference
       if (btnChannel) btnChannel.textContent = sound.getChannelDisplayName();
 
-      const svgPlay = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-      const svgPause = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-
       if (btnPlay) {
         btnPlay.onclick = () => {
           sound.ensure();
           const isPlaying = sound.toggleRadio();
-          btnPlay.textContent = isPlaying ? 'PAUSE' : 'PLAY';
+          btnPlay.innerHTML = `${UI.icon(isPlaying ? 'pause' : 'play', 14)} ${isPlaying ? 'PAUSE' : 'PLAY'}`;
           const trk = sound.realTracks[sound.currentTrackIndex];
           if (trk && radioTitleEl) radioTitleEl.textContent = sound._formatTrackTitle(trk);
           if (radioCard) {
@@ -7875,7 +8322,7 @@
 
       const item = document.createElement('div');
       item.className = `notification-item ${type}`;
-      item.textContent = message;
+      item.innerHTML = message;
       item.style.opacity = '0';
 
       stack.appendChild(item);
@@ -7982,15 +8429,15 @@
       if (pill && text) {
         if (isRain) {
           pill.className = 'climate-pill rain';
-          if (icon) icon.textContent = '🌧️';
+          if (icon) icon.innerHTML = UI.icon('cloudRain');
           text.textContent = `MONSOON RAIN • SLIPPERY GRIP (${this.vehicle.vehicleType === 'cycle' ? '48%' : '68%'})`;
         } else if (isWind) {
           pill.className = 'climate-pill wind';
-          if (icon) icon.textContent = '💨';
+          if (icon) icon.innerHTML = UI.icon('wind');
           text.textContent = 'GUSTY HEADWIND • DRAG +35%';
         } else {
           pill.className = 'climate-pill';
-          if (icon) icon.textContent = '☀️';
+          if (icon) icon.innerHTML = UI.icon('sun');
           text.textContent = 'DRY HIGHWAY • OPTIMAL GRIP 100%';
         }
       }
@@ -8043,14 +8490,14 @@
       };
       const camLabel = document.getElementById('label-cam');
       if (camLabel) camLabel.textContent = `CAM: ${shortNames[this.activeCameraMode]}`;
-      this.showScorePopup(0, `📹 ${names[this.activeCameraMode]}`);
+      this.showScorePopup(0, `${UI.icon('camera')} ${names[this.activeCameraMode]}`);
       sound.playTone(800, 'sine', 0.08);
     }
 
     toggleWeather() {
       this.weather = this.weather === 'rain' ? 'clear' : 'rain';
       if (this.rain) this.rain.setActive(this.weather === 'rain');
-      this.showScorePopup(0, this.weather === 'rain' ? '🌧️ RAIN' : '☀️ CLEAR SKIES');
+      this.showScorePopup(0, this.weather === 'rain' ? `${UI.icon('cloudRain')} RAIN` : `${UI.icon('sun')} CLEAR SKIES`);
       sound.playTone(600, 'sine', 0.08);
     }
 
@@ -8080,10 +8527,12 @@
         this.sunLight.position.copy(this.sunOffset);
       }
       if (this.scene) {
-        this.scene.background = new THREE.Color(tod.skyBottom);
+        const seasonForSky = CONFIG.SEASONS[this.selectedSeason];
+        const useSeasonSky = seasonForSky.isOffWorld && !tod.night;
+        this.scene.background = new THREE.Color(useSeasonSky ? seasonForSky.skyBottom : tod.skyBottom);
         if (this.scene.fog) {
-          this.scene.fog.color.setHex(tod.fog);
-          this.scene.fog.density = tod.fogDensity;
+          this.scene.fog.color.setHex(useSeasonSky ? seasonForSky.fog : tod.fog);
+          this.scene.fog.density = useSeasonSky ? seasonForSky.fogDensity : tod.fogDensity;
         }
       }
 
@@ -8102,9 +8551,9 @@
       const hudTodLabel = document.getElementById('label-tod');
       const dockTod = document.getElementById('btn-dock-tod');
       if (hudTodLabel) hudTodLabel.textContent = (tod.id || todKey).toUpperCase();
-      if (dockTod) dockTod.textContent = tod.icon;
+      if (dockTod) dockTod.innerHTML = UI.icon(tod.icon, 18);
 
-      this.showScorePopup(0, `${tod.icon} ${tod.name.toUpperCase()}`);
+      this.showScorePopup(0, `${UI.icon(tod.icon, 16)} ${tod.name.toUpperCase()}`);
     }
 
     cycleTimeOfDay() {
@@ -8149,19 +8598,19 @@
         this.modalContainer.innerHTML = `
           <div class="modal-backdrop">
             <div class="recovery-card">
-              <div class="recovery-badge failed">🚨 DISPATCH SHIFT FAILED</div>
+              <div class="recovery-badge failed">${UI.icon('alertTriangle')} DISPATCH SHIFT FAILED</div>
               <h2 class="recovery-title">ALL 3 RECOVERY RESUMES EXHAUSTED</h2>
               <div class="recovery-resumes-pill exhausted">
-                <span>❌ 0 / 3 RESUMES REMAINING</span>
+                <span>${UI.icon('x')} 0 / 3 RESUMES REMAINING</span>
               </div>
               <p class="recovery-desc">
                 Your courier vehicle suffered total mechanical failure beyond towing limits.
                 <br><br>
                 <strong>Progress Saved Before 1st Resume Restored:</strong>
-                <br>💰 Earnings: ₹${restoredEarnings} • 📦 Deliveries: ${restoredDeliveries}
+                <br>${UI.icon('package')} Earnings: ₹${restoredEarnings} • ${UI.icon('package')} Deliveries: ${restoredDeliveries}
               </p>
               <button id="btn-restart-shift" class="btn-resume-drive">
-                <span>🔄 RESTART DISPATCH SHIFT (PROGRESS RESTORED)</span>
+                <span>${UI.icon('refresh')} RESTART DISPATCH SHIFT (PROGRESS RESTORED)</span>
               </button>
             </div>
           </div>
@@ -8200,19 +8649,19 @@
       this.modalContainer.innerHTML = `
         <div class="modal-backdrop">
           <div class="recovery-card">
-            <div class="recovery-badge">⚠️ ROADSIDE ASSISTANCE</div>
+            <div class="recovery-badge">${UI.icon('alertTriangle')} ROADSIDE ASSISTANCE</div>
             <h2 class="recovery-title">${reason}</h2>
             <div class="recovery-resumes-pill">
-              <span>🛟 RESUMES: ${remaining} / ${this.maxResumes} REMAINING</span>
+              <span>${UI.icon('lifebuoy')} RESUMES: ${remaining} / ${this.maxResumes} REMAINING</span>
             </div>
             <p class="recovery-desc">
               Your courier vehicle is immobilized or took critical damage.
               Tow vehicle back to road centerline with roadside assistance.
               <br><br>
-              <small style="color: #fca311;">⚠️ Note: You have ${remaining} resume${remaining === 1 ? '' : 's'} remaining. On 4th breakdown, shift fails and restores progress saved before resume #1.</small>
+              <small style="color: #fca311;">${UI.icon('alertTriangle')} Note: You have ${remaining} resume${remaining === 1 ? '' : 's'} remaining. On 4th breakdown, shift fails and restores progress saved before resume #1.</small>
             </p>
             <button id="btn-resume-drive" class="btn-resume-drive">
-              <span>⚡ RESUME DISPATCH (TOW RECOVERY) [R]</span>
+              <span>${UI.icon('bolt')} RESUME DISPATCH (TOW RECOVERY) [R]</span>
             </button>
           </div>
         </div>
@@ -8244,7 +8693,7 @@
       this.updateHealthHUD();
       sound.resumeForGameplay();
       sound.playRepair();
-      this.showScorePopup(0, `🛟 RESUME #${this.resumeCount}/3 USED! Vehicle Serviced`);
+      this.showScorePopup(0, `${UI.icon('lifebuoy')} RESUME #${this.resumeCount}/3 USED! Vehicle Serviced`);
     }
 
     returnToRoad() {
@@ -8257,7 +8706,7 @@
       this.hideReturnToRoadBanner();
       this.vehicle.snapToNearestRoadPoint(this.world.curve);
       sound.resumeForGameplay();
-      this.showScorePopup(0, '🗺️ RETURNED TO ROAD — DRIVE SAFELY!');
+      this.showScorePopup(0, `${UI.icon('map')} RETURNED TO ROAD — DRIVE SAFELY!`);
       sound.playRepair && sound.playRepair();
     }
 
@@ -8285,7 +8734,7 @@
         'border: 2px solid rgba(255,200,120,0.45)',
         'animation: rtrPulse 1.2s ease-in-out infinite alternate'
       ].join(';');
-      banner.innerHTML = '🗺️&nbsp; YOU ARE OFF-ROAD &nbsp;|&nbsp; Press <kbd style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:6px;">R</kbd> or tap here to Return to Road';
+      banner.innerHTML = UI.icon('map') + '&nbsp; YOU ARE OFF-ROAD &nbsp;|&nbsp; Press <kbd style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:6px;">R</kbd> or tap here to Return to Road';
       banner.onclick = () => this.returnToRoad();
 
       // Inject animation keyframe once
@@ -8393,6 +8842,7 @@
               <div class="hub-difficulty-grid">
                 ${roadStyleList.map(r => `
                   <button class="diff-card-btn ${this.selectedRoadTerrain === r.id ? 'active-diff' : ''}" data-rt="${r.id}">
+                    <span class="diff-card-icon">${UI.icon(r.icon, 20)}</span>
                     <span class="diff-card-title">${r.name.toUpperCase()}</span>
                   </button>
                 `).join('')}
@@ -8467,27 +8917,38 @@
       const el = this.dockPanelEl;
 
       if (type === 'world') {
-        // Single map, per direct instruction — the world/city stepper's
-        // prev/next used to cycle 5 cities; now there's one, so this is a
-        // static readout instead of dead-end arrows. ROAD SURFACE and
-        // ROUTE SEED below are the actual "keep expanding on the same
-        // map" knobs — regenerate variety within this one city/world.
+        // Two maps, matching slowroads.io's own World panel (which offers
+        // exactly two locations — HILLS and OFF-WORLD, confirmed by
+        // cycling their location stepper end to end). Off-World is our
+        // Mars biome; Mumbai Coast is the "city"/populated-world
+        // counterpart to their Hills location — our only non-open-road
+        // map with houses, shops, and monuments along it.
         el.innerHTML = `
           <div class="dock-panel-grid">
             <div class="dock-panel-col" style="grid-column: span 2;">
               <span class="dock-panel-label">MAP & ENVIRONMENT</span>
               <div class="dock-btn-row">
-                <button class="dock-sq-btn active-sq" data-city="offworld">🪐 OFF-WORLD</button>
+                <button class="dock-sq-btn ${this.selectedCity === 'offworld' ? 'active-sq' : ''}" data-city="offworld">${UI.icon('planet', 16)} OFF-WORLD</button>
+                <button class="dock-sq-btn ${this.selectedCity === 'mumbai' ? 'active-sq' : ''}" data-city="mumbai">${UI.icon('building', 16)} CITY</button>
               </div>
             </div>
             <div class="dock-panel-col">
               <span class="dock-panel-label">ROAD SURFACE</span>
               <div class="dock-btn-row">
-                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'dirt' ? 'active-sq' : ''}" data-rt="dirt">DIRT</button>
-                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'asphalt' ? 'active-sq' : ''}" data-rt="asphalt">ASPHALT</button>
-                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'gravel' ? 'active-sq' : ''}" data-rt="gravel">GRAVEL</button>
-                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'mud' ? 'active-sq' : ''}" data-rt="mud">MUD</button>
-                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'sand' ? 'active-sq' : ''}" data-rt="sand">SAND</button>
+                ${this.selectedCity === 'offworld' ? `
+                <!-- Off-World: one surface only — Dirt. slowroads.io's own
+                     Mars reference is always the same bare dust/tire-track
+                     trail, never a choice of paved/gravel/sand, so giving
+                     a pick here was itself the wrong idea, not just the
+                     wrong options within it. -->
+                <button class="dock-sq-btn active-sq" data-rt="dirt">${UI.icon('planet', 14)} DIRT</button>
+                ` : `
+                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'dirt' ? 'active-sq' : ''}" data-rt="dirt">${UI.icon('planet', 14)} DIRT</button>
+                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'asphalt' ? 'active-sq' : ''}" data-rt="asphalt">${UI.icon('road', 14)} ASPHALT</button>
+                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'gravel' ? 'active-sq' : ''}" data-rt="gravel">${UI.icon('mountain', 14)} GRAVEL</button>
+                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'mud' ? 'active-sq' : ''}" data-rt="mud">${UI.icon('cloudRain', 14)} MUD</button>
+                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'sand' ? 'active-sq' : ''}" data-rt="sand">${UI.icon('waves', 14)} SAND</button>
+                `}
               </div>
             </div>
             <div class="dock-panel-col">
@@ -8506,6 +8967,7 @@
             const cCfg = CONFIG.CITIES[this.selectedCity];
             if (cCfg && cCfg.season) this.selectedSeason = cCfg.season;
             if (this.selectedCity === 'offworld') this.selectedRoadTerrain = 'dirt';
+            else if (this.selectedCity === 'mumbai') this.selectedRoadTerrain = 'asphalt';
             this.buildWorldAndScene();
             this.renderDockPanelContent('world');
             sound.playTone(750, 'sine', 0.12);
@@ -8536,23 +8998,25 @@
             <div class="dock-panel-col" style="flex: 1.4;">
               <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">WORLD</span>
               <div class="dock-btn-row" style="display: flex; gap: 8px;">
-                <button class="dock-sq-btn active-sq" data-s="offworld" title="Off-World Martian Dunes" style="font-size: 1.3rem; padding: 10px 14px;">🪐</button>
+                <button class="dock-sq-btn icon-only-btn ${this.selectedCity === 'offworld' ? 'active-sq' : ''}" data-s="offworld" title="Off-World Martian Dunes">${UI.icon('planet', 18)}</button>
+                <button class="dock-sq-btn icon-only-btn ${this.selectedCity === 'mumbai' ? 'active-sq' : ''}" data-s="mumbai" title="City">${UI.icon('building', 18)}</button>
               </div>
             </div>
             <div class="dock-panel-col" style="flex: 1.1;">
               <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">TIME</span>
               <div class="dock-btn-row" style="display: flex; gap: 8px;">
-                <button class="dock-sq-btn ${this.selectedTimeOfDay === 'dawn' ? 'active-sq' : ''}" data-tod="dawn" title="Sunrise / Dawn" style="font-size: 1.3rem; padding: 10px 14px;">🌅</button>
-                <button class="dock-sq-btn ${this.selectedTimeOfDay === 'day' ? 'active-sq' : ''}" data-tod="day" title="Midday / Sun" style="font-size: 1.3rem; padding: 10px 14px;">☀️</button>
-                <button class="dock-sq-btn ${this.selectedTimeOfDay === 'dusk' ? 'active-sq' : ''}" data-tod="dusk" title="Sunset / Dusk" style="font-size: 1.3rem; padding: 10px 14px;">🌇</button>
-                <button class="dock-sq-btn ${this.selectedTimeOfDay === 'night' ? 'active-sq' : ''}" data-tod="night" title="Starry Night" style="font-size: 1.3rem; padding: 10px 14px;">🌙</button>
+                <button class="dock-sq-btn icon-only-btn ${this.selectedTimeOfDay === 'dawn' ? 'active-sq' : ''}" data-tod="dawn" title="Sunrise / Dawn">${UI.icon('sunrise', 18)}</button>
+                <button class="dock-sq-btn icon-only-btn ${this.selectedTimeOfDay === 'day' ? 'active-sq' : ''}" data-tod="day" title="Midday / Sun">${UI.icon('sun', 18)}</button>
+                <button class="dock-sq-btn icon-only-btn ${this.selectedTimeOfDay === 'dusk' ? 'active-sq' : ''}" data-tod="dusk" title="Sunset / Dusk">${UI.icon('sunset', 18)}</button>
+                <button class="dock-sq-btn icon-only-btn ${this.selectedTimeOfDay === 'night' ? 'active-sq' : ''}" data-tod="night" title="Starry Night">${UI.icon('moon', 18)}</button>
               </div>
             </div>
             <div class="dock-panel-col" style="flex: 0.8;">
               <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">WEATHER</span>
               <div class="dock-btn-row" style="display: flex; gap: 8px;">
-                <button class="dock-sq-btn ${(!this.selectedWeather || this.selectedWeather === 'clear') ? 'active-sq' : ''}" data-w="clear" title="Clear Sky" style="font-size: 1.3rem; padding: 10px 14px;">☀️</button>
-                <button class="dock-sq-btn ${this.selectedWeather === 'blizzard' ? 'active-sq' : ''}" data-w="blizzard" title="Blizzard / Snow / Rain" style="font-size: 1.3rem; padding: 10px 14px;">☁️</button>
+                <button class="dock-sq-btn icon-only-btn ${(!this.selectedWeather || this.selectedWeather === 'clear') ? 'active-sq' : ''}" data-w="clear" title="Clear Sky">${UI.icon('sun', 18)}</button>
+                <button class="dock-sq-btn icon-only-btn ${this.selectedWeather === 'rain' ? 'active-sq' : ''}" data-w="rain" title="Rain">${UI.icon('cloudRain', 18)}</button>
+                <button class="dock-sq-btn icon-only-btn ${this.selectedWeather === 'blizzard' ? 'active-sq' : ''}" data-w="blizzard" title="Blizzard / Snow">${UI.icon('cloud', 18)}</button>
               </div>
             </div>
           </div>
@@ -8566,10 +9030,16 @@
         });
         el.querySelectorAll('[data-s]').forEach(b => {
           b.onclick = () => {
-            this.selectedSeason = b.dataset.s;
-            if (this.selectedSeason === 'offworld') {
-              this.selectedCity = 'offworld';
-              this.selectedRoadTerrain = 'dirt';
+            if (b.dataset.s === 'mumbai') {
+              this.selectedCity = 'mumbai';
+              this.selectedSeason = CONFIG.CITIES.mumbai.season;
+              this.selectedRoadTerrain = 'asphalt';
+            } else {
+              this.selectedSeason = b.dataset.s;
+              if (this.selectedSeason === 'offworld') {
+                this.selectedCity = 'offworld';
+                this.selectedRoadTerrain = 'dirt';
+              }
             }
             this.buildWorldAndScene();
             this.renderDockPanelContent('style');
@@ -8643,19 +9113,19 @@
                   </div>
                 </div>
               ` : tab === 'controls' ? `
-                <div class="settings-section-title"><span>🚗 DRIVING & MOVEMENT</span></div>
+                <div class="settings-section-title"><span>${UI.icon('car')} DRIVING & MOVEMENT</span></div>
                 <div class="settings-row"><span class="settings-label">Accelerate</span><span class="slider-val">W / ↑</span></div>
                 <div class="settings-row"><span class="settings-label">Brake / Reverse</span><span class="slider-val">S / ↓</span></div>
                 <div class="settings-row"><span class="settings-label">Steer / Turn Left & Right</span><span class="slider-val">A / D or ← / →</span></div>
 
-                <div class="settings-section-title" style="margin-top: 14px;"><span>🛠️ ASSISTS, CAMERA & ENVIRONMENT</span></div>
+                <div class="settings-section-title" style="margin-top: 14px;"><span>${UI.icon('wrench')} ASSISTS, CAMERA & ENVIRONMENT</span></div>
                 <div class="settings-row"><span class="settings-label">AI Autopilot Cruise</span><span class="slider-val">[F]</span></div>
                 <div class="settings-row"><span class="settings-label">Return to Road (Recenter)</span><span class="slider-val">[R]</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Camera View</span><span class="slider-val">[C]</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Time of Day</span><span class="slider-val">[T]</span></div>
                 <div class="settings-row"><span class="settings-label">Toggle Rain</span><span class="slider-val">[P]</span></div>
 
-                <div class="settings-section-title" style="margin-top: 14px;"><span>📻 RADIO & AUDIO CONTROLS</span></div>
+                <div class="settings-section-title" style="margin-top: 14px;"><span>${UI.icon('radio')} RADIO & AUDIO CONTROLS</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Radio Stations</span><span class="slider-val">[L]</span></div>
                 <div class="settings-row"><span class="settings-label">Mute / Unmute Radio</span><span class="slider-val">[M]</span></div>
                 <div class="settings-row"><span class="settings-label">Mute / Unmute SFX & Engine</span><span class="slider-val">[N]</span></div>
@@ -9140,9 +9610,10 @@
           const tod = CONFIG.TIME_OF_DAY[this.selectedTimeOfDay] || CONFIG.TIME_OF_DAY.day;
 
           // Fog control: deep atmospheric clarity inside tunnels, rich horizon silhouettes outside
+          const useSeasonFog = season.isOffWorld && !tod.night;
           if (this.scene.fog) {
-            const targetFog = inTunnel ? 0.0003 : (tod.fogDensity || 0.0048);
-            const targetFogColor = inTunnel ? new THREE.Color(0x1a1512) : new THREE.Color(tod.fog);
+            const targetFog = inTunnel ? 0.0003 : (useSeasonFog ? season.fogDensity : (tod.fogDensity || 0.0048));
+            const targetFogColor = inTunnel ? new THREE.Color(0x1a1512) : new THREE.Color(useSeasonFog ? season.fog : tod.fog);
             this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, targetFog, 0.08);
             this.scene.fog.color.lerp(targetFogColor, 0.08);
           }
@@ -9180,7 +9651,17 @@
         if (!this.onFoot && this.vehicle.distanceTraveled >= nextDistrictThreshold && !this.districtTransitioning) {
           this.districtTransitioning = true;
           this.currentDistrict = (this.currentDistrict || 1) + 1;
-          const districtNames = [
+          // Real Mars surface features for Off-World instead of Indian
+          // highway place names — this progression system runs on every
+          // map, so it needs a name list per world, not one Earth-only list
+          // used everywhere including an alien dust road.
+          const districtNames = this.selectedCity === 'offworld' ? [
+            'Olympus Mons Foothills',
+            'Valles Marineris Rim',
+            'Gale Crater Traverse',
+            'Arabia Terra Plateau',
+            'Hellas Basin Descent'
+          ] : [
             'Scenic Foothills Highway',
             'Western Ghats Ridge',
             'Sahyadri Valley Expressway',
@@ -9191,8 +9672,11 @@
           const bonus = 150;
           this.earnings += bonus;
           sound.playRepair();
-          this.addNotification(`🏙️ ENTERED DISTRICT ${this.currentDistrict}: ${distName}! Highway Bonus +₹${bonus}`, 'success', 5000);
-          this.showScorePopup(bonus, `DISTRICT ${this.currentDistrict}: ${distName.toUpperCase()}`);
+          const isOffWorldDistrict = this.selectedCity === 'offworld';
+          const distIcon = isOffWorldDistrict ? UI.icon('planet') : UI.icon('building');
+          const distLabel = isOffWorldDistrict ? 'SECTOR' : 'DISTRICT';
+          this.addNotification(`${distIcon} ENTERED ${distLabel} ${this.currentDistrict}: ${distName}! Highway Bonus +₹${bonus}`, 'success', 5000);
+          this.showScorePopup(bonus, `${distLabel} ${this.currentDistrict}: ${distName.toUpperCase()}`);
 
           // Smoothly cycle time of day across highway districts
           this.cycleTimeOfDay();
@@ -9297,7 +9781,7 @@
       const app = document.getElementById('game-app') || document.body;
       const errCard = document.createElement('div');
       errCard.style.cssText = 'position: absolute; top: 24px; left: 24px; right: 24px; background: rgba(239, 35, 60, 0.96); color: #fff; padding: 22px 28px; border-radius: 16px; font-family: monospace; font-size: 14px; z-index: 9999999; box-shadow: 0 20px 50px rgba(0,0,0,0.8);';
-      errCard.innerHTML = `<h3 style="margin: 0 0 10px 0;">🚨 Shiplyp Engine Initialization Error</h3><p style="margin: 0 0 8px 0;"><strong>Error:</strong> ${err.message}</p><pre style="white-space: pre-wrap; font-size: 12px; opacity: 0.85; margin: 0;">${err.stack}</pre>`;
+      errCard.innerHTML = `<h3 style="margin: 0 0 10px 0;">Shiplyp Engine Initialization Error</h3><p style="margin: 0 0 8px 0;"><strong>Error:</strong> ${err.message}</p><pre style="white-space: pre-wrap; font-size: 12px; opacity: 0.85; margin: 0;">${err.stack}</pre>`;
       app.appendChild(errCard);
     }
   }
