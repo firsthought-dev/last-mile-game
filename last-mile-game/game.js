@@ -2546,7 +2546,13 @@
         metalness: (tCfg.metalness !== undefined) ? tCfg.metalness : 0.05,
         map: roadTex,
         normalMap: RealTextureFactory.roadNormal(),
-        normalScale: new THREE.Vector2(0.4, 0.4)
+        normalScale: new THREE.Vector2(0.4, 0.4),
+        // Pull road surface in front of coplanar terrain at the edge.
+        // Without this the two surfaces z-fight at curves and the terrain
+        // bleeds through the asphalt shoulder.
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1
       });
 
       this.roadMesh = new THREE.Mesh(geom, roadMaterial);
@@ -5905,19 +5911,77 @@
           });
         }
       } else {
+        // City streaming props: Armco guardrails + rocks + billboard trees,
+        // matching the density and style of the initial createFoliageAndProps pass.
+        const railMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.32 });
+        const postMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.80, roughness: 0.40 });
+        const railGeom = new THREE.BoxGeometry(1, 0.30, 0.08);
+        const postGeom = new THREE.BoxGeometry(0.10, 1.1, 0.10);
+        const streamRockGeom = RockGeometryFactory.createFacetedRockGeometry(42);
+        const streamRockMat = new THREE.MeshStandardMaterial({
+          color: 0x6b5c48, roughness: 0.88, metalness: 0.04,
+          map: RealTextureFactory.rockColor(), normalMap: RealTextureFactory.rockNormal()
+        });
+
+        const fenceDist = CONFIG.ROAD_WIDTH * 0.5 + 2.2;
         const newTrees = [];
-        for (let i = startSeg; i <= endSeg; i += 5) {
+
+        for (let i = startSeg; i <= endSeg; i++) {
           const pt = points[i];
           const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
-          [-1, 1].forEach(side => {
-            const lat = (10.0 + (this.prng ? this.prng.next() : Math.random()) * 26.0) * side;
-            const p = pt.clone().addScaledVector(normal, lat);
-            p.y = this.groundHeightAt(pt, p, lat);
-            const scale = 3.5 + (this.prng ? this.prng.next() : Math.random()) * 3.5;
-            newTrees.push({ pos: p, scale, radius: 2.2 });
-            this.obstacles.push({ pos: p, radius: 2.2, type: 'tree' });
-          });
+          const rng = () => (this.prng ? this.prng.next() : Math.random());
+
+          // Armco guardrail — one post every 4 nodes, rail beam between every 2 posts
+          if (i % 4 === 0) {
+            [-1, 1].forEach(side => {
+              const railPos = pt.clone().addScaledVector(normal, fenceDist * side);
+              railPos.y = this.groundHeightAt(pt, railPos, fenceDist * side) + 0.55;
+
+              const post = new THREE.Mesh(postGeom, postMat);
+              post.position.copy(railPos);
+              post.position.y -= 0.0;
+              scene.add(post);
+
+              const rail = new THREE.Mesh(railGeom, railMat);
+              rail.position.copy(railPos);
+              rail.position.y += 0.05;
+              // Align rail beam along road direction
+              const nextPt = points[Math.min(points.length - 1, i + 4)];
+              rail.lookAt(nextPt.x, rail.position.y, nextPt.z);
+              rail.scale.z = 4.2; // stretch beam to span 4 nodes
+              scene.add(rail);
+            });
+          }
+
+          // Rocks — sparse scatter 12–40m off road, every ~8 nodes
+          if (i % 8 === 0) {
+            [-1, 1].forEach(side => {
+              if (rng() > 0.4) return;
+              const rockLat = side * (CONFIG.ROAD_WIDTH * 0.5 + 5.0 + rng() * 28.0);
+              const rp = pt.clone().addScaledVector(normal, rockLat);
+              rp.y = this.groundHeightAt(pt, rp, rockLat);
+              const rs = 0.4 + rng() * 1.6;
+              const rock = new THREE.Mesh(streamRockGeom, streamRockMat);
+              rock.scale.setScalar(rs);
+              rock.rotation.set(rng() * 3, rng() * 3, 0);
+              rock.position.set(rp.x, rp.y + rs * 0.3, rp.z);
+              scene.add(rock);
+            });
+          }
+
+          // Billboard trees — every 5 nodes
+          if (i % 5 === 0) {
+            [-1, 1].forEach(side => {
+              const lat = (10.0 + rng() * 26.0) * side;
+              const p = pt.clone().addScaledVector(normal, lat);
+              p.y = this.groundHeightAt(pt, p, lat);
+              const scale = 3.5 + rng() * 3.5;
+              newTrees.push({ pos: p, scale, radius: 2.2 });
+              this.obstacles.push({ pos: p, radius: 2.2, type: 'tree' });
+            });
+          }
         }
+
         if (newTrees.length > 0) {
           const treeBatch = TreeBillboardFactory.buildInstancedBatches(newTrees);
           scene.add(treeBatch);
