@@ -5915,7 +5915,9 @@
         // matching the density and style of the initial createFoliageAndProps pass.
         const railMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.32 });
         const postMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.80, roughness: 0.40 });
-        const railGeom = new THREE.BoxGeometry(1, 0.30, 0.08);
+        // Rail is thin in X (0.08m width), tall (0.30m), long in Z (4.2m = one span).
+        // lookAt aligns local +Z along road → the 4.2m dimension runs down the road.
+        const railGeom = new THREE.BoxGeometry(0.08, 0.30, 4.2);
         const postGeom = new THREE.BoxGeometry(0.10, 1.1, 0.10);
         const streamRockGeom = RockGeometryFactory.createFacetedRockGeometry(42);
         const streamRockMat = new THREE.MeshStandardMaterial({
@@ -5931,24 +5933,22 @@
           const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
           const rng = () => (this.prng ? this.prng.next() : Math.random());
 
-          // Armco guardrail — one post every 4 nodes, rail beam between every 2 posts
+          // Armco guardrail — one post every 4 nodes, one rail beam between posts
           if (i % 4 === 0) {
+            const nextPt = points[Math.min(points.length - 1, i + 4)];
             [-1, 1].forEach(side => {
               const railPos = pt.clone().addScaledVector(normal, fenceDist * side);
               railPos.y = this.groundHeightAt(pt, railPos, fenceDist * side) + 0.55;
 
               const post = new THREE.Mesh(postGeom, postMat);
               post.position.copy(railPos);
-              post.position.y -= 0.0;
               scene.add(post);
 
+              // lookAt(nextPt) aligns local +Z with road direction so 4.2m spans along road
               const rail = new THREE.Mesh(railGeom, railMat);
               rail.position.copy(railPos);
               rail.position.y += 0.05;
-              // Align rail beam along road direction
-              const nextPt = points[Math.min(points.length - 1, i + 4)];
               rail.lookAt(nextPt.x, rail.position.y, nextPt.z);
-              rail.scale.z = 4.2; // stretch beam to span 4 nodes
               scene.add(rail);
             });
           }
