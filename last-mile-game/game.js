@@ -8,108 +8,59 @@
   'use strict';
 
   // --------------------------------------------------------------------------
-  // 0. LOCALIZED TRAFFIC ASSET: TATA ACE-STYLE MINI-TRUCK (CC0, Kenney Car Kit)
-  // Recolored from stock to a teal-green/white Indian goods-carrier livery so
-  // it reads distinctly from the yellow auto-rickshaws and red BEST buses.
+  // 0. VEHICLE GLTF ASSET LOADER — shared factory for all three vehicle meshes
   // --------------------------------------------------------------------------
-  const IndianTruckAsset = {
-    template: null,
-    loading: false,
-    load() {
-      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
-      this.loading = true;
-      new THREE.GLTFLoader().load('assets/models/delivery.glb', (gltf) => {
-        const cabMat = new THREE.MeshStandardMaterial({ color: 0xf1f1f1, flatShading: true }); // white cab/door
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a9d8f, flatShading: true }); // teal-green cargo body
-        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-        gltf.scene.traverse((child) => {
-          if (!child.isMesh) return;
-          child.castShadow = true;
-          if (child.name === 'body') child.material = bodyMat;
-          else if (child.name === 'door') child.material = cabMat;
-          else if (child.name.startsWith('wheel')) child.material = wheelMat;
+  function makeVehicleAsset(glbPath, applyMaterials, label) {
+    const asset = {
+      template: null,
+      loading: false,
+      pendingControllers: [],
+      load() {
+        if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
+        this.loading = true;
+        new THREE.GLTFLoader().load(glbPath, (gltf) => {
+          gltf.scene.traverse((child) => {
+            if (!child.isMesh) return;
+            child.castShadow = true;
+            applyMaterials(child);
+          });
+          this.template = gltf.scene;
+          this.pendingControllers.forEach((vc) => vc.buildModel());
+          this.pendingControllers.length = 0;
+        }, undefined, (err) => {
+          console.warn(`${label}: failed to load ${glbPath}, falling back to procedural model`, err);
         });
-        this.template = gltf.scene;
-      }, undefined, (err) => {
-        console.warn('IndianTruckAsset: failed to load delivery.glb, falling back to procedural traffic', err);
-      });
-    },
-    clone() {
-      return this.template ? this.template.clone(true) : null;
-    }
-  };
-  IndianTruckAsset.load();
+      },
+      clone() { return this.template ? this.template.clone(true) : null; }
+    };
+    asset.load();
+    return asset;
+  }
 
-  // --------------------------------------------------------------------------
-  // 0b. LOCALIZED PLAYER CAR: SWIFT/NEXON-STYLE SPORTS HATCH (CC0, Kenney Car Kit)
-  // Replaces the old stacked-boxes hatchback with an actual sculpted car mesh,
-  // recolored to the same fiery-red/gloss-black livery so the branding holds.
-  // --------------------------------------------------------------------------
-  const SwiftCarAsset = {
-    template: null,
-    loading: false,
-    pendingControllers: [],
-    load() {
-      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
-      this.loading = true;
-      new THREE.GLTFLoader().load('assets/models/sedan-sports.glb', (gltf) => {
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xd90429, flatShading: true }); // Fiery Red
-        const trimMat = new THREE.MeshLambertMaterial({ color: 0x0a0a0a }); // Gloss black spoiler/trim
-        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1e293b }); // Diamond-cut alloy
-        gltf.scene.traverse((child) => {
-          if (!child.isMesh) return;
-          child.castShadow = true;
-          if (child.name === 'body') child.material = bodyMat;
-          else if (child.name === 'spoiler') child.material = trimMat;
-          else if (child.name.startsWith('wheel')) child.material = wheelMat;
-        });
-        this.template = gltf.scene;
-        // Rebuild any player vehicle that was already stuck on the boxy fallback
-        this.pendingControllers.forEach((vc) => vc.buildModel());
-        this.pendingControllers.length = 0;
-      }, undefined, (err) => {
-        console.warn('SwiftCarAsset: failed to load sedan-sports.glb, falling back to procedural model', err);
-      });
-    },
-    clone() {
-      return this.template ? this.template.clone(true) : null;
-    }
-  };
-  SwiftCarAsset.load();
+  const IndianTruckAsset = makeVehicleAsset('assets/models/delivery.glb', (child) => {
+    const cabMat  = new THREE.MeshStandardMaterial({ color: 0xf1f1f1, flatShading: true }); // white cab/door
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a9d8f, flatShading: true }); // teal-green cargo body
+    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    if (child.name === 'body')              child.material = bodyMat;
+    else if (child.name === 'door')         child.material = cabMat;
+    else if (child.name.startsWith('wheel')) child.material = wheelMat;
+  }, 'IndianTruckAsset');
 
-  // --------------------------------------------------------------------------
-  // 0c. LOCALIZED PLAYER TRUCK: TATA ACE "CHHOTA HATHI" MINI PICKUP (CC0, Kenney Car Kit)
-  // Replaces the old boxy cab+bed stack with a sculpted open-bed pickup mesh,
-  // recolored to the same Indian Cargo Green livery.
-  // --------------------------------------------------------------------------
-  const ChotaHathiAsset = {
-    template: null,
-    loading: false,
-    pendingControllers: [],
-    load() {
-      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
-      this.loading = true;
-      new THREE.GLTFLoader().load('assets/models/truck.glb', (gltf) => {
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x059669, flatShading: true }); // Indian Cargo Green
-        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-        gltf.scene.traverse((child) => {
-          if (!child.isMesh) return;
-          child.castShadow = true;
-          if (child.name === 'body') child.material = bodyMat;
-          else if (child.name.startsWith('wheel')) child.material = wheelMat;
-        });
-        this.template = gltf.scene;
-        this.pendingControllers.forEach((vc) => vc.buildModel());
-        this.pendingControllers.length = 0;
-      }, undefined, (err) => {
-        console.warn('ChotaHathiAsset: failed to load truck.glb, falling back to procedural model', err);
-      });
-    },
-    clone() {
-      return this.template ? this.template.clone(true) : null;
-    }
-  };
-  ChotaHathiAsset.load();
+  const SwiftCarAsset = makeVehicleAsset('assets/models/sedan-sports.glb', (child) => {
+    const bodyMat  = new THREE.MeshStandardMaterial({ color: 0xd90429, flatShading: true }); // Fiery Red
+    const trimMat  = new THREE.MeshLambertMaterial({ color: 0x0a0a0a }); // Gloss black spoiler/trim
+    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1e293b }); // Diamond-cut alloy
+    if (child.name === 'body')              child.material = bodyMat;
+    else if (child.name === 'spoiler')      child.material = trimMat;
+    else if (child.name.startsWith('wheel')) child.material = wheelMat;
+  }, 'SwiftCarAsset');
+
+  const ChotaHathiAsset = makeVehicleAsset('assets/models/truck.glb', (child) => {
+    const bodyMat  = new THREE.MeshStandardMaterial({ color: 0x059669, flatShading: true }); // Indian Cargo Green
+    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    if (child.name === 'body')              child.material = bodyMat;
+    else if (child.name.startsWith('wheel')) child.material = wheelMat;
+  }, 'ChotaHathiAsset');
 
   // --------------------------------------------------------------------------
   // 1. DETERMINISTIC PRNG
@@ -488,7 +439,7 @@
     // instance rather than tracked locally since SoundEngine is a
     // standalone singleton constructed before `window.game` exists.
     _eraForCurrentTOD() {
-      const tod = window.game && window.game.selectedTimeOfDay;
+      const tod = window.game?.selectedTimeOfDay;
       if (tod === 'dawn' || tod === 'dusk') return '90s';
       if (tod === 'night') return '2010s';
       return '2000s'; // day, or unknown/not-yet-set
@@ -5633,6 +5584,14 @@
       this.walkerMesh.position.copy(exitPos);
       this.scene.add(this.walkerMesh);
 
+      // Snap camera to walker position immediately so it doesn't rush-in
+      // from the vehicle chase-cam distance (which makes the character appear
+      // to rapidly grow on exit). The subject changed entirely — cut, don't lerp.
+      const walkerForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.walkerMesh.quaternion).normalize();
+      this.camera.position.copy(
+        exitPos.clone().addScaledVector(walkerForward, -3.4).add(new THREE.Vector3(0, 1.9, 0))
+      );
+
       // One-time timer bonus per order — walking to the door and back
       // costs real time a drive-by toss doesn't, so the clock needs to
       // absorb that instead of just punishing the choice to walk.
@@ -6599,7 +6558,7 @@
       this.vehicle.snapToNearestRoadPoint(this.world.curve);
       sound.resumeForGameplay();
       this.showScorePopup(0, '🗺️ RETURNED TO ROAD — DRIVE SAFELY!');
-      sound.playRepair && sound.playRepair();
+      sound.playRepair();
     }
 
     showReturnToRoadBanner() {
