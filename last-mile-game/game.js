@@ -8071,12 +8071,36 @@
       }
 
       geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+      // Rain: elongated streak sprite drawn on a canvas so drops look like
+      // actual falling water rather than dots. Snow keeps the plain white dot.
+      let weatherMap = null;
+      if (!isSnow) {
+        const c = document.createElement('canvas');
+        c.width = 8; c.height = 32;
+        const ctx = c.getContext('2d');
+        const grad = ctx.createLinearGradient(0, 0, 0, 32);
+        grad.addColorStop(0, 'rgba(180,210,255,0)');
+        grad.addColorStop(0.25, 'rgba(200,225,255,0.9)');
+        grad.addColorStop(0.75, 'rgba(220,235,255,0.7)');
+        grad.addColorStop(1, 'rgba(180,210,255,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(4, 16, 1.5, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        weatherMap = new THREE.CanvasTexture(c);
+      }
+
       const mat = new THREE.PointsMaterial({
-        color: isSnow ? 0xffffff : 0xbfdbfe,
-        size: isSnow ? 3.4 : 1.8,
-        sizeAttenuation: false,
+        color: isSnow ? 0xffffff : 0xd6eaff,
+        size: isSnow ? 3.4 : 10.0,
+        sizeAttenuation: isSnow ? false : true,
+        map: weatherMap,
+        alphaMap: weatherMap,
+        alphaTest: 0.05,
         transparent: true,
-        opacity: isSnow ? 0.88 : 0.55
+        opacity: isSnow ? 0.88 : 0.72,
+        depthWrite: false
       });
 
       this.weatherMesh = new THREE.Points(geom, mat);
@@ -8087,6 +8111,14 @@
 
     updateWeatherSystem(dt) {
       if (!this.weatherMesh || !this.vehicle || !this.vehicle.mesh) return;
+
+      // Hide weather particles when the car is inside a tunnel — the roof
+      // occludes real precipitation but Three.js particles have no depth test
+      // vs tunnel geometry, so they leak through the ceiling.
+      const meshIdx = Math.round(this.vehicle.splineProgress * CONFIG.ROAD_MESH_SEGMENTS);
+      const inTunnel = this.world && this.world.isInTunnelZone && this.world.isInTunnelZone(meshIdx, 2);
+      this.weatherMesh.visible = !inTunnel;
+      if (inTunnel) return;
 
       const carPos = this.vehicle.mesh.position;
       const positions = this.weatherMesh.geometry.attributes.position.array;
