@@ -5584,6 +5584,14 @@
       this.walkerMesh.position.copy(exitPos);
       this.scene.add(this.walkerMesh);
 
+      // Snap camera to walker position immediately so it doesn't rush-in
+      // from the vehicle chase-cam distance (which makes the character appear
+      // to rapidly grow on exit). The subject changed entirely — cut, don't lerp.
+      const walkerForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.walkerMesh.quaternion).normalize();
+      this.camera.position.copy(
+        exitPos.clone().addScaledVector(walkerForward, -3.4).add(new THREE.Vector3(0, 1.9, 0))
+      );
+
       // One-time timer bonus per order — walking to the door and back
       // costs real time a drive-by toss doesn't, so the clock needs to
       // absorb that instead of just punishing the choice to walk.
