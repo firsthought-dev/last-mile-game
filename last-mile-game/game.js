@@ -5772,8 +5772,10 @@
       const grassCol = new THREE.Color(season.grassColor);
       const grassLight = new THREE.Color(season.grassLight);
       const cliffCol = new THREE.Color(season.cliffColor);
-      const vividGreen = new THREE.Color(0x4a7c3f);
-      const khaki = new THREE.Color(0xc9bb84);
+      // Match createTerrainMesh's shoulder soil color exactly — season-derived,
+      // not the old hardcoded vividGreen/khaki that made all streaming chunks
+      // read as desert regardless of biome.
+      const shoulderSoil = new THREE.Color(season.grassLight).lerp(new THREE.Color(0x2a2824), 0.35);
 
       for (let i = startSeg; i <= endSeg; i++) {
         const pt = points[i];
@@ -5789,31 +5791,32 @@
           let finalY = pt.y;
 
           if (absDist <= laneHalf) {
+            // Hidden under road — use shoulder soil colour (matches createTerrainMesh)
             finalY = pt.y - 0.18 + bankedYOffset;
-            tColors.push(grassLight.r, grassLight.g, grassLight.b);
+            tColors.push(shoulderSoil.r, shoulderSoil.g, shoulderSoil.b);
           } else if (absDist <= 9.0) {
             const t = (absDist - laneHalf) / (9.0 - laneHalf);
             finalY = pt.y - 0.18 - t * 0.32 + bankedYOffset * (1 - t);
-            const GREEN_BAND_T = 1.2 / (9.0 - laneHalf);
-            if (t <= GREEN_BAND_T) {
-              tColors.push(vividGreen.r, vividGreen.g, vividGreen.b);
-            } else {
-              const bandT = THREE.MathUtils.smoothstep(t, GREEN_BAND_T, GREEN_BAND_T + 0.15);
-              const bladeNoise = 0.88 + this.simplex.noise2D(worldPos.x * 0.5, worldPos.z * 0.5) * 0.18;
-              tColors.push(
-                THREE.MathUtils.lerp(vividGreen.r, khaki.r * bladeNoise, bandT),
-                THREE.MathUtils.lerp(vividGreen.g, khaki.g * bladeNoise, bandT),
-                THREE.MathUtils.lerp(vividGreen.b, khaki.b * bladeNoise, bandT)
-              );
-            }
+            // Near-white noise tint — photo texture carries the biome colour
+            const blendT = THREE.MathUtils.smoothstep(t, 0.05, 0.95);
+            const bladeNoise = 0.96 + this.simplex.noise2D(worldPos.x * 0.08, worldPos.z * 0.08) * 0.06;
+            tColors.push(
+              THREE.MathUtils.lerp(shoulderSoil.r, grassCol.r * bladeNoise, blendT),
+              THREE.MathUtils.lerp(shoulderSoil.g, grassCol.g * bladeNoise, blendT),
+              THREE.MathUtils.lerp(shoulderSoil.b, grassCol.b * bladeNoise, blendT)
+            );
           } else {
             const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
             const blendFactor = THREE.MathUtils.smoothstep(absDist, 9.0, 60.0);
             const shoulderDrop = pt.y - 0.5;
             finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
-            const slope = Math.abs(finalY - pt.y) / Math.max(1.0, absDist);
-            const col = (slope > 0.45) ? cliffCol : (this.simplex.noise2D(worldPos.x * 0.05, worldPos.z * 0.05) > 0.2 ? grassCol : grassLight);
-            tColors.push(col.r, col.g, col.b);
+            if (rawH > 22.0) {
+              tColors.push(cliffCol.r, cliffCol.g, cliffCol.b);
+            } else {
+              // Near-white with subtle noise — photo texture shows through
+              const nVal = 0.94 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.07;
+              tColors.push(nVal, nVal, nVal);
+            }
           }
 
           tPositions.push(worldPos.x, finalY, worldPos.z);
@@ -5837,6 +5840,7 @@
       tGeom.setAttribute('uv', new THREE.Float32BufferAttribute(tUvs, 2));
       tGeom.setIndex(tIndices);
       tGeom.computeVertexNormals();
+      tGeom.computeTangents();
 
       const terrainMesh = new THREE.Mesh(tGeom, this.terrainMesh ? this.terrainMesh.material : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0.02, map: RealTextureFactory.grassColor() }));
       terrainMesh.receiveShadow = true;
