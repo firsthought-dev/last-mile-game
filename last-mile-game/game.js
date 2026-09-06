@@ -1719,17 +1719,38 @@
       h += this.simplex.noise2D(wx * 0.006, wz * 0.006) * 16.0;
       h += this.simplex.noise2D(wx * 0.018, wz * 0.018) * 5.5;
       h += this.simplex.noise2D(wx * 0.045, wz * 0.045) * 1.5;
-      // Off-World gets its own, much gentler amplitude. This amplitude
-      // (peaks near +/-61) is mountain-pass scale, tuned for Earth hill
-      // biomes — the road's own elevation is grade-limited and smoothed,
-      // but the terrain immediately beside it (groundHeightAt's embankment
-      // blend, sampled from THIS function) is not, so at full amplitude it
-      // throws up steep walls a few meters off the shoulder — exactly the
-      // "driving through a sand canyon" feel instead of open rolling dunes
-      // like slowroads.io's own Mars reference. Flattened to ~30% for
-      // Off-World: still undulating, not a flat plain, just soft dunes
-      // instead of walled-in mountain terrain.
-      if (this.cityKey === 'offworld') h *= 0.3;
+      // Amplitude is scaled to 30% for EVERY biome. The raw 4-octave sum
+      // peaks near +/-61u, which is mountain-pass scale — and the road
+      // cannot follow it. The spline is clamped to CONFIG-level maxGrade
+      // (4.5%), while these octaves need 27-40% grade to track:
+      //
+      //   octave  amp   wavelength   grade needed
+      //   0.002   38u      500m         30.4%
+      //   0.006   16u      167m         38.4%
+      //   0.018   5.5u      56m         39.6%
+      //
+      // So the road runs tens of metres off the true surface everywhere
+      // (measured: mean 9.7u, worst 41u of terrain sitting ABOVE road
+      // level within the corridor), and groundHeightAt's embankment blend
+      // has to absorb all of it between 9m and 45m — a 41u cut over a 36m
+      // run is a 49-degree face right at the shoulder. That wall is the
+      // long-standing "terrain clipping through the road" artefact: the
+      // road never intersects anything, the carve just has to eat a
+      // mountain to make room for it.
+      //
+      // Routing around the high ground does NOT fix this — it was tried
+      // (a lateral corridor-cut term in the spline scorer) and measured
+      // across all six biomes: mean cut moved <15%, got worse on
+      // Bangalore, and behaved non-monotonically as the weight rose,
+      // because the constraint is vertical (grade cap) and not horizontal.
+      // The grade clamp is saturated at 4.51% in every variant.
+      //
+      // 0.3 is the value Off-World has always used, and Off-World was the
+      // only biome that ever passed dev-checks' road-avoids-high-ground.
+      // Applying it everywhere brings Earth to mean 2.50u / worst 12.80u
+      // (20-degree faces). Terrain still undulates — it just stops being
+      // walled-in mountain terrain the road has to tunnel through.
+      h *= 0.3;
       return h;
     }
 
