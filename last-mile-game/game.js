@@ -62,196 +62,71 @@
   };
 
   // --------------------------------------------------------------------------
-  // 0. LOCALIZED TRAFFIC ASSET: TATA ACE-STYLE MINI-TRUCK (CC0, Kenney Car Kit)
-  // Recolored from stock to a teal-green/white Indian goods-carrier livery so
-  // it reads distinctly from the yellow auto-rickshaws and red BEST buses.
+  // 0. VEHICLE GLTF ASSET LOADER — shared factory for all three vehicle meshes
   // --------------------------------------------------------------------------
-  const IndianTruckAsset = {
-    template: null,
-    loading: false,
-    load() {
-      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
-      this.loading = true;
-      new THREE.GLTFLoader().load('assets/models/delivery.glb', (gltf) => {
-        const cabMat = new THREE.MeshStandardMaterial({ color: 0xf1f1f1, flatShading: true }); // white cab/door
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a9d8f, flatShading: true }); // teal-green cargo body
-        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-        gltf.scene.traverse((child) => {
-          if (!child.isMesh) return;
-          child.castShadow = true;
-          if (child.name === 'body') child.material = bodyMat;
-          else if (child.name === 'door') child.material = cabMat;
-          else if (child.name.startsWith('wheel')) child.material = wheelMat;
+  function makeVehicleAsset(glbPath, applyMaterials, label, postLoad) {
+    const asset = {
+      template: null,
+      loading: false,
+      pendingControllers: [],
+      load() {
+        if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
+        this.loading = true;
+        new THREE.GLTFLoader().load(glbPath, (gltf) => {
+          gltf.scene.traverse((child) => {
+            if (!child.isMesh) return;
+            child.castShadow = true;
+            applyMaterials(child);
+          });
+          if (postLoad) postLoad(gltf.scene);
+          this.template = gltf.scene;
+          this.pendingControllers.forEach((vc) => vc.buildModel());
+          this.pendingControllers.length = 0;
+        }, undefined, (err) => {
+          console.warn(`${label}: failed to load ${glbPath}, falling back to procedural model`, err);
         });
-        this.template = gltf.scene;
-      }, undefined, (err) => {
-        console.warn('IndianTruckAsset: failed to load delivery.glb, falling back to procedural traffic', err);
-      });
-    },
-    clone() {
-      return this.template ? this.template.clone(true) : null;
-    }
-  };
-  IndianTruckAsset.load();
+      },
+      clone() { return this.template ? this.template.clone(true) : null; }
+    };
+    asset.load();
+    return asset;
+  }
 
-  // --------------------------------------------------------------------------
-  // 0b. LOCALIZED PLAYER CAR: SWIFT/NEXON-STYLE SPORTS HATCH (CC0, Kenney Car Kit)
-  // Replaces the old stacked-boxes hatchback with an actual sculpted car mesh,
-  // recolored to the same fiery-red/gloss-black livery so the branding holds.
-  // --------------------------------------------------------------------------
-  const SwiftCarAsset = {
-    template: null,
-    loading: false,
-    pendingControllers: [],
-    load() {
-      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
-      this.loading = true;
-      new THREE.GLTFLoader().load('assets/models/sedan-sports.glb', (gltf) => {
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xd90429, flatShading: true }); // Fiery Red
-        const trimMat = new THREE.MeshLambertMaterial({ color: 0x0a0a0a }); // Gloss black spoiler/trim
-        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1e293b }); // Diamond-cut alloy
-        gltf.scene.traverse((child) => {
-          if (!child.isMesh) return;
-          child.castShadow = true;
-          if (child.name === 'body') child.material = bodyMat;
-          else if (child.name === 'spoiler') child.material = trimMat;
-          else if (child.name.startsWith('wheel')) child.material = wheelMat;
-        });
-        this.template = gltf.scene;
-        // Rebuild any player vehicle that was already stuck on the boxy fallback
-        this.pendingControllers.forEach((vc) => vc.buildModel());
-        this.pendingControllers.length = 0;
-      }, undefined, (err) => {
-        console.warn('SwiftCarAsset: failed to load sedan-sports.glb, falling back to procedural model', err);
-      });
-    },
-    clone() {
-      return this.template ? this.template.clone(true) : null;
-    }
-  };
-  SwiftCarAsset.load();
+  const IndianTruckAsset = makeVehicleAsset('assets/models/delivery.glb', (child) => {
+    const cabMat   = new THREE.MeshStandardMaterial({ color: 0xf1f1f1, flatShading: true }); // white cab/door
+    const bodyMat  = new THREE.MeshStandardMaterial({ color: 0x2a9d8f, flatShading: true }); // teal-green cargo body
+    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    if (child.name === 'body')               child.material = bodyMat;
+    else if (child.name === 'door')          child.material = cabMat;
+    else if (child.name.startsWith('wheel')) child.material = wheelMat;
+  }, 'IndianTruckAsset');
 
-  // --------------------------------------------------------------------------
-  // 0c. LOCALIZED PLAYER TRUCK: TATA ACE "CHHOTA HATHI" MINI PICKUP (CC0, Kenney Car Kit)
-  // Replaces the old boxy cab+bed stack with a sculpted open-bed pickup mesh,
-  // recolored to the same Indian Cargo Green livery.
-  // --------------------------------------------------------------------------
-  const ChotaHathiAsset = {
-    template: null,
-    loading: false,
-    pendingControllers: [],
-    load() {
-      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
-      this.loading = true;
-      new THREE.GLTFLoader().load('assets/models/truck.glb', (gltf) => {
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x059669, flatShading: true }); // Indian Cargo Green
-        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-        gltf.scene.traverse((child) => {
-          if (!child.isMesh) return;
-          child.castShadow = true;
-          if (child.name === 'body') child.material = bodyMat;
-          else if (child.name.startsWith('wheel')) child.material = wheelMat;
-        });
-        this.template = gltf.scene;
-        this.pendingControllers.forEach((vc) => vc.buildModel());
-        this.pendingControllers.length = 0;
-      }, undefined, (err) => {
-        console.warn('ChotaHathiAsset: failed to load truck.glb, falling back to procedural model', err);
-      });
-    },
-    clone() {
-      return this.template ? this.template.clone(true) : null;
-    }
-  };
-  ChotaHathiAsset.load();
+  const SwiftCarAsset = makeVehicleAsset('assets/models/sedan-sports.glb', (child) => {
+    const bodyMat  = new THREE.MeshStandardMaterial({ color: 0xd90429, flatShading: true }); // Fiery Red
+    const trimMat  = new THREE.MeshLambertMaterial({ color: 0x0a0a0a }); // Gloss black spoiler/trim
+    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1e293b }); // Diamond-cut alloy
+    if (child.name === 'body')               child.material = bodyMat;
+    else if (child.name === 'spoiler')       child.material = trimMat;
+    else if (child.name.startsWith('wheel')) child.material = wheelMat;
+  }, 'SwiftCarAsset');
 
-  // --------------------------------------------------------------------------
-  // 0e. SECOND PLAYER VEHICLE: user-supplied sports coupe (source/license
-  // unverified — user confirmed "not sure / found it somewhere" when asked;
-  // flagged in SLOWROADS_PARITY_LOG.md and CREDITS_AND_REFERENCES.md rather
-  // than treated as silently CC0-equivalent). Converted from the supplied
-  // FBX via Blender (headless, this session): FBX->glTF export, textures
-  // downscaled from 2048px to 1024px, and the 'car paint' material's Base
-  // Color re-wired to its actual image node (the exporter dropped it
-  // originally — Blender's importer left an unrelated flat factor already
-  // connected on several materials, which made the fix loop wrongly think
-  // they were already textured and skip them). The 'car paint' material
-  // itself has no diffuse texture in the source file at all (by design —
-  // same reason Kenney's sedan/truck 'body' mesh has no texture, it's meant
-  // to be tinted per-vehicle), so it's recolored here exactly like those.
-  // Model's front (headlights) faces local -Z, opposite this game's +Z-
-  // forward convention — rotated 180° on load to correct it.
-  // --------------------------------------------------------------------------
-  const SportsCoupeAsset = {
-    template: null,
-    loading: false,
-    pendingControllers: [],
-    load() {
-      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
-      this.loading = true;
-      new THREE.GLTFLoader().load('assets/models/sports-coupe.glb?t=' + Date.now(), (gltf) => {
-        const paintMat = new THREE.MeshStandardMaterial({ color: 0x1c2430, metalness: 0.6, roughness: 0.35 }); // Slate charcoal gloss
-        gltf.scene.traverse((child) => {
-          if (!child.isMesh) return;
-          child.castShadow = true;
-          if (child.material && child.material.name === 'car paint') child.material = paintMat;
-        });
-        gltf.scene.rotation.y = Math.PI;
-        this.template = gltf.scene;
-        this.pendingControllers.forEach((vc) => vc.buildModel());
-        this.pendingControllers.length = 0;
-      }, undefined, (err) => {
-        console.warn('SportsCoupeAsset: failed to load sports-coupe.glb, falling back to procedural model', err);
-      });
-    },
-    clone() {
-      return this.template ? this.template.clone(true) : null;
-    }
-  };
-  SportsCoupeAsset.load();
+  const ChotaHathiAsset = makeVehicleAsset('assets/models/truck.glb', (child) => {
+    const bodyMat  = new THREE.MeshStandardMaterial({ color: 0x059669, flatShading: true }); // Indian Cargo Green
+    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    if (child.name === 'body')               child.material = bodyMat;
+    else if (child.name.startsWith('wheel')) child.material = wheelMat;
+  }, 'ChotaHathiAsset');
 
-  // --------------------------------------------------------------------------
-  // 0f. THIRD PLAYER VEHICLE: user-supplied muscle coupe (source/license
-  // unverified, same as SportsCoupeAsset above — flagged, not treated as
-  // CC0-equivalent). The source file's name/metadata referenced a specific
-  // real car manufacturer and trim — explicitly stripped per user
-  // instruction: verified zero occurrences of that name (or the model
-  // trim's name) anywhere in the converted glTF's node/mesh/material/scene
-  // names before this file was ever copied into the project, and renamed
-  // the one remaining real-brand reference found ('Brembo', a brake-caliper
-  // maker) to a generic material name. No filename, code comment, or
-  // in-game vehicle name anywhere below references the real source car.
-  // Converted via the same Blender headless FBX->glTF pipeline, decimated
-  // 50% (263k->131k tris) since the raw source was heavier than needed for
-  // a single real-time hero vehicle. Model's front (headlights) already
-  // faces local +Z matching this game's forward convention — no rotation
-  // needed (checked per-model, not assumed from the other asset above).
-  // --------------------------------------------------------------------------
-  const MuscleCoupeAsset = {
-    template: null,
-    loading: false,
-    pendingControllers: [],
-    load() {
-      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
-      this.loading = true;
-      new THREE.GLTFLoader().load('assets/models/muscle-coupe.glb?t=' + Date.now(), (gltf) => {
-        gltf.scene.traverse((child) => {
-          if (!child.isMesh) return;
-          child.castShadow = true;
-        });
-        // Model naturally faces local +Z (headlights at +Z, taillights at -Z)
-        this.template = gltf.scene;
-        this.pendingControllers.forEach((vc) => vc.buildModel());
-        this.pendingControllers.length = 0;
-      }, undefined, (err) => {
-        console.warn('MuscleCoupeAsset: failed to load muscle-coupe.glb, falling back to procedural model', err);
-      });
-    },
-    clone() {
-      return this.template ? this.template.clone(true) : null;
-    }
-  };
-  MuscleCoupeAsset.load();
+  // 0e. SPORTS COUPE — user-supplied model; headlights face local -Z so scene
+  // is rotated 180° on load. Source/license unverified; flagged in CREDITS.
+  const SportsCoupeAsset = makeVehicleAsset('assets/models/sports-coupe.glb?t=' + Date.now(), (child) => {
+    const paintMat = new THREE.MeshStandardMaterial({ color: 0x1c2430, metalness: 0.6, roughness: 0.35 }); // Slate charcoal gloss
+    if (child.material && child.material.name === 'car paint') child.material = paintMat;
+  }, 'SportsCoupeAsset', (scene) => { scene.rotation.y = Math.PI; });
+
+  // 0f. MUSCLE COUPE — user-supplied model; headlights already face +Z, no
+  // rotation needed. Brand references stripped per user instruction; see CREDITS.
+  const MuscleCoupeAsset = makeVehicleAsset('assets/models/muscle-coupe.glb?t=' + Date.now(), () => {}, 'MuscleCoupeAsset');
 
   // --------------------------------------------------------------------------
   // 1. DETERMINISTIC PRNG
@@ -631,7 +506,7 @@
     // instance rather than tracked locally since SoundEngine is a
     // standalone singleton constructed before `window.game` exists.
     _eraForCurrentTOD() {
-      const tod = window.game && window.game.selectedTimeOfDay;
+      const tod = window.game?.selectedTimeOfDay;
       if (tod === 'dawn' || tod === 'dusk') return '90s';
       if (tod === 'night') return '2010s';
       return '2000s'; // day, or unknown/not-yet-set
@@ -1781,7 +1656,6 @@
     grassColorFloor() { return this._get('grassColorFloor', 'assets/textures/grass_color.webp'); },
     grassNormal() { return this._get('grassNormal', 'assets/textures/grass_normal.webp'); },
     sandColor() { return this._get('sandColor', 'assets/textures/sand_color.webp'); },
-    sandColorFloor() { return this._get('sandColorFloor', 'assets/textures/sand_color.webp'); },
     rockColor() { return this._get('rockColor', 'assets/textures/rock_color.webp'); },
     rockNormal() { return this._get('rockNormal', 'assets/textures/rock_normal.webp'); },
     roadColor(roadTerrainKey = 'asphalt') {
@@ -1798,9 +1672,7 @@
     },
     roadNormal() { return this._get('roadNormal', 'assets/textures/road_normal.webp'); },
     woodColor() { return this._get('woodColor', 'assets/textures/wood_color.webp'); },
-    woodNormal() { return this._get('woodNormal', 'assets/textures/wood_normal.webp'); },
-    stoneColor() { return this._get('stoneColor', 'assets/textures/stone_color.webp'); },
-    stoneNormal() { return this._get('stoneNormal', 'assets/textures/stone_normal.webp'); }
+    woodNormal() { return this._get('woodNormal', 'assets/textures/wood_normal.webp'); }
   };
 
   // --------------------------------------------------------------------------
@@ -5976,7 +5848,8 @@
               const p = pt.clone().addScaledVector(normal, lat);
               p.y = this.groundHeightAt(pt, p, lat);
               const scale = 3.5 + rng() * 3.5;
-              newTrees.push({ pos: p, scale, radius: 2.2 });
+              const isPine = rng() < 0.5;
+              newTrees.push({ pos: p, scale, radius: 2.2, kind: isPine ? 'pine' : 'broadleaf', worldHeight: scale * 2.5, tintHex: 0xffffff });
               this.obstacles.push({ pos: p, radius: 2.2, type: 'tree' });
             });
           }
@@ -6807,9 +6680,7 @@
         // Soft glancing speed attenuation (smooth, not halting)
         this.speed *= Math.max(0.6, 1.0 - 0.20 * dt);
 
-        if (sound && sound.playBarrierScrape && Math.abs(this.speed) > 4) {
-          sound.playBarrierScrape();
-        }
+        if (Math.abs(this.speed) > 4) sound.playBarrierScrape();
       }
       this.lateralOffset = latDist; // kept for the stuck-detection check in Game.animate() and any other reader
 
@@ -8609,9 +8480,9 @@
     }
 
     toggleWeather() {
-      this.weather = this.weather === 'rain' ? 'clear' : 'rain';
-      if (this.rain) this.rain.setActive(this.weather === 'rain');
-      this.showScorePopup(0, this.weather === 'rain' ? `${UI.icon('cloudRain')} RAIN` : `${UI.icon('sun')} CLEAR SKIES`);
+      this.weather = this.weather === 'blizzard' ? 'clear' : 'blizzard';
+      if (this.rain) this.rain.setActive(false);
+      this.showScorePopup(0, this.weather === 'blizzard' ? `${UI.icon('cloud')} BLIZZARD` : `${UI.icon('sun')} CLEAR SKIES`);
       sound.playTone(600, 'sine', 0.08);
     }
 
@@ -8821,7 +8692,7 @@
       this.vehicle.snapToNearestRoadPoint(this.world.curve);
       sound.resumeForGameplay();
       this.showScorePopup(0, `${UI.icon('map')} RETURNED TO ROAD — DRIVE SAFELY!`);
-      sound.playRepair && sound.playRepair();
+      sound.playRepair();
     }
 
     showReturnToRoadBanner() {
@@ -9128,8 +8999,7 @@
             <div class="dock-panel-col" style="flex: 0.8;">
               <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">WEATHER</span>
               <div class="dock-btn-row" style="display: flex; gap: 8px;">
-                <button class="dock-sq-btn icon-only-btn ${(!this.selectedWeather || this.selectedWeather === 'clear') ? 'active-sq' : ''}" data-w="clear" title="Clear Sky">${UI.icon('sun', 18)}</button>
-                <button class="dock-sq-btn icon-only-btn ${this.selectedWeather === 'rain' ? 'active-sq' : ''}" data-w="rain" title="Rain">${UI.icon('cloudRain', 18)}</button>
+                <button class="dock-sq-btn icon-only-btn ${(!this.selectedWeather || this.selectedWeather === 'clear' || this.selectedWeather === 'rain') ? 'active-sq' : ''}" data-w="clear" title="Clear Sky">${UI.icon('sun', 18)}</button>
                 <button class="dock-sq-btn icon-only-btn ${this.selectedWeather === 'blizzard' ? 'active-sq' : ''}" data-w="blizzard" title="Blizzard / Snow">${UI.icon('cloud', 18)}</button>
               </div>
             </div>
@@ -9685,9 +9555,7 @@
           this.updateWalking(dt);
         } else {
           this.vehicle.update(dt, this.keys, this.world, this.selectedSeason, this.selectedRoadTerrain);
-          if (sound && sound.updateDrivingAmbience) {
-            sound.updateDrivingAmbience(this.vehicle.speed, this.vehicle.maxSpeed, (this.vehicle.speed - (this.vehicle.lastSpeed || this.vehicle.speed)) / Math.max(0.01, dt));
-          }
+          sound.updateDrivingAmbience(this.vehicle.speed, this.vehicle.maxSpeed, (this.vehicle.speed - (this.vehicle.lastSpeed || this.vehicle.speed)) / Math.max(0.01, dt));
         }
 
         // Infinite Forward Highway Chunk Streaming (Slow Roads Parity)
