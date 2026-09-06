@@ -2764,3 +2764,162 @@ body.touch-controls-active .slowroads-toss-banner {
     height: 58px;
   }
 }
+
+/* ==========================================================================
+   PORTRAIT PHONE OPTIMISATION
+   Aggressive HUD compaction so the 3D game view gets ≥65% of viewport
+   height. Every HUD element shrinks to its minimum functional form.
+
+   Why a second block rather than editing the rules above:
+   These overrides must win over the existing 480px rules via later
+   cascade position. Gathering them here makes the portrait intent legible
+   in one place without scattering edits across the file.
+   ========================================================================== */
+
+/* ── Tier 1: hide entirely (zero functional loss on touch phone) ─────────── */
+@media (max-width: 480px) {
+  /* Status pills: AUDIO ON / CAM: CHASE / SFX / 53 FPS / DAY
+     All states are changeable via the dock panel. Keeping them always
+     visible costs ~40px at the top of a portrait phone for no gain. */
+  .slowroads-sys-btns {
+    display: none;
+  }
+
+  /* Radar map canvas: the 76×76 px canvas is the bulk of the radar box
+     (~130px of its height). The distance label (74m) stays visible.
+     Players can read the road ahead visually from the 3D scene. */
+  .radar-canvas-housing {
+    display: none;
+  }
+
+  /* Autopilot / Recenter pills inside the telemetry column: both buttons
+     are accessible from the dock panel. Hiding them on phone collapses
+     the telemetry box from two columns to just the speed numeral. */
+  .telemetry-controls-col {
+    display: none;
+  }
+
+  /* Notification panel: move from lower-right (conflicts with touch pedals)
+     to upper-right, below the top HUD (~70px from top). */
+  .notification-panel {
+    top: 72px;
+    bottom: auto;
+    right: 8px;
+    max-width: 56vw;
+    max-height: 160px;
+  }
+}
+
+/* ── Tier 2: reposition bottom-corner boxes to a thin bar ───────────────── */
+@media (max-width: 480px) {
+  /* Radar badge: strip to one row (label + distance), reposition to just
+     above the dock so touch controls can live above it unobstructed. */
+  .slowroads-radar-box {
+    bottom: 56px;
+    left: 8px;
+    padding: 5px 9px;
+    gap: 0;
+    flex-direction: row;
+    align-items: center;
+    max-width: none;
+    border-radius: 8px;
+  }
+  .radar-header-row {
+    gap: 8px;
+  }
+  .radar-tag {
+    font-size: 0.46rem;
+  }
+  .radar-dist {
+    font-size: 0.60rem;
+  }
+
+  /* Telemetry badge: speed numeral only, same tier as radar. */
+  .slowroads-telemetry-box {
+    bottom: 56px;
+    right: 8px;
+    gap: 0;
+    max-width: none;
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+  .telemetry-digits-box {
+    padding: 5px 10px;
+    border-radius: 8px;
+  }
+  .telemetry-numeral {
+    font-size: 1.5rem;
+  }
+  .telemetry-sub-row {
+    margin-top: 2px;
+  }
+}
+
+/* ── Tier 3: touch controls — anchor just above the badge row ────────────── */
+/* Both radar and telemetry badges are now ~28–32px tall at bottom:56px,
+   so their top edge is at ~88px from the bottom. Touch controls at
+   bottom:100px sit 12px above that, then reach ~152px (52px button height).
+   That leaves 152px → screen-top as pure 3D game view on a 844px phone —
+   roughly 82% of the visible area above the dock. */
+@media (max-width: 480px) {
+  .touch-steer-cluster {
+    bottom: 100px;
+    left: 8px;
+    gap: 10px;
+  }
+  .touch-pedal-cluster {
+    bottom: 100px;
+    right: 8px;
+    gap: 10px;
+  }
+  .touch-action-btn {
+    bottom: 104px;
+    width: 62px;
+    height: 62px;
+    font-size: 0.72rem;
+  }
+  .touch-steer-btn,
+  .touch-pedal-btn {
+    width: 52px;
+    height: 52px;
+    font-size: 1.3rem;
+  }
+  /* Press state: keep the translateX(-50%) on the action btn */
+  .touch-action-btn.touch-pressed {
+    transform: translateX(-50%) scale(0.94);
+  }
+}
+
+/* ── Tier 4: top HUD compaction ─────────────────────────────────────────── */
+@media (max-width: 480px) {
+  /* Objective + status pills row: tighter top anchor */
+  .shiplyp-top-left {
+    top: 8px;
+    left: 8px;
+  }
+
+  /* Radio + controls cluster: tighter top anchor and reduce internal gap */
+  .shiplyp-top-right {
+    top: 8px;
+    right: 8px;
+    gap: 3px;
+  }
+
+  /* Earnings/health/streak pills: smaller padding so they read in one row */
+  .health-pill, .climate-pill, .earnings-pill, .streak-pill, .rating-pill {
+    padding: 3px 6px;
+    font-size: 0.58rem;
+    gap: 4px;
+  }
+
+  /* Objective card: tighter */
+  .active-order-card {
+    padding: 8px 10px;
+  }
+  .order-customer-name {
+    font-size: 0.72rem;
+  }
+  .order-cargo-info {
+    font-size: 0.62rem;
+  }
+}
