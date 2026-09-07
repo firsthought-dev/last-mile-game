@@ -7417,8 +7417,11 @@
       const isDrifting = !!keys.space;
       const driftGripMult = isDrifting ? 0.40 : 1.0; // 60% friction reduction during power-slide drift
 
-      // Safety Override: Driver manual brake / handbrake disengages Autopilot immediately
-      if (this.isAutodrive && (keys.down || keys.s || keys.space)) {
+      // Safety Override: Driver pressing the brake pedal disengages Autopilot.
+      // Space (handbrake/parcel-toss) intentionally excluded — players toss
+      // parcels while autopilot is active, and button-focus causes the browser
+      // to re-fire Space when a HUD button has keyboard focus.
+      if (this.isAutodrive && (keys.down || keys.s)) {
         this.isAutodrive = false;
         if (typeof document !== 'undefined') {
           const pill = document.getElementById('btn-hud-autodrive');
