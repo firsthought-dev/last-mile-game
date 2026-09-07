@@ -3633,7 +3633,7 @@
 
       const isOffWorld = (season.id === 'offworld' || this.cityKey === 'offworld' || !!season.isOffWorld);
       const rockMat = new THREE.MeshStandardMaterial({
-        color: isOffWorld ? 0x8a4f2b : (season.cliffColor || 0x5a6065),
+        color: isOffWorld ? 0x8a4f2b : 0x7a5c3a, // off-world: Martian red-brown (unchanged); city: warm sandy rock
         roughness: 0.85,
         metalness: 0.05,
         map: RealTextureFactory.rockColor(),
@@ -4107,21 +4107,17 @@
           // Dense Near-Road Rock Scatter — applies across ALL biomes (Earth cities get
           // dense basalt/granite scree along roadside cuttings and shoulders; Off-World gets
           // pebble scatter across dunes).
-          if (!inTunnel && this.prng.next() > (isOffWorld ? 0.08 : 0.25)) {
-            // Minimum offset raised to 3.5m past road edge (was 0.4m) so
-            // no cluster jitter can push a rock back onto the driving surface.
+          if (!inTunnel && this.prng.next() > (isOffWorld ? 0.08 : 0.08)) {
             const minOffset = isOffWorld ? 0.4 : 3.5;
             const maxOffset = isOffWorld ? 34.0 : 28.0;
             const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(minOffset, maxOffset));
             const rPos = pt.clone().addScaledVector(normal, rockDist);
             const clusterCount = Math.floor(this.prng.range(3, isOffWorld ? 8 : 6));
             for (let ci = 0; ci < clusterCount; ci++) {
-              // Tighter jitter (±1.5m, was ±3m) keeps cluster members near
-              // the anchor point so they can't drift back toward the road center.
               const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 3.0, 0, (this.prng.next() - 0.5) * 3.0);
               const cPos = rPos.clone().add(cOffset);
-              const rockScale = isOffWorld ? this.prng.range(0.02, 0.16) : this.prng.range(0.4, 2.8);
-              const requiredClearance = isOffWorld ? (1.3 + rockScale * 0.8) : (CONFIG.ROAD_WIDTH * 0.5 + 2.0 + rockScale * 0.7);
+              const rockScale = isOffWorld ? this.prng.range(0.02, 0.16) : this.prng.range(0.02, 0.3);
+              const requiredClearance = isOffWorld ? (1.3 + rockScale * 0.8) : (CONFIG.ROAD_WIDTH * 0.5 + 2.0 + rockScale * 0.8);
               if (!clearsRoad(cPos, requiredClearance)) continue;
 
               // True signed lateral distance of cPos from the road centerline.
@@ -4238,6 +4234,44 @@
                 pos: cBgPos.clone(), scale: bgScale, rotY: this.prng.next() * Math.PI * 2,
                 radius: 2.2 * bgScale
               });
+            }
+          }
+
+          // City/Earth large background boulder formations — mirrors off-world's
+          // background block but strictly non-offworld only.
+          if (!isOffWorld && i % 3 === 0 && this.prng.next() > 0.35 && !inTunnel) {
+            const bgBoulderDist = side * this.prng.range(35.0, 85.0);
+            const bgBoulderPos = pt.clone().addScaledVector(normal, bgBoulderDist);
+            const bgBoulderCount = Math.floor(this.prng.range(1, 4));
+            for (let ci = 0; ci < bgBoulderCount; ci++) {
+              const bgOff = new THREE.Vector3((this.prng.next() - 0.5) * 10.0, 0, (this.prng.next() - 0.5) * 10.0);
+              const cBgPos = bgBoulderPos.clone().add(bgOff);
+              const boulderScale = this.prng.range(0.8, 3.6);
+              if (!clearsRoad(cBgPos, CONFIG.ROAD_WIDTH * 0.5 + 4.0)) continue;
+              const bgLatDist = normal.dot(bgOff) + bgBoulderDist;
+              cBgPos.y = calcTerrainY(cBgPos, bgLatDist);
+              const bgGeomIdx = Math.floor(this.prng.next() * rockGeomPool.length);
+              const bgChosenGeom = rockGeomPool[bgGeomIdx];
+              const rock = new THREE.Mesh(bgChosenGeom, rockMat);
+              rock.scale.set(
+                boulderScale * this.prng.range(0.7, 1.4),
+                boulderScale * this.prng.range(0.6, 1.1),
+                boulderScale * this.prng.range(0.7, 1.4)
+              );
+              const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
+              rock.rotation.set(rotX, rotY, 0);
+              const bgRotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
+              const bgPosAttr = bgChosenGeom.attributes.position;
+              let bgMinY = Infinity;
+              const bgV = new THREE.Vector3();
+              for (let vi = 0; vi < bgPosAttr.count; vi++) {
+                bgV.set(bgPosAttr.getX(vi), bgPosAttr.getY(vi), bgPosAttr.getZ(vi)).applyMatrix4(bgRotMat).multiply(rock.scale);
+                if (bgV.y < bgMinY) bgMinY = bgV.y;
+              }
+              rock.position.set(cBgPos.x, cBgPos.y - bgMinY, cBgPos.z);
+              rock.userData.isRock = true;
+              this.foliageGroup.add(rock);
+              this.obstacles.push({ pos: cBgPos.clone(), radius: 1.4 * boulderScale, type: 'rock', mesh: rock });
             }
           }
 
