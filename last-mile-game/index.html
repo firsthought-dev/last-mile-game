@@ -48,6 +48,29 @@
 
     <!-- 1. SLOWROADS MINIMALIST HUD ARCHITECTURE -->
     <div id="in-game-hud" class="hud-overlay">
+      <!-- Top-Left: Minimalist Slowroads Delivery Mission Capsule -->
+      <div class="slowroads-delivery-capsule" id="delivery-mission-capsule">
+        <div class="delivery-capsule-header">
+          <div class="delivery-badge">
+            <span class="delivery-status-dot" id="delivery-status-dot"></span>
+            <span id="delivery-tag-text" class="delivery-tag">EXPRESS DROP</span>
+          </div>
+          <span class="delivery-order-seq" id="delivery-count">0/12</span>
+          <span class="delivery-sep">/</span>
+          <span class="delivery-payout" id="delivery-payout-text">₹85</span>
+        </div>
+        <div class="delivery-capsule-body">
+          <div class="delivery-dest-row">
+            <span class="delivery-dest-name" id="delivery-dest-name">Searching for drop point...</span>
+            <span class="delivery-dist-badge" id="delivery-dist-badge">--m</span>
+          </div>
+          <div class="delivery-cargo-row">
+            <span class="delivery-cargo-desc" id="delivery-cargo-desc">Standard Courier Parcel</span>
+            <span class="delivery-side-badge" id="delivery-side-badge">AHEAD</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Top-Right: Slowroads Minimal Audio Bar & System Controls -->
       <div class="slowroads-top-bar">
         <div class="slowroads-radio-pill" id="cassette-radio-card">
@@ -92,6 +115,13 @@
         </div>
       </div>
 
+      <!-- Contextual Drop Action Prompt (Appears within 60m of drop point) -->
+      <div id="drop-action-prompt" class="drop-action-prompt" style="display: none;">
+        <div class="action-key-pill"><span class="key-cap">SPACE</span> EXPRESS DROP</div>
+        <span class="action-sep">•</span>
+        <div class="action-key-pill"><span class="key-cap">E</span> DELIVER ON FOOT</div>
+      </div>
+
       <!-- Bottom-Left: Slowroads Clean Curvature Radar Minimap -->
       <div class="slowroads-radar-box" id="slowroads-radar-box">
         <div class="radar-header-row">
@@ -130,22 +160,27 @@
             <span class="meta-sep">/</span>
             <span id="telemetry-distance" class="telemetry-trip">0.0 KM</span>
           </div>
+          <div class="telemetry-delivery-row">
+            <span class="telemetry-rupee">₹</span><span id="hud-earnings" class="telemetry-earnings">0</span>
+            <span class="meta-sep">/</span>
+            <span id="hud-streak-pill" class="telemetry-streak">1x STREAK</span>
+          </div>
           <!-- Hidden arc for telemetry loop -->
           <svg style="display:none;"><circle id="speed-arc-fill" /></svg>
         </div>
       </div>
 
-      <!-- Hidden hook targets to keep game.js telemetry updates running cleanly -->
+      <!-- Hidden hook targets to keep game.js legacy telemetry & dev-checks running cleanly -->
       <div class="hud-headless-hooks" style="display:none !important;" aria-hidden="true">
         <span id="order-id-label"></span>
         <span id="order-difficulty-pill"></span>
+        <span id="order-target-name"></span>
+        <span id="order-cargo-desc"></span>
         <div id="order-timer-bar"></div>
         <div id="hud-health-pill"><div id="hud-health-fill"></div><span id="hud-health-text"></span></div>
         <div id="hud-climate-pill"><span id="climate-status"></span></div>
-        <span id="hud-earnings"></span>
-        <div id="hud-streak-pill"></div>
-        <span id="delivery-count"></span>
         <div id="waypoint-hud-arrow"><span id="waypoint-target-text"></span></div>
+        <span id="waypoint-distance-text"></span>
       </div>
 
       <div id="score-popup-container" class="score-popup-container"></div>

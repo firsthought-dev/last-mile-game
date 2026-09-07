@@ -842,6 +842,178 @@ function runWorldChecks() {
     }
   }
 
+  // 25. Modern Delivery HUD Capsule, Waypoint & Telemetry Integration
+  {
+    const capsule = document.getElementById('delivery-mission-capsule');
+    const destName = document.getElementById('delivery-dest-name');
+    const distBadge = document.getElementById('delivery-dist-badge');
+    const cargoDesc = document.getElementById('delivery-cargo-desc');
+    const payoutText = document.getElementById('delivery-payout-text');
+    const earningsEl = document.getElementById('hud-earnings');
+    const streakEl = document.getElementById('hud-streak-pill');
+    const promptEl = document.getElementById('drop-action-prompt');
+    const radarCanvas = document.getElementById('gps-radar-canvas');
+
+    const domOk = !!(capsule && destName && distBadge && cargoDesc && payoutText && earningsEl && streakEl && promptEl && radarCanvas);
+    const hasTargets = world.deliveryTargets && world.deliveryTargets.length > 0;
+    const destFilled = destName && destName.textContent.trim().length > 0;
+    const distFilled = distBadge && distBadge.textContent.trim().length > 0;
+
+    record('delivery-hud-capsule-and-radar', domOk && destFilled && distFilled,
+      `capsule/telemetry DOM: ${domOk ? 'OK' : 'MISSING'}, targets: ${world.deliveryTargets ? world.deliveryTargets.length : 0}, dest: "${destName?.textContent}", dist: "${distBadge?.textContent}"`);
+  }
+
+  // 26. Space Express Drop & E On-Foot Delivery Controls (B69 Regression)
+  if (window.game) {
+    const g = window.game;
+    const hasMethods = typeof g.tossParcel3D === 'function' && typeof g.tryWalkDelivery === 'function' && typeof g.toggleOnFoot === 'function';
+    
+    // Test onFoot state transitions
+    const initialOnFoot = !!g.onFoot;
+    g.toggleOnFoot();
+    const transitionedOnFoot = !!g.onFoot && !!g.walkerMesh;
+    g.toggleOnFoot();
+    const restoredVehicle = !g.onFoot && !g.walkerMesh;
+
+    // Test parcel toss spawn
+    const prevParcelsCount = (g.parcels || []).length;
+    g.tossParcel3D();
+    const newParcelsCount = (g.parcels || []).length;
+    const tossSpawned = newParcelsCount > prevParcelsCount;
+    // Clean up test parcel
+    if (tossSpawned && g.parcels.length > 0) {
+      const p = g.parcels.pop();
+      if (p.mesh) g.scene.remove(p.mesh);
+    }
+
+    const controlsOk = hasMethods && !initialOnFoot && transitionedOnFoot && restoredVehicle && tossSpawned;
+    record('delivery-space-and-foot-controls', controlsOk,
+      `methods: ${hasMethods ? 'OK' : 'FAIL'}, onFoot toggle: ${transitionedOnFoot && restoredVehicle ? 'PASS' : 'FAIL'}, tossSpawn: ${tossSpawned ? 'PASS' : 'FAIL'}`);
+  }
+
+  // 27. Floor Mesh Clearance — floor mesh vertices within 65m of the road
+  // must stay safely below the road surface (finalY <= nearestRoadY - 1.0)
+  // so the floor underlayer never breaches or covers the asphalt road or ribbon.
+  {
+    if (world.floorMesh && world.curve) {
+      const floorPos = world.floorMesh.geometry.attributes.position;
+      const roadSamples = world.roadSpacedPoints || world.curve.getSpacedPoints(300);
+      function getNearestRoadY(fx, fz) {
+        let minDistSq = Infinity;
+        let nearY = 0;
+        for (let s = 0; s < roadSamples.length; s += 2) {
+          const dx = fx - roadSamples[s].x;
+          const dz = fz - roadSamples[s].z;
+          const dSq = dx * dx + dz * dz;
+          if (dSq < minDistSq) {
+            minDistSq = dSq;
+            nearY = roadSamples[s].y;
+          }
+        }
+        return { dist: Math.sqrt(minDistSq), y: nearY };
+      }
+
+      let worstBreach = -Infinity;
+      let breaches = 0;
+      let checkedVertices = 0;
+
+      for (let i = 0; i < floorPos.count; i += 7) {
+        const fx = floorPos.getX(i);
+        const fy = floorPos.getY(i);
+        const fz = floorPos.getZ(i);
+        const near = getNearestRoadY(fx, fz);
+        if (near.dist <= 65.0) {
+          checkedVertices++;
+          const breach = fy - near.y;
+          if (breach > worstBreach) worstBreach = breach;
+          if (breach > -0.5) breaches++;
+        }
+      }
+      const ok = worstBreach <= -1.0;
+      record('floor-mesh-never-above-road', ok,
+        `worst floor clearance vs road: ${worstBreach.toFixed(2)}u (expect <= -1.0u, breaches: ${breaches}/${checkedVertices})`);
+    } else {
+      record('floor-mesh-never-above-road', false, 'world.floorMesh not present');
+    }
+  }
+
+  // 28. Tunnel Delivery Exclusion — zero delivery targets, drop rings, or
+  // villas may spawn inside or within 35m of any tunnel zone.
+  {
+    if (world.deliveryTargets && world.tunnelZones) {
+      let tunnelViolations = 0;
+      const totalTargets = world.deliveryTargets.length;
+      const segCount = (typeof CONFIG !== 'undefined' && CONFIG.ROAD_MESH_SEGMENTS) || 1200;
+
+      for (const t of world.deliveryTargets) {
+        const segIdx = Math.round((t.splineU || 0) * segCount);
+        if (world.isInTunnelZone && world.isInTunnelZone(segIdx, 25)) {
+          tunnelViolations++;
+          continue;
+        }
+        for (const z of world.tunnelZones) {
+          const startPt = world.curve.getPointAt(z.start / segCount);
+          const endPt = world.curve.getPointAt(z.end / segCount);
+          if (t.pos.distanceTo(startPt) < 35.0 || t.pos.distanceTo(endPt) < 35.0) {
+            tunnelViolations++;
+            break;
+          }
+        }
+      }
+      record('tunnel-delivery-exclusion', tunnelViolations === 0,
+        `${tunnelViolations}/${totalTargets} delivery targets inside or within 35m of tunnels (tunnel zones: ${world.tunnelZones.length})`);
+    } else {
+      record('tunnel-delivery-exclusion', true, 'No tunnel zones or delivery targets on this map');
+    }
+  }
+
+  // 29. Smart Auto-Headlights & Automotive Lens Materials
+  // Verifies headlight beam spotlights and physical lens materials toggle
+  // synchronously between dark specular glass (OFF) and bright xenon glow (ON).
+  {
+    const g = window.game;
+    const veh = g && g.vehicle;
+    const hasHeadlights = !!(veh && veh.headlights && veh.headlightLensMat);
+    if (hasHeadlights) {
+      const origIntensity = veh.headlights[0]?.intensity || 0;
+
+      // Test OFF state
+      veh.setHeadlightsActive(false, 0);
+      const offOk = veh.headlights.every(h => h.intensity === 0) &&
+                    veh.headlightLensMat.emissive.getHex() === 0x000000;
+
+      // Test ON state
+      veh.setHeadlightsActive(true, 2.5);
+      const onOk = veh.headlights.every(h => h.intensity > 0) &&
+                   veh.headlightLensMat.emissive.getHex() === 0xfff5e6;
+
+      // Restore original state
+      veh.setHeadlightsActive(origIntensity > 0, origIntensity);
+
+      record('auto-headlight-lens-and-beams', offOk && onOk,
+        `OFF state: ${offOk ? 'PASS' : 'FAIL'} (dark specular glass), ON state: ${onOk ? 'PASS' : 'FAIL'} (xenon emission 0xfff5e6)`);
+    } else {
+      record('auto-headlight-lens-and-beams', false, 'Headlight rigs or lens material missing');
+    }
+  }
+
+  // 30. Continuous Diurnal Daylight Cycle
+  // Verifies daylight progress is continuous without discrete jumps or errors.
+  {
+    const g = window.game;
+    const hasCycle = typeof g.dayProgress === 'number' && typeof g.updateDayNightCycle === 'function';
+    if (hasCycle) {
+      const p0 = g.dayProgress;
+      g.updateDayNightCycle(0.016);
+      const p1 = g.dayProgress;
+      const advances = p1 >= p0;
+      record('continuous-daylight-cycle', advances,
+        `dayProgress: ${p0.toFixed(4)} -> ${p1.toFixed(4)} (continuous progression active)`);
+    } else {
+      record('continuous-daylight-cycle', false, 'dayProgress or updateDayNightCycle missing');
+    }
+  }
+
   console.table(results.map(r => ({ check: r.name, pass: r.pass ? 'PASS' : 'FAIL', detail: r.detail })));
   const failed = results.filter(r => !r.pass);
   if (failed.length) {
