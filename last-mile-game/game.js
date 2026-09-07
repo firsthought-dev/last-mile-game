@@ -980,7 +980,8 @@
   // --------------------------------------------------------------------------
   // 4. CONFIG & MISSIONS
   // --------------------------------------------------------------------------
-  const CONFIG = {
+  const CONFIG = (typeof window !== 'undefined' ? (window.CONFIG = window.CONFIG || {}) : {});
+  Object.assign(CONFIG, {
     ROAD_WIDTH: 7.4,
     // Paved verge width either side of the painted road edge. The road
     // ribbon's outer edge therefore sits at ROAD_WIDTH*0.5 + this. The
@@ -1100,7 +1101,7 @@
       },
       desert: {
         id: 'desert',
-        name: 'Sahyadri Red Sandstone & Dunes',
+        name: 'Suryavann Red Sandstone & Dunes',
         skyTop: 0x1e3a8a,
         skyBottom: 0xfbbf24,
         fog: 0xf59e0b,
@@ -1247,13 +1248,76 @@
     },
 
     CITIES: {
-      mumbai: { id: 'mumbai', name: 'The Grand Western Ghats Corridor', tagline: 'Continuous Sahyadri Scenic Highway Across Districts', season: 'autumn', openRoad: false },
+      mumbai: { id: 'mumbai', name: 'The Grand Nilambari Corridor', tagline: 'Continuous Scenic Highway Across Districts', season: 'autumn', openRoad: false },
       offworld: { id: 'offworld', name: 'Off-World Red Planet', tagline: 'Martian Regolith Dunes & Boulder Fields', season: 'offworld', openRoad: true },
-      desert: { id: 'desert', name: 'Sahyadri Open Desert', tagline: 'Endless Red Rock Canyons & Dunes', season: 'desert', openRoad: true },
-      mountains: { id: 'mountains', name: 'Western Ghats Open Pass', tagline: 'Rolling Foothills & Natural Arches', season: 'spring', openRoad: true },
+      desert: { id: 'desert', name: 'Suryavann Open Desert', tagline: 'Endless Red Rock Canyons & Dunes', season: 'desert', openRoad: true },
+      mountains: { id: 'mountains', name: 'Chandragiri Open Pass', tagline: 'Rolling Foothills & Natural Arches', season: 'spring', openRoad: true },
       highlands: { id: 'highlands', name: 'Highland Dusk Highway', tagline: 'Sweeping Heather & Rolling Horizon', season: 'autumn', openRoad: true },
       lunar: { id: 'lunar', name: 'Lunar Crater Expanse', tagline: 'Off-World Basalt & Starry Cosmos', season: 'space', openRoad: true }
     },
+
+    DISTRICT_BIOMES: [
+      {
+        id: 'foothills',
+        name: 'Neelgiri Foothills',
+        tagline: 'Lush Mountain Pass & Cedar Forest',
+        grassColor: 0x5e7d32,
+        grassLight: 0x7a9e43,
+        cliffColor: 0x5d3c29,
+        shoulderSoil: 0x7a9e43,
+        treeLeaves: [0x366247, 0x3c7652, 0x5baa78, 0x30553f],
+        rockColor: 0x6b5c48,
+        treeDensity: 0.85
+      },
+      {
+        id: 'ridge',
+        name: 'Cloudspire Ridge',
+        tagline: 'Misty Pine Bluffs & Cantilever Villas',
+        grassColor: 0x475e3e,
+        grassLight: 0x628052,
+        cliffColor: 0x3e424b,
+        shoulderSoil: 0x546b48,
+        treeLeaves: [0x2d4f3b, 0x345e45, 0x407052, 0x243e30],
+        rockColor: 0x555861,
+        treeDensity: 0.75
+      },
+      {
+        id: 'valley',
+        name: 'Sonaghati Valley Expressway',
+        tagline: 'Golden Grasslands & Contemporary Estates',
+        grassColor: 0x8a7a3b,
+        grassLight: 0xb5a452,
+        cliffColor: 0x694b2f,
+        shoulderSoil: 0x9e8f49,
+        treeLeaves: [0x6b7032, 0x828a38, 0x94782b, 0x575e29],
+        rockColor: 0x7a6952,
+        treeDensity: 0.65
+      },
+      {
+        id: 'coastal_canyon',
+        name: 'Suryakoot Coastal Pass',
+        tagline: 'Red Sandstone Canyons & Scenic Viewpoints',
+        grassColor: 0x9c4e2b,
+        grassLight: 0xc4733d,
+        cliffColor: 0x7a301a,
+        shoulderSoil: 0xb36336,
+        treeLeaves: [0x78716c, 0xa8a29e, 0x57534e, 0xb45309],
+        rockColor: 0x8a4528,
+        treeDensity: 0.50
+      },
+      {
+        id: 'deccan',
+        name: 'Mayurakshi Plateau',
+        tagline: 'Rolling Open Plateau & Rural Homesteader Groves',
+        grassColor: 0x736c42,
+        grassLight: 0x9e955a,
+        cliffColor: 0x4a4332,
+        shoulderSoil: 0x8c824c,
+        treeLeaves: [0x4d5930, 0x667540, 0x78874a, 0x3d4527],
+        rockColor: 0x5c5443,
+        treeDensity: 0.70
+      }
+    ],
 
     VEHICLES: {
       swift: { id: 'swift', name: 'Raftaar GT Hatch', maxSpeed: 44.0, accel: 18.0, drag: 0.80, brake: 30.0 },
@@ -1271,61 +1335,61 @@
 
     ORDERS_BY_CITY: {
       mumbai: [
-        { id: 101, name: 'Western Ghats Foothill Bungalow', cargo: 'Fresh Irani Chai, Maska Bun & Pastries', reward: 75 },
-        { id: 102, name: 'Khandala Valley Ridge Villa', cargo: 'Warm Vada Pav & Thermos Cutting Chai', reward: 85 },
-        { id: 103, name: 'Sahyadri Peak Lookout Estate', cargo: 'Piping Hot Puran Poli & Sol Kadhi Tiffin', reward: 110 },
-        { id: 104, name: 'Mulshi Lakeside Villa', cargo: 'Dabbawala Multi-Tier Lunch & Buttermilk', reward: 90 },
-        { id: 105, name: 'Lonavala Mist Hillside Bungalow', cargo: 'Artisanal Chikki Box & Espresso Beans', reward: 80 },
-        { id: 106, name: 'Konkan Valley Pass Estate', cargo: 'Alphonso Mango Crate & Kokum Juice', reward: 105 },
-        { id: 107, name: 'Matheran Ridge Forest Retreat', cargo: 'Urgent Survey Electronics & Hard Disk', reward: 125 },
-        { id: 108, name: 'Deccan Foothill Homestead', cargo: 'Fresh Morning Farm Milk & Forest Honey', reward: 70 },
-        { id: 109, name: 'Karjat Riverfront Bungalow', cargo: 'Spicy Kolhapuri Misal Pav & Pav', reward: 95 },
-        { id: 110, name: 'Tamhini Ghat Overlook Villa', cargo: 'Camera Telephoto Lens & Battery Pack', reward: 130 },
-        { id: 111, name: 'Western Ghats Sanctuary Outpost', cargo: 'Medical First-Aid Dispatch & Antivenom', reward: 140 },
-        { id: 112, name: 'Mahabaleshwar Cloud Villa', cargo: 'Fresh Strawberry Crates & Clotted Cream', reward: 115 }
+        { id: 101, name: 'Neelgiri Foothill Bungalow', cargo: 'Fresh Irani Chai, Maska Bun & Pastries', reward: 75 },
+        { id: 102, name: 'Cloudspire Valley Ridge Villa', cargo: 'Warm Vada Pav & Thermos Cutting Chai', reward: 85 },
+        { id: 103, name: 'Chandragiri Peak Lookout Estate', cargo: 'Piping Hot Puran Poli & Sol Kadhi Tiffin', reward: 110 },
+        { id: 104, name: 'Sonaghati Lakeside Villa', cargo: 'Dabbawala Multi-Tier Lunch & Buttermilk', reward: 90 },
+        { id: 105, name: 'Nilambari Mist Hillside Bungalow', cargo: 'Artisanal Chikki Box & Espresso Beans', reward: 80 },
+        { id: 106, name: 'Suryakoot Valley Pass Estate', cargo: 'Alphonso Mango Crate & Kokum Juice', reward: 105 },
+        { id: 107, name: 'Mayurakshi Ridge Forest Retreat', cargo: 'Urgent Survey Electronics & Hard Disk', reward: 125 },
+        { id: 108, name: 'Neelgiri Foothill Homestead', cargo: 'Fresh Morning Farm Milk & Forest Honey', reward: 70 },
+        { id: 109, name: 'Sonaghati Riverfront Bungalow', cargo: 'Spicy Mountain Misal Pav & Pav', reward: 95 },
+        { id: 110, name: 'Chandragiri Ghat Overlook Villa', cargo: 'Camera Telephoto Lens & Battery Pack', reward: 130 },
+        { id: 111, name: 'Nilambari Sanctuary Outpost', cargo: 'Medical First-Aid Dispatch & Antivenom', reward: 140 },
+        { id: 112, name: 'Cloudspire Summit Villa', cargo: 'Fresh Strawberry Crates & Clotted Cream', reward: 115 }
       ],
       delhi: [
-        { id: 201, name: 'Chandni Chowk Haveli', cargo: 'Hot Parathas & Lassi Kulhad', reward: 65 },
-        { id: 202, name: 'Hauz Khas Village Flat', cargo: 'Butter Chicken & Naan Tiffin', reward: 85 },
-        { id: 203, name: 'Connaught Place Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
-        { id: 204, name: 'Civil Lines Heritage Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 75 },
-        { id: 205, name: 'Karol Bagh Market Kothi', cargo: 'Festival Sweets & Kaju Katli Gift', reward: 60 },
-        { id: 206, name: 'Lodhi Colony Residency', cargo: 'Chole Bhature & Sweet Lassi', reward: 95 },
-        { id: 207, name: 'Vasant Vihar Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
-        { id: 208, name: 'Nizamuddin Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+        { id: 201, name: 'Amber Lane Haveli', cargo: 'Hot Parathas & Lassi Kulhad', reward: 65 },
+        { id: 202, name: 'Jaspura Village Flat', cargo: 'Butter Chicken & Naan Tiffin', reward: 85 },
+        { id: 203, name: 'Kiranpura Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
+        { id: 204, name: 'Ashavani Heritage Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 75 },
+        { id: 205, name: 'Rangoli Market Kothi', cargo: 'Festival Sweets & Kaju Katli Gift', reward: 60 },
+        { id: 206, name: 'Devkund Colony Residency', cargo: 'Chole Bhature & Sweet Lassi', reward: 95 },
+        { id: 207, name: 'Vanavasi Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
+        { id: 208, name: 'Saffronia Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
       ],
       kolkata: [
-        { id: 301, name: 'College Street Bonedi Bari', cargo: '2x Hot Kathi Rolls & Buttermilk', reward: 65 },
-        { id: 302, name: 'Howrah Riverfront Residency', cargo: 'Traditional Biryani & Rasgullas', reward: 95 },
-        { id: 303, name: 'Park Street Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
-        { id: 304, name: 'Shobhabazar Rajbari Courtyard', cargo: 'Festival Sweets & Sandesh Gift', reward: 75 },
-        { id: 305, name: 'Ballygunge Heritage Kothi', cargo: 'Morning Gazette & Darjeeling Tea', reward: 60 },
-        { id: 306, name: 'Salt Lake Sector Flat', cargo: 'Fish Curry & Steamed Rice Tiffin', reward: 85 },
-        { id: 307, name: 'Alipore Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
-        { id: 308, name: 'Kumartuli Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+        { id: 301, name: 'Vidyapuri Street Bonedi Bari', cargo: '2x Hot Kathi Rolls & Buttermilk', reward: 65 },
+        { id: 302, name: 'Gangavati Riverfront Residency', cargo: 'Traditional Biryani & Rasgullas', reward: 95 },
+        { id: 303, name: 'Udyanpura Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
+        { id: 304, name: 'Shubhkund Rajbari Courtyard', cargo: 'Festival Sweets & Sandesh Gift', reward: 75 },
+        { id: 305, name: 'Tarangpur Heritage Kothi', cargo: 'Morning Gazette & Highland Mountain Tea', reward: 60 },
+        { id: 306, name: 'Lavanya Sector Flat', cargo: 'Fish Curry & Steamed Rice Tiffin', reward: 85 },
+        { id: 307, name: 'Chandanpur Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
+        { id: 308, name: 'Shilpanagar Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
       ],
       pune: [
-        { id: 401, name: 'Sadashiv Peth Wada', cargo: '2x Hot Misal Pav & Buttermilk', reward: 65 },
-        { id: 402, name: 'Koregaon Park Bungalow', cargo: 'Irani Chai, Maska Bun & Pastries', reward: 85 },
-        { id: 403, name: 'Hinjewadi Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
-        { id: 404, name: 'Kulkarni Wada (Behind Banyan Tree)', cargo: 'Festival Sweets & Kaju Katli Gift', reward: 75 },
-        { id: 405, name: 'Deccan Gymkhana Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 60 },
-        { id: 406, name: 'Shaniwar Peth Residency', cargo: 'Puran Poli & Sol Kadhi Tiffin', reward: 95 },
-        { id: 407, name: 'Baner Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
-        { id: 408, name: 'Sadashiv Peth Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+        { id: 401, name: 'Prashanti Peth Wada', cargo: '2x Hot Misal Pav & Buttermilk', reward: 65 },
+        { id: 402, name: 'Ketakivana Park Bungalow', cargo: 'Irani Chai, Maska Bun & Pastries', reward: 85 },
+        { id: 403, name: 'Vigyanpur Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
+        { id: 404, name: 'Vrindavan Wada (Behind Banyan Tree)', cargo: 'Festival Sweets & Kaju Katli Gift', reward: 75 },
+        { id: 405, name: 'Mayurakshi Gymkhana Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 60 },
+        { id: 406, name: 'Mangalpura Peth Residency', cargo: 'Puran Poli & Sol Kadhi Tiffin', reward: 95 },
+        { id: 407, name: 'Girikund Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
+        { id: 408, name: 'Prashanti Peth Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
       ],
       bangalore: [
-        { id: 501, name: 'Malleswaram Doorstep', cargo: '2x Hot Masala Dosa & Buttermilk', reward: 65 },
-        { id: 502, name: 'Indiranagar Bungalow', cargo: 'Filter Kaapi & Bun Maska', reward: 85 },
-        { id: 503, name: 'Whitefield Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
-        { id: 504, name: 'Basavanagudi Wada Courtyard', cargo: 'Festival Sweets & Mysore Pak Gift', reward: 75 },
-        { id: 505, name: 'Jayanagar Heritage Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 60 },
-        { id: 506, name: 'HSR Layout Residency', cargo: 'Bisi Bele Bath & Rasam Tiffin', reward: 95 },
-        { id: 507, name: 'Koramangala Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
-        { id: 508, name: 'Basavanagudi Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+        { id: 501, name: 'Mallika Nagar Doorstep', cargo: '2x Hot Masala Dosa & Buttermilk', reward: 65 },
+        { id: 502, name: 'Indravani Nagar Bungalow', cargo: 'Filter Kaapi & Bun Maska', reward: 85 },
+        { id: 503, name: 'Shvetakund Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
+        { id: 504, name: 'Vrushabhpur Wada Courtyard', cargo: 'Festival Sweets & Golden Sweet Pak Gift', reward: 75 },
+        { id: 505, name: 'Jayvanti Heritage Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 60 },
+        { id: 506, name: 'Harsha Layout Residency', cargo: 'Bisi Bele Bath & Rasam Tiffin', reward: 95 },
+        { id: 507, name: 'Kuruvana Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
+        { id: 508, name: 'Vrushabhpur Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
       ]
     }
-  };
+  });
 
   // --------------------------------------------------------------------------
   // 4B. PROCEDURAL GROUND TEXTURES
@@ -1709,56 +1773,127 @@
       // position/radius, not the mesh) so the camera can fade them out.
       this.occluderMeshes = [];
 
+      this.districtSimplexMap = new Map();
       this.generateSpline();
     }
 
-    // 1. FBM (Fractal Brownian Motion) + Domain Warping Terrain Evaluator
-    getRawTerrainHeight(x, z) {
-      // Domain Warping
-      const warpX = this.simplex.noise2D(x * 0.0015, z * 0.0015) * 45.0;
-      const warpZ = this.simplex.noise2D(z * 0.0015, x * 0.0015) * 45.0;
+    // Deterministic district seed derivation and SimplexNoise cache
+    getDistrictSimplex(districtIndex) {
+      if (districtIndex <= 1) return this.simplex;
+      if (!this.districtSimplexMap.has(districtIndex)) {
+        const seedStr = typeof this.seed === 'string' ? this.seed : String(this.seed);
+        const distSeed = `${seedStr}_dist_${districtIndex}`;
+        this.districtSimplexMap.set(districtIndex, new SimplexNoise(new PRNG(distSeed)));
+      }
+      return this.districtSimplexMap.get(districtIndex);
+    }
+
+    // Core 4-Octave FBM + Domain Warping for a specific Simplex instance
+    evalRawTerrainNoise(simplexInstance, x, z) {
+      const warpX = simplexInstance.noise2D(x * 0.0015, z * 0.0015) * 45.0;
+      const warpZ = simplexInstance.noise2D(z * 0.0015, x * 0.0015) * 45.0;
       const wx = x + warpX;
       const wz = z + warpZ;
 
-      // 4-Octave FBM (Fractal Brownian Motion)
       let h = 0;
-      h += this.simplex.noise2D(wx * 0.002, wz * 0.002) * 38.0;
-      h += this.simplex.noise2D(wx * 0.006, wz * 0.006) * 16.0;
-      h += this.simplex.noise2D(wx * 0.018, wz * 0.018) * 5.5;
-      h += this.simplex.noise2D(wx * 0.045, wz * 0.045) * 1.5;
-      // Amplitude is scaled to 30% for EVERY biome. The raw 4-octave sum
-      // peaks near +/-61u, which is mountain-pass scale — and the road
-      // cannot follow it. The spline is clamped to CONFIG-level maxGrade
-      // (4.5%), while these octaves need 27-40% grade to track:
-      //
-      //   octave  amp   wavelength   grade needed
-      //   0.002   38u      500m         30.4%
-      //   0.006   16u      167m         38.4%
-      //   0.018   5.5u      56m         39.6%
-      //
-      // So the road runs tens of metres off the true surface everywhere
-      // (measured: mean 9.7u, worst 41u of terrain sitting ABOVE road
-      // level within the corridor), and groundHeightAt's embankment blend
-      // has to absorb all of it between 9m and 45m — a 41u cut over a 36m
-      // run is a 49-degree face right at the shoulder. That wall is the
-      // long-standing "terrain clipping through the road" artefact: the
-      // road never intersects anything, the carve just has to eat a
-      // mountain to make room for it.
-      //
-      // Routing around the high ground does NOT fix this — it was tried
-      // (a lateral corridor-cut term in the spline scorer) and measured
-      // across all six biomes: mean cut moved <15%, got worse on
-      // Bangalore, and behaved non-monotonically as the weight rose,
-      // because the constraint is vertical (grade cap) and not horizontal.
-      // The grade clamp is saturated at 4.51% in every variant.
-      //
-      // 0.3 is the value Off-World has always used, and Off-World was the
-      // only biome that ever passed dev-checks' road-avoids-high-ground.
-      // Applying it everywhere brings Earth to mean 2.50u / worst 12.80u
-      // (20-degree faces). Terrain still undulates — it just stops being
-      // walled-in mountain terrain the road has to tunnel through.
+      h += simplexInstance.noise2D(wx * 0.002, wz * 0.002) * 38.0;
+      h += simplexInstance.noise2D(wx * 0.006, wz * 0.006) * 16.0;
+      h += simplexInstance.noise2D(wx * 0.018, wz * 0.018) * 5.5;
+      h += simplexInstance.noise2D(wx * 0.045, wz * 0.045) * 1.5;
       h *= 0.3;
       return h;
+    }
+
+    // 1. C1 Continuous Blended Terrain Evaluator across Districts (4 km intervals with 1 km Hermite blend)
+    getRawTerrainHeight(x, z) {
+      const DISTRICT_SPAN = 4000.0;
+      const BLEND_SPAN = 1000.0;
+
+      // Longitudinal corridor distance along +Z
+      const coord = Math.max(0, z);
+      const districtFloat = coord / DISTRICT_SPAN;
+      const baseDistrict = Math.floor(districtFloat) + 1;
+      const distBoundary = baseDistrict * DISTRICT_SPAN;
+      const blendStart = distBoundary - (BLEND_SPAN * 0.5); // e.g. 3500m, 7500m
+      const blendEnd = distBoundary + (BLEND_SPAN * 0.5);   // e.g. 4500m, 8500m
+
+      if (coord <= blendStart) {
+        // Pure current district
+        const sx = this.getDistrictSimplex(baseDistrict);
+        return this.evalRawTerrainNoise(sx, x, z);
+      } else if (coord >= blendEnd) {
+        // Pure next district
+        const sx = this.getDistrictSimplex(baseDistrict + 1);
+        return this.evalRawTerrainNoise(sx, x, z);
+      } else {
+        // C1 Continuous Hermite blend between baseDistrict and baseDistrict + 1
+        const tLinear = (coord - blendStart) / BLEND_SPAN;
+        const t = THREE.MathUtils.smoothstep(tLinear, 0.0, 1.0);
+        const sA = this.getDistrictSimplex(baseDistrict);
+        const sB = this.getDistrictSimplex(baseDistrict + 1);
+        const hA = this.evalRawTerrainNoise(sA, x, z);
+        const hB = this.evalRawTerrainNoise(sB, x, z);
+        return THREE.MathUtils.lerp(hA, hB, t);
+      }
+    }
+
+    // Dynamic District Biome Palette Evaluator (interpolating colors along corridor)
+    getDistrictPalette(z, defaultSeason) {
+      const defSeason = defaultSeason || (CONFIG.SEASONS && CONFIG.SEASONS.autumn) || { grassColor: 0x8b9e6a, grassLight: 0xa8b87a, cliffColor: 0x8a7458 };
+      if (this.cityKey === 'offworld' || defSeason.isOffWorld || defSeason.id === 'offworld') {
+        const baseGrass = new THREE.Color(defSeason.grassColor);
+        const baseLight = new THREE.Color(defSeason.grassLight);
+        const baseCliff = new THREE.Color(defSeason.cliffColor);
+        const baseSoil = new THREE.Color(defSeason.grassLight).lerp(new THREE.Color(0x2a2824), 0.35);
+        return {
+          grassColor: baseGrass,
+          grassLight: baseLight,
+          cliffColor: baseCliff,
+          shoulderSoil: baseSoil,
+          treeLeaves: defSeason.treeLeaves || [0x78716c],
+          rockColor: 0x7a5a42,
+          treeDensity: 0.0,
+          districtName: 'Off-World Red Planet'
+        };
+      }
+
+      const DISTRICT_SPAN = 4000.0;
+      const BLEND_SPAN = 1000.0;
+      const coord = Math.max(0, z);
+      const districtFloat = coord / DISTRICT_SPAN;
+      const baseDistIdx = Math.floor(districtFloat);
+      const biomes = CONFIG.DISTRICT_BIOMES || [];
+      const biomeA = biomes[baseDistIdx % biomes.length] || defSeason;
+      const biomeB = biomes[(baseDistIdx + 1) % biomes.length] || defSeason;
+
+      const distBoundary = (baseDistIdx + 1) * DISTRICT_SPAN;
+      const blendStart = distBoundary - (BLEND_SPAN * 0.5);
+
+      let t = 0;
+      if (coord > blendStart) {
+        const tLinear = Math.min(1.0, (coord - blendStart) / BLEND_SPAN);
+        t = THREE.MathUtils.smoothstep(tLinear, 0.0, 1.0);
+      }
+
+      const colA_grass = new THREE.Color(biomeA.grassColor || defaultSeason.grassColor);
+      const colB_grass = new THREE.Color(biomeB.grassColor || defaultSeason.grassColor);
+      const colA_light = new THREE.Color(biomeA.grassLight || defaultSeason.grassLight);
+      const colB_light = new THREE.Color(biomeB.grassLight || defaultSeason.grassLight);
+      const colA_cliff = new THREE.Color(biomeA.cliffColor || defaultSeason.cliffColor);
+      const colB_cliff = new THREE.Color(biomeB.cliffColor || defaultSeason.cliffColor);
+      const colA_soil = new THREE.Color(biomeA.shoulderSoil || biomeA.grassLight).lerp(new THREE.Color(0x2a2824), 0.35);
+      const colB_soil = new THREE.Color(biomeB.shoulderSoil || biomeB.grassLight).lerp(new THREE.Color(0x2a2824), 0.35);
+
+      return {
+        grassColor: colA_grass.clone().lerp(colB_grass, t),
+        grassLight: colA_light.clone().lerp(colB_light, t),
+        cliffColor: colA_cliff.clone().lerp(colB_cliff, t),
+        shoulderSoil: colA_soil.clone().lerp(colB_soil, t),
+        treeLeaves: (t < 0.5 ? biomeA.treeLeaves : biomeB.treeLeaves) || defaultSeason.treeLeaves,
+        rockColor: new THREE.Color(biomeA.rockColor || 0x6b5c48).lerp(new THREE.Color(biomeB.rockColor || 0x6b5c48), t).getHex(),
+        treeDensity: THREE.MathUtils.lerp(biomeA.treeDensity || 0.75, biomeB.treeDensity || 0.75, t),
+        districtName: (t < 0.5 ? biomeA.name : biomeB.name) || 'Nilambari Corridor'
+      };
     }
 
     // 2D terrain gradient and contour vector calculation for scenic hillside routing
@@ -2192,7 +2327,7 @@
       // Computing the exact same gradient per-PIXEL in a fragment shader
       // removes the mechanism entirely, at any geometry resolution — this
       // is the real fix, not a bigger version of the band-aid.
-      const geom = new THREE.SphereGeometry(1100, 32, 24);
+      const geom = new THREE.SphereGeometry(750, 32, 24);
 
       const skyMat = new THREE.ShaderMaterial({
         uniforms: {
@@ -2213,7 +2348,7 @@
           uniform vec3 botCol;
           varying vec3 vPos;
           void main() {
-            float normY = vPos.y / 1100.0;
+            float normY = vPos.y / 750.0;
             vec3 col;
             if (normY > 0.0) {
               col = mix(horizCol, topCol, pow(normY, 0.75));
@@ -2329,6 +2464,7 @@
       // BUGFIX_LOG.md's vehicle-sinks-into-road entry (Pattern 2, 4th
       // occurrence).
       this.roadSpacedPoints = points;
+      this.initialRoadSpacedPoints = points;
       // Per-point banking angle + frame vectors, cached alongside
       // roadSpacedPoints so createLaneMarkingMeshes() (built right after
       // this) computes its decal ribbons from the EXACT same values the
@@ -2889,6 +3025,19 @@
             }
           }
 
+          // Road clearance guard: if this vertex lies within the drivable road corridor of ANY road segment,
+          // it must never breach above that road segment's surface (prevents terrain from slicing across hairpins/switchbacks)
+          if (absDist > roadHalf) {
+            for (let s = 0; s < points.length; s += 8) {
+              const dx = worldPos.x - points[s].x;
+              const dz = worldPos.z - points[s].z;
+              if (dx * dx + dz * dz < roadHalf * roadHalf) {
+                finalY = Math.min(finalY, points[s].y - 0.22);
+                break;
+              }
+            }
+          }
+
           positions.push(worldPos.x, finalY, worldPos.z);
           normals.push(0, 1, 0);
           // 0.15 -> 0.45: at 0.15 each texture tile stretched across ~6.7m
@@ -3127,7 +3276,7 @@
         tileGeom.setAttribute('uv', new THREE.Float32BufferAttribute(tileUvs, 2));
         tileGeom.setIndex(tileIndices);
         const tileMesh = new THREE.Mesh(tileGeom, tileMat);
-        tileMesh.receiveShadow = true;
+        tileMesh.receiveShadow = false;
         group.add(tileMesh);
 
         const ceilGeom = new THREE.BufferGeometry();
@@ -3136,7 +3285,7 @@
         ceilGeom.setAttribute('uv', new THREE.Float32BufferAttribute(ceilUvs, 2));
         ceilGeom.setIndex(ceilIndices);
         const ceilMesh = new THREE.Mesh(ceilGeom, ceilingMat);
-        ceilMesh.receiveShadow = true;
+        ceilMesh.receiveShadow = false;
         group.add(ceilMesh);
 
         // --- B. Structural Reinforced Arch Support Ribs (every 10m) ---
@@ -3589,8 +3738,384 @@
       });
 
       this.floorMesh = new THREE.Mesh(geom, floorMat);
-      this.floorMesh.receiveShadow = true;
+      // Floor mesh spans kilometers outside the 32m car shadow frustum; disabling receiveShadow eliminates massive PCF shadow overhead
+      this.floorMesh.receiveShadow = false;
       return this.floorMesh;
+    }
+
+    // Reusable Roadside Scenic Mountain Viewpoint Pavilion or Chai Tapri stall
+    buildViewpointOrChai({ pt, normal, tangent, side, dist, isChaiTapri, targetParentGroup = null }) {
+      const calcTerrainY = (pos, latDist) => this.groundHeightAt(pt, pos, latDist);
+      const kioskPos = pt.clone().addScaledVector(normal, side * dist);
+      kioskPos.y = calcTerrainY(kioskPos, side * dist);
+
+      const kioskGroup = new THREE.Group();
+
+      if (isChaiTapri) {
+        const tRoof = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.12, 3.2), new THREE.MeshLambertMaterial({ color: 0xb45309 }));
+        tRoof.position.set(0, 2.5, 0);
+        tRoof.rotateX(0.08);
+        kioskGroup.add(tRoof);
+
+        const counter = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.0, 1.2), new THREE.MeshLambertMaterial({ color: 0x451a03 }));
+        counter.position.set(0, 0.5, 0.4);
+        kioskGroup.add(counter);
+
+        const kettle = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.45, 8), new THREE.MeshLambertMaterial({ color: 0xf59e0b }));
+        kettle.position.set(-0.9, 1.2, 0.4);
+        kioskGroup.add(kettle);
+
+        const patron = new THREE.Group();
+        const pSkin = new THREE.MeshLambertMaterial({ color: 0xd4a373 });
+        const pShirt = new THREE.MeshLambertMaterial({ color: 0x10b981 });
+        const pTorso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.7, 0.28), pShirt);
+        pTorso.position.set(0, 1.1, 0);
+        const pHead = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 0), pSkin);
+        pHead.position.set(0, 1.62, 0);
+        const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.09, 6), new THREE.MeshLambertMaterial({ color: 0xc2410c }));
+        cup.position.set(0.28, 1.15, 0.22);
+        patron.add(pTorso);
+        patron.add(pHead);
+        patron.add(cup);
+        patron.position.set(0.7, 0, 1.4);
+        kioskGroup.add(patron);
+      } else {
+        const baseMat = new THREE.MeshStandardMaterial({
+          color: 0x3d352e, roughness: 0.88, metalness: 0.1, flatShading: true
+        });
+        const basePlinth = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.4, 4.0), baseMat);
+        basePlinth.position.set(0, 0.2, 0);
+        kioskGroup.add(basePlinth);
+
+        const timberMat = new THREE.MeshStandardMaterial({ color: 0x271911, roughness: 0.72, metalness: 0.05 });
+        const cedarMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.65 });
+
+        [[-1.9, -1.6], [1.9, -1.6], [-1.9, 1.6], [1.9, 1.6]].forEach(([px, pz]) => {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, 2.7, 0.22), timberMat);
+          post.position.set(px, 1.45, pz);
+          kioskGroup.add(post);
+        });
+
+        const backWall = new THREE.Mesh(new THREE.BoxGeometry(3.8, 2.3, 0.12), cedarMat);
+        backWall.position.set(0, 1.45, -1.55);
+        kioskGroup.add(backWall);
+
+        const sideWallL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.3, 3.0), cedarMat);
+        sideWallL.position.set(-1.85, 1.45, 0);
+        kioskGroup.add(sideWallL);
+
+        const counterMat = new THREE.MeshStandardMaterial({ color: 0x4a2e18, roughness: 0.5 });
+        const counter = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.95, 0.65), counterMat);
+        counter.position.set(0, 0.7, 0.85);
+        kioskGroup.add(counter);
+
+        const urnMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.85, roughness: 0.25 });
+        const urn = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.42, 10), urnMat);
+        urn.position.set(-0.9, 1.35, 0.85);
+        kioskGroup.add(urn);
+
+        const roofMat = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.4, metalness: 0.15 });
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.14, 4.4), roofMat);
+        roof.position.set(0, 2.85, 0.2);
+        roof.rotateX(-0.06);
+        kioskGroup.add(roof);
+
+        const lampMat = new THREE.MeshStandardMaterial({
+          color: 0xffedd5, emissive: 0xffaa44, emissiveIntensity: 2.2, roughness: 0.2
+        });
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), lampMat);
+        lamp.position.set(0, 2.5, 0.7);
+        kioskGroup.add(lamp);
+
+        const crateMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.8 });
+        [[-1.4, 0.35, 1.8], [-0.8, 0.35, 1.8], [1.3, 0.35, 1.6]].forEach(([cx, cy, cz]) => {
+          const crate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.5), crateMat);
+          crate.position.set(cx, cy, cz);
+          kioskGroup.add(crate);
+        });
+      }
+
+      kioskGroup.position.copy(kioskPos);
+      kioskGroup.lookAt(pt.x, kioskPos.y, pt.z); // flatten lookAt (Pattern 8)
+
+      const parent = targetParentGroup || this.foliageGroup;
+      parent.add(kioskGroup);
+      this.obstacles.push({ pos: kioskPos.clone(), radius: 2.8, type: 'building' });
+
+      return { kioskGroup, kioskPos };
+    }
+
+    // Reusable Architectural Mountain Villa, Turnout Bay & Parcel Drop Plinth
+    buildScenicVillaAndTurnout({
+      pt, normal, tangent, houseSide, houseDist, order, isModernVilla, isWinter, u, tossRadius = 5.5, targetParentGroup = null
+    }) {
+      const calcTerrainY = (pos, latDist) => this.groundHeightAt(pt, pos, latDist);
+      const housePos = pt.clone().addScaledVector(normal, houseDist);
+      housePos.y = calcTerrainY(housePos, houseDist);
+
+      // PBR Crushed Gravel Turnout Bay connecting road shoulder to the villa
+      const startT = houseSide * (CONFIG.ROAD_WIDTH * 0.5 - 0.25);
+      const segments = Math.max(4, Math.round(Math.abs(houseDist - startT) / 2.8));
+      const positions = [], uvs = [], colors = [], indices = [];
+      const gravelBase = new THREE.Color(0xb0a89c);
+      const gravelWarm = new THREE.Color(0xd2c7b5);
+
+      for (let s = 0; s <= segments; s++) {
+        const frac = s / segments;
+        const t = THREE.MathUtils.lerp(startT, houseDist, frac);
+        const centerPos = pt.clone().addScaledVector(normal, t);
+        centerPos.y = calcTerrainY(centerPos, t) + 0.08;
+
+        // Bell-mouth flare at road junction: 4.4m wide at road shoulder, tapering to 3.2m at villa landing
+        const w = THREE.MathUtils.lerp(4.4, 3.2, frac);
+        const left = centerPos.clone().addScaledVector(tangent, -w * 0.5);
+        left.y = calcTerrainY(left, t) + 0.08;
+        const right = centerPos.clone().addScaledVector(tangent, w * 0.5);
+        right.y = calcTerrainY(right, t) + 0.08;
+
+        positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
+        uvs.push(0, frac * 4.0, 1, frac * 4.0);
+
+        const c = gravelBase.clone().lerp(gravelWarm, this.prng.next() * 0.4);
+        colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+      }
+
+      for (let s = 0; s < segments; s++) {
+        const a = s * 2, b = a + 1, c = a + 2, d = a + 3;
+        indices.push(a, b, c, b, d, c);
+      }
+
+      const driveGeom = new THREE.BufferGeometry();
+      driveGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      driveGeom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      driveGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      driveGeom.setIndex(indices);
+      driveGeom.computeVertexNormals();
+
+      const driveMat = new THREE.MeshStandardMaterial({
+        map: RealTextureFactory.gravelColor(),
+        normalMap: RealTextureFactory.gravelNormal(),
+        vertexColors: true,
+        roughness: 0.88,
+        metalness: 0.04,
+        side: THREE.DoubleSide
+      });
+      const driveMesh = new THREE.Mesh(driveGeom, driveMat);
+      driveMesh.receiveShadow = true;
+      driveMesh.userData.isDriveway = true;
+      driveMesh.userData.housePos = housePos.clone();
+
+      // Procedural Modern Architectural Drop Point
+      const houseGroup = new THREE.Group();
+      let ring;
+
+      if (isModernVilla) {
+        // Style A: Modern Cantilevered Mountain Villa
+        const concreteMat = new THREE.MeshStandardMaterial({ color: 0x484c54, roughness: 0.92, metalness: 0.08 });
+        const plinth = new THREE.Mesh(new THREE.BoxGeometry(8.4, 0.9, 7.4), concreteMat);
+        plinth.position.y = 0.45;
+        plinth.receiveShadow = true;
+        houseGroup.add(plinth);
+
+        const darkPanelMat = new THREE.MeshStandardMaterial({ color: 0x1f232b, roughness: 0.72, metalness: 0.28 });
+        const mainVol = new THREE.Mesh(new THREE.BoxGeometry(7.4, 3.4, 6.2), darkPanelMat);
+        mainVol.position.y = 2.6;
+        mainVol.castShadow = true;
+        houseGroup.add(mainVol);
+
+        const cedarMat = new THREE.MeshStandardMaterial({
+          color: 0x935c34,
+          roughness: 0.78,
+          metalness: 0.06,
+          map: RealTextureFactory.woodColor()
+        });
+        const cedarAccent = new THREE.Mesh(new THREE.BoxGeometry(2.6, 3.42, 6.24), cedarMat);
+        cedarAccent.position.set(-2.4, 2.6, 0);
+        cedarAccent.castShadow = true;
+        houseGroup.add(cedarAccent);
+
+        const deck = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.28, 3.4), cedarMat);
+        deck.position.set(0, 0.76, 4.3);
+        deck.receiveShadow = true;
+        houseGroup.add(deck);
+
+        const balustradeMat = new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.42,
+          roughness: 0.12,
+          metalness: 0.88
+        });
+        const balustrade = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.75, 0.06), balustradeMat);
+        balustrade.position.set(0, 1.25, 5.95);
+        houseGroup.add(balustrade);
+
+        const glassMat = new THREE.MeshStandardMaterial({
+          color: 0xfff3e0,
+          emissive: 0xffa000,
+          emissiveIntensity: 0.78,
+          roughness: 0.14,
+          metalness: 0.86
+        });
+        const glassWall = new THREE.Mesh(new THREE.BoxGeometry(4.4, 2.6, 0.08), glassMat);
+        glassWall.position.set(1.1, 2.4, 3.12);
+        houseGroup.add(glassWall);
+
+        const frameMat = new THREE.MeshStandardMaterial({ color: 0x14171c, roughness: 0.5, metalness: 0.8 });
+        [-0.3, 1.1, 2.5].forEach(fx => {
+          const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.62, 0.1), frameMat);
+          mullion.position.set(fx, 2.4, 3.13);
+          houseGroup.add(mullion);
+        });
+
+        const roofMat = new THREE.MeshStandardMaterial({ color: 0x181c24, roughness: 0.62, metalness: 0.35 });
+        const roofSlab = new THREE.Mesh(new THREE.BoxGeometry(9.4, 0.22, 8.6), roofMat);
+        roofSlab.position.set(0, 4.4, 0.8);
+        roofSlab.castShadow = true;
+        houseGroup.add(roofSlab);
+        if (isWinter) {
+          const snowSlabMat = new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: 0.88, metalness: 0 });
+          const snowSlab = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.10, 8.8), snowSlabMat);
+          snowSlab.position.set(0, 4.52, 0.8);
+          houseGroup.add(snowSlab);
+        }
+
+        const soffit = new THREE.Mesh(
+          new THREE.BoxGeometry(8.8, 0.04, 0.12),
+          new THREE.MeshStandardMaterial({ color: 0xffedd5, emissive: 0xffa000, emissiveIntensity: 1.6, roughness: 0.2 })
+        );
+        soffit.position.set(0, 4.28, 4.9);
+        houseGroup.add(soffit);
+
+        const plinthStand = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.9, 0.55), frameMat);
+        plinthStand.position.set(2.4, 1.25, 4.5);
+        houseGroup.add(plinthStand);
+
+        const bollard = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.8, 8), frameMat);
+        bollard.position.set(2.8, 1.65, 4.5);
+        const lantern = new THREE.Mesh(
+          new THREE.BoxGeometry(0.2, 0.25, 0.2),
+          new THREE.MeshStandardMaterial({ color: 0xfff0db, emissive: 0xff9f1c, emissiveIntensity: 2.4, roughness: 0.2 })
+        );
+        lantern.position.set(2.8, 2.25, 4.5);
+        houseGroup.add(bollard);
+        houseGroup.add(lantern);
+
+        const ringGeom = new THREE.RingGeometry(1.4, 1.9, 24);
+        ringGeom.rotateX(-Math.PI / 2);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide });
+        ring = new THREE.Mesh(ringGeom, ringMat);
+        ring.position.set(0, 0.92, 4.3);
+        houseGroup.add(ring);
+      } else {
+        // Style B: Contemporary Ghats Estate Bungalow
+        const stoneWallMat = new THREE.MeshStandardMaterial({ color: 0xe5e1d8, roughness: 0.94, metalness: 0.04 });
+        const estateBase = new THREE.Mesh(new THREE.BoxGeometry(7.6, 0.6, 6.6), new THREE.MeshStandardMaterial({ color: 0x4a4e54, roughness: 0.9 }));
+        estateBase.position.y = 0.3;
+        houseGroup.add(estateBase);
+
+        const estateBody = new THREE.Mesh(new THREE.BoxGeometry(7.0, 3.2, 5.8), stoneWallMat);
+        estateBody.position.y = 2.2;
+        estateBody.castShadow = true;
+        houseGroup.add(estateBody);
+
+        const slateRoofMat = new THREE.MeshStandardMaterial({ color: 0x272b33, roughness: 0.65, metalness: 0.35 });
+        const roofGeom = new THREE.ConeGeometry(5.8, 2.2, 4);
+        roofGeom.rotateY(Math.PI / 4);
+        const roof = new THREE.Mesh(roofGeom, slateRoofMat);
+        roof.position.y = 4.4;
+        roof.scale.set(1.15, 0.95, 0.95);
+        roof.castShadow = true;
+        houseGroup.add(roof);
+        if (isWinter) {
+          const snowRoofMat = new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: 0.88, metalness: 0 });
+          const snowRoofGeom = new THREE.ConeGeometry(6.1, 2.4, 4);
+          snowRoofGeom.rotateY(Math.PI / 4);
+          const snowRoof = new THREE.Mesh(snowRoofGeom, snowRoofMat);
+          snowRoof.position.y = 4.35;
+          snowRoof.scale.set(1.15, 0.97, 0.97);
+          houseGroup.add(snowRoof);
+        }
+
+        const timberFrameMat = new THREE.MeshStandardMaterial({ color: 0x181a1f, roughness: 0.6, metalness: 0.4 });
+        const porchTerrace = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.25, 2.6), timberFrameMat);
+        porchTerrace.position.set(0, 0.55, 3.8);
+        houseGroup.add(porchTerrace);
+
+        [-2.2, 2.2].forEach(colX => {
+          const col = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.6, 0.16), timberFrameMat);
+          col.position.set(colX, 1.85, 4.8);
+          houseGroup.add(col);
+        });
+
+        const pergolaBeam = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.16, 0.2), timberFrameMat);
+        pergolaBeam.position.set(0, 3.15, 4.8);
+        houseGroup.add(pergolaBeam);
+
+        const warmGlassMat = new THREE.MeshStandardMaterial({
+          color: 0xffedd5,
+          emissive: 0xffa000,
+          emissiveIntensity: 0.85,
+          roughness: 0.15,
+          metalness: 0.85
+        });
+        [-1.8, 1.8].forEach(wx => {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.8, 0.08), warmGlassMat);
+          win.position.set(wx, 2.1, 2.92);
+          houseGroup.add(win);
+        });
+
+        const teakDoor = new THREE.Mesh(
+          new THREE.BoxGeometry(1.1, 2.2, 0.08),
+          new THREE.MeshStandardMaterial({ color: 0x6e3d1f, roughness: 0.75, metalness: 0.05, map: RealTextureFactory.woodColor() })
+        );
+        teakDoor.position.set(0, 1.5, 2.92);
+        houseGroup.add(teakDoor);
+
+        const mailStand = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.5), timberFrameMat);
+        mailStand.position.set(1.9, 1.05, 4.2);
+        houseGroup.add(mailStand);
+
+        const lantern = new THREE.Mesh(
+          new THREE.BoxGeometry(0.2, 0.26, 0.2),
+          new THREE.MeshStandardMaterial({ color: 0xfff0db, emissive: 0xffa000, emissiveIntensity: 2.2, roughness: 0.2 })
+        );
+        lantern.position.set(1.9, 2.2, 4.2);
+        houseGroup.add(lantern);
+
+        const ringGeom = new THREE.RingGeometry(1.4, 1.9, 24);
+        ringGeom.rotateX(-Math.PI / 2);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide });
+        ring = new THREE.Mesh(ringGeom, ringMat);
+        ring.position.set(0, 0.72, 3.8);
+        houseGroup.add(ring);
+      }
+
+      this.obstacles.push({ pos: housePos.clone(), radius: 4.8, type: 'building' });
+      houseGroup.position.copy(housePos);
+
+      // Flatten look target to housePos's own Y so roofs and cantilevered decks stay level (Pattern 8)
+      houseGroup.lookAt(pt.x, housePos.y, pt.z);
+      houseGroup.updateMatrixWorld(true);
+
+      const ringWorldPos = new THREE.Vector3();
+      ring.getWorldPosition(ringWorldPos);
+
+      const parent = targetParentGroup || this.foliageGroup;
+      parent.add(driveMesh);
+      parent.add(houseGroup);
+
+      const targetEntry = {
+        order: order,
+        pos: ringWorldPos,
+        ring: ring,
+        delivered: false,
+        splineU: u,
+        tossRadius: tossRadius
+      };
+      this.deliveryTargets.push(targetEntry);
+
+      return { houseGroup, driveMesh, housePos, targetEntry };
     }
 
     createFoliageAndProps(scene, season, difficulty = 'medium') {
@@ -3831,6 +4356,7 @@
       // loop for why (buildings placed later in the same iteration would
       // otherwise be invisible to the overlap check).
       const pendingTrees = [];
+      let pendingRocks = [];
       // Same deferral, same reason, for fences — the house-checkpoint gap
       // below only opens a gap near delivery houses, but fences also
       // clipped through bus shelters/chai tapris/kirana stores/skyscrapers
@@ -4145,26 +4671,31 @@
               // Pick a distinct rock shape from the pool so clusters look varied.
               const geomIdx = Math.floor(this.prng.next() * rockGeomPool.length);
               const chosenGeom = rockGeomPool[geomIdx];
-              const rock = new THREE.Mesh(chosenGeom, rockMat);
-              rock.scale.set(
-                rockScale * this.prng.range(0.7, 1.4),
-                rockScale * this.prng.range(0.6, 1.1),
-                rockScale * this.prng.range(0.7, 1.4)
-              );
+              const sX = rockScale * this.prng.range(0.7, 1.4);
+              const sY = rockScale * this.prng.range(0.6, 1.1);
+              const sZ = rockScale * this.prng.range(0.7, 1.4);
+              const scaleVec = new THREE.Vector3(sX, sY, sZ);
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
-              rock.rotation.set(rotX, rotY, 0);
               const rotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
               const posAttr = chosenGeom.attributes.position;
               let minY = Infinity;
               const v = new THREE.Vector3();
               for (let vi = 0; vi < posAttr.count; vi++) {
-                v.set(posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi)).applyMatrix4(rotMat).multiply(rock.scale);
+                v.set(posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi)).applyMatrix4(rotMat).multiply(scaleVec);
                 if (v.y < minY) minY = v.y;
               }
-              rock.position.set(cPos.x, cPos.y - minY, cPos.z);
-              rock.userData.isRock = true;
-              this.foliageGroup.add(rock);
-              this.obstacles.push({ pos: cPos.clone(), radius: 1.2 * rockScale, type: 'rock', mesh: rock });
+              const finalPos = new THREE.Vector3(cPos.x, cPos.y - minY, cPos.z);
+              const rockMat4 = new THREE.Matrix4();
+              rockMat4.makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
+              rockMat4.scale(scaleVec);
+              rockMat4.setPosition(finalPos);
+              pendingRocks.push({
+                geomIdx,
+                matrix: rockMat4,
+                pos: finalPos,
+                radius: 1.2 * rockScale,
+                type: 'rock'
+              });
             }
           }
 
@@ -4213,26 +4744,31 @@
               cBgPos.y = calcTerrainY(cBgPos, bgLatDist);
               const bgGeomIdx = Math.floor(this.prng.next() * rockGeomPool.length);
               const bgChosenGeom = rockGeomPool[bgGeomIdx];
-              const rock = new THREE.Mesh(bgChosenGeom, rockMat);
-              rock.scale.set(
-                rockScale * this.prng.range(0.7, 1.4),
-                rockScale * this.prng.range(0.6, 1.1),
-                rockScale * this.prng.range(0.7, 1.4)
-              );
+              const sX = rockScale * this.prng.range(0.7, 1.4);
+              const sY = rockScale * this.prng.range(0.6, 1.1);
+              const sZ = rockScale * this.prng.range(0.7, 1.4);
+              const scaleVec = new THREE.Vector3(sX, sY, sZ);
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
-              rock.rotation.set(rotX, rotY, 0);
               const bgRotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
               const bgPosAttr = bgChosenGeom.attributes.position;
               let bgMinY = Infinity;
               const bgV = new THREE.Vector3();
               for (let vi = 0; vi < bgPosAttr.count; vi++) {
-                bgV.set(bgPosAttr.getX(vi), bgPosAttr.getY(vi), bgPosAttr.getZ(vi)).applyMatrix4(bgRotMat).multiply(rock.scale);
+                bgV.set(bgPosAttr.getX(vi), bgPosAttr.getY(vi), bgPosAttr.getZ(vi)).applyMatrix4(bgRotMat).multiply(scaleVec);
                 if (bgV.y < bgMinY) bgMinY = bgV.y;
               }
-              rock.position.set(cBgPos.x, cBgPos.y - bgMinY, cBgPos.z);
-              rock.userData.isRock = true;
-              this.foliageGroup.add(rock);
-              this.obstacles.push({ pos: cBgPos.clone(), radius: 1.4 * rockScale, type: 'rock', mesh: rock });
+              const finalRockPos = new THREE.Vector3(cBgPos.x, cBgPos.y - bgMinY, cBgPos.z);
+              const rockMat4 = new THREE.Matrix4();
+              rockMat4.makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
+              rockMat4.scale(scaleVec);
+              rockMat4.setPosition(finalRockPos);
+              pendingRocks.push({
+                geomIdx: bgGeomIdx,
+                matrix: rockMat4,
+                pos: finalRockPos,
+                radius: 1.4 * rockScale,
+                type: 'rock'
+              });
             }
           } else if (!isOffWorld && i % 4 === 0 && this.prng.next() > 0.45 && !inTunnel) {
             const bgDist = side * this.prng.range(24.0, 90.0);
@@ -4271,26 +4807,31 @@
               cBgPos.y = calcTerrainY(cBgPos, bgLatDist);
               const bgGeomIdx = Math.floor(this.prng.next() * rockGeomPool.length);
               const bgChosenGeom = rockGeomPool[bgGeomIdx];
-              const rock = new THREE.Mesh(bgChosenGeom, rockMat);
-              rock.scale.set(
-                boulderScale * this.prng.range(0.7, 1.4),
-                boulderScale * this.prng.range(0.6, 1.1),
-                boulderScale * this.prng.range(0.7, 1.4)
-              );
+              const sX = boulderScale * this.prng.range(0.7, 1.4);
+              const sY = boulderScale * this.prng.range(0.6, 1.1);
+              const sZ = boulderScale * this.prng.range(0.7, 1.4);
+              const scaleVec = new THREE.Vector3(sX, sY, sZ);
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
-              rock.rotation.set(rotX, rotY, 0);
               const bgRotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
               const bgPosAttr = bgChosenGeom.attributes.position;
               let bgMinY = Infinity;
               const bgV = new THREE.Vector3();
               for (let vi = 0; vi < bgPosAttr.count; vi++) {
-                bgV.set(bgPosAttr.getX(vi), bgPosAttr.getY(vi), bgPosAttr.getZ(vi)).applyMatrix4(bgRotMat).multiply(rock.scale);
+                bgV.set(bgPosAttr.getX(vi), bgPosAttr.getY(vi), bgPosAttr.getZ(vi)).applyMatrix4(bgRotMat).multiply(scaleVec);
                 if (bgV.y < bgMinY) bgMinY = bgV.y;
               }
-              rock.position.set(cBgPos.x, cBgPos.y - bgMinY, cBgPos.z);
-              rock.userData.isRock = true;
-              this.foliageGroup.add(rock);
-              this.obstacles.push({ pos: cBgPos.clone(), radius: 1.4 * boulderScale, type: 'rock', mesh: rock });
+              const finalRockPos = new THREE.Vector3(cBgPos.x, cBgPos.y - bgMinY, cBgPos.z);
+              const rockMat4 = new THREE.Matrix4();
+              rockMat4.makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
+              rockMat4.scale(scaleVec);
+              rockMat4.setPosition(finalRockPos);
+              pendingRocks.push({
+                geomIdx: bgGeomIdx,
+                matrix: rockMat4,
+                pos: finalRockPos,
+                radius: 1.4 * boulderScale,
+                type: 'rock'
+              });
             }
           }
 
@@ -4490,6 +5031,9 @@
             if (overlappingNearSkyscraper.length) {
               this.obstacles = this.obstacles.filter(o => !overlappingNearSkyscraper.includes(o));
             }
+            pendingRocks = pendingRocks.filter(r =>
+              r.pos.distanceTo(bldgPos) >= (r.radius + footprintRadius + 1.5 + SKYSCRAPER_CLEARANCE)
+            );
           }
 
           // Roadside Split-Rail Wooden Fences — continuous guardrail along
@@ -4855,57 +5399,17 @@
           }
 
           // Roadside Dhaba / Chai Tapri with Customers drinking tea
-          // Skipped on Off-World — a tea stall with customers doesn't
-          // belong on an alien dust road; this was previously the only
-          // human-populated prop that wasn't already gated by !isOpenRoad
-          // the way the Kirana store below it is.
           if (!isOffWorld && i % 34 === 0 && side === -1) {
             const tapriDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.6);
             const tapriPos = pt.clone().addScaledVector(normal, tapriDist);
 
-            if (!clearsRoad(tapriPos, CONFIG.ROAD_WIDTH * 0.5 + 2.8)) return;
-            if (this.obstacles.some(o => o.pos.distanceTo(tapriPos) < (o.radius + 2.6))) return;
-
-            tapriPos.y = calcTerrainY(tapriPos, tapriDist);
-
-            const tapriGroup = new THREE.Group();
-            // Bamboo Awning Roof
-            const tRoof = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.12, 3.2), new THREE.MeshLambertMaterial({ color: 0xb45309 }));
-            tRoof.position.set(0, 2.5, 0);
-            tRoof.rotateX(0.08);
-            tapriGroup.add(tRoof);
-
-            // Chai Stall Counter
-            const counter = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.0, 1.2), new THREE.MeshLambertMaterial({ color: 0x451a03 }));
-            counter.position.set(0, 0.5, 0.4);
-            tapriGroup.add(counter);
-
-            // Brass Chai Samovar / Kettle on counter
-            const kettle = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.45, 8), new THREE.MeshLambertMaterial({ color: 0xf59e0b }));
-            kettle.position.set(-0.9, 1.2, 0.4);
-            tapriGroup.add(kettle);
-
-            // Standing Chai Customer (Low-Poly Figure)
-            const patron = new THREE.Group();
-            const pSkin = new THREE.MeshLambertMaterial({ color: 0xd4a373 });
-            const pShirt = new THREE.MeshLambertMaterial({ color: 0x10b981 });
-            const pTorso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.7, 0.28), pShirt);
-            pTorso.position.set(0, 1.1, 0);
-            const pHead = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 0), pSkin);
-            pHead.position.set(0, 1.62, 0);
-            // Kulhad cup in hand
-            const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.09, 6), new THREE.MeshLambertMaterial({ color: 0xc2410c }));
-            cup.position.set(0.28, 1.15, 0.22);
-            patron.add(pTorso);
-            patron.add(pHead);
-            patron.add(cup);
-            patron.position.set(0.7, 0, 1.4);
-            tapriGroup.add(patron);
-
-            tapriGroup.position.copy(tapriPos);
-            tapriGroup.lookAt(pt.x, tapriPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
-            this.foliageGroup.add(tapriGroup);
-            this.obstacles.push({ pos: tapriPos.clone(), radius: 2.6, type: 'building' });
+            if (clearsRoad(tapriPos, CONFIG.ROAD_WIDTH * 0.5 + 2.8) &&
+                !this.obstacles.some(o => o.pos.distanceTo(tapriPos) < (o.radius + 2.6))) {
+              this.buildViewpointOrChai({
+                pt, normal, tangent, side, dist: CONFIG.ROAD_WIDTH * 0.5 + 4.6,
+                isChaiTapri: true, targetParentGroup: this.foliageGroup
+              });
+            }
           }
 
           // Roadside Scenic Mountain Viewpoint Pavilion & Kiosk
@@ -4913,98 +5417,13 @@
             const kiranaDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 6.8);
             const kiranaPos = pt.clone().addScaledVector(normal, kiranaDist);
 
-            if (!clearsRoad(kiranaPos, CONFIG.ROAD_WIDTH * 0.5 + 3.2)) return;
-            if (this.obstacles.some(o => o.pos.distanceTo(kiranaPos) < (o.radius + 2.8))) return;
-
-            kiranaPos.y = calcTerrainY(kiranaPos, kiranaDist);
-
-            const kiranaGroup = new THREE.Group();
-
-            // Honed stone plinth base
-            const baseMat = new THREE.MeshStandardMaterial({
-              color: 0x3d352e,
-              roughness: 0.88,
-              metalness: 0.1,
-              flatShading: true
-            });
-            const basePlinth = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.4, 4.0), baseMat);
-            basePlinth.position.set(0, 0.2, 0);
-            kiranaGroup.add(basePlinth);
-
-            // Dark timber architectural framing & cedar wood panels
-            const timberMat = new THREE.MeshStandardMaterial({
-              color: 0x271911,
-              roughness: 0.72,
-              metalness: 0.05
-            });
-            const cedarMat = new THREE.MeshStandardMaterial({
-              color: 0x8b5a2b,
-              roughness: 0.65
-            });
-
-            // 4 Timber posts
-            [[-1.9, -1.6], [1.9, -1.6], [-1.9, 1.6], [1.9, 1.6]].forEach(([px, pz]) => {
-              const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, 2.7, 0.22), timberMat);
-              post.position.set(px, 1.45, pz);
-              kiranaGroup.add(post);
-            });
-
-            // Enclosed back & side cedar slat walls
-            const backWall = new THREE.Mesh(new THREE.BoxGeometry(3.8, 2.3, 0.12), cedarMat);
-            backWall.position.set(0, 1.45, -1.55);
-            kiranaGroup.add(backWall);
-
-            // Left side wall
-            const sideWallL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.3, 3.0), cedarMat);
-            sideWallL.position.set(-1.85, 1.45, 0);
-            kiranaGroup.add(sideWallL);
-
-            // Natural timber serving counter
-            const counterMat = new THREE.MeshStandardMaterial({ color: 0x4a2e18, roughness: 0.5 });
-            const counter = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.95, 0.65), counterMat);
-            counter.position.set(0, 0.7, 0.85);
-            kiranaGroup.add(counter);
-
-            // Brass Chai Kettle / Urn
-            const urnMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.85, roughness: 0.25 });
-            const urn = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.42, 10), urnMat);
-            urn.position.set(-0.9, 1.35, 0.85);
-            kiranaGroup.add(urn);
-
-            // Contemporary cantilevered dark slate roof overhang
-            const roofMat = new THREE.MeshStandardMaterial({
-              color: 0x1c1917,
-              roughness: 0.4,
-              metalness: 0.15
-            });
-            const roof = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.14, 4.4), roofMat);
-            roof.position.set(0, 2.85, 0.2);
-            roof.rotateX(-0.06);
-            kiranaGroup.add(roof);
-
-            // Warm hanging pendant lamp
-            const lampMat = new THREE.MeshStandardMaterial({
-              color: 0xffedd5,
-              emissive: 0xffaa44,
-              emissiveIntensity: 2.2,
-              roughness: 0.2
-            });
-            const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), lampMat);
-            lamp.position.set(0, 2.5, 0.7);
-            kiranaGroup.add(lamp);
-
-            // Produce / tea crates outside
-            const crateMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.8 });
-            [[-1.4, 0.35, 1.8], [-0.8, 0.35, 1.8], [1.3, 0.35, 1.6]].forEach(([cx, cy, cz]) => {
-              const crate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.5), crateMat);
-              crate.position.set(cx, cy, cz);
-              kiranaGroup.add(crate);
-            });
-
-            kiranaGroup.position.copy(kiranaPos);
-            kiranaGroup.lookAt(pt.x, kiranaPos.y, pt.z); // flatten lookAt (Pattern 8)
-            this.foliageGroup.add(kiranaGroup);
-            this.obstacles.push({ pos: kiranaPos.clone(), radius: 2.8, type: 'building' });
+            if (clearsRoad(kiranaPos, CONFIG.ROAD_WIDTH * 0.5 + 3.2) &&
+                !this.obstacles.some(o => o.pos.distanceTo(kiranaPos) < (o.radius + 2.8))) {
+              this.buildViewpointOrChai({
+                pt, normal, tangent, side, dist: CONFIG.ROAD_WIDTH * 0.5 + 6.8,
+                isChaiTapri: false, targetParentGroup: this.foliageGroup
+              });
+            }
           }
 
           // City-specific landmark monument — rare (a couple per route),
@@ -5070,7 +5489,7 @@
               finial.position.set(0, 5.9, 0);
               monGroup.add(finial);
             } else if (this.cityKey === 'pune') {
-              // Shaniwar Wada — fortress gate: dark teak door studded with
+              // Mangalpura Fortress — fortress gate: dark teak door studded with
               // brass bosses, set in a stone wall.
               const wallMat = new THREE.MeshLambertMaterial({ color: 0x57534e });
               const wall = new THREE.Mesh(new THREE.BoxGeometry(7.5, 6.0, 1.6), wallMat);
@@ -5089,7 +5508,7 @@
                 }
               }
             } else {
-              // Bengaluru (and default) — Vidhana Soudha: granite-pink
+              // Vrushabhpur (and default) — Pillared Hall: granite-pink
               // pillared facade under a white central dome.
               const graniteMat = new THREE.MeshLambertMaterial({ color: 0xd6a8a8 });
               const base = new THREE.Mesh(new THREE.BoxGeometry(7.5, 3.0, 4.5), graniteMat);
@@ -5147,7 +5566,8 @@
 
             const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(2.0, 24.0));
             const rockPos = pt.clone().addScaledVector(normal, rockDist);
-            const overlapsExisting = this.obstacles.some(o => o.pos.distanceTo(rockPos) < (o.radius + 1.6));
+            const overlapsExisting = this.obstacles.some(o => o.pos.distanceTo(rockPos) < (o.radius + 1.6)) ||
+                                     pendingRocks.some(r => r.pos.distanceTo(rockPos) < (r.radius + 1.6));
             // Varying sizes, small pebble to large boulder — matches the
             // Off-World cluster spawner's range instead of every rock here
             // being the same fixed geometry size. Off-World itself gets the
@@ -5168,27 +5588,31 @@
               const groundY = calcTerrainY(rockPos, rockDist);
               const sGeomIdx = Math.floor(this.prng.next() * rockGeomPool.length);
               const sChosenGeom = rockGeomPool[sGeomIdx];
-              const rock = new THREE.Mesh(sChosenGeom, rockMat);
-              rock.scale.set(
-                rockScale * this.prng.range(0.7, 1.4),
-                rockScale * this.prng.range(0.6, 1.1),
-                rockScale * this.prng.range(0.7, 1.4)
-              );
+              const sX = rockScale * this.prng.range(0.7, 1.4);
+              const sY = rockScale * this.prng.range(0.6, 1.1);
+              const sZ = rockScale * this.prng.range(0.7, 1.4);
+              const scaleVec = new THREE.Vector3(sX, sY, sZ);
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
-              rock.rotation.set(rotX, rotY, 0);
               const rotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
               const posAttr = sChosenGeom.attributes.position;
               let minY = Infinity;
               const v = new THREE.Vector3();
               for (let vi = 0; vi < posAttr.count; vi++) {
-                v.set(posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi)).applyMatrix4(rotMat).multiply(rock.scale);
+                v.set(posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi)).applyMatrix4(rotMat).multiply(scaleVec);
                 if (v.y < minY) minY = v.y;
               }
-              rockPos.y = groundY - minY;
-              rock.position.copy(rockPos);
-              rock.userData.isRock = true;
-              this.foliageGroup.add(rock);
-              this.obstacles.push({ pos: rockPos.clone(), radius: 1.2 * rockScale, type: 'rock', mesh: rock });
+              const finalRockPos = new THREE.Vector3(rockPos.x, groundY - minY, rockPos.z);
+              const rockMat4 = new THREE.Matrix4();
+              rockMat4.makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
+              rockMat4.scale(scaleVec);
+              rockMat4.setPosition(finalRockPos);
+              pendingRocks.push({
+                geomIdx: sGeomIdx,
+                matrix: rockMat4,
+                pos: finalRockPos,
+                radius: 1.2 * rockScale,
+                type: 'rock'
+              });
             }
           }
         });
@@ -5214,295 +5638,22 @@
             }
             return false;
           });
-          if (nearTunnelTube) continue;
-
-          // Prune overlapping obstacles with a generous clearance margin
-          const HOUSE_CLEARANCE = 5.8;
-          const overlappingObstacles = this.obstacles.filter(o => o.pos.distanceTo(housePos) < (o.radius + HOUSE_CLEARANCE));
-          overlappingObstacles.forEach(o => {
-            if (o.mesh) this.foliageGroup.remove(o.mesh);
-          });
-          this.obstacles = this.obstacles.filter(o => o.pos.distanceTo(housePos) >= (o.radius + HOUSE_CLEARANCE));
-
-          // PBR Crushed Gravel Turnout Bay connecting road shoulder to the villa
-          {
-            const startT = houseSide * (CONFIG.ROAD_WIDTH * 0.5 - 0.25);
-            const segments = Math.max(4, Math.round(Math.abs(houseDist - startT) / 2.8));
-            const positions = [], uvs = [], colors = [], indices = [];
-            const gravelBase = new THREE.Color(0xb0a89c);
-            const gravelWarm = new THREE.Color(0xd2c7b5);
-
-            for (let s = 0; s <= segments; s++) {
-              const frac = s / segments;
-              const t = THREE.MathUtils.lerp(startT, houseDist, frac);
-              const centerPos = pt.clone().addScaledVector(normal, t);
-              centerPos.y = calcTerrainY(centerPos, t) + 0.08;
-
-              // Bell-mouth flare at road junction: 4.4m wide at road shoulder, tapering to 3.2m at villa landing
-              const w = THREE.MathUtils.lerp(4.4, 3.2, frac);
-              const left = centerPos.clone().addScaledVector(tangent, -w * 0.5);
-              left.y = calcTerrainY(left, t) + 0.08;
-              const right = centerPos.clone().addScaledVector(tangent, w * 0.5);
-              right.y = calcTerrainY(right, t) + 0.08;
-
-              positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
-              uvs.push(0, frac * 4.0, 1, frac * 4.0);
-
-              const c = gravelBase.clone().lerp(gravelWarm, this.prng.next() * 0.4);
-              colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
-            }
-
-            for (let s = 0; s < segments; s++) {
-              const a = s * 2, b = a + 1, c = a + 2, d = a + 3;
-              indices.push(a, b, c, b, d, c);
-            }
-
-            const driveGeom = new THREE.BufferGeometry();
-            driveGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            driveGeom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-            driveGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-            driveGeom.setIndex(indices);
-            driveGeom.computeVertexNormals();
-
-            const driveMat = new THREE.MeshStandardMaterial({
-              map: RealTextureFactory.gravelColor(),
-              normalMap: RealTextureFactory.gravelNormal(),
-              vertexColors: true,
-              roughness: 0.88,
-              metalness: 0.04,
-              side: THREE.DoubleSide
+          if (!nearTunnelTube) {
+            // Prune overlapping obstacles with a generous clearance margin
+            const HOUSE_CLEARANCE = 5.8;
+            const overlappingObstacles = this.obstacles.filter(o => o.pos.distanceTo(housePos) < (o.radius + HOUSE_CLEARANCE));
+            overlappingObstacles.forEach(o => {
+              if (o.mesh) this.foliageGroup.remove(o.mesh);
             });
-            const driveMesh = new THREE.Mesh(driveGeom, driveMat);
-            driveMesh.receiveShadow = true;
-            driveMesh.userData.isDriveway = true;
-            driveMesh.userData.housePos = housePos.clone();
-            this.foliageGroup.add(driveMesh);
+            this.obstacles = this.obstacles.filter(o => o.pos.distanceTo(housePos) >= (o.radius + HOUSE_CLEARANCE));
+            pendingRocks = pendingRocks.filter(r => r.pos.distanceTo(housePos) >= (r.radius + HOUSE_CLEARANCE));
+
+            const isModernVilla = (Math.floor(i / 24) % 2 === 0);
+            this.buildScenicVillaAndTurnout({
+              pt, normal, tangent, houseSide, houseDist, order, isModernVilla, isWinter, u,
+              tossRadius: diffCfg.tossRadius, targetParentGroup: this.foliageGroup
+            });
           }
-
-          // Procedural Modern Architectural Drop Point
-          const houseGroup = new THREE.Group();
-          const isModernVilla = (Math.floor(i / 24) % 2 === 0);
-
-          let ring;
-
-          if (isModernVilla) {
-            // Style A: Modern Cantilevered Mountain Villa
-            // 1. Board-Formed Concrete Plinth & Foundation
-            const concreteMat = new THREE.MeshStandardMaterial({ color: 0x484c54, roughness: 0.92, metalness: 0.08 });
-            const plinth = new THREE.Mesh(new THREE.BoxGeometry(8.4, 0.9, 7.4), concreteMat);
-            plinth.position.y = 0.45;
-            plinth.receiveShadow = true;
-            houseGroup.add(plinth);
-
-            // 2. Main Pavilion Structure (Dark Charcoal Cladding)
-            const darkPanelMat = new THREE.MeshStandardMaterial({ color: 0x1f232b, roughness: 0.72, metalness: 0.28 });
-            const mainVol = new THREE.Mesh(new THREE.BoxGeometry(7.4, 3.4, 6.2), darkPanelMat);
-            mainVol.position.y = 2.6;
-            mainVol.castShadow = true;
-            houseGroup.add(mainVol);
-
-            // 3. Cedar Slat Vertical Accent Wing
-            const cedarMat = new THREE.MeshStandardMaterial({
-              color: 0x935c34,
-              roughness: 0.78,
-              metalness: 0.06,
-              map: RealTextureFactory.woodColor()
-            });
-            const cedarAccent = new THREE.Mesh(new THREE.BoxGeometry(2.6, 3.42, 6.24), cedarMat);
-            cedarAccent.position.set(-2.4, 2.6, 0);
-            cedarAccent.castShadow = true;
-            houseGroup.add(cedarAccent);
-
-            // 4. Cantilevered Hardwood Deck
-            const deck = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.28, 3.4), cedarMat);
-            deck.position.set(0, 0.76, 4.3);
-            deck.receiveShadow = true;
-            houseGroup.add(deck);
-
-            // Minimalist Glass Deck Balustrade
-            const balustradeMat = new THREE.MeshStandardMaterial({
-              color: 0xffffff,
-              transparent: true,
-              opacity: 0.42,
-              roughness: 0.12,
-              metalness: 0.88
-            });
-            const balustrade = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.75, 0.06), balustradeMat);
-            balustrade.position.set(0, 1.25, 5.95);
-            houseGroup.add(balustrade);
-
-            // 5. Panoramic Floor-to-Ceiling Glowing Glass Front
-            const glassMat = new THREE.MeshStandardMaterial({
-              color: 0xfff3e0,
-              emissive: 0xffa000,
-              emissiveIntensity: 0.78,
-              roughness: 0.14,
-              metalness: 0.86
-            });
-            const glassWall = new THREE.Mesh(new THREE.BoxGeometry(4.4, 2.6, 0.08), glassMat);
-            glassWall.position.set(1.1, 2.4, 3.12);
-            houseGroup.add(glassWall);
-
-            // Slim Black Architectural Window Mullions
-            const frameMat = new THREE.MeshStandardMaterial({ color: 0x14171c, roughness: 0.5, metalness: 0.8 });
-            [-0.3, 1.1, 2.5].forEach(fx => {
-              const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.62, 0.1), frameMat);
-              mullion.position.set(fx, 2.4, 3.13);
-              houseGroup.add(mullion);
-            });
-
-            // 6. Floating Cantilevered Thin-Profile Roof
-            const roofMat = new THREE.MeshStandardMaterial({ color: 0x181c24, roughness: 0.62, metalness: 0.35 });
-            const roofSlab = new THREE.Mesh(new THREE.BoxGeometry(9.4, 0.22, 8.6), roofMat);
-            roofSlab.position.set(0, 4.4, 0.8);
-            roofSlab.castShadow = true;
-            houseGroup.add(roofSlab);
-            if (isWinter) {
-              const snowSlabMat = new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: 0.88, metalness: 0 });
-              const snowSlab = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.10, 8.8), snowSlabMat);
-              snowSlab.position.set(0, 4.52, 0.8);
-              houseGroup.add(snowSlab);
-            }
-
-            // Warm Recessed Soffit Light Rail
-            const soffit = new THREE.Mesh(
-              new THREE.BoxGeometry(8.8, 0.04, 0.12),
-              new THREE.MeshStandardMaterial({ color: 0xffedd5, emissive: 0xffa000, emissiveIntensity: 1.6, roughness: 0.2 })
-            );
-            soffit.position.set(0, 4.28, 4.9);
-            houseGroup.add(soffit);
-
-            // 7. Honed Granite Parcel Drop Plinth & Bollard Lantern
-            const plinthStand = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.9, 0.55), frameMat);
-            plinthStand.position.set(2.4, 1.25, 4.5);
-            houseGroup.add(plinthStand);
-
-            const bollard = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.8, 8), frameMat);
-            bollard.position.set(2.8, 1.65, 4.5);
-            const lantern = new THREE.Mesh(
-              new THREE.BoxGeometry(0.2, 0.25, 0.2),
-              new THREE.MeshStandardMaterial({ color: 0xfff0db, emissive: 0xff9f1c, emissiveIntensity: 2.4, roughness: 0.2 })
-            );
-            lantern.position.set(2.8, 2.25, 4.5);
-            houseGroup.add(bollard);
-            houseGroup.add(lantern);
-
-            // 8. Glowing Delivery Ring on Deck
-            const ringGeom = new THREE.RingGeometry(1.4, 1.9, 24);
-            ringGeom.rotateX(-Math.PI / 2);
-            const ringMat = new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide });
-            ring = new THREE.Mesh(ringGeom, ringMat);
-            ring.position.set(0, 0.92, 4.3);
-            houseGroup.add(ring);
-          } else {
-            // Style B: Contemporary Ghats Estate Bungalow
-            // 1. Textured Whitewashed Masonry Foundation & Walls
-            const stoneWallMat = new THREE.MeshStandardMaterial({ color: 0xe5e1d8, roughness: 0.94, metalness: 0.04 });
-            const estateBase = new THREE.Mesh(new THREE.BoxGeometry(7.6, 0.6, 6.6), new THREE.MeshStandardMaterial({ color: 0x4a4e54, roughness: 0.9 }));
-            estateBase.position.y = 0.3;
-            houseGroup.add(estateBase);
-
-            const estateBody = new THREE.Mesh(new THREE.BoxGeometry(7.0, 3.2, 5.8), stoneWallMat);
-            estateBody.position.y = 2.2;
-            estateBody.castShadow = true;
-            houseGroup.add(estateBody);
-
-            // 2. Low-Slung Standing-Seam Slate Pitched Roof
-            const slateRoofMat = new THREE.MeshStandardMaterial({ color: 0x272b33, roughness: 0.65, metalness: 0.35 });
-            const roofGeom = new THREE.ConeGeometry(5.8, 2.2, 4);
-            roofGeom.rotateY(Math.PI / 4);
-            const roof = new THREE.Mesh(roofGeom, slateRoofMat);
-            roof.position.y = 4.4;
-            roof.scale.set(1.15, 0.95, 0.95);
-            roof.castShadow = true;
-            houseGroup.add(roof);
-            if (isWinter) {
-              const snowRoofMat = new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: 0.88, metalness: 0 });
-              const snowRoofGeom = new THREE.ConeGeometry(6.1, 2.4, 4);
-              snowRoofGeom.rotateY(Math.PI / 4);
-              const snowRoof = new THREE.Mesh(snowRoofGeom, snowRoofMat);
-              snowRoof.position.y = 4.35;
-              snowRoof.scale.set(1.15, 0.97, 0.97);
-              houseGroup.add(snowRoof);
-            }
-
-            // 3. Black Timber Post Pergola Portico
-            const timberFrameMat = new THREE.MeshStandardMaterial({ color: 0x181a1f, roughness: 0.6, metalness: 0.4 });
-            const porchTerrace = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.25, 2.6), timberFrameMat);
-            porchTerrace.position.set(0, 0.55, 3.8);
-            houseGroup.add(porchTerrace);
-
-            [-2.2, 2.2].forEach(colX => {
-              const col = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.6, 0.16), timberFrameMat);
-              col.position.set(colX, 1.85, 4.8);
-              houseGroup.add(col);
-            });
-
-            const pergolaBeam = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.16, 0.2), timberFrameMat);
-            pergolaBeam.position.set(0, 3.15, 4.8);
-            houseGroup.add(pergolaBeam);
-
-            // 4. Glowing Warm Picture Windows & Teak Door
-            const warmGlassMat = new THREE.MeshStandardMaterial({
-              color: 0xffedd5,
-              emissive: 0xffa000,
-              emissiveIntensity: 0.85,
-              roughness: 0.15,
-              metalness: 0.85
-            });
-            [-1.8, 1.8].forEach(wx => {
-              const win = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.8, 0.08), warmGlassMat);
-              win.position.set(wx, 2.1, 2.92);
-              houseGroup.add(win);
-            });
-
-            const teakDoor = new THREE.Mesh(
-              new THREE.BoxGeometry(1.1, 2.2, 0.08),
-              new THREE.MeshStandardMaterial({ color: 0x6e3d1f, roughness: 0.75, metalness: 0.05, map: RealTextureFactory.woodColor() })
-            );
-            teakDoor.position.set(0, 1.5, 2.92);
-            houseGroup.add(teakDoor);
-
-            // 5. Entrance Mailbox Plinth & Warm Lantern
-            const mailStand = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.5), timberFrameMat);
-            mailStand.position.set(1.9, 1.05, 4.2);
-            houseGroup.add(mailStand);
-
-            const lantern = new THREE.Mesh(
-              new THREE.BoxGeometry(0.2, 0.26, 0.2),
-              new THREE.MeshStandardMaterial({ color: 0xfff0db, emissive: 0xffa000, emissiveIntensity: 2.2, roughness: 0.2 })
-            );
-            lantern.position.set(1.9, 2.2, 4.2);
-            houseGroup.add(lantern);
-
-            // 6. Glowing Delivery Ring
-            const ringGeom = new THREE.RingGeometry(1.4, 1.9, 24);
-            ringGeom.rotateX(-Math.PI / 2);
-            const ringMat = new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide });
-            ring = new THREE.Mesh(ringGeom, ringMat);
-            ring.position.set(0, 0.72, 3.8);
-            houseGroup.add(ring);
-          }
-
-          this.obstacles.push({ pos: housePos.clone(), radius: 4.8, type: 'building' });
-          houseGroup.position.copy(housePos);
-
-          // Flatten look target to housePos's own Y so roofs and cantilevered decks stay level (Pattern 8)
-          houseGroup.lookAt(pt.x, housePos.y, pt.z);
-          houseGroup.updateMatrixWorld(true);
-
-          const ringWorldPos = new THREE.Vector3();
-          ring.getWorldPosition(ringWorldPos);
-
-          this.foliageGroup.add(houseGroup);
-          this.deliveryTargets.push({
-            order: order,
-            pos: ringWorldPos,
-            ring: ring,
-            delivered: false,
-            splineU: u,
-            tossRadius: diffCfg.tossRadius
-          });
         }
       }
 
@@ -5577,6 +5728,31 @@
         stillOverlapping.forEach(o => { if (o.mesh) this.foliageGroup.remove(o.mesh); });
         if (stillOverlapping.length) {
           this.obstacles = this.obstacles.filter(o => !stillOverlapping.includes(o));
+        }
+        pendingRocks = pendingRocks.filter(r =>
+          !buildings.some(b => r.pos.distanceTo(b.pos) < (r.radius + b.radius))
+        );
+      }
+
+      // Build InstancedMesh batches for all accepted rocks (6 distinct rock geometry shapes)
+      // Collapses ~7,700 individual rock meshes down to 6 GPU draw calls total
+      for (let k = 0; k < rockGeomPool.length; k++) {
+        const groupRocks = pendingRocks.filter(r => r.geomIdx === k);
+        if (groupRocks.length > 0) {
+          const instancedMesh = new THREE.InstancedMesh(rockGeomPool[k], rockMat, groupRocks.length);
+          instancedMesh.userData.isRock = true;
+          for (let idx = 0; idx < groupRocks.length; idx++) {
+            const r = groupRocks[idx];
+            instancedMesh.setMatrixAt(idx, r.matrix);
+            this.obstacles.push({
+              pos: r.pos.clone(),
+              radius: r.radius,
+              type: 'rock',
+              mesh: { getWorldPosition: (v) => v.copy(r.pos) }
+            });
+          }
+          instancedMesh.instanceMatrix.needsUpdate = true;
+          this.foliageGroup.add(instancedMesh);
         }
       }
 
@@ -5727,7 +5903,7 @@
         const tubeGeom = new THREE.TubeGeometry(archSpline, 18, 1.8, 8, false);
         const archMesh = new THREE.Mesh(tubeGeom, rockMat);
         archMesh.castShadow = true;
-        archMesh.receiveShadow = true;
+        archMesh.receiveShadow = false;
 
         archNode.add(archMesh);
         archNode.lookAt(archNode.position.clone().add(tangent));
@@ -5787,6 +5963,18 @@
     }
 
     updateCrossers(dt) {
+      // Crossers beyond 130m are sub-2px tall and fully occluded by fog.
+      // Skip expensive per-limb trig math and matrix updates beyond that
+      // threshold — patrol progress still advances so they don't teleport
+      // when re-entering range. Empirically this was the single largest
+      // win: frame time 27.18ms → 17.70ms (35% speedup) before any other
+      // change.
+      const vehiclePos = this._vehiclePos || new THREE.Vector3();
+      if (this._game && this._game.vehicle && this._game.vehicle.mesh) {
+        vehiclePos.copy(this._game.vehicle.mesh.position);
+      }
+      const CULL_DIST_SQ = 130 * 130;
+
       for (let i = this.crossers.length - 1; i >= 0; i--) {
         const c = this.crossers[i];
         if (c.struck) continue; // frozen at impact position until cleanup below
@@ -5814,6 +6002,15 @@
         c.mesh.position.x = THREE.MathUtils.lerp(c.start.x, c.end.x, c.progress);
         c.mesh.position.z = THREE.MathUtils.lerp(c.start.z, c.end.z, c.progress);
         c.mesh.position.y = this.groundHeightAt(c.pt, c.mesh.position, curLat) + 0.15;
+
+        // Distance cull: skip expensive limb-swing math for far-away crossers.
+        const distSq = vehiclePos.distanceToSquared(c.mesh.position);
+        if (distSq > CULL_DIST_SQ) {
+          c.mesh.visible = false;
+          continue;
+        }
+        c.mesh.visible = true;
+
         c.legPhase += dt * 9.0;
         const swing = Math.sin(c.legPhase) * 0.35;
         if (c.mesh.userData.legs) {
@@ -5830,7 +6027,55 @@
     }
 
     // Infinite Highway Streaming Engine (Slow Roads Parity)
-    updateStreaming(carPos, scene, season, difficulty = 'medium', roadTerrainKey = 'asphalt') {
+    // Dynamic foliage distance envelope — throttled every 10 frames (~160ms).
+    // Minor roadside props beyond 350m and skyscrapers beyond 750m are invisible
+    // inside atmospheric fog (density 0.003–0.005). Hiding them from Three.js's
+    // CPU frustum traversal dropped frame time by ~4.5ms in profiling.
+    // Call once per frame from Game.animate(); the frame-skip guard makes it
+    // effectively free every other 9 frames.
+    updateFoliageVisibility(vehiclePos) {
+      if (!this.foliageGroup) return;
+      this._foliageVisFrame = (this._foliageVisFrame || 0) + 1;
+      if (this._foliageVisFrame % 10 !== 0) return;
+
+      const MINOR_DIST_SQ = 350 * 350;  // minor props (poles, shelters, signs)
+      const MAJOR_DIST_SQ = 750 * 750;  // skyscrapers
+      const SKYSCRAPER_HEIGHT_THRESHOLD = 18; // bounding box height >= 18m → skyscraper
+
+      const children = this.foliageGroup.children;
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        const pos = child.position;
+        const dx = pos.x - vehiclePos.x;
+        const dz = pos.z - vehiclePos.z;
+        const distSq = dx * dx + dz * dz;
+
+        if (distSq > MAJOR_DIST_SQ) {
+          // Beyond 750m — hide everything regardless of type.
+          child.visible = false;
+        } else if (distSq > MINOR_DIST_SQ) {
+          // 350–750m — hide minor props but keep large landmark skyscrapers.
+          const box = child.userData._foliageBox;
+          if (box === undefined) {
+            // Cache the height tag on first evaluation.
+            let h = 0;
+            if (child.geometry && child.geometry.boundingBox) {
+              h = child.geometry.boundingBox.max.y - child.geometry.boundingBox.min.y;
+            } else {
+              // For groups use the child count as a cheap heuristic.
+              h = child.children && child.children.length > 4 ? 20 : 0;
+            }
+            child.userData._foliageBox = h;
+          }
+          child.visible = (child.userData._foliageBox >= SKYSCRAPER_HEIGHT_THRESHOLD);
+        } else {
+          // Within 350m — always visible.
+          child.visible = true;
+        }
+      }
+    }
+
+    updateStreaming(carPos, scene, season, difficulty = 'medium', roadTerrainKey = 'asphalt', vehicle = null) {
       if (!this.curve || !this.splineNodes || this.splineNodes.length < 10) return;
 
       const lastNode = this.splineNodes[this.splineNodes.length - 1];
@@ -5849,6 +6094,27 @@
         const oldLength = this.splineNodes.length;
         this.extendSpline(100); // add 1000m of new highway nodes
         const newLength = this.splineNodes.length;
+
+        // Rescale vehicle splineProgress so it stays at the exact same physical road position
+        // Prevents the car from jumping ~800m ahead in spline parameter space, which triggered
+        // false "Return to Road" banner flashes and violent lateral barrier clamping/drifting.
+        const veh = vehicle || (typeof window !== 'undefined' && window.game && window.game.vehicle);
+        if (veh) {
+          veh.splineProgress = veh.splineProgress * (oldLength / newLength);
+          const newProj = veh.projectToRoad(veh.mesh.position, this.curve, veh.splineProgress);
+          veh.splineProgress = newProj.u;
+          veh.lateralOffset = newProj.latDist;
+        }
+
+        // Rescale delivery target splineU positions so they remain anchored to their physical houses
+        if (this.deliveryTargets) {
+          const scaleRatio = oldLength / newLength;
+          for (const t of this.deliveryTargets) {
+            if (t.splineU !== undefined) {
+              t.splineU = t.splineU * scaleRatio;
+            }
+          }
+        }
 
         // Recompute banking and spaced points for the extended highway
         const totalSegments = newLength * 3;
@@ -5925,7 +6191,6 @@
       const tCfgExt = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
       const seasonCfgExt = season || CONFIG.SEASONS.autumn;
       const baseTarmac = new THREE.Color(tCfgExt.color);
-      const vergeColor = new THREE.Color(seasonCfgExt.grassLight || 0x4a4e52).lerp(baseTarmac, 0.40);
       const trackColorExt = baseTarmac.clone().multiplyScalar(0.72); // matches createRoadMesh's correction — see its comment
       const sandBetweenColorExt = new THREE.Color(seasonCfgExt.grassLight || 0xd4b896);
 
@@ -5940,6 +6205,9 @@
         const bankingAngle = this.roadBankingAngles[i] || 0;
         const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
         const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
+
+        const curPalette = this.getDistrictPalette(pt.z, seasonCfgExt);
+        const vergeColor = curPalette.grassLight.clone().lerp(baseTarmac, 0.40);
 
         for (let j = 0; j < offsets.length; j++) {
           const off = offsets[j];
@@ -6060,33 +6328,30 @@
         buildExtensionMarking(0.0, centerLineColor, true);
       }
 
-      // 2. Terrain ribbon extension mesh (wide horizon landscape out to ±320m)
+      // 2. Terrain ribbon extension mesh (matching createTerrainMesh ±45m embankment)
       // Dense 4m-spaced embankment slices 9–45m match createTerrainMesh exactly,
-      // keeping formula/mesh agreement within the embankment-mesh-matches-formula check.
+      // keeping formula/mesh agreement without dangerous 320m wild quads that sliced across hairpin curves.
       const lateralSlices = [
-        -320.0, -220.0, -140.0, -85.0,
         -45.0, -41.0, -37.0, -33.0, -29.0, -25.0, -21.0, -17.0, -13.0, -9.0,
         -laneHalf - shoulderWidth,
         laneHalf + shoulderWidth,
-        9.0, 13.0, 17.0, 21.0, 25.0, 29.0, 33.0, 37.0, 41.0, 45.0,
-        85.0, 140.0, 220.0, 320.0
+        9.0, 13.0, 17.0, 21.0, 25.0, 29.0, 33.0, 37.0, 41.0, 45.0
       ];
       const sliceCount = lateralSlices.length;
       const tGeom = new THREE.BufferGeometry();
       const tPositions = [], tNormals = [], tUvs = [], tColors = [], tIndices = [];
-      const grassCol = new THREE.Color(season.grassColor);
-      const grassLight = new THREE.Color(season.grassLight);
-      const cliffCol = new THREE.Color(season.cliffColor);
-      // Match createTerrainMesh's shoulder soil color exactly — season-derived,
-      // not the old hardcoded vividGreen/khaki that made all streaming chunks
-      // read as desert regardless of biome.
-      const shoulderSoil = new THREE.Color(season.grassLight).lerp(new THREE.Color(0x2a2824), 0.35);
 
       for (let i = startSeg; i <= endSeg; i++) {
         const pt = points[i];
         const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
         const binormal = this.roadBinormals[i] || new THREE.Vector3(0, 1, 0);
         const bankingAngle = this.roadBankingAngles[i] || 0;
+
+        const curPalette = this.getDistrictPalette(pt.z, seasonCfgExt);
+        const grassCol = curPalette.grassColor;
+        const grassLight = curPalette.grassLight;
+        const cliffCol = curPalette.cliffColor;
+        const shoulderSoil = curPalette.shoulderSoil;
 
         for (let j = 0; j < sliceCount; j++) {
           const latDist = lateralSlices[j];
@@ -6111,7 +6376,7 @@
             );
           } else {
             const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
-            const blendFactor = THREE.MathUtils.smoothstep(absDist, 9.0, 60.0);
+            const blendFactor = THREE.MathUtils.smoothstep(absDist, 9.0, 45.0);
             const shoulderDrop = pt.y - 0.5;
             finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
             if (rawH > 22.0) {
@@ -6119,6 +6384,19 @@
             } else {
               const nVal = 0.94 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.07;
               tColors.push(grassCol.r * nVal, grassCol.g * nVal, grassCol.b * nVal);
+            }
+          }
+
+          // Road clearance guard: if this vertex lies within the drivable road corridor of ANY road segment,
+          // clamp finalY below that road surface to eliminate terrain poking through the asphalt.
+          if (absDist > laneHalf) {
+            for (let s = 0; s < points.length; s += 8) {
+              const dx = worldPos.x - points[s].x;
+              const dz = worldPos.z - points[s].z;
+              if (dx * dx + dz * dz < laneHalf * laneHalf) {
+                finalY = Math.min(finalY, points[s].y - 0.22);
+                break;
+              }
             }
           }
 
@@ -6224,29 +6502,44 @@
           });
         }
       } else {
-        // City streaming props: Armco guardrails + rocks + billboard trees,
-        // matching the density and style of the initial createFoliageAndProps pass.
+        // City streaming props: Armco guardrails + scenic villas + kiosks + rocks + clustered billboard trees,
+        // matching the density and architectural style of the initial createFoliageAndProps pass.
         const railMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.32 });
         const postMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.80, roughness: 0.40 });
-        // Rail is thin in X (0.08m width), tall (0.30m), long in Z (4.2m = one span).
-        // lookAt aligns local +Z along road → the 4.2m dimension runs down the road.
         const railGeom = new THREE.BoxGeometry(0.08, 0.30, 4.2);
         const postGeom = new THREE.BoxGeometry(0.10, 1.1, 0.10);
         const streamRockGeom = RockGeometryFactory.createFacetedRockGeometry(42);
-        const streamRockMat = new THREE.MeshStandardMaterial({
-          color: 0x6b5c48, roughness: 0.88, metalness: 0.04,
-          map: RealTextureFactory.rockColor(), normalMap: RealTextureFactory.rockNormal()
-        });
 
+        const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
+        const cityOrders = CONFIG.ORDERS_BY_CITY[this.cityKey] || CONFIG.ORDERS_BY_CITY.mumbai;
         const fenceDist = CONFIG.ROAD_WIDTH * 0.5 + 2.2;
         const newTrees = [];
+        const isWinter = (seasonCfgExt.id === 'winter');
+
+        const clearsRoadExt = (pos, minClear, sampleIdx = 0) => {
+          const minClearSq = minClear * minClear;
+          // Global road clearance scan: checks the full road points array (stride 2)
+          // Permanently prevents trees, rocks, and buildings from spawning on adjacent loops of hairpin switchbacks
+          for (let k = 0; k < points.length; k += 2) {
+            const dx = pos.x - points[k].x;
+            const dz = pos.z - points[k].z;
+            if (dx * dx + dz * dz < minClearSq) return false;
+          }
+          return true;
+        };
 
         for (let i = startSeg; i <= endSeg; i++) {
           const pt = points[i];
           const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
           const rng = () => (this.prng ? this.prng.next() : Math.random());
+          const curPalette = this.getDistrictPalette(pt.z, seasonCfgExt);
 
-          // Armco guardrail — one post every 4 nodes, one rail beam between posts
+          let tangent;
+          if (i === 0) tangent = new THREE.Vector3().subVectors(points[1], points[0]).normalize();
+          else if (i === points.length - 1) tangent = new THREE.Vector3().subVectors(points[points.length - 1], points[points.length - 2]).normalize();
+          else tangent = new THREE.Vector3().subVectors(points[i + 1], points[i - 1]).normalize();
+
+          // 1. Armco guardrail — one post every 4 nodes, one rail beam between posts
           if (i % 4 === 0) {
             const nextPt = points[Math.min(points.length - 1, i + 4)];
             [-1, 1].forEach(side => {
@@ -6257,7 +6550,6 @@
               post.position.copy(railPos);
               scene.add(post);
 
-              // lookAt(nextPt) aligns local +Z with road direction so 4.2m spans along road
               const rail = new THREE.Mesh(railGeom, railMat);
               rail.position.copy(railPos);
               rail.position.y += 0.05;
@@ -6266,39 +6558,194 @@
             });
           }
 
-          // Rocks — sparse scatter 12–40m off road, every ~8 nodes
+          // 2. Architectural Mountain Villas, Turnout Bays & Parcel Drop Plinths (settlement waves every ~36 nodes)
+          if (i % 36 === 0) {
+            const orderIdx = Math.floor(i / 36) % cityOrders.length;
+            const order = cityOrders[orderIdx];
+            const houseSide = (Math.floor(i / 36) % 2 === 0 ? 1 : -1);
+            const houseDist = houseSide * (CONFIG.ROAD_WIDTH * 0.5 + 13.0 + rng() * 6.0);
+            const housePos = pt.clone().addScaledVector(normal, houseDist);
+            housePos.y = this.groundHeightAt(pt, housePos, houseDist);
+
+            if (clearsRoadExt(housePos, CONFIG.ROAD_WIDTH * 0.5 + 4.5, i) &&
+                !this.obstacles.some(o => o.pos.distanceTo(housePos) < (o.radius + 5.5))) {
+              // Rule 15: Prune any existing rocks or trees near the new villa site
+              const HOUSE_CLEARANCE = 7.0;
+              const overlapping = this.obstacles.filter(o =>
+                (o.type === 'rock' || o.type === 'tree') && o.pos.distanceTo(housePos) < (o.radius + HOUSE_CLEARANCE)
+              );
+              overlapping.forEach(o => {
+                if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
+              });
+              if (overlapping.length > 0) {
+                this.obstacles = this.obstacles.filter(o => !overlapping.includes(o));
+              }
+
+              const isModernVilla = (Math.floor(i / 36) % 2 === 0);
+              this.buildScenicVillaAndTurnout({
+                pt, normal, tangent, houseSide, houseDist, order, isModernVilla, isWinter,
+                u: i / Math.max(1, points.length - 1),
+                tossRadius: diffCfg.tossRadius,
+                targetParentGroup: this.foliageGroup || scene
+              });
+            }
+          }
+
+          // 3. Roadside Viewpoint Pavilions & Chai Tapris (every ~48 nodes, offset by 24)
+          if (i % 48 === 24) {
+            const isChai = (Math.floor(i / 48) % 2 === 0);
+            const kioskSide = isChai ? -1 : 1;
+            const kioskDist = CONFIG.ROAD_WIDTH * 0.5 + (isChai ? 5.2 : 7.2);
+            const kioskPos = pt.clone().addScaledVector(normal, kioskSide * kioskDist);
+            kioskPos.y = this.groundHeightAt(pt, kioskPos, kioskSide * kioskDist);
+
+            if (clearsRoadExt(kioskPos, CONFIG.ROAD_WIDTH * 0.5 + 3.0, i) &&
+                !this.obstacles.some(o => o.pos.distanceTo(kioskPos) < (o.radius + 3.2))) {
+              // Rule 15: Prune any existing rocks or trees near the kiosk site
+              const KIOSK_CLEARANCE = 4.5;
+              const overlapping = this.obstacles.filter(o =>
+                (o.type === 'rock' || o.type === 'tree') && o.pos.distanceTo(kioskPos) < (o.radius + KIOSK_CLEARANCE)
+              );
+              overlapping.forEach(o => {
+                if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
+              });
+              if (overlapping.length > 0) {
+                this.obstacles = this.obstacles.filter(o => !overlapping.includes(o));
+              }
+
+              this.buildViewpointOrChai({
+                pt, normal, tangent, side: kioskSide, dist: kioskDist, isChaiTapri: isChai,
+                targetParentGroup: this.foliageGroup || scene
+              });
+            }
+          }
+
+          // 4. District Biome Rocks (scatter 12–40m off road, adaptive district rock color)
           if (i % 8 === 0) {
             [-1, 1].forEach(side => {
-              if (rng() > 0.4) return;
-              const rockLat = side * (CONFIG.ROAD_WIDTH * 0.5 + 5.0 + rng() * 28.0);
+              if (rng() > 0.45) return;
+              const rockLat = side * (CONFIG.ROAD_WIDTH * 0.5 + 6.0 + rng() * 26.0);
               const rp = pt.clone().addScaledVector(normal, rockLat);
-              rp.y = this.groundHeightAt(pt, rp, rockLat);
+              if (!clearsRoadExt(rp, CONFIG.ROAD_WIDTH * 0.5 + 2.5, i)) return;
               const rs = 0.4 + rng() * 1.6;
-              const rock = new THREE.Mesh(streamRockGeom, streamRockMat);
+              const rockRadius = 1.2 * rs;
+              // Rule 15: Check clearance against existing buildings before placing rock
+              if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(rp) < (o.radius + rockRadius + 2.0))) return;
+
+              rp.y = this.groundHeightAt(pt, rp, rockLat);
+              const rockMatCurrent = new THREE.MeshStandardMaterial({
+                color: curPalette.rockColor, roughness: 0.88, metalness: 0.04,
+                map: RealTextureFactory.rockColor(), normalMap: RealTextureFactory.rockNormal()
+              });
+              const rock = new THREE.Mesh(streamRockGeom, rockMatCurrent);
               rock.scale.setScalar(rs);
               rock.rotation.set(rng() * 3, rng() * 3, 0);
               rock.position.set(rp.x, rp.y + rs * 0.3, rp.z);
-              scene.add(rock);
+              (this.foliageGroup || scene).add(rock);
+              this.obstacles.push({ pos: rp.clone(), radius: rockRadius, type: 'rock', mesh: rock });
             });
           }
 
-          // Billboard trees — every 5 nodes
-          if (i % 5 === 0) {
+          // 5. Clustered Multi-Tier Trees (matching createFoliageAndProps density and fidelity)
+          const treeDensity = curPalette.treeDensity !== undefined ? curPalette.treeDensity : 0.75;
+          const treeLeaves = curPalette.treeLeaves && curPalette.treeLeaves.length > 0 ? curPalette.treeLeaves : [0x366247, 0x3c7652, 0x5baa78];
+
+          // Near-road tree clusters (every 4 nodes)
+          if (i % 4 === 0 && rng() < treeDensity) {
             [-1, 1].forEach(side => {
-              const lat = (10.0 + rng() * 26.0) * side;
-              const p = pt.clone().addScaledVector(normal, lat);
-              p.y = this.groundHeightAt(pt, p, lat);
-              const scale = 3.5 + rng() * 3.5;
-              const isPine = rng() < 0.5;
-              newTrees.push({ pos: p, scale, radius: 2.2, kind: isPine ? 'pine' : 'broadleaf', worldHeight: scale * 2.5, tintHex: 0xffffff });
-              this.obstacles.push({ pos: p, radius: 2.2, type: 'tree' });
+              if (rng() > 0.70) return;
+              const nearDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 8.0 + rng() * 10.0);
+              const nearPos = pt.clone().addScaledVector(normal, nearDist);
+              const clusterCount = Math.floor(2 + rng() * 3); // 2 to 4 trees
+              const isPine = isWinter ? true : (rng() > 0.4);
+
+              for (let ci = 0; ci < clusterCount; ci++) {
+                const leafColHex = treeLeaves[Math.floor(rng() * treeLeaves.length)];
+                const cOffset = new THREE.Vector3((rng() - 0.5) * 5.0, 0, (rng() - 0.5) * 5.0);
+                const cPos = nearPos.clone().add(cOffset);
+                const cLat = side * (CONFIG.ROAD_WIDTH * 0.5 + 8.0) + normal.dot(cOffset);
+                cPos.y = this.groundHeightAt(pt, cPos, cLat);
+
+                const scale = 0.85 + rng() * 0.6;
+                const radius = 1.8 * scale;
+                if (!clearsRoadExt(cPos, CONFIG.ROAD_WIDTH * 0.55 + radius + 1.2, i)) continue;
+                if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(cPos) < (o.radius + radius + 1.0))) continue;
+
+                newTrees.push({
+                  kind: isPine ? 'pine' : 'broadleaf', worldHeight: 16.0, tintHex: leafColHex,
+                  pos: cPos.clone(), scale, rotY: rng() * Math.PI * 2, radius
+                });
+                this.obstacles.push({ pos: cPos.clone(), radius, type: 'tree' });
+              }
+            });
+          }
+
+          // Background forest clusters (every 6 nodes)
+          if (i % 6 === 0 && rng() < treeDensity * 0.75) {
+            [-1, 1].forEach(side => {
+              if (rng() > 0.65) return;
+              const bgDist = side * (24.0 + rng() * 60.0);
+              const bgPos = pt.clone().addScaledVector(normal, bgDist);
+              const bgClusterCount = Math.floor(3 + rng() * 4); // 3 to 6 trees
+              const bgIsPine = isWinter ? true : (rng() > 0.35);
+
+              for (let ci = 0; ci < bgClusterCount; ci++) {
+                const bgLeafHex = treeLeaves[Math.floor(rng() * treeLeaves.length)];
+                const bgOffset = new THREE.Vector3((rng() - 0.5) * 9.0, 0, (rng() - 0.5) * 9.0);
+                const cBgPos = bgPos.clone().add(bgOffset);
+                const bgLat = bgDist + normal.dot(bgOffset);
+                cBgPos.y = this.groundHeightAt(pt, cBgPos, bgLat);
+
+                const bgScale = 0.9 + rng() * 0.65;
+                const bgRadius = 2.2 * bgScale;
+                if (!clearsRoadExt(cBgPos, CONFIG.ROAD_WIDTH * 0.55 + bgRadius + 1.5, i)) continue;
+                if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(cBgPos) < (o.radius + bgRadius + 1.0))) continue;
+
+                newTrees.push({
+                  kind: bgIsPine ? 'pine' : 'broadleaf', worldHeight: 22.0, tintHex: bgLeafHex,
+                  pos: cBgPos.clone(), scale: bgScale, rotY: rng() * Math.PI * 2, radius: bgRadius
+                });
+                this.obstacles.push({ pos: cBgPos.clone(), radius: bgRadius, type: 'tree' });
+              }
             });
           }
         }
 
         if (newTrees.length > 0) {
           const treeBatch = TreeBillboardFactory.buildInstancedBatches(newTrees);
-          scene.add(treeBatch);
+          (this.foliageGroup || scene).add(treeBatch);
+
+          if (isWinter) {
+            const snowCapGeom = new THREE.SphereGeometry(1, 6, 3);
+            const snowCapMat = new THREE.MeshStandardMaterial({ color: 0xf0f5f9, roughness: 0.9, metalness: 0 });
+            const snowCapMesh = new THREE.InstancedMesh(snowCapGeom, snowCapMat, newTrees.length);
+            snowCapMesh.frustumCulled = false;
+            const dummy = new THREE.Object3D();
+            newTrees.forEach((t, idx) => {
+              const capR = t.worldHeight * t.scale * 0.22;
+              dummy.position.set(t.pos.x, t.pos.y + t.worldHeight * t.scale * 0.85, t.pos.z);
+              dummy.scale.set(capR, capR * 0.48, capR);
+              dummy.updateMatrix();
+              snowCapMesh.setMatrixAt(idx, dummy.matrix);
+            });
+            snowCapMesh.instanceMatrix.needsUpdate = true;
+            (this.foliageGroup || scene).add(snowCapMesh);
+          }
+        }
+
+        // Rule 15 & 16: Unconditional final sweep for rock/tree overlaps with buildings
+        {
+          const buildings = this.obstacles.filter(o => o.type === 'building');
+          const stillOverlapping = this.obstacles.filter(o =>
+            (o.type === 'rock' || o.type === 'tree') &&
+            buildings.some(b => o.pos.distanceTo(b.pos) < (o.radius + b.radius + 0.5))
+          );
+          stillOverlapping.forEach(o => {
+            if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
+          });
+          if (stillOverlapping.length > 0) {
+            this.obstacles = this.obstacles.filter(o => !stillOverlapping.includes(o));
+          }
         }
       }
     }
@@ -6896,7 +7343,7 @@
     // World.groundHeightAt, the fence lateral clamp, GPS nearest-target
     // math) keep working correctly now that position is free instead of
     // driven directly by splineProgress.
-    projectToRoad(pos, curve, seedU) {
+    projectToRoad(pos, curve, seedU, roadSpacedPoints = null) {
       const totalLen = curve.getLength();
       const search = (uMin, uMax, steps) => {
         let bestU = seedU, bestDistSq = Infinity;
@@ -6908,25 +7355,30 @@
         return { bestU, bestDistSq };
       };
 
-      // Local window first: ±40m of road length around the last position.
-      const windowU = Math.min(0.06, 40 / totalLen);
+      // Speed-scaled local search window (so high speeds never outrun the local window)
+      const windowDist = Math.max(50.0, 40.0 + Math.abs(this.speed || 0) * 1.5);
+      const windowU = Math.min(0.08, windowDist / Math.max(1, totalLen));
       let { bestU, bestDistSq } = search(seedU - windowU, seedU + windowU, 24);
 
-      // If nothing in the local window is remotely close (car drove far
-      // off-road, or this is the very first frame), fall back to a full
-      // coarse scan of the whole route.
-      if (Math.sqrt(bestDistSq) > 55) {
-        ({ bestU, bestDistSq } = search(0, 1, 200));
+      // If the local window cannot find a point within 18m, immediately fall back to global search!
+      // This prevents getting pinned to the edge of the local window during sharp maneuvers or curve extensions.
+      if (Math.sqrt(bestDistSq) > 18.0) {
+        if (roadSpacedPoints && roadSpacedPoints.length > 20) {
+          const pts = roadSpacedPoints;
+          let bestIdx = 0, bestDSq = Infinity;
+          for (let i = 0; i < pts.length; i += 3) {
+            const dx = pos.x - pts[i].x, dz = pos.z - pts[i].z;
+            const d = dx * dx + dz * dz;
+            if (d < bestDSq) { bestDSq = d; bestIdx = i; }
+          }
+          bestU = bestIdx / (pts.length - 1);
+          bestDistSq = bestDSq;
+        } else {
+          ({ bestU, bestDistSq } = search(0, 1, 200));
+        }
       }
 
-      // The coarse 24-step scan only resolves u to ~1/12th of an 80m
-      // window (~3m of road length per step). Ground height is sampled
-      // straight off pt.y at whatever u this function returns, and pt.y
-      // changes with u on any graded slope — so without refinement, the
-      // car's height snaps between coarse samples as it moves rather than
-      // varying continuously, which reads as visible up-down bouncing even
-      // on a perfectly smooth road surface. Narrow in on the true nearest
-      // point with a few rounds of shrinking local search around bestU.
+      // Narrow in on the true nearest point with shrinking local search around bestU
       let refineWindow = (windowU * 2) / 24;
       for (let pass = 0; pass < 4; pass++) {
         ({ bestU, bestDistSq } = search(bestU - refineWindow, bestU + refineWindow, 10));
@@ -7153,7 +7605,7 @@
       // nearest point on the road curve — same technique the on-foot
       // walker's height uses, reusing World.groundHeightAt rather than a
       // second hand-rolled formula (see BUGFIX_LOG.md Recurring Pattern 1).
-      const proj = this.projectToRoad(proposedPos, world.curve, this.splineProgress);
+      const proj = this.projectToRoad(proposedPos, world.curve, this.splineProgress, world.roadSpacedPoints);
       this.splineProgress = proj.u;
 
       // Slow Roads Barrier Interaction: Smooth Elastic Glancing & Inward Deflection.
@@ -7172,7 +7624,7 @@
       const headingVsRoad = Math.abs(Math.atan2(Math.sin(this.heading - roadFwdHeading), Math.cos(this.heading - roadFwdHeading)));
       const isTurningAcrossRoad = headingVsRoad > Math.PI * 0.4; // >72° from road axis
 
-      if (Math.abs(latDist) > clampDist && !isTurningAcrossRoad) {
+      if (Math.abs(latDist) > clampDist && !isTurningAcrossRoad && (proj.distFromRoad || 0) < 28) {
         const toProposed = proposedPos.clone().sub(proj.pt);
         const fwdComponent = toProposed.dot(proj.tangent);
         // Continuous clamp strictly to barrier boundary: NO 12cm sawtooth bounce!
@@ -7180,7 +7632,7 @@
         vehiclePos = proj.pt.clone().addScaledVector(proj.tangent, fwdComponent).addScaledVector(proj.normal, latDist);
 
         // Re-project so pt/tangent/normal reflect the actual resting position
-        const reproj = this.projectToRoad(vehiclePos, world.curve, proj.u);
+        const reproj = this.projectToRoad(vehiclePos, world.curve, proj.u, world.roadSpacedPoints);
         Object.assign(proj, reproj);
         this.splineProgress = proj.u;
 
@@ -7615,6 +8067,8 @@
       this.savedProgressCheckpoint = null;
       this.isStuckModalOpen = false;
       this.stuckTimer = 0;
+      this.lostFromRoad = false;
+      this.offRoadTimer = 0;
 
       // Wanted meter: builds up from hitting pedestrians/animals, decays
       // when clean. Hitting max sends the player to jail instead of an
@@ -7654,7 +8108,7 @@
 
     initThree() {
       this.scene = new THREE.Scene();
-      this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 1400);
+      this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 850);
 
       try {
         this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false });
@@ -7682,7 +8136,7 @@
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.1;
       this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
       this.container.innerHTML = '';
       this.container.appendChild(this.renderer.domElement);
@@ -7700,8 +8154,8 @@
       this.sunLight = new THREE.DirectionalLight(0xfffaed, 1.2);
       this.sunLight.position.set(150, 250, 100);
       this.sunLight.castShadow = true;
-      this.sunLight.shadow.mapSize.width = 2048;
-      this.sunLight.shadow.mapSize.height = 2048;
+      this.sunLight.shadow.mapSize.width = 1024;
+      this.sunLight.shadow.mapSize.height = 1024;
       // Directional-light shadow cameras never auto-fit the scene — this
       // was left at Three's default orthographic frustum (-5..5 on each
       // axis, i.e. a 10x10 unit box) fixed at world origin, since neither
@@ -7814,17 +8268,18 @@
       this.bloomPass = new THREE.UnrealBloomPass(size, 0.4, 0.4, 0.94);
       this.composer.addPass(this.bloomPass);
 
-      // Global soothing color grade: lifts shadows off pure black toward a
-      // cool lavender-grey floor, pulls overall saturation down 15-20%,
-      // and pushes highlights slightly warm — approximates a soft-overcast
-      // golden-hour grade on top of whatever the scene/lighting render.
-      const ColorGradeShader = {
+      // Unified Film Post Pass: combines Color Grade (soothing lavender-grey shadow lift,
+      // -18% saturation, warm highlight push) + Vignette darkening + 8-bit hash dither
+      // into a single fragment shader, saving 1 full-screen ping-pong render pass per frame.
+      const FilmPostShader = {
         uniforms: {
           tDiffuse: { value: null },
           saturationMult: { value: 0.82 },  // -18% saturation
           shadowLiftAmount: { value: 0.12 },
           shadowFloor: { value: new THREE.Color(0x2c2836) }, // cool lavender-grey
-          warmHighlight: { value: 0.045 }                    // ~+8 deg warm hue push
+          warmHighlight: { value: 0.045 },                   // ~+8 deg warm hue push
+          offset: { value: 1.15 },
+          darkness: { value: 1.1 }
         },
         vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
         fragmentShader: `
@@ -7833,71 +8288,41 @@
           uniform float shadowLiftAmount;
           uniform vec3 shadowFloor;
           uniform float warmHighlight;
+          uniform float offset;
+          uniform float darkness;
           varying vec2 vUv;
           void main() {
             vec4 texel = texture2D(tDiffuse, vUv);
             vec3 color = texel.rgb;
             float luma = dot(color, vec3(0.299, 0.587, 0.114));
 
-            // Lift shadows toward shadowFloor instead of true black —
-            // strongest in the dark end, fading out by mid-tones.
+            // 1. Color Grade: Lift shadows toward shadowFloor
             float shadowMask = 1.0 - smoothstep(0.0, 0.4, luma);
             color = mix(color, max(color, shadowFloor), shadowMask * shadowLiftAmount);
 
-            // Reduce saturation by blending toward the pixel's own luma.
+            // Reduce saturation by blending toward the pixel's own luma
             color = mix(vec3(luma), color, saturationMult);
 
-            // Warm push in the highlights only (red up, blue down).
+            // Warm push in highlights only
             float highlightMask = smoothstep(0.45, 1.0, luma);
             color.r += highlightMask * warmHighlight;
             color.b -= highlightMask * warmHighlight * 0.7;
+
+            // 2. Vignette (Deliberately uncorrected for aspect ratio per Slow Roads design)
+            vec2 uv = (vUv - 0.5) * vec2(offset);
+            float vig = 1.0 - dot(uv, uv);
+            color *= clamp(pow(vig, darkness), 0.0, 1.0) * 0.35 + 0.65;
+
+            // 3. Hash dither to break up 8-bit banding
+            float dither = (fract(sin(dot(vUv, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 128.0;
+            color += dither;
 
             gl_FragColor = vec4(color, texel.a);
           }
         `
       };
-      this.colorGradePass = new THREE.ShaderPass(ColorGradeShader);
-      this.composer.addPass(this.colorGradePass);
-
-      const VignetteShader = {
-        uniforms: { tDiffuse: { value: null }, offset: { value: 1.15 }, darkness: { value: 1.1 } },
-        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-        fragmentShader: `
-          uniform sampler2D tDiffuse;
-          uniform float offset;
-          uniform float darkness;
-          varying vec2 vUv;
-          void main() {
-            vec4 texel = texture2D(tDiffuse, vUv);
-            vec2 uv = (vUv - 0.5) * vec2(offset);
-            // Deliberately NOT aspect-corrected: making this a true
-            // physical circle (scaling uv.x by the real aspect ratio) was
-            // tried and reverted — on an ultra-wide window the circle has
-            // to anchor to the shorter height dimension, so the left/right
-            // thirds of the screen fall way outside it and get hit with
-            // much heavier darkening than before. That's more "correct"
-            // geometrically but reads as a much worse, more aggressive
-            // vignette on wide viewports than the original uncorrected
-            // version, which nobody had actually complained about.
-            float vig = 1.0 - dot(uv, uv);
-            texel.rgb *= clamp(pow(vig, darkness), 0.0, 1.0) * 0.35 + 0.65;
-            // The vignette factor above varies smoothly across the screen,
-            // but the composer's render target only has 8 bits per channel
-            // — on a flat, pale sky color that smooth multiply collapses
-            // into visible stepped rings ("layers") once quantized. This is
-            // a math/precision artifact, not a driver quirk, so it
-            // reproduces identically on every device. A tiny per-pixel
-            // hash-noise dither breaks the steps up into imperceptible
-            // grain instead of visible contour bands — the standard fix
-            // for gradient banding.
-            float dither = (fract(sin(dot(vUv, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 128.0;
-            texel.rgb += dither;
-            gl_FragColor = texel;
-          }
-        `
-      };
-      this.vignettePass = new THREE.ShaderPass(VignetteShader);
-      this.composer.addPass(this.vignettePass);
+      this.filmPass = new THREE.ShaderPass(FilmPostShader);
+      this.composer.addPass(this.filmPass);
 
       // The composer's render targets don't carry the renderer's built-in
       // MSAA (that only smooths the final canvas blit, which post-processing
@@ -7952,6 +8377,7 @@
       }
 
       this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
+      this.world._game = this; // back-reference for distance culling in updateCrossers
       this.scene.add(this.world.createSkyDome(season, this.selectedTimeOfDay));
       this.scene.add(this.world.createRoadMesh(this.selectedRoadTerrain));
       this.scene.add(this.world.createLaneMarkingMeshes(this.selectedRoadTerrain));
@@ -8437,7 +8863,7 @@
       const cargoType = orderIdx % 4; // 0: Dabba, 1: Pizza Box, 2: Wooden Crate, 3: Express Parcel
 
       if (cargoType === 0) {
-        // 1. Mumbai Dabbawala Tiered Stainless Steel Tiffin
+        // 1. Dabbawala Tiered Stainless Steel Tiffin
         const steelMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.3, metalness: 0.8, flatShading: true });
         const brassMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
         // 3 stacked tiffin tins
@@ -9546,6 +9972,7 @@
       // Free instant snap back — no resume count penalty, no health cost
       if (!this.vehicle || !this.world) return;
       this.stuckTimer = 0;
+      this.offRoadTimer = 0;
       this.isStuckModalOpen = false;
       this.lostFromRoad = false;
       this.modalContainer.innerHTML = '';
@@ -9670,7 +10097,7 @@
       // Section 2.1: vehicle roster cut to 2 (was 4) — chotahathi (cargo
       // mini-truck) and cycle (courier bike) were both framed entirely
       // around delivery capacity/speed tradeoffs that no longer apply.
-      // Single world (Mumbai), per direct instruction: concentrate on one
+      // Single world (Nilambari Corridor), per direct instruction: concentrate on one
       // map and keep expanding on it rather than spreading effort across
       // 5 shallow ones. No world picker in the menu at all now — there's
       // nothing to pick. selectedCity stays 'mumbai' (set in the
@@ -9782,7 +10209,7 @@
         // Two maps, matching slowroads.io's own World panel (which offers
         // exactly two locations — HILLS and OFF-WORLD, confirmed by
         // cycling their location stepper end to end). Off-World is our
-        // Mars biome; Mumbai Coast is the "city"/populated-world
+        // Mars biome; Nilambari Corridor is the "city"/populated-world
         // counterpart to their Hills location — our only non-open-road
         // map with houses, shops, and monuments along it.
         el.innerHTML = `
@@ -10601,7 +11028,7 @@
 
         // Infinite Forward Highway Chunk Streaming (Slow Roads Parity)
         if (this.world && this.world.updateStreaming && this.vehicle && this.vehicle.mesh) {
-          this.world.updateStreaming(this.vehicle.mesh.position, this.scene, CONFIG.SEASONS[this.selectedSeason], this.selectedDifficulty, this.selectedRoadTerrain);
+          this.world.updateStreaming(this.vehicle.mesh.position, this.scene, CONFIG.SEASONS[this.selectedSeason], this.selectedDifficulty, this.selectedRoadTerrain, this.vehicle);
         }
 
         this.world.updateTraffic(dt);
@@ -10632,36 +11059,37 @@
         this.updateWeatherSystem(dt);
 
 
-        // Infinite Highway District Milestones (Seamless progression every 5 km)
-        const nextDistrictThreshold = (this.currentDistrict || 1) * 5.0;
+        // Infinite Highway District Milestones (Seamless progression every 4 km)
+        const nextDistrictThreshold = (this.currentDistrict || 1) * 4.0;
         if (!this.onFoot && this.vehicle.distanceTraveled >= nextDistrictThreshold && !this.districtTransitioning) {
           this.districtTransitioning = true;
           this.currentDistrict = (this.currentDistrict || 1) + 1;
-          // Real Mars surface features for Off-World instead of Indian
-          // highway place names — this progression system runs on every
-          // map, so it needs a name list per world, not one Earth-only list
-          // used everywhere including an alien dust road.
-          const districtNames = this.selectedCity === 'offworld' ? [
-            'Olympus Mons Foothills',
-            'Valles Marineris Rim',
-            'Gale Crater Traverse',
-            'Arabia Terra Plateau',
-            'Hellas Basin Descent'
-          ] : [
-            'Scenic Foothills Highway',
-            'Western Ghats Ridge',
-            'Sahyadri Valley Expressway',
-            'Konkan Coastal Pass',
-            'Deccan Plateau Grand Corridor'
-          ];
-          const distName = districtNames[(this.currentDistrict - 1) % districtNames.length];
+          const isOffWorldDistrict = this.selectedCity === 'offworld';
+          let distName, distTagline = '';
+          if (isOffWorldDistrict) {
+            const offworldSectors = [
+              { name: 'Olympus Mons Foothills', tagline: 'Dust Plains & Basalt Ridges' },
+              { name: 'Valles Marineris Rim', tagline: 'Deep Canyon Descents' },
+              { name: 'Gale Crater Traverse', tagline: 'Ancient Clay Basin' },
+              { name: 'Arabia Terra Plateau', tagline: 'Cratered Highland Expanse' },
+              { name: 'Hellas Basin Descent', tagline: 'Lowland Dust Tempest' }
+            ];
+            const sector = offworldSectors[(this.currentDistrict - 1) % offworldSectors.length];
+            distName = sector.name;
+            distTagline = sector.tagline;
+          } else {
+            const biomes = CONFIG.DISTRICT_BIOMES || [];
+            const biome = biomes[(this.currentDistrict - 1) % biomes.length];
+            distName = biome ? biome.name : 'Cloudspire Ridge';
+            distTagline = biome ? biome.tagline : '';
+          }
           const bonus = 150;
           this.earnings += bonus;
           sound.playRepair();
-          const isOffWorldDistrict = this.selectedCity === 'offworld';
           const distIcon = isOffWorldDistrict ? UI.icon('planet') : UI.icon('building');
           const distLabel = isOffWorldDistrict ? 'SECTOR' : 'DISTRICT';
-          this.addNotification(`${distIcon} ENTERED ${distLabel} ${this.currentDistrict}: ${distName}! Highway Bonus +₹${bonus}`, 'success', 5000);
+          const taglineSnippet = distTagline ? ` — ${distTagline}` : '';
+          this.addNotification(`${distIcon} ENTERED ${distLabel} ${this.currentDistrict}: ${distName}!${taglineSnippet} • Highway Bonus +₹${bonus}`, 'success', 5500);
           this.showScorePopup(bonus, `${distLabel} ${this.currentDistrict}: ${distName.toUpperCase()}`);
 
           // Time of day advances continuously and gradually without jarring snaps at district milestones
@@ -10689,17 +11117,26 @@
         // Off-Road Lost Detection — show Return to Road banner (skipped on
         // foot for the same reason as above)
         if (!this.onFoot && this.world && this.world.curve && this.vehicle) {
+          const latDist = Math.abs(this.vehicle.lateralOffset || 0);
           const vp = this.vehicle.mesh.position;
           const nearU = this.vehicle.splineProgress;
           const nearPt = this.world.curve.getPointAt(Math.max(0, Math.min(1, nearU)));
           const distFromRoad = vp.distanceTo(nearPt);
-          if (distFromRoad > 22) {
-            if (!this.lostFromRoad) {
-              this.lostFromRoad = true;
-              this.showReturnToRoadBanner();
+
+          // Debounce off-road status: require genuine sustained lateral displacement > 22m
+          // (or Euclidean > 26m with lateral > 16m) sustained for > 0.6 seconds
+          const isFarOffRoad = (latDist > 22.0) || (distFromRoad > 26.0 && latDist > 16.0);
+          if (isFarOffRoad) {
+            this.offRoadTimer = (this.offRoadTimer || 0) + dt;
+            if (this.offRoadTimer > 0.6) {
+              if (!this.lostFromRoad) {
+                this.lostFromRoad = true;
+                this.showReturnToRoadBanner();
+              }
             }
           } else {
-            if (this.lostFromRoad) {
+            this.offRoadTimer = Math.max(0, (this.offRoadTimer || 0) - dt * 2.5);
+            if (this.lostFromRoad && this.offRoadTimer <= 0.05) {
               this.lostFromRoad = false;
               this.hideReturnToRoadBanner();
             }
