@@ -1014,6 +1014,48 @@ function runWorldChecks() {
     }
   }
 
+  // No rock may sit on the driveable surface.
+  //
+  // There was no check for this, which is how rocks-on-road survived so long:
+  // the suite has rocks-clear-of-houses and fences-clear-of-all-obstacles, but
+  // nothing ever compared a rock against the road itself, so it was only ever
+  // caught by someone noticing it in a screenshot.
+  //
+  // Measures the rock's WORLD position (getWorldPosition, not .pos or the
+  // local .mesh.position) — a rock parented under an offset group reports a
+  // local position that can be metres from where it actually renders.
+  {
+    const roadHalf = (typeof CONFIG !== 'undefined' && CONFIG.ROAD_WIDTH)
+      ? CONFIG.ROAD_WIDTH * 0.5 : 3.7;
+    const road = world.roadSpacedPoints || (world.curve && world.curve.getSpacedPoints(1200));
+    const rocks = (world.obstacles || []).filter(o => o && o.type === 'rock' && o.mesh);
+    if (!road || !rocks.length) {
+      record('rocks-clear-of-road', true,
+        `no road samples or no rocks present (rocks: ${rocks.length}) — nothing to check`);
+    } else {
+      if (game.scene) game.scene.updateMatrixWorld(true);
+      const v = new THREE.Vector3();
+      let onAsphalt = 0, worst = Infinity, overhang = 0;
+      for (const o of rocks) {
+        o.mesh.getWorldPosition(v);
+        let bestSq = Infinity;
+        for (let s = 0; s < road.length; s += 2) {
+          const dx = road[s].x - v.x, dz = road[s].z - v.z;
+          const d = dx * dx + dz * dz;
+          if (d < bestSq) bestSq = d;
+        }
+        const dist = Math.sqrt(bestSq);
+        if (dist < roadHalf) { onAsphalt++; if (dist < worst) worst = dist; }
+        // Centre is clear but the body still overhangs the lane edge.
+        else if (dist - (o.radius || 0) < roadHalf) overhang++;
+      }
+      record('rocks-clear-of-road', onAsphalt === 0,
+        `${onAsphalt}/${rocks.length} rocks with centre ON the driveable surface (<${roadHalf.toFixed(2)}m from centreline)` +
+        (onAsphalt ? `, closest ${worst.toFixed(2)}m` : '') +
+        ` | ${overhang} more overhang the lane edge by radius (advisory)`);
+    }
+  }
+
   console.table(results.map(r => ({ check: r.name, pass: r.pass ? 'PASS' : 'FAIL', detail: r.detail })));
   const failed = results.filter(r => !r.pass);
   if (failed.length) {
