@@ -8200,8 +8200,9 @@
       // --- Cinematic fade-out ---
       const loaderEl = document.getElementById('game-loader');
       if (loaderEl) {
+        loaderEl.style.pointerEvents = 'none'; // unblock game immediately
         loaderEl.style.opacity = '0';
-        setTimeout(() => { loaderEl.hidden = true; }, 680);
+        setTimeout(() => { loaderEl.style.display = 'none'; }, 700);
       }
 
       this.startDrive();
