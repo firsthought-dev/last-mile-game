@@ -6961,9 +6961,20 @@
       const healthFactor = (this.health >= 50) ? 1.0 : Math.max(0.25, 0.4 + 0.6 * (this.health / 50));
       const effectiveMaxSpeed = (this.health <= 0) ? 0.0 : Math.max(8.0, (this.maxSpeed - windDrag * 3.5) * healthFactor);
 
-      // 1. Throttle / Acceleration & EV One-Pedal Regen Braking
+      // 1. Throttle / Acceleration, Service Brakes & Emergency Handbrake
       const isDrifting = !!keys.space;
       const driftGripMult = isDrifting ? 0.40 : 1.0; // 60% friction reduction during power-slide drift
+
+      // Safety Override: Driver manual brake / handbrake disengages Autopilot immediately
+      if (this.isAutodrive && (keys.down || keys.s || keys.space)) {
+        this.isAutodrive = false;
+        if (typeof document !== 'undefined') {
+          const pill = document.getElementById('btn-hud-autodrive');
+          const text = document.getElementById('autodrive-text');
+          if (pill) pill.classList.remove('autodrive-active');
+          if (text) text.textContent = 'AUTOPILOT [F]';
+        }
+      }
 
       if (this.isAutodrive) {
         // Curve-adaptive pure pursuit autopilot: look ahead by a dynamic distance
@@ -7003,48 +7014,60 @@
         if (this.speed < autoTargetSpeed) {
           this.speed += this.accel * dt;
         } else if (this.speed > autoTargetSpeed + 1.0) {
-          this.speed -= this.brake * dt * 0.7;
+          this.speed -= (this.brake || 30.0) * dt * 0.7;
         }
       } else {
         if (this.health <= 0) {
           // Engine breakdown stall
           this.speed *= Math.exp(-2.5 * dt);
           if (Math.abs(this.speed) < 0.1) this.speed = 0;
-        } else if (keys.up || keys.w) {
-          // UP / W: ACCELERATE FORWARD
-          this._downBrakingFromForward = false;
-          if (this.speed < 0) {
-            // Releasing reverse and braking to forward
-            this.speed += this.brake * dt * 2.0;
-            if (this.speed > 0) this.speed = 0;
+        } else if (keys.space) {
+          // SPACE: EMERGENCY HANDBRAKE — Powerful deceleration and unconditional full halt
+          if (Math.abs(this.speed) > 0.08) {
+            const hBrake = (this.brake || 30.0) * dt * 2.5;
+            if (this.speed > 0) this.speed = Math.max(0, this.speed - hBrake);
+            else this.speed = Math.min(0, this.speed + hBrake);
           } else {
-            // Softened from -1.4: the old curve hit ~157 km/h in ~2s from standstill,
-            // far too fast for the chase cam to read as forward motion.
+            this.speed = 0;
+          }
+          this._downBrakingFromForward = false;
+        } else if (keys.down || keys.s) {
+          // DOWN / S: BRAKE WHEN MOVING FORWARD, HOLD AT FULL STOP
+          // (Prioritized over throttle — brake pedal always overrides gas)
+          if (this.speed > 0.08) {
+            // Moving forward — apply service brakes with high authority down to 0
+            this._downBrakingFromForward = true;
+            this.speed -= (this.brake || 30.0) * dt * climateGrip * 2.0;
+            if (this.speed <= 0.08) {
+              this.speed = 0;
+            }
+          } else if (this._downBrakingFromForward) {
+            // Held DOWN through forward braking to a complete stop:
+            // KEEP VEHICLE AT A FULL HALT (VEHICLE HOLD MODE).
+            // Driver must release S and press again to engage reverse gear.
+            this.speed = 0;
+          } else if (this.speed < -0.08) {
+            // Already in reverse — reverse acceleration up to reverse limit
+            const reverseMax = -5.0;
+            this.speed += (reverseMax - this.speed) * (1 - Math.exp(-1.2 * dt));
+          } else {
+            // At standstill and DOWN was NOT held from forward braking:
+            // Fresh intentional press to reverse
+            const reverseMax = -5.0;
+            this.speed += (reverseMax - this.speed) * (1 - Math.exp(-1.2 * dt));
+          }
+        } else if (keys.up || keys.w) {
+          // UP / W: ACCELERATE FORWARD (or brake reverse motion to a full stop)
+          this._downBrakingFromForward = false;
+          if (this.speed < -0.08) {
+            // Reversing — pressing forward throttle acts as brake to bring vehicle to a full stop
+            this.speed += (this.brake || 30.0) * dt * 2.4;
+            if (this.speed >= -0.08) this.speed = 0;
+          } else {
             this.speed += (effectiveMaxSpeed - this.speed) * (1 - Math.exp(-0.42 * dt));
           }
-        } else if (keys.down || keys.s) {
-          // DOWN / S: BRAKE WHEN MOVING FORWARD, REVERSE WHEN TRULY STOPPED
-          if (this.speed > 0.05) {
-            // Still moving forward — brake to a full stop
-            this._downBrakingFromForward = true;
-            this.speed -= this.brake * dt * climateGrip * 1.8;
-            if (this.speed < 0) this.speed = 0;
-          } else if (this.speed < -0.05) {
-            // Already reversing — keep accelerating in reverse
-            this._downBrakingFromForward = false;
-            const reverseMax = -4.0;
-            this.speed += (reverseMax - this.speed) * (1 - Math.exp(-1.0 * dt));
-          } else {
-            // At standstill — only engage reverse if DOWN was NOT held during forward braking
-            // (requires a fresh DOWN press at rest to engage reverse, preventing accidental reverse)
-            if (!this._downBrakingFromForward) {
-              const reverseMax = -4.0;
-              this.speed += (reverseMax - this.speed) * (1 - Math.exp(-1.0 * dt));
-            }
-            // else: car stays stopped until driver releases DOWN and re-presses it
-          }
         } else {
-          // Natural coasting / drag; also clear the reverse-guard so a fresh DOWN press can reverse
+          // Natural coasting / drag; clear hold mode so fresh press can reverse
           this._downBrakingFromForward = false;
           this.speed *= Math.exp(-this.drag * 0.85 * dt);
           if (Math.abs(this.speed) < 0.08) this.speed = 0;
@@ -8268,8 +8291,6 @@
           this.vehicle.mesh.position.copy(this.walkerParkedVehiclePos);
         }
         this.vehicle.speed = 0;
-        this.vehicle.throttle = 0;
-        this.vehicle.brake = 0;
         this.addNotification(`${UI.icon('car')} BACK IN VEHICLE`, 'neutral', 2000);
         return;
       }
@@ -8281,8 +8302,6 @@
 
       this.onFoot = true;
       this.vehicle.speed = 0;
-      this.vehicle.throttle = 0;
-      this.vehicle.brake = 0;
       this.walkerParkedVehiclePos = this.vehicle.mesh.position.clone();
       this.walkerMesh = this.createWalkerMesh();
       this.walkerMesh.quaternion.copy(this.vehicle.mesh.quaternion);
