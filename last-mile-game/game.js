@@ -8096,13 +8096,115 @@
       this.inactivityTimer = 0;
 
       this.initThree();
-      this.buildWorldAndScene();
       this.initEvents();
       this.initHUD();
-      // Launch directly into driving behind the car (Slow Roads Parity)
-      this.startDrive();
-
       this.clock = new THREE.Clock();
+      // Async boot: show loading screen, build world in yielded stages, warmup shaders, then startDrive
+      this._bootWithLoader();
+    }
+
+    async _bootWithLoader() {
+      const setProgress = (pct, label) => {
+        const fill   = document.getElementById('loader-bar-fill');
+        const pctEl  = document.getElementById('loader-pct');
+        const status = document.getElementById('loader-status');
+        const track  = document.getElementById('loader-bar-track');
+        if (fill)   fill.style.width = pct + '%';
+        if (pctEl)  pctEl.textContent = Math.round(pct) + '%';
+        if (status && label) status.textContent = label;
+        if (track)  track.setAttribute('aria-valuenow', Math.round(pct));
+      };
+      const frame = () => new Promise(r => requestAnimationFrame(r));
+
+      setProgress(5, 'Initializing 3D engine...');
+      await frame();
+
+      // --- Stage 1: Scene lighting & fog (mirrors buildWorldAndScene preamble) ---
+      const season         = CONFIG.SEASONS[this.selectedSeason];
+      const tod            = CONFIG.TIME_OF_DAY[this.selectedTimeOfDay] || CONFIG.TIME_OF_DAY.day;
+      const skyBottomHex   = (season.isOffWorld && !tod.night) ? season.skyBottom : tod.skyBottom;
+      const fogHex         = (season.isOffWorld && !tod.night) ? season.fog : tod.fog;
+      const fogDensityVal  = (season.isOffWorld && !tod.night) ? season.fogDensity : tod.fogDensity;
+
+      this.scene.background = new THREE.Color(skyBottomHex);
+      this.scene.fog = new THREE.FogExp2(fogHex, fogDensityVal);
+      if (this.ambientLight) { this.ambientLight.color.setHex(tod.ambientColor); this.ambientLight.intensity = tod.ambientIntensity; }
+      if (this.sunLight) {
+        this.sunLight.color.setHex(tod.sunColor);
+        this.sunLight.intensity = tod.sunIntensity;
+        this.sunOffset = new THREE.Vector3(...tod.sunPos);
+        this.sunLight.position.copy(this.sunOffset);
+      }
+
+      setProgress(20, 'Synthesizing Western Ghats highway spline...');
+      await frame();
+
+      // --- Stage 2: World object + sky dome + road ---
+      this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
+      this.world._game = this;
+      this.scene.add(this.world.createSkyDome(season, this.selectedTimeOfDay));
+      this.scene.add(this.world.createRoadMesh(this.selectedRoadTerrain));
+      this.scene.add(this.world.createLaneMarkingMeshes(this.selectedRoadTerrain));
+
+      setProgress(45, 'Sculpting mountain valley terrain & road verges...');
+      await frame();
+
+      // --- Stage 3: Terrain, tunnels, arches ---
+      this.scene.add(this.world.createWorldFloor(season));
+      this.scene.add(this.world.createTerrainMesh(season));
+      this.scene.add(this.world.createTunnelMeshes());
+      this.world.createMountainArches(this.scene, season);
+
+      setProgress(65, 'Placing hillside cantilever villas & turnout plinths...');
+      await frame();
+
+      // --- Stage 4: Foliage, props, villas, rocks (heaviest stage) ---
+      this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
+
+      setProgress(82, 'Seeding subtropical forests & Sahyadri rockfaces...');
+      await frame();
+
+      // --- Stage 5: Vehicle, weather, order card ---
+      if (!this.vehicle) {
+        this.vehicle = new VehicleController(this.scene, this.selectedVehicle);
+      } else {
+        this.vehicle.setVehicleType(this.selectedVehicle);
+      }
+      this.vehicle.resetToSpline(this.world.curve, 0.008);
+      this.vehicle.setHeadlightsActive(tod.night || tod.id === 'dusk');
+      this.applyWindowGlow(tod);
+      this.initWeatherSystem();
+      const diffCfg = CONFIG.DIFFICULTY_TIERS[this.selectedDifficulty];
+      this.maxOrderTimer = diffCfg.timeLimit;
+      this.orderTimer = this.maxOrderTimer;
+      this.updateActiveOrderCard();
+
+      setProgress(92, 'Compiling PBR shaders & contact shadow maps...');
+      await frame();
+
+      // --- Stage 6: WebGL shader pre-compilation & warmup ---
+      // Runs renderer.compile() and 3 composer passes while the loader is still
+      // opaque, so first-frame shader-compilation stutter is invisible to the player.
+      if (this.renderer && this.scene && this.camera) {
+        try { this.renderer.compile(this.scene, this.camera); } catch (_) {}
+      }
+      if (this.composer) {
+        await frame(); try { this.composer.render(); } catch (_) {}
+        await frame(); try { this.composer.render(); } catch (_) {}
+        await frame(); try { this.composer.render(); } catch (_) {}
+      }
+
+      setProgress(100, 'Grand Corridor ready. Safe driving!');
+      await frame();
+
+      // --- Cinematic fade-out ---
+      const loaderEl = document.getElementById('game-loader');
+      if (loaderEl) {
+        loaderEl.style.opacity = '0';
+        setTimeout(() => { loaderEl.hidden = true; }, 680);
+      }
+
+      this.startDrive();
       requestAnimationFrame(this.animate.bind(this));
     }
 
@@ -10509,7 +10611,15 @@
       this._occluderRaycaster.far = dist - 0.3; // stop short of the subject itself
       this._occluderRaycaster.near = 0.1;
 
-      const hits = this._occluderRaycaster.intersectObjects(this.world.occluderMeshes, true);
+      // Pre-filter: only test occluder meshes within 20m of the subject.
+      // Buildings farther away cannot physically sit on the camera-to-subject ray,
+      // so skipping them avoids unnecessary BVH traversal per frame.
+      const nearOccluders = this.world.occluderMeshes.filter(
+        m => m.position.distanceToSquared(subjectPos) < 400 // 20m²
+      );
+      const hits = this._occluderRaycaster.intersectObjects(
+        nearOccluders.length ? nearOccluders : this.world.occluderMeshes, true
+      );
       const hitRoots = new Set();
       hits.forEach(h => {
         let o = h.object;

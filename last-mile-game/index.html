@@ -211,6 +211,21 @@
     <div id="modal-container"></div>
   </div>
 
+  <!-- Full-screen loading overlay — hidden by JS after shader warmup -->
+  <div id="game-loader" aria-live="polite" aria-label="Loading game">
+    <div class="loader-inner">
+      <div class="loader-wordmark">SHIPLYP</div>
+      <div class="loader-tagline">// COURIER DISPATCH &bull; THE GRAND WESTERN GHATS CORRIDOR</div>
+      <div class="loader-bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loader-bar-track">
+        <div class="loader-bar-fill" id="loader-bar-fill"></div>
+      </div>
+      <div class="loader-meta">
+        <span class="loader-pct" id="loader-pct">0%</span>
+        <span class="loader-status" id="loader-status">Initializing 3D engine...</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Main Game Engine Bundle with Absolute Cache Busting -->
   <script>
     const s = document.createElement('script');
