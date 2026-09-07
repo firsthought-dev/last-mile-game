@@ -7569,7 +7569,8 @@
       this.dayProgress = 0.30; // Continuous day-night cycle progression [0.0, 1.0)
       this.targetDayProgress = null; // Target for smooth animated transitions
       this.selectedRoadTerrain = 'asphalt';
-      this.weather = 'clear'; // 'clear', 'rain' — see SLOWROADS_PARITY_LOG.md item 4
+      this.selectedWeather = 'clear';
+      this.weather = 'clear'; // 'clear', 'blizzard', 'rain' — see SLOWROADS_PARITY_LOG.md item 4
       this.selectedSeed = '5927cd04';
       this.selectedVehicle = 'musclecoupe';
       this.selectedDifficulty = 'medium';
@@ -8786,7 +8787,7 @@
       const BOX_HEIGHT = 26;
 
       // Wind drift — snow only; rain falls straight down by design
-      const isSnowNow = (this.selectedSeason === 'winter');
+      const isSnowNow = (this.selectedSeason === 'winter' && this.selectedWeather !== 'clear') || (this.selectedWeather === 'blizzard');
       if (!this._windPhase) this._windPhase = 0;
       if (isSnowNow) this._windPhase += dt * 0.12;
       const windX = isSnowNow ? (Math.cos(this._windPhase) * 1.2 + 0.6) : 0; // 0.6–1.8 m/s lateral bias
@@ -9139,7 +9140,8 @@
     }
 
     updateClimateHUD() {
-      const isRain = (this.selectedSeason === 'autumn' || this.selectedSeason === 'summer');
+      const isSnow = (this.selectedSeason === 'winter' && this.selectedWeather !== 'clear') || (this.selectedWeather === 'blizzard');
+      const isRain = (this.selectedWeather === 'rain') || ((this.selectedSeason === 'autumn' || this.selectedSeason === 'summer') && this.selectedWeather !== 'clear');
       const isWind = (this.selectedSeason === 'winter' || this.selectedSeason === 'summer');
 
       const pill = document.getElementById('hud-climate-pill');
@@ -9147,10 +9149,14 @@
       const text = document.getElementById('climate-status');
 
       if (pill && text) {
-        if (isRain) {
+        if (isSnow) {
+          pill.className = 'climate-pill wind';
+          if (icon) icon.innerHTML = UI.icon('cloud');
+          text.textContent = `BLIZZARD SNOW • SLIPPERY GRIP (${this.vehicle && this.vehicle.vehicleType === 'cycle' ? '45%' : '60%'})`;
+        } else if (isRain) {
           pill.className = 'climate-pill rain';
           if (icon) icon.innerHTML = UI.icon('cloudRain');
-          text.textContent = `MONSOON RAIN • SLIPPERY GRIP (${this.vehicle.vehicleType === 'cycle' ? '48%' : '68%'})`;
+          text.textContent = `MONSOON RAIN • SLIPPERY GRIP (${this.vehicle && this.vehicle.vehicleType === 'cycle' ? '48%' : '68%'})`;
         } else if (isWind) {
           pill.className = 'climate-pill wind';
           if (icon) icon.innerHTML = UI.icon('wind');
@@ -9215,9 +9221,12 @@
     }
 
     toggleWeather() {
-      this.weather = this.weather === 'blizzard' ? 'clear' : 'blizzard';
-      if (this.rain) this.rain.setActive(false);
-      this.showScorePopup(0, this.weather === 'blizzard' ? `${UI.icon('cloud')} BLIZZARD` : `${UI.icon('sun')} CLEAR SKIES`);
+      this.selectedWeather = (this.selectedWeather === 'blizzard') ? 'clear' : 'blizzard';
+      this.weather = this.selectedWeather;
+      this.initWeatherSystem();
+      this.updateClimateHUD();
+      if (this.activeDockPanel === 'style') this.renderDockPanelContent('style');
+      this.showScorePopup(0, this.selectedWeather === 'blizzard' ? `${UI.icon('cloud')} BLIZZARD` : `${UI.icon('sun')} CLEAR SKIES`);
       sound.playTone(600, 'sine', 0.08);
     }
 
@@ -9882,7 +9891,9 @@
         el.querySelectorAll('[data-w]').forEach(b => {
           b.onclick = () => {
             this.selectedWeather = b.dataset.w;
+            this.weather = this.selectedWeather;
             this.initWeatherSystem();
+            this.updateClimateHUD();
             this.renderDockPanelContent('style');
             sound.playTone(680, 'sine', 0.1);
           };
