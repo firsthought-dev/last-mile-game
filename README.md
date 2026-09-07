@@ -15,8 +15,6 @@ Play directly in your browser with zero installs or downloads:
 
 👉 **[firsthought-dev/last-mile-game](https://github.com/firsthought-dev/last-mile-game)**
 
-> Active development happens in a local repo; only the files needed to run/deploy the game are pushed here.
-
 ---
 
 ## 🕹️ Controls
