@@ -490,6 +490,268 @@ html, body {
   font-weight: 700;
 }
 
+/* ==========================================================================
+   SLOWROADS MINIMALIST DELIVERY MISSION CAPSULE (Top-Left)
+   ========================================================================== */
+.slowroads-delivery-capsule {
+  position: absolute;
+  top: 24px;
+  left: 28px;
+  background: rgba(8, 14, 24, 0.78);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 8px 14px;
+  min-width: 250px;
+  max-width: min(380px, 45vw);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 60;
+  pointer-events: auto;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.slowroads-delivery-capsule.delivery-approaching {
+  border-color: rgba(245, 158, 11, 0.55);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 18px rgba(245, 158, 11, 0.25);
+  animation: capsuleApproachPulse 1.4s infinite alternate ease-in-out;
+}
+
+@keyframes capsuleApproachPulse {
+  0% { border-color: rgba(245, 158, 11, 0.35); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 8px rgba(245, 158, 11, 0.15); }
+  100% { border-color: rgba(245, 158, 11, 0.85); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 22px rgba(245, 158, 11, 0.35); }
+}
+
+.delivery-capsule-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.delivery-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.30);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+
+.delivery-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brand-saffron);
+  box-shadow: 0 0 6px var(--brand-saffron);
+  animation: deliveryDotBlink 1.8s infinite ease-in-out;
+}
+
+@keyframes deliveryDotBlink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.delivery-tag {
+  font-family: var(--font-mono);
+  font-size: 0.54rem;
+  letter-spacing: 1.5px;
+  font-weight: 800;
+  color: var(--brand-saffron);
+}
+
+.delivery-order-seq {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.delivery-sep {
+  font-family: var(--font-mono);
+  font-size: 0.60rem;
+  color: rgba(255, 255, 255, 0.20);
+}
+
+.delivery-payout {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #10b981;
+  letter-spacing: 0.5px;
+}
+
+.delivery-capsule-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.delivery-dest-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.delivery-dest-name {
+  font-family: var(--font-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.delivery-dist-badge {
+  font-family: var(--font-mono);
+  font-size: 0.70rem;
+  font-weight: 800;
+  color: var(--brand-teal);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.delivery-dist-badge.dist-near {
+  color: var(--brand-saffron);
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+.delivery-cargo-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.delivery-cargo-desc {
+  font-family: var(--font-primary);
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.48);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.delivery-side-badge {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+
+/* --- Contextual Drop Action Prompt --- */
+.drop-action-prompt {
+  position: absolute;
+  bottom: 168px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(8, 14, 24, 0.84);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(245, 158, 11, 0.40);
+  border-radius: 30px;
+  padding: 6px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 20px rgba(245, 158, 11, 0.25);
+  z-index: 60;
+  pointer-events: none;
+  animation: actionPromptSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes actionPromptSlideUp {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.action-key-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-primary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+}
+
+.action-key-pill .key-cap {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  font-weight: 800;
+  background: rgba(245, 158, 11, 0.20);
+  color: var(--brand-saffron);
+  border: 1px solid rgba(245, 158, 11, 0.50);
+  border-radius: 4px;
+  padding: 2px 6px;
+  letter-spacing: 1px;
+}
+
+.action-sep {
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 0.70rem;
+}
+
+/* --- Floating Score/Celebration Popup Container & Banner --- */
+.score-popup-container {
+  position: absolute;
+  top: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.score-popup-banner {
+  background: rgba(8, 14, 24, 0.88);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(245, 158, 11, 0.40);
+  border-radius: 12px;
+  padding: 10px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), 0 0 24px rgba(245, 158, 11, 0.25);
+  animation: toastBannerSlideDown 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes toastBannerSlideDown {
+  from { opacity: 0; transform: translateY(-16px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.score-popup-banner .popup-title {
+  font-family: var(--font-primary);
+  font-size: 0.94rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+}
+
+.score-popup-banner .popup-sub {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--brand-saffron);
+  letter-spacing: 1px;
+}
+
 /* --- Top-Right: Slowroads Minimal Audio Bar & System Controls --- */
 .slowroads-top-bar {
   position: absolute;
@@ -1004,6 +1266,36 @@ div.slowroads-status-pill {
   font-size: 0.58rem;
   color: rgba(255, 255, 255, 0.45);
   font-weight: 600;
+}
+
+.telemetry-delivery-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.telemetry-rupee {
+  font-family: var(--font-mono);
+  font-size: 0.60rem;
+  font-weight: 800;
+  color: #10b981;
+}
+
+.telemetry-earnings {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #10b981;
+  letter-spacing: 0.5px;
+}
+
+.telemetry-streak {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: var(--brand-saffron);
+  letter-spacing: 0.5px;
 }
 
 /* ==========================================================================
@@ -2766,117 +3058,119 @@ body.touch-controls-active .slowroads-toss-banner {
 }
 
 /* ==========================================================================
-   PORTRAIT PHONE OPTIMISATION
-   Aggressive HUD compaction so the 3D game view gets ≥65% of viewport
-   height. Every HUD element shrinks to its minimum functional form.
+   PORTRAIT PHONE — ZONE-BASED LAYOUT  (≤480px)
+   Four non-overlapping zones, bottom to top:
 
-   Why a second block rather than editing the rules above:
-   These overrides must win over the existing 480px rules via later
-   cascade position. Gathering them here makes the portrait intent legible
-   in one place without scattering edits across the file.
+     Zone A  bottom: 0–58px      Dock (WORLD / ENV / VEHICLE tabs)
+     Zone B  bottom: 60–150px    HUD info  (radar left | telemetry right)
+     Zone C  bottom: 152–214px   Touch controls  (steer | action | pedal)
+     Zone D  214px → viewport    3D game view  ← this is what the player sees
+     Zone E  top: 0–48px         Menu bar  (radio, single compact row)
+
+   Nothing is hidden that the player actually uses.
    ========================================================================== */
 
-/* ── Tier 1: hide entirely (zero functional loss on touch phone) ─────────── */
+/* ── Zone E: top menu bar — collapse radio to one line ──────────────────── */
 @media (max-width: 480px) {
-  /* Status pills: AUDIO ON / CAM: CHASE / SFX / 53 FPS / DAY
-     All states are changeable via the dock panel. Keeping them always
-     visible costs ~40px at the top of a portrait phone for no gain. */
+  /* Hide PREV/NEXT (already done above at 700px) + status pill rows.
+     Result: a single ~44px bar across the top. */
   .slowroads-sys-btns {
     display: none;
   }
-
-  /* Radar map canvas: the 76×76 px canvas is the bulk of the radar box
-     (~130px of its height). The distance label (74m) stays visible.
-     Players can read the road ahead visually from the 3D scene. */
-  .radar-canvas-housing {
-    display: none;
+  .slowroads-radio-pill {
+    flex-wrap: nowrap;
+    padding: 6px 10px;
+    gap: 6px;
+    align-items: center;
   }
-
-  /* Autopilot / Recenter pills inside the telemetry column: both buttons
-     are accessible from the dock panel. Hiding them on phone collapses
-     the telemetry box from two columns to just the speed numeral. */
-  .telemetry-controls-col {
-    display: none;
+  /* Truncate track title to fit one line */
+  .slowroads-track-text {
+    max-width: 100px;
+    font-size: 0.64rem;
   }
-
-  /* Notification panel: move from lower-right (conflicts with touch pedals)
-     to upper-right, below the top HUD (~70px from top). */
-  .notification-panel {
-    top: 72px;
-    bottom: auto;
-    right: 8px;
-    max-width: 56vw;
-    max-height: 160px;
+  .radio-channel-btn {
+    font-size: 0.50rem;
+    padding: 2px 5px;
   }
 }
 
-/* ── Tier 2: reposition bottom-corner boxes to a thin bar ───────────────── */
+/* ── Zone B: HUD info strip — radar left, telemetry right ───────────────── */
 @media (max-width: 480px) {
-  /* Radar badge: strip to one row (label + distance), reposition to just
-     above the dock so touch controls can live above it unobstructed. */
+  /* Radar: 60px canvas, sits flush left just above dock */
   .slowroads-radar-box {
-    bottom: 56px;
-    left: 8px;
-    padding: 5px 9px;
-    gap: 0;
-    flex-direction: row;
-    align-items: center;
-    max-width: none;
-    border-radius: 8px;
+    bottom: 62px;
+    left: 6px;
+    padding: 4px 6px;
+    gap: 3px;
+    max-width: 44vw;
   }
-  .radar-header-row {
-    gap: 8px;
+  #gps-minimap-canvas {
+    width: 60px !important;
+    height: 60px !important;
+  }
+  .radar-canvas-housing {
+    padding: 0;
   }
   .radar-tag {
-    font-size: 0.46rem;
+    font-size: 0.42rem;
   }
   .radar-dist {
-    font-size: 0.60rem;
+    font-size: 0.56rem;
   }
 
-  /* Telemetry badge: speed numeral only, same tier as radar. */
+  /* Telemetry: speed numeral + compact autopilot column, flush right */
   .slowroads-telemetry-box {
-    bottom: 56px;
-    right: 8px;
-    gap: 0;
-    max-width: none;
+    bottom: 62px;
+    right: 6px;
+    gap: 4px;
     flex-wrap: nowrap;
-    align-items: center;
+    align-items: stretch;
+    max-width: 44vw;
   }
   .telemetry-digits-box {
-    padding: 5px 10px;
-    border-radius: 8px;
+    padding: 4px 8px;
   }
   .telemetry-numeral {
-    font-size: 1.5rem;
+    font-size: 1.3rem;
   }
   .telemetry-sub-row {
-    margin-top: 2px;
+    font-size: 0.50rem;
+    margin-top: 1px;
+  }
+  .telemetry-controls-col {
+    gap: 3px;
+    justify-content: center;
+  }
+  .telemetry-controls-col button,
+  .telemetry-controls-col .pill-btn {
+    padding: 3px 6px;
+    font-size: 0.50rem;
+    min-height: 0;
+    line-height: 1.2;
   }
 }
 
-/* ── Tier 3: touch controls — anchor just above the badge row ────────────── */
-/* Both radar and telemetry badges are now ~28–32px tall at bottom:56px,
-   so their top edge is at ~88px from the bottom. Touch controls at
-   bottom:100px sit 12px above that, then reach ~152px (52px button height).
-   That leaves 152px → screen-top as pure 3D game view on a 844px phone —
-   roughly 82% of the visible area above the dock. */
+/* ── Zone C: touch controls — anchored above the HUD strip ──────────────── */
+/* HUD boxes (radar/telemetry) are ≤88px tall at bottom:62px
+   → their tops reach ~150px from the bottom.
+   Touch controls at bottom:154px sit 4px clear above them.
+   The 62px button height brings their tops to ~216px → Zone D starts there. */
 @media (max-width: 480px) {
   .touch-steer-cluster {
-    bottom: 100px;
-    left: 8px;
-    gap: 10px;
+    bottom: 154px;
+    left: 6px;
+    gap: 8px;
   }
   .touch-pedal-cluster {
-    bottom: 100px;
-    right: 8px;
-    gap: 10px;
+    bottom: 154px;
+    right: 6px;
+    gap: 8px;
   }
   .touch-action-btn {
-    bottom: 104px;
+    bottom: 158px;
     width: 62px;
     height: 62px;
-    font-size: 0.72rem;
+    font-size: 0.70rem;
   }
   .touch-steer-btn,
   .touch-pedal-btn {
@@ -2922,4 +3216,30 @@ body.touch-controls-active .slowroads-toss-banner {
   .order-cargo-info {
     font-size: 0.62rem;
   }
+
+  /* Slowroads delivery capsule on portrait mobile: compact width and top anchor */
+  .slowroads-delivery-capsule {
+    top: 8px;
+    left: 8px;
+    min-width: 0;
+    max-width: 48vw;
+    padding: 6px 8px;
+  }
+  .delivery-dest-name {
+    font-size: 0.68rem;
+  }
+  .delivery-cargo-desc {
+    font-size: 0.54rem;
+    max-width: 75px;
+  }
+  .delivery-dist-badge {
+    font-size: 0.60rem;
+  }
+  .drop-action-prompt {
+    bottom: 220px;
+    padding: 5px 12px;
+    font-size: 0.60rem;
+    gap: 8px;
+  }
 }
+
