@@ -1089,13 +1089,14 @@
         id: 'winter',
         name: 'Northern Frost & Evergreen',
         skyTop: 0x1e3a8a,
-        skyBottom: 0xbfdbfe,
-        fog: 0xdbeafe,
-        fogDensity: 0.0016,
-        grassColor: 0xe5e8ec,
-        grassLight: 0xf9fafb,
-        cliffColor: 0x252a33,
-        treeLeaves: [0x30553f, 0x366247, 0x3c7652, 0x356e69]
+        skyBottom: 0xd4e8f8,
+        fog: 0xe8f2fb,
+        fogDensity: 0.0018,
+        grassColor: 0xeef1f4,   // brighter near-white snow blanket
+        grassLight: 0xfcfeff,   // almost pure white snow highlights
+        cliffColor: 0x3a4048,   // slightly lighter cliff for snowy mountain feel
+        snowRockColor: 0xbec4cc, // frost-dusted rock faces (used in winter scatter)
+        treeLeaves: [0x4a6b58, 0x3d5e4a, 0x526a5c, 0x4a6660] // muted blue-green (frosted evergreen)
       },
       desert: {
         id: 'desert',
@@ -2883,7 +2884,7 @@
                 colors.push(cliffCol.r, cliffCol.g, cliffCol.b);
               } else {
                 const nVal = 0.94 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.07;
-                colors.push(nVal, nVal, nVal);
+                colors.push(grassCol.r * nVal, grassCol.g * nVal, grassCol.b * nVal);
               }
             }
           }
@@ -3632,9 +3633,12 @@
       const owRailMat = new THREE.MeshStandardMaterial({ color: 0x6b6862, roughness: 0.6, metalness: 0.5 });
 
       const isOffWorld = (season.id === 'offworld' || this.cityKey === 'offworld' || !!season.isOffWorld);
+      const isWinter = (season.id === 'winter');
+      // Rock color: Martian red-brown for off-world, frost-grey for winter, warm sandy for everything else
+      const rockBaseColor = isOffWorld ? 0x8a4f2b : (isWinter ? (season.snowRockColor || 0xbec4cc) : 0x7a5c3a);
       const rockMat = new THREE.MeshStandardMaterial({
-        color: isOffWorld ? 0x8a4f2b : 0x7a5c3a, // off-world: Martian red-brown (unchanged); city: warm sandy rock
-        roughness: 0.85,
+        color: rockBaseColor,
+        roughness: isWinter ? 0.75 : 0.85,
         metalness: 0.05,
         map: RealTextureFactory.rockColor(),
         normalMap: RealTextureFactory.rockNormal()
@@ -3809,7 +3813,7 @@
 
       const clearsRoad = (pos, minClearance) => {
         const minClearanceSq = minClearance * minClearance;
-        for (let s = 0; s < sampledPoints.length; s += 3) {
+        for (let s = 0; s < sampledPoints.length; s += 1) {
           const dx = pos.x - sampledPoints[s].x;
           const dz = pos.z - sampledPoints[s].z;
           if (dx * dx + dz * dz < minClearanceSq) return false;
@@ -4117,7 +4121,21 @@
               const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 3.0, 0, (this.prng.next() - 0.5) * 3.0);
               const cPos = rPos.clone().add(cOffset);
               const rockScale = this.prng.range(0.02, 0.16);
-              const requiredClearance = 1.3 + rockScale * 0.8;
+              // Must include the road half-width. This read `1.3 + rockScale *
+              // 0.8` — and since rockScale is range(0.02, 0.16) that is only
+              // 1.32-1.43m of required clearance, while the driveable surface
+              // extends to ROAD_WIDTH * 0.5 = 3.70m from the centreline. So the
+              // guard was waving through rocks sitting well inside the asphalt.
+              //
+              // rockDist above starts at ROAD_WIDTH * 0.5 + 0.4, which looks
+              // safe on its own, but cOffset then shifts each cluster member by
+              // up to +/-1.5m in x and z — landing them near 2.6m — and on the
+              // inside of a bend the nearest road sample can be closer still.
+              // Measured before this fix: 14 rocks on the asphalt in mumbai,
+              // closest 3.11m; 10 in offworld at 2.33m. See dev-checks
+              // rocks-clear-of-road. Matches the correct form already used by
+              // the other rock spawner (search: ROAD_WIDTH * 0.5 + 1.6).
+              const requiredClearance = CONFIG.ROAD_WIDTH * 0.5 + 1.3 + rockScale * 0.8;
               if (!clearsRoad(cPos, requiredClearance)) continue;
 
               // True signed lateral distance of cPos from the road centerline.
@@ -4237,10 +4255,11 @@
             }
           }
 
-          // City/Earth large background boulder formations — exact off-world params,
-          // strictly non-offworld only (off-world has its own block above).
-          if (!isOffWorld && i % 3 === 0 && this.prng.next() > 0.25 && !inTunnel) {
-            const bgBoulderDist = side * this.prng.range(28.0, 85.0);
+          // City/Earth large background boulder formations — pushed far behind
+          // the treeline (55–120m) so they read as distant landscape, not
+          // roadside rubble.  Off-world has its own block above.
+          if (!isOffWorld && i % 6 === 0 && this.prng.next() > 0.50 && !inTunnel) {
+            const bgBoulderDist = side * this.prng.range(90.0, 180.0);
             const bgBoulderPos = pt.clone().addScaledVector(normal, bgBoulderDist);
             const bgBoulderCount = Math.floor(this.prng.range(1, 4));
             for (let ci = 0; ci < bgBoulderCount; ci++) {
@@ -5338,6 +5357,12 @@
             roofSlab.position.set(0, 4.4, 0.8);
             roofSlab.castShadow = true;
             houseGroup.add(roofSlab);
+            if (isWinter) {
+              const snowSlabMat = new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: 0.88, metalness: 0 });
+              const snowSlab = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.10, 8.8), snowSlabMat);
+              snowSlab.position.set(0, 4.52, 0.8);
+              houseGroup.add(snowSlab);
+            }
 
             // Warm Recessed Soffit Light Rail
             const soffit = new THREE.Mesh(
@@ -5391,6 +5416,15 @@
             roof.scale.set(1.15, 0.95, 0.95);
             roof.castShadow = true;
             houseGroup.add(roof);
+            if (isWinter) {
+              const snowRoofMat = new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: 0.88, metalness: 0 });
+              const snowRoofGeom = new THREE.ConeGeometry(6.1, 2.4, 4);
+              snowRoofGeom.rotateY(Math.PI / 4);
+              const snowRoof = new THREE.Mesh(snowRoofGeom, snowRoofMat);
+              snowRoof.position.y = 4.35;
+              snowRoof.scale.set(1.15, 0.97, 0.97);
+              houseGroup.add(snowRoof);
+            }
 
             // 3. Black Timber Post Pergola Portico
             const timberFrameMat = new THREE.MeshStandardMaterial({ color: 0x181a1f, roughness: 0.6, metalness: 0.4 });
@@ -5496,6 +5530,23 @@
         this.obstacles.push({ pos: d.pos, radius: d.radius, type: 'tree' });
       });
       this.foliageGroup.add(TreeBillboardFactory.buildInstancedBatches(acceptedTrees));
+
+      if (isWinter && acceptedTrees.length > 0) {
+        const snowCapGeom = new THREE.SphereGeometry(1, 6, 3);
+        const snowCapMat = new THREE.MeshStandardMaterial({ color: 0xf0f5f9, roughness: 0.9, metalness: 0 });
+        const snowCapMesh = new THREE.InstancedMesh(snowCapGeom, snowCapMat, acceptedTrees.length);
+        snowCapMesh.frustumCulled = false;
+        const dummy = new THREE.Object3D();
+        acceptedTrees.forEach((t, idx) => {
+          const capR = t.worldHeight * t.scale * 0.22;
+          dummy.position.set(t.pos.x, t.pos.y + t.worldHeight * t.scale * 0.85, t.pos.z);
+          dummy.scale.set(capR, capR * 0.48, capR);
+          dummy.updateMatrix();
+          snowCapMesh.setMatrixAt(idx, dummy.matrix);
+        });
+        snowCapMesh.instanceMatrix.needsUpdate = true;
+        this.foliageGroup.add(snowCapMesh);
+      }
 
       // Resolve fence overlaps against the now-complete obstacle list
       // (buildings/shops/skyscrapers/rocks/trees). The house-checkpoint
@@ -5619,12 +5670,26 @@
       scene.add(this.foliageGroup);
     }
 
-    // Slow Roads Natural Mountain Rock Arches & Bridges
+    // Rock arch portals — placed only at tunnel entrance and exit points
+    // to frame the opening and hide the seam where terrain meets the bore.
     createMountainArches(scene, season) {
       const archGroup = new THREE.Group();
       archGroup.name = 'mountain-arches';
+
+      if (!this.tunnelZones || !this.tunnelZones.length) {
+        this.archGroup = archGroup;
+        scene.add(archGroup);
+        return archGroup;
+      }
+
       const points = this.curve.getSpacedPoints(CONFIG.ROAD_MESH_SEGMENTS);
-      const archIndices = [160, 380, 640, 880, 1080];
+
+      // One arch just outside each tunnel portal (2 indices ≈ 10-15m before bore).
+      const archIndices = [];
+      for (const zone of this.tunnelZones) {
+        archIndices.push(Math.max(0, zone.start - 2));
+        archIndices.push(Math.min(points.length - 3, zone.end + 2));
+      }
 
       const rockMat = new THREE.MeshStandardMaterial({
         color: season.cliffColor || 0x4a4038,
@@ -5636,7 +5701,6 @@
 
       for (const idx of archIndices) {
         if (idx >= points.length - 2) continue;
-        if (this.isInTunnelZone && this.isInTunnelZone(idx, 8)) continue;
 
         const pt = points[idx];
         const prev = points[Math.max(0, idx - 1)];
@@ -6038,7 +6102,6 @@
           } else if (absDist <= 9.0) {
             const t = (absDist - laneHalf) / (9.0 - laneHalf);
             finalY = pt.y - 0.18 - t * 0.32;
-            // Near-white noise tint — photo texture carries the biome colour
             const blendT = THREE.MathUtils.smoothstep(t, 0.05, 0.95);
             const bladeNoise = 0.96 + this.simplex.noise2D(worldPos.x * 0.08, worldPos.z * 0.08) * 0.06;
             tColors.push(
@@ -6054,9 +6117,8 @@
             if (rawH > 22.0) {
               tColors.push(cliffCol.r, cliffCol.g, cliffCol.b);
             } else {
-              // Near-white with subtle noise — photo texture shows through
               const nVal = 0.94 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.07;
-              tColors.push(nVal, nVal, nVal);
+              tColors.push(grassCol.r * nVal, grassCol.g * nVal, grassCol.b * nVal);
             }
           }
 
@@ -6134,6 +6196,22 @@
             if ((this.prng ? this.prng.next() : Math.random()) < 0.75) return;
             const lat = (CONFIG.ROAD_WIDTH * 0.5 + 3.5 + (this.prng ? this.prng.next() : Math.random()) * 30.0) * side;
             const p = pt.clone().addScaledVector(normal, lat);
+            // A perpendicular offset of >=7.2m from THIS sample can still land
+            // inside the asphalt further along a bend, because the road curves
+            // back toward the offset point — the nearest road sample is not
+            // necessarily the one we offset from. The full clearsRoad() helper
+            // isn't in scope here (it's local to createFoliageAndProps) and
+            // scanning the whole spline per rock would be too slow for this
+            // streaming path, so check a window of nearby samples instead,
+            // which is what actually covers the local bend.
+            const minClear = CONFIG.ROAD_WIDTH * 0.5 + 1.5;
+            const minClearSq = minClear * minClear;
+            let tooClose = false;
+            for (let k = Math.max(0, i - 60); k < Math.min(points.length, i + 61); k++) {
+              const dx = p.x - points[k].x, dz = p.z - points[k].z;
+              if (dx * dx + dz * dz < minClearSq) { tooClose = true; break; }
+            }
+            if (tooClose) return;
             p.y = this.groundHeightAt(pt, p, lat);
             const rockScale = 0.02 + (this.prng ? this.prng.next() : Math.random()) * 0.14;
             const rock = new THREE.Mesh(streamRockGeom, streamRockMat);
@@ -6934,6 +7012,7 @@
           if (Math.abs(this.speed) < 0.1) this.speed = 0;
         } else if (keys.up || keys.w) {
           // UP / W: ACCELERATE FORWARD
+          this._downBrakingFromForward = false;
           if (this.speed < 0) {
             // Releasing reverse and braking to forward
             this.speed += this.brake * dt * 2.0;
@@ -6944,17 +7023,29 @@
             this.speed += (effectiveMaxSpeed - this.speed) * (1 - Math.exp(-0.42 * dt));
           }
         } else if (keys.down || keys.s) {
-          // DOWN / S: BRAKE WHEN MOVING FORWARD, REVERSE WHEN STOPPED
-          if (this.speed > 0.4) {
+          // DOWN / S: BRAKE WHEN MOVING FORWARD, REVERSE WHEN TRULY STOPPED
+          if (this.speed > 0.05) {
+            // Still moving forward — brake to a full stop
+            this._downBrakingFromForward = true;
             this.speed -= this.brake * dt * climateGrip * 1.8;
             if (this.speed < 0) this.speed = 0;
-          } else {
-            // Reverse speed up to -4.0 m/s (~14 km/h)
+          } else if (this.speed < -0.05) {
+            // Already reversing — keep accelerating in reverse
+            this._downBrakingFromForward = false;
             const reverseMax = -4.0;
             this.speed += (reverseMax - this.speed) * (1 - Math.exp(-1.0 * dt));
+          } else {
+            // At standstill — only engage reverse if DOWN was NOT held during forward braking
+            // (requires a fresh DOWN press at rest to engage reverse, preventing accidental reverse)
+            if (!this._downBrakingFromForward) {
+              const reverseMax = -4.0;
+              this.speed += (reverseMax - this.speed) * (1 - Math.exp(-1.0 * dt));
+            }
+            // else: car stays stopped until driver releases DOWN and re-presses it
           }
         } else {
-          // Natural coasting / drag
+          // Natural coasting / drag; also clear the reverse-guard so a fresh DOWN press can reverse
+          this._downBrakingFromForward = false;
           this.speed *= Math.exp(-this.drag * 0.85 * dt);
           if (Math.abs(this.speed) < 0.08) this.speed = 0;
         }
@@ -7051,7 +7142,14 @@
       let vehiclePos = proposedPos;
       let latDist = proj.latDist;
 
-      if (Math.abs(latDist) > clampDist) {
+      // When the car is turning sharply across the road (U-turn / three-point turn), skip the
+      // lateral position clamp entirely so the car can swing past the fence line and complete
+      // the arc. The threshold is ~72° from the road direction (forward or backward).
+      const roadFwdHeading = Math.atan2(proj.tangent.x, proj.tangent.z);
+      const headingVsRoad = Math.abs(Math.atan2(Math.sin(this.heading - roadFwdHeading), Math.cos(this.heading - roadFwdHeading)));
+      const isTurningAcrossRoad = headingVsRoad > Math.PI * 0.4; // >72° from road axis
+
+      if (Math.abs(latDist) > clampDist && !isTurningAcrossRoad) {
         const toProposed = proposedPos.clone().sub(proj.pt);
         const fwdComponent = toProposed.dot(proj.tangent);
         // Continuous clamp strictly to barrier boundary: NO 12cm sawtooth bounce!
@@ -7063,11 +7161,16 @@
         Object.assign(proj, reproj);
         this.splineProgress = proj.u;
 
-        // Slow Roads Barrier Glancing: deflect vehicle heading smoothly parallel to road tangent
+        // Slow Roads Barrier Glancing: align heading with the nearest road tangent direction.
+        // We check both the forward and backward tangent so a U-turning car (heading ~180° from
+        // road forward) gets aligned backward along the road instead of being snapped back to
+        // the forward direction, which would kill the U-turn.
         const tangentHeading = Math.atan2(proj.tangent.x, proj.tangent.z);
-        let headingDiff = tangentHeading - this.heading;
-        while (headingDiff > Math.PI) headingDiff -= Math.PI * 2;
-        while (headingDiff < -Math.PI) headingDiff += Math.PI * 2;
+        let headingDiffFwd = tangentHeading - this.heading;
+        headingDiffFwd = Math.atan2(Math.sin(headingDiffFwd), Math.cos(headingDiffFwd));
+        let headingDiffBck = (tangentHeading + Math.PI) - this.heading;
+        headingDiffBck = Math.atan2(Math.sin(headingDiffBck), Math.cos(headingDiffBck));
+        const headingDiff = Math.abs(headingDiffFwd) <= Math.abs(headingDiffBck) ? headingDiffFwd : headingDiffBck;
 
         // Smoothly guide heading to align with road tangent without overshooting/oscillating inward
         const alignRate = 1.0 - Math.exp(-12.0 * dt);
@@ -8191,13 +8294,13 @@
       // same way updateWalking() does every frame.
       const doorSide = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion);
       const exitPos = this.vehicle.mesh.position.clone().addScaledVector(doorSide, 1.7);
+      this._walkerU = THREE.MathUtils.clamp(this.vehicle.splineProgress, 0, 1);
       if (this.world && this.world.curve) {
-        const u = THREE.MathUtils.clamp(this.vehicle.splineProgress, 0, 1);
-        const pt = this.world.curve.getPointAt(u);
-        const tangent = this.world.curve.getTangentAt(u).normalize();
+        const pt = this.world.curve.getPointAt(this._walkerU);
+        const tangent = this.world.curve.getTangentAt(this._walkerU).normalize();
         const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
         const latDist = exitPos.clone().sub(pt).dot(normal);
-        exitPos.y = this.world.groundHeightAt(pt, exitPos, latDist) + 0.05;
+        exitPos.y = this.world.groundHeightAt(pt, exitPos, latDist) + 0.30;
       }
       this.walkerMesh.position.copy(exitPos);
       this.scene.add(this.walkerMesh);
@@ -8231,17 +8334,26 @@
         const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.walkerMesh.quaternion);
         const newPos = this.walkerMesh.position.clone().addScaledVector(forward, moveDir * walkSpeed * dt);
 
-        // Ground height via the shared formula (BUGFIX_LOG.md Recurring
-        // Pattern 1) — never hand-roll a new height approximation here.
-        // The walker stays close to where the vehicle parked, so the
-        // vehicle's own splineProgress is a good-enough nearest-point
-        // reference without re-searching the whole curve every frame.
-        const u = THREE.MathUtils.clamp(this.vehicle.splineProgress, 0, 1);
-        const pt = this.world.curve.getPointAt(u);
-        const tangent = this.world.curve.getTangentAt(u).normalize();
+        // Find the nearest spline point to the walker's current XZ — local
+        // search ±20 steps of 0.001 u around last known walker u.  Fixes
+        // grow bug: using vehicle.splineProgress was wrong when walker moves
+        // laterally; latDist grew → embankment formula elevated Y.
+        const searchBase = this._walkerU ?? this.vehicle.splineProgress;
+        let bestU = searchBase, bestD2 = Infinity;
+        for (let step = -20; step <= 20; step++) {
+          const testU = THREE.MathUtils.clamp(searchBase + step * 0.001, 0, 1);
+          const tp = this.world.curve.getPointAt(testU);
+          const d2 = (tp.x - newPos.x) ** 2 + (tp.z - newPos.z) ** 2;
+          if (d2 < bestD2) { bestD2 = d2; bestU = testU; }
+        }
+        this._walkerU = bestU;
+        const pt = this.world.curve.getPointAt(bestU);
+        const tangent = this.world.curve.getTangentAt(bestU).normalize();
         const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
         const latDist = newPos.clone().sub(pt).dot(normal);
-        newPos.y = this.world.groundHeightAt(pt, newPos, latDist) + 0.05;
+        // +0.30 bridges groundHeightAt's road offset (pt.y-0.18) up to the
+        // actual road mesh surface (pt.y+0.12), keeping walker soles above road.
+        newPos.y = this.world.groundHeightAt(pt, newPos, latDist) + 0.30;
 
         this.walkerMesh.position.copy(newPos);
 
@@ -8579,7 +8691,7 @@
 
       if (!isSnow && !isRain) return;
 
-      const COUNT = 1600;
+      const COUNT = isSnow ? 2000 : 1600;
       const geom = new THREE.BufferGeometry();
       const positions = new Float32Array(COUNT * 3);
       const velocities = [];
@@ -8604,34 +8716,47 @@
 
       geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-      // Rain: elongated streak sprite drawn on a canvas so drops look like
-      // actual falling water rather than dots. Snow keeps the plain white dot.
+      // Snow: soft Gaussian disc sprite so near flakes are large blobs and
+      // far ones shrink naturally (sizeAttenuation:true + world-unit size).
+      // Rain: elongated streak sprite for falling-water look.
       let weatherMap = null;
-      if (!isSnow) {
+      {
         const c = document.createElement('canvas');
-        c.width = 8; c.height = 32;
-        const ctx = c.getContext('2d');
-        const grad = ctx.createLinearGradient(0, 0, 0, 32);
-        grad.addColorStop(0, 'rgba(180,210,255,0)');
-        grad.addColorStop(0.25, 'rgba(200,225,255,0.9)');
-        grad.addColorStop(0.75, 'rgba(220,235,255,0.7)');
-        grad.addColorStop(1, 'rgba(180,210,255,0)');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.ellipse(4, 16, 1.5, 14, 0, 0, Math.PI * 2);
-        ctx.fill();
+        if (isSnow) {
+          c.width = 64; c.height = 64;
+          const ctx = c.getContext('2d');
+          const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+          grad.addColorStop(0,   'rgba(255,255,255,1.0)');
+          grad.addColorStop(0.35,'rgba(255,255,255,0.95)');
+          grad.addColorStop(0.65,'rgba(255,255,255,0.4)');
+          grad.addColorStop(1.0, 'rgba(255,255,255,0)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 64, 64);
+        } else {
+          c.width = 8; c.height = 32;
+          const ctx = c.getContext('2d');
+          const grad = ctx.createLinearGradient(0, 0, 0, 32);
+          grad.addColorStop(0, 'rgba(180,210,255,0)');
+          grad.addColorStop(0.25, 'rgba(200,225,255,0.9)');
+          grad.addColorStop(0.75, 'rgba(220,235,255,0.7)');
+          grad.addColorStop(1, 'rgba(180,210,255,0)');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.ellipse(4, 16, 1.5, 14, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
         weatherMap = new THREE.CanvasTexture(c);
       }
 
       const mat = new THREE.PointsMaterial({
         color: isSnow ? 0xffffff : 0xd6eaff,
-        size: isSnow ? 3.4 : 10.0,
-        sizeAttenuation: isSnow ? false : true,
+        size: isSnow ? 0.35 : 10.0,       // world units for snow → depth-varied blob sizes
+        sizeAttenuation: true,             // both snow and rain scale with depth now
         map: weatherMap,
         alphaMap: weatherMap,
         alphaTest: 0.05,
         transparent: true,
-        opacity: isSnow ? 0.88 : 0.72,
+        opacity: isSnow ? 0.92 : 0.72,
         depthWrite: false
       });
 
@@ -8660,13 +8785,20 @@
       const BOX_HALF = 30;
       const BOX_HEIGHT = 26;
 
+      // Wind drift — snow only; rain falls straight down by design
+      const isSnowNow = (this.selectedSeason === 'winter');
+      if (!this._windPhase) this._windPhase = 0;
+      if (isSnowNow) this._windPhase += dt * 0.12;
+      const windX = isSnowNow ? (Math.cos(this._windPhase) * 1.2 + 0.6) : 0; // 0.6–1.8 m/s lateral bias
+      const windZ = isSnowNow ? (Math.sin(this._windPhase * 0.7) * 0.5) : 0;
+
       for (let i = 0; i < count; i++) {
         vels[i].sway += dt * 2.0;
         const swayX = Math.sin(vels[i].sway) * 0.35;
 
-        positions[i * 3 + 0] += (vels[i].x + swayX) * dt;
+        positions[i * 3 + 0] += (vels[i].x + swayX + windX) * dt;
         positions[i * 3 + 1] += vels[i].y * dt;
-        positions[i * 3 + 2] += vels[i].z * dt;
+        positions[i * 3 + 2] += (vels[i].z + windZ) * dt;
 
         const dx = positions[i * 3 + 0] - carPos.x;
         const dy = positions[i * 3 + 1] - carPos.y;
@@ -10468,6 +10600,7 @@
 
         // Dynamic Weather Particle System (Snowfall Blizzard & Rain)
         this.updateWeatherSystem(dt);
+
 
         // Infinite Highway District Milestones (Seamless progression every 5 km)
         const nextDistrictThreshold = (this.currentDistrict || 1) * 5.0;

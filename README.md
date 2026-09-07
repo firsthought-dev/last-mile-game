@@ -39,12 +39,6 @@ Play directly in your browser with zero installs or downloads:
 
 ---
 
-## 📚 Documentation & Credits
-
-- **[Credits, References & Attributions](last-mile-game/CREDITS_AND_REFERENCES.md)** — Attributions for creators, AI models (Claude & Antigravity), open-source libraries, CC0 assets, and music.
-
----
-
 ## 📁 Repository Structure
 
 ```
@@ -54,9 +48,7 @@ Play directly in your browser with zero installs or downloads:
     ├── index.html                       ← WebGL Canvas & responsive HUD interface
     ├── game.js                          ← Main game engine (Three.js r128)
     ├── style.css                        ← Glassmorphic HUD & telemetry styling
-    ├── dev-checks.js                    ← Automated regression verification suite
-    ├── CREDITS_AND_REFERENCES.md
-    └── assets/                          ← CC0 3D models and backdrops
+    └── assets/                          ← 3D models and textures
 ```
 
 ---
