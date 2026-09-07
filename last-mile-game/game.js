@@ -4107,17 +4107,17 @@
           // Dense Near-Road Rock Scatter — applies across ALL biomes (Earth cities get
           // dense basalt/granite scree along roadside cuttings and shoulders; Off-World gets
           // pebble scatter across dunes).
-          if (!inTunnel && this.prng.next() > (isOffWorld ? 0.08 : 0.08)) {
-            const minOffset = isOffWorld ? 0.4 : 3.5;
-            const maxOffset = isOffWorld ? 34.0 : 28.0;
-            const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(minOffset, maxOffset));
+          if (!inTunnel && this.prng.next() > 0.08) {
+            // City uses exact off-world scatter setup: 0.4–34m offset, pebble scale,
+            // same clearance and cluster count — only the rock color differs.
+            const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(0.4, 34.0));
             const rPos = pt.clone().addScaledVector(normal, rockDist);
-            const clusterCount = Math.floor(this.prng.range(3, isOffWorld ? 8 : 6));
+            const clusterCount = Math.floor(this.prng.range(3, 8));
             for (let ci = 0; ci < clusterCount; ci++) {
               const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 3.0, 0, (this.prng.next() - 0.5) * 3.0);
               const cPos = rPos.clone().add(cOffset);
-              const rockScale = isOffWorld ? this.prng.range(0.02, 0.16) : this.prng.range(0.02, 0.3);
-              const requiredClearance = isOffWorld ? (1.3 + rockScale * 0.8) : (CONFIG.ROAD_WIDTH * 0.5 + 2.0 + rockScale * 0.8);
+              const rockScale = this.prng.range(0.02, 0.16);
+              const requiredClearance = 1.3 + rockScale * 0.8;
               if (!clearsRoad(cPos, requiredClearance)) continue;
 
               // True signed lateral distance of cPos from the road centerline.
@@ -4237,10 +4237,10 @@
             }
           }
 
-          // City/Earth large background boulder formations — mirrors off-world's
-          // background block but strictly non-offworld only.
-          if (!isOffWorld && i % 3 === 0 && this.prng.next() > 0.35 && !inTunnel) {
-            const bgBoulderDist = side * this.prng.range(35.0, 85.0);
+          // City/Earth large background boulder formations — exact off-world params,
+          // strictly non-offworld only (off-world has its own block above).
+          if (!isOffWorld && i % 3 === 0 && this.prng.next() > 0.25 && !inTunnel) {
+            const bgBoulderDist = side * this.prng.range(28.0, 85.0);
             const bgBoulderPos = pt.clone().addScaledVector(normal, bgBoulderDist);
             const bgBoulderCount = Math.floor(this.prng.range(1, 4));
             for (let ci = 0; ci < bgBoulderCount; ci++) {
