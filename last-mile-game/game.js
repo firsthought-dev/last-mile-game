@@ -8598,6 +8598,16 @@
         }
       });
 
+      // Game HUD buttons must never take keyboard focus on mouse click.
+      // tabindex="-1" only removes them from TAB order — clicking still focuses them,
+      // and a focused button fires a synthetic click on every Space/Enter press,
+      // which triggers autopilot-off and other unintended game actions.
+      // preventDefault on mousedown blocks focus acquisition while leaving the
+      // click event intact so all button handlers continue to work normally.
+      document.querySelectorAll('#in-game-hud button, #slowroads-dock button').forEach(btn => {
+        btn.addEventListener('mousedown', e => e.preventDefault());
+      });
+
       this.initTouchControls();
     }
 
