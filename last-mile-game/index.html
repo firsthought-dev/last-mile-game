@@ -76,28 +76,28 @@
         <div class="slowroads-radio-pill" id="cassette-radio-card">
           <span class="radio-label">RADIO</span>
           <span class="radio-sep">/</span>
-          <button id="btn-radio-channel" class="radio-channel-btn" title="Switch Channel [L]">DHABA FM</button>
-          <button id="btn-radio-lang" class="radio-channel-btn" title="Switch Language: Hindi / English">HIN/ENG</button>
+          <button id="btn-radio-channel" class="radio-channel-btn" title="Switch Channel [L]" tabindex="-1">DHABA FM</button>
+          <button id="btn-radio-lang" class="radio-channel-btn" title="Switch Language: Hindi / English" tabindex="-1">HIN/ENG</button>
           <span class="radio-sep">/</span>
           <span id="radio-track-title" class="slowroads-track-text">Dil Ne Yeh Kaha — Udit Narayan (90s)</span>
           <div class="slowroads-radio-btns">
-            <button id="btn-radio-prev" class="slowroads-text-btn" title="Previous">PREV</button>
-            <button id="btn-radio-play" class="slowroads-text-btn play-btn" title="Play / Pause">PLAY</button>
-            <button id="btn-radio-next" class="slowroads-text-btn" title="Next">NEXT</button>
+            <button id="btn-radio-prev" class="slowroads-text-btn" title="Previous" tabindex="-1">PREV</button>
+            <button id="btn-radio-play" class="slowroads-text-btn play-btn" title="Play / Pause" tabindex="-1">PLAY</button>
+            <button id="btn-radio-next" class="slowroads-text-btn" title="Next" tabindex="-1">NEXT</button>
           </div>
           <!-- Hidden equalizer for headless sound engine -->
           <div id="radio-eq" style="display:none;"><span></span><span></span><span></span><span></span></div>
         </div>
 
         <div class="slowroads-sys-btns">
-          <button id="btn-hud-radio-mute" class="slowroads-status-pill" title="Toggle Radio [M]"><span class="status-dot" id="dot-audio"></span><span id="label-audio">AUDIO: ON</span></button>
-          <button id="btn-hud-camera" class="slowroads-status-pill" title="Camera Mode [C]"><span id="label-cam">CAM: CHASE</span></button>
-          <button id="btn-hud-sfx-mute" class="slowroads-icon-btn" title="Toggle SFX [N]">SFX</button>
-          <button id="btn-hud-sound" class="slowroads-icon-btn" title="Toggle All Audio" style="display:none;">MUTE</button>
+          <button id="btn-hud-radio-mute" class="slowroads-status-pill" title="Toggle Radio [M]" tabindex="-1"><span class="status-dot" id="dot-audio"></span><span id="label-audio">AUDIO: ON</span></button>
+          <button id="btn-hud-camera" class="slowroads-status-pill" title="Camera Mode [C]" tabindex="-1"><span id="label-cam">CAM: CHASE</span></button>
+          <button id="btn-hud-sfx-mute" class="slowroads-icon-btn" title="Toggle SFX [N]" tabindex="-1">SFX</button>
+          <button id="btn-hud-sound" class="slowroads-icon-btn" title="Toggle All Audio" style="display:none;" tabindex="-1">MUTE</button>
         </div>
         <div class="slowroads-sys-btns">
           <div class="slowroads-status-pill" id="hud-fps-pill"><span id="hud-fps-value">60</span> FPS</div>
-          <button id="btn-hud-tod" class="slowroads-status-pill" title="Cycle Time of Day [T]"><span id="label-tod">DAY</span></button>
+          <button id="btn-hud-tod" class="slowroads-status-pill" title="Cycle Time of Day [T]" tabindex="-1"><span id="label-tod">DAY</span></button>
         </div>
       </div>
 
@@ -141,11 +141,11 @@
       <!-- Bottom-Right: Slowroads Clean Telemetry Readout -->
       <div class="slowroads-telemetry-box">
         <div class="telemetry-controls-col">
-          <button id="btn-hud-autodrive" class="slowroads-pill-btn" title="Autopilot [F]">
+          <button id="btn-hud-autodrive" class="slowroads-pill-btn" title="Autopilot [F]" tabindex="-1">
             <span class="slowroads-dot"></span>
             <span id="autodrive-text">AUTOPILOT</span>
           </button>
-          <button id="btn-hud-reset" class="slowroads-pill-btn" title="Recenter [R]">
+          <button id="btn-hud-reset" class="slowroads-pill-btn" title="Recenter [R]" tabindex="-1">
             <span>RECENTER</span>
           </button>
         </div>
@@ -193,16 +193,16 @@
 
       <div class="dock-bar-glass">
         <div class="dock-nav-items">
-          <button class="dock-tab-btn" data-panel="world">WORLD</button>
-          <button class="dock-tab-btn" data-panel="style">ENVIRONMENT</button>
-          <button class="dock-tab-btn" data-panel="vehicle">VEHICLE</button>
+          <button class="dock-tab-btn" data-panel="world" tabindex="-1">WORLD</button>
+          <button class="dock-tab-btn" data-panel="style" tabindex="-1">ENVIRONMENT</button>
+          <button class="dock-tab-btn" data-panel="vehicle" tabindex="-1">VEHICLE</button>
         </div>
 
         <div class="dock-icons-right">
-          <button id="btn-dock-tod" class="dock-icon" title="Time of Day [T]">TOD</button>
-          <button id="btn-dock-camera" class="dock-icon" title="Switch Camera Mode [C]">CAM</button>
-          <button id="btn-dock-sound" class="dock-icon" title="Mute/Unmute Audio [M]">AUDIO</button>
-          <button id="btn-dock-settings" class="dock-icon" title="Settings">CONFIG</button>
+          <button id="btn-dock-tod" class="dock-icon" title="Time of Day [T]" tabindex="-1">TOD</button>
+          <button id="btn-dock-camera" class="dock-icon" title="Switch Camera Mode [C]" tabindex="-1">CAM</button>
+          <button id="btn-dock-sound" class="dock-icon" title="Mute/Unmute Audio [M]" tabindex="-1">AUDIO</button>
+          <button id="btn-dock-settings" class="dock-icon" title="Settings" tabindex="-1">CONFIG</button>
         </div>
       </div>
     </div>
