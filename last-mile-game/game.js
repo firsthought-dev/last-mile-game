@@ -5961,9 +5961,15 @@
       }
 
       // 2. Terrain ribbon extension mesh (wide horizon landscape out to ±320m)
+      // Dense 4m-spaced embankment slices 9–45m match createTerrainMesh exactly,
+      // keeping formula/mesh agreement within the embankment-mesh-matches-formula check.
       const lateralSlices = [
-        -320.0, -220.0, -140.0, -85.0, -45.0, -24.0, -12.0, -laneHalf - shoulderWidth,
-        laneHalf + shoulderWidth, 12.0, 24.0, 45.0, 85.0, 140.0, 220.0, 320.0
+        -320.0, -220.0, -140.0, -85.0,
+        -45.0, -41.0, -37.0, -33.0, -29.0, -25.0, -21.0, -17.0, -13.0, -9.0,
+        -laneHalf - shoulderWidth,
+        laneHalf + shoulderWidth,
+        9.0, 13.0, 17.0, 21.0, 25.0, 29.0, 33.0, 37.0, 41.0, 45.0,
+        85.0, 140.0, 220.0, 320.0
       ];
       const sliceCount = lateralSlices.length;
       const tGeom = new THREE.BufferGeometry();
