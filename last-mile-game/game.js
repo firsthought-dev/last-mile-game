@@ -3612,8 +3612,10 @@
       // trunk baked into the sprite art, so trunkGeom/trunkMat/
       // pineLeavesGeom/decLeavesGeom no longer have any callers.
       const bushGeom = new THREE.DodecahedronGeometry(1.2, 0);
-      // detail 1 (not 0): flat-normal duplicate vertices only welding to a
-      const rockGeom = RockGeometryFactory.createFacetedRockGeometry(42);
+      // Pool of 6 distinct rock shapes (different seeds → different silhouettes)
+      // so clusters never look like copies of the same stamp.
+      const rockGeomPool = [2, 11, 23, 37, 53, 71].map(s => RockGeometryFactory.createFacetedRockGeometry(s));
+      const rockGeom = rockGeomPool[0]; // fallback for legacy references
       const poleGeom = new THREE.CylinderGeometry(0.1, 0.12, 6.5, 6);
       const crossbarGeom = new THREE.BoxGeometry(1.8, 0.12, 0.12);
       // Thin Off-World guardrail — checked against the developer's own
@@ -4106,43 +4108,39 @@
           // dense basalt/granite scree along roadside cuttings and shoulders; Off-World gets
           // pebble scatter across dunes).
           if (!inTunnel && this.prng.next() > (isOffWorld ? 0.08 : 0.25)) {
-            // Starts near the road edge so rocks naturally pepper the cutting verges
-            const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(0.4, isOffWorld ? 34.0 : 28.0));
+            // Minimum offset raised to 3.5m past road edge (was 0.4m) so
+            // no cluster jitter can push a rock back onto the driving surface.
+            const minOffset = isOffWorld ? 0.4 : 3.5;
+            const maxOffset = isOffWorld ? 34.0 : 28.0;
+            const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(minOffset, maxOffset));
             const rPos = pt.clone().addScaledVector(normal, rockDist);
             const clusterCount = Math.floor(this.prng.range(3, isOffWorld ? 8 : 6));
             for (let ci = 0; ci < clusterCount; ci++) {
-              const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 6.0, 0, (this.prng.next() - 0.5) * 6.0);
+              // Tighter jitter (±1.5m, was ±3m) keeps cluster members near
+              // the anchor point so they can't drift back toward the road center.
+              const cOffset = new THREE.Vector3((this.prng.next() - 0.5) * 3.0, 0, (this.prng.next() - 0.5) * 3.0);
               const cPos = rPos.clone().add(cOffset);
-              const rockScale = isOffWorld ? this.prng.range(0.02, 0.16) : this.prng.range(0.35, 1.35);
-              const requiredClearance = isOffWorld ? (1.3 + rockScale * 0.8) : (CONFIG.ROAD_WIDTH * 0.5 + 0.5 + rockScale * 0.7);
-              if (!clearsRoad(cPos, requiredClearance)) continue; // STRICT ROAD CLEARANCE
+              const rockScale = isOffWorld ? this.prng.range(0.02, 0.16) : this.prng.range(0.4, 2.8);
+              const requiredClearance = isOffWorld ? (1.3 + rockScale * 0.8) : (CONFIG.ROAD_WIDTH * 0.5 + 2.0 + rockScale * 0.7);
+              if (!clearsRoad(cPos, requiredClearance)) continue;
 
-              // True signed lateral distance of cPos from the road centerline
-              // is the projection of (cPos - pt) onto the lateral `normal`,
-              // NOT `|rockDist| + |cOffset.x|` (the old formula) — that always
-              // added the cluster jitter regardless of its sign, so a cluster
-              // offset back toward the road still counted as farther out.
-              // groundHeightAt() blends shoulder-drop vs. raw dune height by
-              // this distance, so an overestimate could put a boulder's
-              // ground sample well above/below the dune surface actually
-              // under it — the cause of boulders floating over or sinking
-              // into sloped dune terrain.
+              // True signed lateral distance of cPos from the road centerline.
               const cDist = normal.dot(cOffset) + rockDist;
               cPos.y = calcTerrainY(cPos, cDist);
 
-              const rock = new THREE.Mesh(rockGeom, rockMat);
+              // Pick a distinct rock shape from the pool so clusters look varied.
+              const geomIdx = Math.floor(this.prng.next() * rockGeomPool.length);
+              const chosenGeom = rockGeomPool[geomIdx];
+              const rock = new THREE.Mesh(chosenGeom, rockMat);
               rock.scale.set(
-                rockScale * this.prng.range(0.85, 1.25),
-                rockScale * this.prng.range(0.75, 1.15),
-                rockScale * this.prng.range(0.85, 1.25)
+                rockScale * this.prng.range(0.7, 1.4),
+                rockScale * this.prng.range(0.6, 1.1),
+                rockScale * this.prng.range(0.7, 1.4)
               );
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
               rock.rotation.set(rotX, rotY, 0);
-              // Embed the rock's actual lowest scaled/rotated vertex into the
-              // ground sample (was a flat `+0.15 * rockScale` heuristic that
-              // under-embedded large boulders relative to their true size).
               const rotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
-              const posAttr = rockGeom.attributes.position;
+              const posAttr = chosenGeom.attributes.position;
               let minY = Infinity;
               const v = new THREE.Vector3();
               for (let vi = 0; vi < posAttr.count; vi++) {
@@ -4199,16 +4197,18 @@
               // visibly float above the sampled ground point.
               const bgLatDist = normal.dot(bgOffset) + bgDist;
               cBgPos.y = calcTerrainY(cBgPos, bgLatDist);
-              const rock = new THREE.Mesh(rockGeom, rockMat);
+              const bgGeomIdx = Math.floor(this.prng.next() * rockGeomPool.length);
+              const bgChosenGeom = rockGeomPool[bgGeomIdx];
+              const rock = new THREE.Mesh(bgChosenGeom, rockMat);
               rock.scale.set(
-                rockScale * this.prng.range(0.85, 1.25),
-                rockScale * this.prng.range(0.75, 1.15),
-                rockScale * this.prng.range(0.85, 1.25)
+                rockScale * this.prng.range(0.7, 1.4),
+                rockScale * this.prng.range(0.6, 1.1),
+                rockScale * this.prng.range(0.7, 1.4)
               );
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
               rock.rotation.set(rotX, rotY, 0);
               const bgRotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
-              const bgPosAttr = rockGeom.attributes.position;
+              const bgPosAttr = bgChosenGeom.attributes.position;
               let bgMinY = Infinity;
               const bgV = new THREE.Vector3();
               for (let vi = 0; vi < bgPosAttr.count; vi++) {
@@ -5113,16 +5113,18 @@
 
             if (!nearHouseZone && !overlapsExisting && clearsRoad(rockPos, requiredClearance)) {
               const groundY = calcTerrainY(rockPos, rockDist);
-              const rock = new THREE.Mesh(rockGeom, rockMat);
+              const sGeomIdx = Math.floor(this.prng.next() * rockGeomPool.length);
+              const sChosenGeom = rockGeomPool[sGeomIdx];
+              const rock = new THREE.Mesh(sChosenGeom, rockMat);
               rock.scale.set(
-                rockScale * this.prng.range(0.85, 1.25),
-                rockScale * this.prng.range(0.75, 1.15),
-                rockScale * this.prng.range(0.85, 1.25)
+                rockScale * this.prng.range(0.7, 1.4),
+                rockScale * this.prng.range(0.6, 1.1),
+                rockScale * this.prng.range(0.7, 1.4)
               );
               const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
               rock.rotation.set(rotX, rotY, 0);
               const rotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
-              const posAttr = rockGeom.attributes.position;
+              const posAttr = sChosenGeom.attributes.position;
               let minY = Infinity;
               const v = new THREE.Vector3();
               for (let vi = 0; vi < posAttr.count; vi++) {
