@@ -8125,13 +8125,16 @@
             vec3 n  = texture2D(tNormal, vUv).rgb * 2.0 - 1.0;
             vec3 nr = texture2D(tNormal, vUv + vec2(px.x, 0.0)).rgb * 2.0 - 1.0;
             vec3 nd = texture2D(tNormal, vUv + vec2(0.0, px.y)).rgb * 2.0 - 1.0;
-            float edge = step(0.28, max(length(n - nr), length(n - nd)));
-            vec3 col = mix(texel.rgb, vec3(0.06, 0.05, 0.04), edge * 0.82);
+            float edge = step(0.15, max(length(n - nr), length(n - nd)));
+            vec3 col = mix(texel.rgb, vec3(0.04, 0.03, 0.02), edge * 0.92);
             gl_FragColor = vec4(col, texel.a);
           }
         `
       };
       this.edgePass = new THREE.ShaderPass(EdgeHardenShader);
+      // UniformsUtils.clone copies textures by value (new Texture object), so re-point
+      // tNormal at the actual render target texture after construction.
+      this.edgePass.uniforms['tNormal'].value = this._normalTarget.texture;
       this.edgePass.enabled = false;
       this.edgePass.renderToScreen = false;
 
