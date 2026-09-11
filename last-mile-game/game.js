@@ -1755,6 +1755,72 @@
   };
 
   // --------------------------------------------------------------------------
+  // 4.5. ROAD SPATIAL HASH GRID (Accurate hairpin/switchback road clearance queries)
+  // --------------------------------------------------------------------------
+  class RoadSpatialGrid {
+    constructor(cellSize = 25.0) {
+      this.cellSize = cellSize;
+      this.grid = new Map();
+      this.points = [];
+    }
+
+    _key(cx, cz) {
+      return `${cx},${cz}`;
+    }
+
+    build(roadSpacedPoints) {
+      this.grid.clear();
+      this.points = roadSpacedPoints || [];
+      if (!this.points.length) return;
+
+      const cs = this.cellSize;
+      for (let i = 0; i < this.points.length; i++) {
+        const pt = this.points[i];
+        const cx = Math.floor(pt.x / cs);
+        const cz = Math.floor(pt.z / cs);
+        const key = this._key(cx, cz);
+        let cell = this.grid.get(key);
+        if (!cell) {
+          cell = [];
+          this.grid.set(key, cell);
+        }
+        cell.push(i);
+      }
+    }
+
+    getNearestRoadPoint(x, z, maxDist = 30.0) {
+      if (!this.points.length) return null;
+      const cs = this.cellSize;
+      const minCx = Math.floor((x - maxDist) / cs);
+      const maxCx = Math.floor((x + maxDist) / cs);
+      const minCz = Math.floor((z - maxDist) / cs);
+      const maxCz = Math.floor((z + maxDist) / cs);
+
+      let nearest = null;
+      let minSq = maxDist * maxDist;
+
+      for (let cx = minCx; cx <= maxCx; cx++) {
+        for (let cz = minCz; cz <= maxCz; cz++) {
+          const cell = this.grid.get(this._key(cx, cz));
+          if (!cell) continue;
+          for (let k = 0; k < cell.length; k++) {
+            const idx = cell[k];
+            const pt = this.points[idx];
+            const dx = x - pt.x;
+            const dz = z - pt.z;
+            const dSq = dx * dx + dz * dz;
+            if (dSq < minSq) {
+              minSq = dSq;
+              nearest = { point: pt, dist: Math.sqrt(dSq), distSq: dSq, y: pt.y, index: idx };
+            }
+          }
+        }
+      }
+      return nearest;
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // 5. SLOW ROADS PROCEDURAL TERRAIN & DUAL-GRID ARCHITECTURE
   // --------------------------------------------------------------------------
   class ProceduralWorld {
@@ -1769,6 +1835,7 @@
       this.roadMesh = null;
       this.terrainMesh = null;
       this.skyMesh = null;
+      this.roadSpatialGrid = new RoadSpatialGrid(25.0);
       this.foliageGroup = new THREE.Group();
       this.windowMaterials = [];
       this.trafficVehicles = [];
@@ -2473,6 +2540,9 @@
       // occurrence).
       this.roadSpacedPoints = points;
       this.initialRoadSpacedPoints = points;
+      if (this.roadSpatialGrid) {
+        this.roadSpatialGrid.build(points);
+      }
       // Per-point banking angle + frame vectors, cached alongside
       // roadSpacedPoints so createLaneMarkingMeshes() (built right after
       // this) computes its decal ribbons from the EXACT same values the
@@ -2987,13 +3057,13 @@
           let finalY = pt.y;
 
           if (absDist <= roadHalf) {
-            // 1. Under Asphalt: strictly 0.18m below road surface, banked with the road
-            finalY = pt.y - 0.18 + bankedYOffset;
+            // 1. Under Asphalt: strictly 0.22m below road surface, banked with the road (continuous road corridor trench)
+            finalY = pt.y - 0.22 + bankedYOffset;
             colors.push(shoulderSoilColor.r, shoulderSoilColor.g, shoulderSoilColor.b);
           } else if (absDist <= 9.0) {
             // 2. Road Shoulder Verge: gentle downward slope matching groundHeightAt()
             const t = (absDist - roadHalf) / (9.0 - roadHalf);
-            finalY = pt.y - 0.18 - t * 0.32;
+            finalY = pt.y - 0.22 - t * 0.32;
 
             // Natural organic shoulder blending into biome landscape:
             // Starts at shoulderSoilColor at road edge (t=0), feathering outward into season grass/sand
@@ -3036,12 +3106,17 @@
           // Road clearance guard: if this vertex lies within the drivable road corridor of ANY road segment,
           // it must never breach above that road segment's surface (prevents terrain from slicing across hairpins/switchbacks)
           if (absDist > roadHalf) {
-            for (let s = 0; s < points.length; s += 8) {
-              const dx = worldPos.x - points[s].x;
-              const dz = worldPos.z - points[s].z;
-              if (dx * dx + dz * dz < roadHalf * roadHalf) {
-                finalY = Math.min(finalY, points[s].y - 0.22);
-                break;
+            const nearestRoad = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(worldPos.x, worldPos.z, vergeLat + 1.0) : null;
+            if (nearestRoad && nearestRoad.dist < (CONFIG.ROAD_WIDTH * 0.5 + CONFIG.ROAD_SHOULDER_WIDTH + 0.5)) {
+              finalY = Math.min(finalY, nearestRoad.y - 0.22);
+            } else {
+              for (let s = 0; s < points.length; s += 8) {
+                const dx = worldPos.x - points[s].x;
+                const dz = worldPos.z - points[s].z;
+                if (dx * dx + dz * dz < roadHalf * roadHalf) {
+                  finalY = Math.min(finalY, points[s].y - 0.22);
+                  break;
+                }
               }
             }
           }
@@ -3700,7 +3775,7 @@
         // A wider blend window (25->45, tried first) broke that guard —
         // this narrower 40->45 band is the widest that respects it.
         const BLEND_START = 40.0;
-        const SAFETY_ZONE = 65.0;
+        const SAFETY_ZONE = 75.0;
         if (dist <= BLEND_START) {
           finalY = nearestRoadY - 25.0;
         } else if (dist < RIBBON_COVERAGE) {
@@ -5747,7 +5822,9 @@
         if (overlapsBuilding) return;
         // Same hairpin/switchback risk as skyscrapers, just at a shorter
         // offset — the curve can loop back near a tree's local placement.
-        if (!clearsRoad(d.pos, CONFIG.ROAD_WIDTH * 0.55 + d.radius)) return;
+        // Billboard sweep clearance: account for camera rotation sweep width (radius * 1.25 + 1.2)
+        const treeSweepClearance = (CONFIG.ROAD_WIDTH * 0.5) + (d.radius * 1.25) + 1.2;
+        if (!clearsRoad(d.pos, treeSweepClearance)) return;
         acceptedTrees.push(d);
         this.obstacles.push({ pos: d.pos, radius: d.radius, type: 'tree' });
       });
@@ -5803,6 +5880,23 @@
         pendingRocks = pendingRocks.filter(r =>
           !buildings.some(b => r.pos.distanceTo(b.pos) < (r.radius + b.radius))
         );
+
+        // Rule 16: Unconditional road corridor clearance sweep - prune any prop breaching the asphalt corridor
+        const minCorridorClear = CONFIG.ROAD_WIDTH * 0.5 + 1.0;
+        this.obstacles = this.obstacles.filter(o => {
+          if (o.type === 'rock' || o.type === 'tree') {
+            const reqDist = minCorridorClear + (o.radius || 1.0);
+            if (!clearsRoad(o.pos, reqDist)) {
+              if (o.mesh) this.foliageGroup.remove(o.mesh);
+              return false;
+            }
+          }
+          return true;
+        });
+        pendingRocks = pendingRocks.filter(r => {
+          const reqDist = minCorridorClear + (r.radius || 1.0);
+          return clearsRoad(r.pos, reqDist);
+        });
       }
 
       // Build InstancedMesh batches for all accepted rocks (6 distinct rock geometry shapes)
@@ -6243,20 +6337,29 @@
           this.roadBankedUp[i] = bankedUp.clone();
         }
 
+        // Rebuild road spatial grid for fast road corridor clearance lookups
+        if (this.roadSpatialGrid) {
+          this.roadSpatialGrid.build(this.roadSpacedPoints);
+        }
+
         // Generate forward extension meshes for road, lane markings, terrain, and roadside props
         this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, roadTerrainKey);
       }
     }
 
     buildExtensionMeshes(scene, oldNodeCount, newNodeCount, season, difficulty = 'medium', roadTerrainKey = 'asphalt') {
-      const startSeg = Math.max(0, (oldNodeCount - 1) * 3);
-      const endSeg = (newNodeCount) * 3;
+      const totalSegments = newNodeCount * 3;
+      // Exact arc-length parameter match to the boundary of the previous mesh
+      const startSeg = Math.max(0, Math.round(((oldNodeCount - 1) / (newNodeCount - 1)) * totalSegments));
+      const endSeg = totalSegments;
       const points = this.roadSpacedPoints;
       if (!points || points.length <= endSeg) return;
 
       const roadWidth = CONFIG.ROAD_WIDTH;
       const shoulderWidth = CONFIG.ROAD_SHOULDER_WIDTH;
       const laneHalf = roadWidth * 0.5;
+      const roadHalf = roadWidth * 0.52;
+      const vergeLat = roadWidth * 0.5 + shoulderWidth;
       const isOffWorldExt = this.cityKey === 'offworld';
       // Same single-vehicle-track narrowing as createRoadMesh — outer
       // verge (points 0/6) stays at the wide laneHalf+shoulderWidth so it
@@ -6264,13 +6367,13 @@
       // the inner track columns pull in narrow.
       const trackHalf = isOffWorldExt ? 1.15 : laneHalf;
       const offsets = [
-        -laneHalf - shoulderWidth,
+        -vergeLat,
         -trackHalf,
         -trackHalf * 0.46 / 0.5,
         0.0,
         trackHalf * 0.46 / 0.5,
         trackHalf,
-        laneHalf + shoulderWidth
+        vergeLat
       ];
 
       // Was hardcoded generic dark-asphalt colors (0x3a3d40/0x2d3033)
@@ -6425,8 +6528,7 @@
       // keeping formula/mesh agreement without dangerous 320m wild quads that sliced across hairpin curves.
       const lateralSlices = [
         -45.0, -41.0, -37.0, -33.0, -29.0, -25.0, -21.0, -17.0, -13.0, -9.0,
-        -laneHalf - shoulderWidth,
-        laneHalf + shoulderWidth,
+        -vergeLat, -roadHalf, roadHalf, vergeLat,
         9.0, 13.0, 17.0, 21.0, 25.0, 29.0, 33.0, 37.0, 41.0, 45.0
       ];
       const sliceCount = lateralSlices.length;
@@ -6452,13 +6554,13 @@
           const worldPos = pt.clone().addScaledVector(normal, latDist);
           let finalY = pt.y;
 
-          if (absDist <= laneHalf) {
-            // Hidden under road — use shoulder soil colour (matches createTerrainMesh)
-            finalY = pt.y - 0.18 + bankedYOffset;
+          if (absDist <= roadHalf) {
+            // Hidden under road — strictly 0.22m below road surface (matches createTerrainMesh)
+            finalY = pt.y - 0.22 + bankedYOffset;
             tColors.push(shoulderSoil.r, shoulderSoil.g, shoulderSoil.b);
           } else if (absDist <= 9.0) {
-            const t = (absDist - laneHalf) / (9.0 - laneHalf);
-            finalY = pt.y - 0.18 - t * 0.32;
+            const t = (absDist - roadHalf) / (9.0 - roadHalf);
+            finalY = pt.y - 0.22 - t * 0.32;
             const blendT = THREE.MathUtils.smoothstep(t, 0.05, 0.95);
             const bladeNoise = 0.96 + this.simplex.noise2D(worldPos.x * 0.08, worldPos.z * 0.08) * 0.06;
             tColors.push(
@@ -6481,13 +6583,18 @@
 
           // Road clearance guard: if this vertex lies within the drivable road corridor of ANY road segment,
           // clamp finalY below that road surface to eliminate terrain poking through the asphalt.
-          if (absDist > laneHalf) {
-            for (let s = 0; s < points.length; s += 8) {
-              const dx = worldPos.x - points[s].x;
-              const dz = worldPos.z - points[s].z;
-              if (dx * dx + dz * dz < laneHalf * laneHalf) {
-                finalY = Math.min(finalY, points[s].y - 0.22);
-                break;
+          if (absDist > roadHalf) {
+            const nearestRoad = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(worldPos.x, worldPos.z, vergeLat + 1.0) : null;
+            if (nearestRoad && nearestRoad.dist < (CONFIG.ROAD_WIDTH * 0.5 + CONFIG.ROAD_SHOULDER_WIDTH + 0.5)) {
+              finalY = Math.min(finalY, nearestRoad.y - 0.22);
+            } else {
+              for (let s = 0; s < points.length; s += 8) {
+                const dx = worldPos.x - points[s].x;
+                const dz = worldPos.z - points[s].z;
+                if (dx * dx + dz * dz < roadHalf * roadHalf) {
+                  finalY = Math.min(finalY, points[s].y - 0.22);
+                  break;
+                }
               }
             }
           }
@@ -6760,7 +6867,8 @@
 
                 const scale = 0.85 + rng() * 0.6;
                 const radius = 1.8 * scale;
-                if (!clearsRoadExt(cPos, CONFIG.ROAD_WIDTH * 0.55 + radius + 1.2, i)) continue;
+                const treeClearance = (CONFIG.ROAD_WIDTH * 0.5) + (radius * 1.25) + 1.2;
+                if (!clearsRoadExt(cPos, treeClearance, i)) continue;
                 if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(cPos) < (o.radius + radius + 1.0))) continue;
 
                 newTrees.push({
@@ -6790,7 +6898,8 @@
 
                 const bgScale = 0.9 + rng() * 0.65;
                 const bgRadius = 2.2 * bgScale;
-                if (!clearsRoadExt(cBgPos, CONFIG.ROAD_WIDTH * 0.55 + bgRadius + 1.5, i)) continue;
+                const bgClearance = (CONFIG.ROAD_WIDTH * 0.5) + (bgRadius * 1.25) + 1.2;
+                if (!clearsRoadExt(cBgPos, bgClearance, i)) continue;
                 if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(cBgPos) < (o.radius + bgRadius + 1.0))) continue;
 
                 newTrees.push({
@@ -6825,7 +6934,7 @@
           }
         }
 
-        // Rule 15 & 16: Unconditional final sweep for rock/tree overlaps with buildings
+        // Rule 15 & 16: Unconditional final sweep for rock/tree overlaps with buildings and road corridor
         {
           const buildings = this.obstacles.filter(o => o.type === 'building');
           const stillOverlapping = this.obstacles.filter(o =>
@@ -6837,6 +6946,22 @@
           });
           if (stillOverlapping.length > 0) {
             this.obstacles = this.obstacles.filter(o => !stillOverlapping.includes(o));
+          }
+
+          // Road corridor clearance sweep
+          const minCorridorClear = CONFIG.ROAD_WIDTH * 0.5 + 1.0;
+          const breachingRoad = this.obstacles.filter(o => {
+            if (o.type === 'rock' || o.type === 'tree') {
+              const reqDist = minCorridorClear + (o.radius || 1.0);
+              return !clearsRoadExt(o.pos, reqDist);
+            }
+            return false;
+          });
+          breachingRoad.forEach(o => {
+            if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
+          });
+          if (breachingRoad.length > 0) {
+            this.obstacles = this.obstacles.filter(o => !breachingRoad.includes(o));
           }
         }
       }
