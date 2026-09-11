@@ -8121,12 +8121,20 @@
           void main() {
             vec4 texel = texture2D(tDiffuse, vUv);
             vec2 px = 1.0 / resolution;
-            // Sample the normal buffer at neighbours
-            vec3 n  = texture2D(tNormal, vUv).rgb * 2.0 - 1.0;
-            vec3 nr = texture2D(tNormal, vUv + vec2(px.x, 0.0)).rgb * 2.0 - 1.0;
-            vec3 nd = texture2D(tNormal, vUv + vec2(0.0, px.y)).rgb * 2.0 - 1.0;
-            float edge = step(0.15, max(length(n - nr), length(n - nd)));
-            vec3 col = mix(texel.rgb, vec3(0.04, 0.03, 0.02), edge * 0.92);
+            // 3x3 Sobel on normal buffer: cancels micro-variations on flat walls,
+            // only true silhouette/corner edges survive the threshold.
+            vec3 tl=texture2D(tNormal,vUv+vec2(-px.x,-px.y)).rgb*2.-1.;
+            vec3 tc=texture2D(tNormal,vUv+vec2( 0.0, -px.y)).rgb*2.-1.;
+            vec3 tr=texture2D(tNormal,vUv+vec2( px.x,-px.y)).rgb*2.-1.;
+            vec3 ml=texture2D(tNormal,vUv+vec2(-px.x,  0.0)).rgb*2.-1.;
+            vec3 mr=texture2D(tNormal,vUv+vec2( px.x,  0.0)).rgb*2.-1.;
+            vec3 bl=texture2D(tNormal,vUv+vec2(-px.x, px.y)).rgb*2.-1.;
+            vec3 bc=texture2D(tNormal,vUv+vec2( 0.0,  px.y)).rgb*2.-1.;
+            vec3 br=texture2D(tNormal,vUv+vec2( px.x, px.y)).rgb*2.-1.;
+            vec3 Gx = -tl + tr - 2.0*ml + 2.0*mr - bl + br;
+            vec3 Gy = -tl - 2.0*tc - tr + bl + 2.0*bc + br;
+            float edge = step(1.2, sqrt(dot(Gx,Gx) + dot(Gy,Gy)));
+            vec3 col = mix(texel.rgb, vec3(0.04, 0.03, 0.02), edge * 0.90);
             gl_FragColor = vec4(col, texel.a);
           }
         `
