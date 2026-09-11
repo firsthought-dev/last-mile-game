@@ -4185,57 +4185,120 @@
       // Low-poly pedestrian/animal road-crosser builder — same flat-shaded
       // block-figure style as the porch resident so crossers read as part
       // of the world rather than a mismatched asset dropped in.
-      const CROSSER_PALETTE = [0xef4444, 0x3b82f6, 0x22c55e, 0xf59e0b, 0x8b5cf6, 0xec4899];
+      // Stylized Indian humanoid road-crosser builder — matching the
+      // polished character turnaround sheet and bicycle courier aesthetic
+      // with clean edge loops, polo collars, and jogger cuffs.
+      const CROSSER_POLO_PALETTE = [0x228b96, 0xd97706, 0x059669, 0x2563eb, 0x7c3aed, 0xdb2777];
+      const CROSSER_PANTS_PALETTE = [0x5f6e43, 0x1e293b, 0x334155, 0x475569, 0x3f3f46];
       const buildCrosserMesh = (kind) => {
         const group = new THREE.Group();
         if (kind === 'pedestrian') {
-          const skinMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.6 });
-          const shirtMat = new THREE.MeshStandardMaterial({ color: CROSSER_PALETTE[Math.floor(this.prng.range(0, CROSSER_PALETTE.length))], roughness: 0.6 });
-          const legMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 });
-          const shoeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
-          const hairMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9 });
+          const skinMat = new THREE.MeshStandardMaterial({ color: 0xc68a62, roughness: 0.55 });
+          const poloColor = CROSSER_POLO_PALETTE[Math.floor(this.prng.range(0, CROSSER_POLO_PALETTE.length))];
+          const shirtMat = new THREE.MeshStandardMaterial({ color: poloColor, roughness: 0.60 });
+          const collarMat = new THREE.MeshStandardMaterial({ color: 0xa4d4d8, roughness: 0.65 });
+          const pantsColor = CROSSER_PANTS_PALETTE[Math.floor(this.prng.range(0, CROSSER_PANTS_PALETTE.length))];
+          const legMat = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.70 });
+          const cuffMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85 });
+          const shoeMat = new THREE.MeshStandardMaterial({ color: 0x2a2421, roughness: 0.65 });
+          const soleMat = new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.45 });
+          const hairMat = new THREE.MeshStandardMaterial({ color: 0x181412, roughness: 0.45 });
 
-          // Head & Hair
+          // Head & Stylized Hair
           const headGroup = new THREE.Group();
-          const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.15, 1), skinMat);
+          const headGeom = new THREE.SphereGeometry(0.145, 12, 10);
+          headGeom.scale(0.95, 1.05, 1.0);
+          const head = new THREE.Mesh(headGeom, skinMat);
           headGroup.add(head);
-          const hair = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.10, 0.30), hairMat);
-          hair.position.y = 0.08;
+
+          // Sculpted Hair Cap
+          const hairGeom = new THREE.SphereGeometry(0.152, 12, 10);
+          hairGeom.scale(0.98, 1.02, 1.05);
+          const hair = new THREE.Mesh(hairGeom, hairMat);
+          hair.position.set(0, 0.03, -0.02);
           headGroup.add(hair);
-          headGroup.position.y = 1.46;
+
+          // Stylized Nose
+          const nose = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.06, 5), skinMat);
+          nose.rotation.x = Math.PI / 2;
+          nose.position.set(0, 0, 0.145);
+          headGroup.add(nose);
+
+          headGroup.position.y = 1.48;
           group.add(headGroup);
 
-          // Torso
-          const torso = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.58, 0.24), shirtMat);
-          torso.position.y = 1.02;
+          // Torso & Polo Collar
+          const torsoGeom = new THREE.CylinderGeometry(0.16, 0.14, 0.52, 12);
+          torsoGeom.scale(1.15, 1.0, 0.75);
+          const torso = new THREE.Mesh(torsoGeom, shirtMat);
+          torso.position.y = 1.04;
           group.add(torso);
 
-          // Articulated Arms (with shoulder pivots)
-          const armGeom = new THREE.BoxGeometry(0.10, 0.46, 0.11);
-          const armL = new THREE.Mesh(armGeom, shirtMat);
-          armL.position.set(-0.25, 0.98, 0);
-          const armR = new THREE.Mesh(armGeom, shirtMat);
-          armR.position.set(0.25, 0.98, 0);
+          const collarMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.08, 10), collarMat);
+          collarMesh.position.y = 1.32;
+          group.add(collarMesh);
+
+          // Articulated Arms (Polo sleeves + skin forearms)
+          const makeArm = (sign) => {
+            const armPivot = new THREE.Group();
+            armPivot.position.set(sign * 0.22, 1.25, 0);
+
+            // Polo sleeve
+            const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.18, 8), shirtMat);
+            sleeve.position.y = -0.09;
+            armPivot.add(sleeve);
+
+            // Forearm
+            const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.042, 0.26, 8), skinMat);
+            forearm.position.y = -0.29;
+            armPivot.add(forearm);
+
+            // Hand
+            const hand = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 6), skinMat);
+            hand.position.y = -0.43;
+            armPivot.add(hand);
+
+            return armPivot;
+          };
+
+          const armL = makeArm(-1);
+          const armR = makeArm(1);
           group.add(armL, armR);
 
-          // Articulated Legs & Shoes
-          const legL = new THREE.Group();
-          const legMeshL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.54, 0.15), legMat);
-          legMeshL.position.y = -0.27;
-          const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.10, 0.22), shoeMat);
-          shoeL.position.set(0, -0.56, 0.03);
-          legL.add(legMeshL, shoeL);
-          legL.position.set(-0.11, 0.70, 0);
+          // Articulated Legs (Joggers + Cuffs + Sneakers)
+          const makeLeg = (sign) => {
+            const legPivot = new THREE.Group();
+            legPivot.position.set(sign * 0.11, 0.78, 0);
 
-          const legR = new THREE.Group();
-          const legMeshR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.54, 0.15), legMat);
-          legMeshR.position.y = -0.27;
-          const shoeR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.10, 0.22), shoeMat);
-          shoeR.position.set(0, -0.56, 0.03);
-          legR.add(legMeshR, shoeR);
-          legR.position.set(0.11, 0.70, 0);
+            // Thigh & Knee jogger
+            const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.38, 8), legMat);
+            thigh.position.y = -0.19;
+            legPivot.add(thigh);
 
+            // Shin jogger
+            const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.055, 0.32, 8), legMat);
+            shin.position.y = -0.48;
+            legPivot.add(shin);
+
+            // Ribbed Ankle Cuff
+            const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.06, 8), cuffMat);
+            cuff.position.y = -0.65;
+            legPivot.add(cuff);
+
+            // Sneaker
+            const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.08, 0.20), shoeMat);
+            shoe.position.set(0, -0.71, 0.03);
+            const sole = new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.025, 0.21), soleMat);
+            sole.position.set(0, -0.75, 0.03);
+            legPivot.add(shoe, sole);
+
+            return legPivot;
+          };
+
+          const legL = makeLeg(-1);
+          const legR = makeLeg(1);
           group.add(legL, legR);
+
           group.userData.legs = [legL, legR];
           group.userData.arms = [armL, armR];
           group.userData.hitRadius = 1.1;
@@ -11202,6 +11265,9 @@
 
         this.world.updateTraffic(dt);
         this.world.updateCrossers(dt);
+        if (this.vehicle && this.vehicle.mesh && this.world.updateFoliageVisibility) {
+          this.world.updateFoliageVisibility(this.vehicle.mesh.position);
+        }
         this.checkCrosserCollisions();
         if (this.rain && this.vehicle && this.vehicle.mesh) {
           const rainForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion);
