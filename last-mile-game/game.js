@@ -128,6 +128,9 @@
   // rotation needed. Brand references stripped per user instruction; see CREDITS.
   const MuscleCoupeAsset = makeVehicleAsset('assets/models/muscle-coupe.glb?t=' + Date.now(), () => {}, 'MuscleCoupeAsset');
 
+  // 0g. DELIVERY CYCLE — Blender-exported GLB with corrected Y-up orientation.
+  const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?t=' + Date.now(), () => {}, 'DeliveryCycleAsset');
+
   // --------------------------------------------------------------------------
   // 1. DETERMINISTIC PRNG
   // --------------------------------------------------------------------------
@@ -787,7 +790,7 @@
       }
     }
 
-    updateDrivingAmbience(speed, maxSpeed, accelRatio) {
+    updateDrivingAmbience(speed, maxSpeed, accelRatio, vehicleType) {
       if (this.suspended || this.sfxMuted || !this.ctx) {
         if (this.engineGain && this.ctx) this.engineGain.gain.setValueAtTime(0, this.ctx.currentTime);
         if (this.windGain && this.ctx) this.windGain.gain.setValueAtTime(0, this.ctx.currentTime);
@@ -796,15 +799,19 @@
       this._initAmbience();
       const now = this.ctx.currentTime;
       const speedRatio = Math.min(1.0, Math.abs(speed || 0) / (maxSpeed || 40));
+      const isPedal = vehicleType === 'cycle';
 
-      // RPM pitch curve with virtual 4-gear cycles
-      const gearCycle = (speedRatio * 3.6) % 1.0;
-      const rpmFreq = 46 + gearCycle * 52 + speedRatio * 38;
-      if (this.engineOsc1) this.engineOsc1.frequency.setTargetAtTime(rpmFreq, now, 0.06);
-      if (this.engineOsc2) this.engineOsc2.frequency.setTargetAtTime(rpmFreq * 1.5, now, 0.06);
-
-      const targetEngineVol = 0.02 + (Math.abs(accelRatio || 0) > 0.5 ? 0.035 : 0.008) + speedRatio * 0.035;
-      if (this.engineGain) this.engineGain.gain.setTargetAtTime(targetEngineVol, now, 0.08);
+      // Engine hum — silent for pedal vehicles
+      if (!isPedal) {
+        const gearCycle = (speedRatio * 3.6) % 1.0;
+        const rpmFreq = 46 + gearCycle * 52 + speedRatio * 38;
+        if (this.engineOsc1) this.engineOsc1.frequency.setTargetAtTime(rpmFreq, now, 0.06);
+        if (this.engineOsc2) this.engineOsc2.frequency.setTargetAtTime(rpmFreq * 1.5, now, 0.06);
+        const targetEngineVol = 0.02 + (Math.abs(accelRatio || 0) > 0.5 ? 0.035 : 0.008) + speedRatio * 0.035;
+        if (this.engineGain) this.engineGain.gain.setTargetAtTime(targetEngineVol, now, 0.08);
+      } else {
+        if (this.engineGain) this.engineGain.gain.setTargetAtTime(0, now, 0.1);
+      }
 
       // Wind noise volume and aerodynamic cutoff scaling
       const windVol = Math.pow(speedRatio, 1.8) * 0.07;
@@ -1324,7 +1331,7 @@
       chotahathi: { id: 'chotahathi', name: 'Gaja 500 Mini Truck', maxSpeed: 30.0, accel: 12.0, drag: 0.85, brake: 26.0 },
       sportscoupe: { id: 'sportscoupe', name: 'Sports Coupe', maxSpeed: 50.0, accel: 20.0, drag: 0.78, brake: 32.0 },
       musclecoupe: { id: 'musclecoupe', name: 'Muscle Coupe', maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0 },
-      cycle: { id: 'cycle', name: 'Pawan Pedaler Bike', maxSpeed: 22.0, accel: 10.0, drag: 0.95, brake: 20.0 }
+      cycle: { id: 'cycle', name: 'Delivery Cycle', maxSpeed: 22.0, accel: 8.0, drag: 0.90, brake: 18.0 }
     },
 
     DIFFICULTY_TIERS: {
@@ -7191,6 +7198,35 @@
           this.wheels.push(w);
         });
 
+      } else if (this.vehicleType === 'cycle' && DeliveryCycleAsset.template) {
+        const cycleModel = DeliveryCycleAsset.clone();
+        // Authored nose-toward--Y in Blender, so the Y-up GLB export already lands the
+        // nose on +Z road-forward. No rotation correction needed.
+        cycleModel.scale.setScalar(1.0);
+        this.mesh.add(cycleModel);
+        cycleModel.traverse(child => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+      } else if (this.vehicleType === 'cycle') {
+        if (DeliveryCycleAsset.pendingControllers.indexOf(this) === -1) {
+          DeliveryCycleAsset.pendingControllers.push(this);
+        }
+        const wheelGeom = new THREE.CylinderGeometry(0.44, 0.44, 0.06, 16);
+        wheelGeom.rotateZ(Math.PI / 2);
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+        [[0, 0.44, 0.78], [0, 0.44, -0.82]].forEach(p => {
+          const w = new THREE.Mesh(wheelGeom, wheelMat);
+          w.position.set(...p);
+          this.mesh.add(w);
+          this.wheels.push(w);
+        });
+        const box = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.28, 0.52), new THREE.MeshLambertMaterial({ color: 0xff9f1c }));
+        box.position.set(0, 1.05, 0.68);
+        this.mesh.add(box);
+
       } else if (this.vehicleType === 'musclecoupe' && MuscleCoupeAsset.template) {
         // ====================================================================
         // 4. MUSCLE COUPE (user-supplied model, see MuscleCoupeAsset comment
@@ -7257,7 +7293,7 @@
 
       } else {
         // ====================================================================
-        // 4. PAWAN PEDALER BICYCLE (Eco Zen Delivery MTB)
+        // PROCEDURAL BICYCLE (fallback for unknown vehicle types)
         // ====================================================================
         const frameMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, flatShading: true });
         const tubeGeom = new THREE.CylinderGeometry(0.035, 0.035, 1.1, 8);
@@ -8580,7 +8616,14 @@
         if (k === 'p' || code === 'KeyP') this.toggleWeather();
         if (k === 'e' || code === 'KeyE') this.toggleOnFoot();
         if (k === 'h' || k === '?' || code === 'KeyH') this.openSettingsModal('controls');
-        if (k === 'escape' || code === 'Escape') this.openSettingsModal('gameplay');
+        if (k === 'escape' || code === 'Escape') {
+          if (this.modalContainer && this.modalContainer.querySelector('.settings-modal')) {
+            this.modalContainer.innerHTML = '';
+            if (this.gameState === 'menu') this.renderDispatchHub();
+          } else {
+            this.openSettingsModal('gameplay');
+          }
+        }
         if ((k === 'enter' || code === 'Enter') && this.gameState === 'menu') this.startDrive();
         if ((k === ' ' || code === 'Space') && this.gameState === 'playing' && !e.repeat) {
           if (this.onFoot) this.tryWalkDelivery();
@@ -10229,8 +10272,9 @@
       ];
 
       const vehList = [
-        { id: 'sportscoupe', name: 'Sports Coupe', stat: '180 km/h • Gasoline' },
-        { id: 'musclecoupe', name: 'Muscle Coupe', stat: '194 km/h • Gasoline' }
+        { id: 'sportscoupe', name: 'Sports Coupe',        stat: '180 km/h • Gasoline' },
+        { id: 'musclecoupe', name: 'Muscle Coupe',        stat: '194 km/h • Gasoline' },
+        { id: 'cycle',       name: 'Delivery Cycle',      stat: '22 km/h • Pedal Power' },
       ];
 
       this.modalContainer.innerHTML = `
@@ -10468,6 +10512,7 @@
               <div class="dock-btn-row">
                 <button class="dock-sq-btn ${this.selectedVehicle === 'sportscoupe' ? 'active-sq' : ''}" data-v="sportscoupe">COUPE</button>
                 <button class="dock-sq-btn ${this.selectedVehicle === 'musclecoupe' ? 'active-sq' : ''}" data-v="musclecoupe">MUSCLE</button>
+                <button class="dock-sq-btn ${this.selectedVehicle === 'cycle' ? 'active-sq' : ''}" data-v="cycle">CYCLE</button>
               </div>
             </div>
           </div>
@@ -11147,7 +11192,7 @@
           this.updateWalking(dt);
         } else {
           this.vehicle.update(dt, this.keys, this.world, this.selectedSeason, this.selectedRoadTerrain);
-          sound.updateDrivingAmbience(this.vehicle.speed, this.vehicle.maxSpeed, (this.vehicle.speed - (this.vehicle.lastSpeed || this.vehicle.speed)) / Math.max(0.01, dt));
+          sound.updateDrivingAmbience(this.vehicle.speed, this.vehicle.maxSpeed, (this.vehicle.speed - (this.vehicle.lastSpeed || this.vehicle.speed)) / Math.max(0.01, dt), this.vehicle.vehicleType);
         }
 
         // Infinite Forward Highway Chunk Streaming (Slow Roads Parity)
