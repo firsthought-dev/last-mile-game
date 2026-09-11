@@ -6888,6 +6888,17 @@
       }
     }
 
+    updateTrolleyParcels(deliveriesMade) {
+      if (!this.trolleyParcels || this.trolleyParcels.length === 0) return;
+      const totalParcels = this.trolleyParcels.length; // 9 parcels
+      // Deplete top parcels first, then middle, then bottom
+      const parcelsRemaining = Math.max(1, totalParcels - deliveriesMade);
+      this.trolleyParcels.forEach((p, idx) => {
+        // Earlier indices are bottom layer, later indices are top layer
+        p.visible = idx < parcelsRemaining;
+      });
+    }
+
     getCamOffsets() {
       // Pulled back + raised (slowroads-style) so roadside props recede instead of
       // smearing past the periphery, which destroyed the sense of forward motion.
@@ -7271,8 +7282,55 @@
           if (child.isMesh) {
             child.castShadow = true;
             child.receiveShadow = true;
+            // Hide the static placeholder cargo box in the trolley so our dynamic depleting stack takes its place!
+            if (child.name && (child.name.includes('cargo_trolley') || child.name.includes('Canvas') || child.name.includes('Leather'))) {
+              if (child.name === 'cargo_trolley005_3' || child.name === 'cargo_trolley005_4') {
+                child.visible = false;
+              }
+            }
           }
         });
+
+        // Dynamic Depleting Parcel Stack on the Cargo Trolley:
+        // Positions correspond to the wooden trolley bed (X: +-0.18, Y: 0.58-0.95, Z: -1.24 in Three.js road coordinates)
+        this.trolleyParcels = [];
+        const parcelGroup = new THREE.Group();
+        const parcelDefs = [
+          // Bottom layer (4 sturdy parcels)
+          { size: [0.26, 0.18, 0.28], pos: [-0.14, 0.52, -1.10], col: 0xd97706, tape: 0x1e293b },
+          { size: [0.24, 0.19, 0.28], pos: [0.14, 0.52, -1.10],  col: 0xb45309, tape: 0xf59e0b },
+          { size: [0.25, 0.17, 0.26], pos: [-0.13, 0.52, -1.38], col: 0xc2410c, tape: 0x1e293b },
+          { size: [0.24, 0.18, 0.27], pos: [0.13, 0.52, -1.38],  col: 0xca8a04, tape: 0x475569 },
+          // Middle layer (3 parcels)
+          { size: [0.28, 0.16, 0.26], pos: [-0.08, 0.69, -1.14], col: 0x0284c7, tape: 0xffffff }, // Express Blue
+          { size: [0.26, 0.16, 0.26], pos: [0.10, 0.69, -1.32],  col: 0x16a34a, tape: 0xd97706 }, // Organic Green
+          { size: [0.22, 0.15, 0.24], pos: [-0.10, 0.69, -1.36], col: 0xd97706, tape: 0x1e293b },
+          // Top tier parcels (deplete first as courier delivers!)
+          { size: [0.22, 0.14, 0.22], pos: [0.00, 0.84, -1.22],  col: 0xe11d48, tape: 0xffffff }, // Fragile Red
+          { size: [0.18, 0.13, 0.20], pos: [-0.09, 0.83, -1.18], col: 0xf59e0b, tape: 0x1e293b }
+        ];
+
+        parcelDefs.forEach((p, idx) => {
+          const pMesh = new THREE.Group();
+          const box = new THREE.Mesh(
+            new THREE.BoxGeometry(...p.size),
+            new THREE.MeshStandardMaterial({ color: p.col, roughness: 0.75, metalness: 0.05 })
+          );
+          box.castShadow = true;
+          box.receiveShadow = true;
+          pMesh.add(box);
+
+          // Realistic cross packaging strap / tape
+          const tapeGeom = new THREE.BoxGeometry(p.size[0] * 1.02, p.size[1] * 1.02, p.size[2] * 0.18);
+          const tapeMesh = new THREE.Mesh(tapeGeom, new THREE.MeshBasicMaterial({ color: p.tape }));
+          pMesh.add(tapeMesh);
+
+          pMesh.position.set(...p.pos);
+          parcelGroup.add(pMesh);
+          this.trolleyParcels.push(pMesh);
+        });
+
+        this.mesh.add(parcelGroup);
       } else if (this.vehicleType === 'cycle') {
         if (DeliveryCycleAsset.pendingControllers.indexOf(this) === -1) {
           DeliveryCycleAsset.pendingControllers.push(this);
@@ -9200,6 +9258,9 @@
       });
 
       this.activeOrderIndex++;
+      if (this.vehicle && this.vehicle.updateTrolleyParcels) {
+        this.vehicle.updateTrolleyParcels(this.deliveriesMade);
+      }
       this.updateActiveOrderCard();
       this.updateHUDStats();
       this.refreshStatusPanel();
