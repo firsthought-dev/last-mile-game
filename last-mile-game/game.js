@@ -4676,7 +4676,11 @@
               speed: walkMesh.userData.walkSpeed * 0.75, // ambling shoulder pace, slower than a road-crossing dash
               hitRadius: walkMesh.userData.hitRadius,
               struck: false,
-              legPhase: this.prng.next() * Math.PI * 2
+              legPhase: this.prng.next() * Math.PI * 2,
+              // Endpoints never move (the patrol flip just swaps them), so the
+              // path length is constant — cache it instead of paying a sqrt
+              // per crosser per frame in updateCrossers.
+              pathLen: startPos.distanceTo(endPos)
             });
           }
         }
@@ -6242,7 +6246,7 @@
       // when re-entering range. Empirically this was the single largest
       // win: frame time 27.18ms → 17.70ms (35% speedup) before any other
       // change.
-      const vehiclePos = this._vehiclePos || new THREE.Vector3();
+      const vehiclePos = this._vehiclePos || (this._vehiclePos = new THREE.Vector3());
       if (this._game && this._game.vehicle && this._game.vehicle.mesh) {
         vehiclePos.copy(this._game.vehicle.mesh.position);
       }
@@ -6252,7 +6256,7 @@
         const c = this.crossers[i];
         if (c.struck) continue; // frozen at impact position until cleanup below
 
-        c.progress += (c.speed * dt) / c.start.distanceTo(c.end);
+        c.progress += (c.speed * dt) / (c.pathLen || (c.pathLen = c.start.distanceTo(c.end)));
         if (c.progress >= 1.0) {
           // Reached the far side — walk back the other way so the same
           // crosser keeps patrolling instead of despawning mid-street.
@@ -6263,7 +6267,9 @@
           const tmpLat = c.latStart;
           c.latStart = c.latEnd;
           c.latEnd = tmpLat;
-          c.mesh.lookAt(c.end);
+          // flatten: an un-flattened lookAt on sloped terrain pitches/rolls the
+          // whole figure (see the lookAt-tilt pattern used throughout).
+          c.mesh.lookAt(c.end.x, c.mesh.position.y, c.end.z);
         }
 
         // X/Z still lerp in a straight line (fine — that's genuinely
