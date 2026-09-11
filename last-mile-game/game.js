@@ -1045,9 +1045,9 @@
         // (this color) covers a lot of ground next to the road it was
         // visually swamping the green grass, making the whole map read as
         // "no grass, just tan". Sand/soil tone is reserved for Off-World's
-        // dune terrain instead, where it's the correct material.
-        grassColor: 0x8b9e6a,
-        grassLight: 0xa8b87a,
+        // Rich lush natural hillside greens (prevents washout under bright daylight)
+        grassColor: 0x276638,
+        grassLight: 0x3a874d,
         cliffColor: 0x8a7458,
         // Muted sage/olive canopy with a warm-brown bark accent, no pure
         // black outlines anywhere in the set. Brighter than the target
@@ -1268,10 +1268,10 @@
         id: 'foothills',
         name: 'Neelgiri Foothills',
         tagline: 'Lush Mountain Pass & Cedar Forest',
-        grassColor: 0x5e7d32,
-        grassLight: 0x7a9e43,
+        grassColor: 0x276638,
+        grassLight: 0x3a874d,
         cliffColor: 0x5d3c29,
-        shoulderSoil: 0x7a9e43,
+        shoulderSoil: 0x3a874d,
         treeLeaves: [0x366247, 0x3c7652, 0x5baa78, 0x30553f],
         rockColor: 0x6b5c48,
         treeDensity: 0.85
@@ -1280,10 +1280,10 @@
         id: 'ridge',
         name: 'Cloudspire Ridge',
         tagline: 'Misty Pine Bluffs & Cantilever Villas',
-        grassColor: 0x475e3e,
-        grassLight: 0x628052,
+        grassColor: 0x225530,
+        grassLight: 0x327544,
         cliffColor: 0x3e424b,
-        shoulderSoil: 0x546b48,
+        shoulderSoil: 0x327544,
         treeLeaves: [0x2d4f3b, 0x345e45, 0x407052, 0x243e30],
         rockColor: 0x555861,
         treeDensity: 0.75
@@ -1292,10 +1292,10 @@
         id: 'valley',
         name: 'Sonaghati Valley Expressway',
         tagline: 'Golden Grasslands & Contemporary Estates',
-        grassColor: 0x8a7a3b,
-        grassLight: 0xb5a452,
+        grassColor: 0x4a7332,
+        grassLight: 0x669945,
         cliffColor: 0x694b2f,
-        shoulderSoil: 0x9e8f49,
+        shoulderSoil: 0x669945,
         treeLeaves: [0x6b7032, 0x828a38, 0x94782b, 0x575e29],
         rockColor: 0x7a6952,
         treeDensity: 0.65
@@ -1316,10 +1316,10 @@
         id: 'deccan',
         name: 'Mayurakshi Plateau',
         tagline: 'Rolling Open Plateau & Rural Homesteader Groves',
-        grassColor: 0x736c42,
-        grassLight: 0x9e955a,
+        grassColor: 0x356338,
+        grassLight: 0x4d874e,
         cliffColor: 0x4a4332,
-        shoulderSoil: 0x8c824c,
+        shoulderSoil: 0x4d874e,
         treeLeaves: [0x4d5930, 0x667540, 0x78874a, 0x3d4527],
         rockColor: 0x5c5443,
         treeDensity: 0.70
@@ -1914,7 +1914,7 @@
 
     // Dynamic District Biome Palette Evaluator (interpolating colors along corridor)
     getDistrictPalette(z, defaultSeason) {
-      const defSeason = defaultSeason || (CONFIG.SEASONS && CONFIG.SEASONS.autumn) || { grassColor: 0x8b9e6a, grassLight: 0xa8b87a, cliffColor: 0x8a7458 };
+      const defSeason = defaultSeason || (CONFIG.SEASONS && CONFIG.SEASONS[this.seasonKey]) || (CONFIG.SEASONS && CONFIG.SEASONS.autumn) || { grassColor: 0x276638, grassLight: 0x3a874d, cliffColor: 0x8a7458 };
       if (this.cityKey === 'offworld' || defSeason.isOffWorld || defSeason.id === 'offworld') {
         const baseGrass = new THREE.Color(defSeason.grassColor);
         const baseLight = new THREE.Color(defSeason.grassLight);
@@ -1929,6 +1929,22 @@
           rockColor: 0x7a5a42,
           treeDensity: 0.0,
           districtName: 'Off-World Red Planet'
+        };
+      }
+      if (defSeason.id === 'winter' || this.seasonKey === 'winter') {
+        const baseGrass = new THREE.Color(defSeason.grassColor);
+        const baseLight = new THREE.Color(defSeason.grassLight);
+        const baseCliff = new THREE.Color(defSeason.cliffColor);
+        const baseSoil = new THREE.Color(defSeason.grassLight).lerp(new THREE.Color(0x2a2824), 0.20);
+        return {
+          grassColor: baseGrass,
+          grassLight: baseLight,
+          cliffColor: baseCliff,
+          shoulderSoil: baseSoil,
+          treeLeaves: defSeason.treeLeaves || [0x4a6b58],
+          rockColor: defSeason.snowRockColor || 0xbec4cc,
+          treeDensity: 0.75,
+          districtName: 'Northern Frost & Evergreen'
         };
       }
 
@@ -2656,6 +2672,9 @@
         this.roadBinormals[i] = binormal.clone();
         this.roadBankedUp[i] = bankedUp.clone();
 
+        const curPalette = this.getDistrictPalette(pt.z, seasonCfg);
+        const curVergeColor = curPalette.grassLight.clone().lerp(baseTarmac, 0.40);
+
         for (let j = 0; j < offsets.length; j++) {
           const off = offsets[j];
           const isVerge = (j === 0 || j === 6);
@@ -2716,7 +2735,7 @@
           } else if (j === 0 || j === 6) {
             // Plain tarmac/verge only — paint is a separate decal mesh now
             // (see createLaneMarkingMeshes), not baked into this ribbon.
-            colors.push(vergeColor.r, vergeColor.g, vergeColor.b);
+            colors.push(curVergeColor.r, curVergeColor.g, curVergeColor.b);
           } else {
             colors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
           }
@@ -3044,6 +3063,12 @@
           ? this.roadBankingAngles[i]
           : 0;
 
+        // Synchronize terrain vertex colors with district biome palette (matching streaming extension)
+        const curPalette = this.getDistrictPalette(pt.z, season);
+        const curGrassCol = curPalette.grassColor;
+        const curCliffCol = curPalette.cliffColor;
+        const curSoilColor = curPalette.shoulderSoil;
+
         for (let j = 0; j < sliceCount; j++) {
           const latDist = lateralSlices[j];
           const absDist = Math.abs(latDist);
@@ -3059,7 +3084,7 @@
           if (absDist <= roadHalf) {
             // 1. Under Asphalt: strictly 0.22m below road surface, banked with the road (continuous road corridor trench)
             finalY = pt.y - 0.22 + bankedYOffset;
-            colors.push(shoulderSoilColor.r, shoulderSoilColor.g, shoulderSoilColor.b);
+            colors.push(curSoilColor.r, curSoilColor.g, curSoilColor.b);
           } else if (absDist <= 9.0) {
             // 2. Road Shoulder Verge: gentle downward slope matching groundHeightAt()
             const t = (absDist - roadHalf) / (9.0 - roadHalf);
@@ -3069,9 +3094,9 @@
             // Starts at shoulderSoilColor at road edge (t=0), feathering outward into season grass/sand
             const blendT = THREE.MathUtils.smoothstep(t, 0.05, 0.95);
             const bladeNoise = 0.96 + this.simplex.noise2D(worldPos.x * 0.08, worldPos.z * 0.08) * 0.06;
-            const r = THREE.MathUtils.lerp(shoulderSoilColor.r, grassCol.r * bladeNoise, blendT);
-            const g = THREE.MathUtils.lerp(shoulderSoilColor.g, grassCol.g * bladeNoise, blendT);
-            const b = THREE.MathUtils.lerp(shoulderSoilColor.b, grassCol.b * bladeNoise, blendT);
+            const r = THREE.MathUtils.lerp(curSoilColor.r, curGrassCol.r * bladeNoise, blendT);
+            const g = THREE.MathUtils.lerp(curSoilColor.g, curGrassCol.g * bladeNoise, blendT);
+            const b = THREE.MathUtils.lerp(curSoilColor.b, curGrassCol.b * bladeNoise, blendT);
             colors.push(r, g, b);
           } else {
             // 3. Embankment Carving: Smooth terrain transition from road edge to raw hills
@@ -3086,7 +3111,7 @@
               const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
               const mountainOverhead = Math.max(rawH, pt.y + 14.0);
               finalY = THREE.MathUtils.lerp(pt.y - 0.5, mountainOverhead, blendFactor);
-              colors.push(cliffCol.r * 0.9, cliffCol.g * 0.9, cliffCol.b * 0.9);
+              colors.push(curCliffCol.r * 0.9, curCliffCol.g * 0.9, curCliffCol.b * 0.9);
             } else {
               const SHOULDER_TRANSITION = 9.0;  // End of shoulder
               const EMBANKMENT_BLEND = 45.0;    // Fully back to raw terrain
@@ -3095,25 +3120,28 @@
               finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
 
               if (rawH > 22.0) {
-                colors.push(cliffCol.r, cliffCol.g, cliffCol.b);
+                colors.push(curCliffCol.r, curCliffCol.g, curCliffCol.b);
               } else {
                 const nVal = 0.94 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.07;
-                colors.push(grassCol.r * nVal, grassCol.g * nVal, grassCol.b * nVal);
+                colors.push(curGrassCol.r * nVal, curGrassCol.g * nVal, curGrassCol.b * nVal);
               }
             }
           }
 
           // Road clearance guard: if this vertex lies within the drivable road corridor of ANY road segment,
-          // it must never breach above that road segment's surface (prevents terrain from slicing across hairpins/switchbacks)
+          // it must never breach above that road segment's surface (prevents terrain from slicing across hairpins/switchbacks).
+          // Full clearance covers the paved road ribbon plus shoulder verge (vergeLat + 0.6m).
           if (absDist > roadHalf) {
-            const nearestRoad = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(worldPos.x, worldPos.z, vergeLat + 1.0) : null;
-            if (nearestRoad && nearestRoad.dist < (CONFIG.ROAD_WIDTH * 0.5 + CONFIG.ROAD_SHOULDER_WIDTH + 0.5)) {
+            const clearRadius = vergeLat + 0.6;
+            const nearestRoad = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(worldPos.x, worldPos.z, clearRadius + 1.0) : null;
+            if (nearestRoad && nearestRoad.dist < clearRadius) {
               finalY = Math.min(finalY, nearestRoad.y - 0.22);
             } else {
+              const clearSq = clearRadius * clearRadius;
               for (let s = 0; s < points.length; s += 8) {
                 const dx = worldPos.x - points[s].x;
                 const dz = worldPos.z - points[s].z;
-                if (dx * dx + dz * dz < roadHalf * roadHalf) {
+                if (dx * dx + dz * dz < clearSq) {
                   finalY = Math.min(finalY, points[s].y - 0.22);
                   break;
                 }
@@ -3791,11 +3819,16 @@
         }
         pos.setY(i, finalY);
 
+        const curPalette = this.getDistrictPalette(z, season);
+        const curGrassCol = curPalette.grassColor;
+        const curGrassLight = curPalette.grassLight;
+        const curCliffCol = curPalette.cliffColor;
+
         if (rawH > 22.0) {
-          colors.push(cliffCol.r, cliffCol.g, cliffCol.b);
+          colors.push(curCliffCol.r, curCliffCol.g, curCliffCol.b);
         } else {
           const mixT = (this.simplex.noise2D(x * 0.008, z * 0.008) + 1) / 2;
-          const c = grassCol.clone().lerp(grassLight, mixT * 0.5);
+          const c = curGrassCol.clone().lerp(curGrassLight, mixT * 0.5);
           colors.push(c.r, c.g, c.b);
         }
       }
@@ -6583,15 +6616,18 @@
 
           // Road clearance guard: if this vertex lies within the drivable road corridor of ANY road segment,
           // clamp finalY below that road surface to eliminate terrain poking through the asphalt.
+          // Full clearance covers the paved road ribbon plus shoulder verge (vergeLat + 0.6m).
           if (absDist > roadHalf) {
-            const nearestRoad = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(worldPos.x, worldPos.z, vergeLat + 1.0) : null;
-            if (nearestRoad && nearestRoad.dist < (CONFIG.ROAD_WIDTH * 0.5 + CONFIG.ROAD_SHOULDER_WIDTH + 0.5)) {
+            const clearRadius = vergeLat + 0.6;
+            const nearestRoad = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(worldPos.x, worldPos.z, clearRadius + 1.0) : null;
+            if (nearestRoad && nearestRoad.dist < clearRadius) {
               finalY = Math.min(finalY, nearestRoad.y - 0.22);
             } else {
+              const clearSq = clearRadius * clearRadius;
               for (let s = 0; s < points.length; s += 8) {
                 const dx = worldPos.x - points[s].x;
                 const dz = worldPos.z - points[s].z;
-                if (dx * dx + dz * dz < roadHalf * roadHalf) {
+                if (dx * dx + dz * dz < clearSq) {
                   finalY = Math.min(finalY, points[s].y - 0.22);
                   break;
                 }
