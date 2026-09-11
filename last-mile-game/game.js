@@ -1692,6 +1692,7 @@
           group.add(inst);
         }
       }
+      group.userData.isTreeBatch = true;
       return group;
     }
   };
@@ -6115,13 +6116,34 @@
       const children = this.foliageGroup.children;
       for (let i = 0; i < children.length; i++) {
         const child = children[i];
+
+        // Never cull instanced meshes, multi-instance billboard tree groups,
+        // driveways, or delivery checkpoints — their vertices/instances span
+        // the entire highway route or need to remain visible for navigation.
+        if (child.isInstancedMesh ||
+            child.userData?.isDriveway ||
+            child.userData?.isTreeBatch ||
+            child.userData?.isRock ||
+            (child.userData && child.userData._isGlobalBatch)) {
+          child.visible = true;
+          continue;
+        }
+
         const pos = child.position;
+        // If an object's position is sitting at (0, 0, 0) while having complex children,
+        // it is a root batch/group rather than an individual roadside prop.
+        if (pos.x === 0 && pos.y === 0 && pos.z === 0 && child.children && child.children.length > 0) {
+          // Check if any child has non-zero position or if it's a composite world mesh
+          child.visible = true;
+          continue;
+        }
+
         const dx = pos.x - vehiclePos.x;
         const dz = pos.z - vehiclePos.z;
         const distSq = dx * dx + dz * dz;
 
         if (distSq > MAJOR_DIST_SQ) {
-          // Beyond 750m — hide everything regardless of type.
+          // Beyond 750m — hide individual props regardless of type.
           child.visible = false;
         } else if (distSq > MINOR_DIST_SQ) {
           // 350–750m — hide minor props but keep large landmark skyscrapers.
