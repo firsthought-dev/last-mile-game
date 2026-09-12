@@ -117,16 +117,16 @@
     else if (child.name.startsWith('wheel')) child.material = wheelMat;
   }, 'ChotaHathiAsset');
 
-  // 0e. SPORTS COUPE — user-supplied model; headlights face local -Z so scene
-  // is rotated 180° on load. Source/license unverified; flagged in CREDITS.
-  const SportsCoupeAsset = makeVehicleAsset('assets/models/sports-coupe.glb?t=' + Date.now(), (child) => {
-    const paintMat = new THREE.MeshStandardMaterial({ color: 0x1c2430, metalness: 0.6, roughness: 0.35 }); // Slate charcoal gloss
-    if (child.material && child.material.name === 'car paint') child.material = paintMat;
-  }, 'SportsCoupeAsset', (scene) => { scene.rotation.y = Math.PI; });
-
   // 0f. MUSCLE COUPE — user-supplied model; headlights already face +Z, no
   // rotation needed. Brand references stripped per user instruction; see CREDITS.
-  const MuscleCoupeAsset = makeVehicleAsset('assets/models/muscle-coupe.glb?t=' + Date.now(), () => {}, 'MuscleCoupeAsset');
+  // Paint swapped from the model's stock fire-engine red ("Default Metallic
+  // Paint") to a muted dusty-blue slate — the red read as too loud against
+  // the game's soft, desaturated visual styles.
+  const MuscleCoupeAsset = makeVehicleAsset('assets/models/muscle-coupe.glb?t=' + Date.now(), (child) => {
+    if (child.material && child.material.name && child.material.name.startsWith('Default Metallic Paint')) {
+      child.material = new THREE.MeshStandardMaterial({ color: 0x5c7285, metalness: 0.55, roughness: 0.35 });
+    }
+  }, 'MuscleCoupeAsset');
 
   // 0g. DELIVERY CYCLE — Blender-exported GLB with corrected Y-up orientation.
   const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?t=' + Date.now(), () => {}, 'DeliveryCycleAsset');
@@ -1383,7 +1383,6 @@
     VEHICLES: {
       swift: { id: 'swift', name: 'Raftaar GT Hatch', maxSpeed: 44.0, accel: 18.0, drag: 0.80, brake: 30.0 },
       chotahathi: { id: 'chotahathi', name: 'Gaja 500 Mini Truck', maxSpeed: 30.0, accel: 12.0, drag: 0.85, brake: 26.0 },
-      sportscoupe: { id: 'sportscoupe', name: 'Sports Coupe', maxSpeed: 50.0, accel: 20.0, drag: 0.78, brake: 32.0 },
       musclecoupe: { id: 'musclecoupe', name: 'Muscle Coupe', maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0 },
       cycle: { id: 'cycle', name: 'Delivery Cycle', maxSpeed: 22.0, accel: 8.0, drag: 0.90, brake: 18.0 }
     },
@@ -8015,61 +8014,6 @@
           this.wheels.push(w);
         });
 
-      } else if (this.vehicleType === 'sportscoupe' && SportsCoupeAsset.template) {
-        // ====================================================================
-        // 3. SPORTS COUPE (user-supplied model, see SportsCoupeAsset comment
-        // above for source/conversion notes) — replaces the flat-primitive
-        // "Volt Scooter" as the second vehicle.
-        // ====================================================================
-        const carModel = SportsCoupeAsset.clone();
-        carModel.scale.setScalar(0.92);
-        this.mesh.add(carModel);
-        carModel.traverse((child) => {
-          if (child.isMesh && child.name && /(rim|tyre|caliper|disc)$/i.test(child.name)) {
-            this.wheels.push(child);
-          }
-        });
-
-        // Projector Headlight Lenses (+Z front)
-        const scHeadGeom = new THREE.BoxGeometry(0.32, 0.08, 0.06);
-        const scLeftHead = new THREE.Mesh(scHeadGeom, this.headlightLensMat);
-        scLeftHead.position.set(-0.62, 0.52, 1.85);
-        const scRightHead = new THREE.Mesh(scHeadGeom, this.headlightLensMat);
-        scRightHead.position.set(0.62, 0.52, 1.85);
-        this.mesh.add(scLeftHead);
-        this.mesh.add(scRightHead);
-
-      } else if (this.vehicleType === 'sportscoupe') {
-        // Procedural fallback, used only until SportsCoupeAsset finishes
-        // loading, then auto-rebuilt (same pattern as 'swift' above).
-        if (SportsCoupeAsset.pendingControllers.indexOf(this) === -1) {
-          SportsCoupeAsset.pendingControllers.push(this);
-        }
-        const bodyGeom = new THREE.BoxGeometry(1.82, 0.65, 4.3);
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1c2430, flatShading: true });
-        const body = new THREE.Mesh(bodyGeom, bodyMat);
-        body.position.y = 0.55;
-        body.castShadow = true;
-        this.mesh.add(body);
-
-        const scHeadGeom = new THREE.BoxGeometry(0.32, 0.08, 0.06);
-        const scLeftHead = new THREE.Mesh(scHeadGeom, this.headlightLensMat);
-        scLeftHead.position.set(-0.62, 0.52, 2.12);
-        const scRightHead = new THREE.Mesh(scHeadGeom, this.headlightLensMat);
-        scRightHead.position.set(0.62, 0.52, 2.12);
-        this.mesh.add(scLeftHead);
-        this.mesh.add(scRightHead);
-
-        const wheelGeom = new THREE.CylinderGeometry(0.30, 0.30, 0.22, 14);
-        wheelGeom.rotateZ(Math.PI / 2);
-        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
-        [[-0.90, 0.30, 1.4], [0.90, 0.30, 1.4], [-0.90, 0.30, -1.4], [0.90, 0.30, -1.4]].forEach(p => {
-          const w = new THREE.Mesh(wheelGeom, wheelMat);
-          w.position.set(...p);
-          this.mesh.add(w);
-          this.wheels.push(w);
-        });
-
       } else if (this.vehicleType === 'cycle' && DeliveryCycleAsset.template) {
         const cycleModel = DeliveryCycleAsset.clone();
         // Authored nose-toward--Y in Blender, so the Y-up GLB export already lands the
@@ -8984,59 +8928,25 @@
   }
 
   // --------------------------------------------------------------------------
-  // 7a. PLAYER PROGRESSION & VISUAL FIDELITY SYSTEM
+  // 7a. VISUAL STYLE SYSTEM
   // --------------------------------------------------------------------------
+  // Three selectable, always-available visual styles (Classic / Enhanced /
+  // Cinematic) picked from the dispatch hub landing screen — no unlocking,
+  // no XP or leveling. Replaces the earlier 6-tier auto-progression system.
 
-  class PlayerProgressionSystem {
-    // XP needed per level, and how many levels make up one visual tier.
-    static XP_PER_LEVEL = 75;
-    static LEVELS_PER_TIER = 3;
-    static MAX_TIER = 6;
-
-    constructor() {
-      this.totalXP = parseInt(localStorage.getItem('shiplyp_totalXP') || '0', 10);
-      this.currentLevel = Math.floor(this.totalXP / PlayerProgressionSystem.XP_PER_LEVEL);
-      this.currentTier = PlayerProgressionSystem.tierForLevel(this.currentLevel);
-      this._levelUpCbs = [];
-      this._tierUpCbs = [];
-      window.progression = this;
-    }
-
-    static tierForLevel(level) {
-      return Math.min(PlayerProgressionSystem.MAX_TIER, Math.max(1, Math.ceil(level / PlayerProgressionSystem.LEVELS_PER_TIER)));
-    }
-
-    get level() { return this.currentLevel; }
-    get tier() { return this.currentTier; }
-
-    addXP(earnedBonus) {
-      const xp = Math.floor(earnedBonus / 10);
-      const prevLevel = this.currentLevel;
-      const prevTier = this.currentTier;
-      this.totalXP += xp;
-      this.currentLevel = Math.floor(this.totalXP / PlayerProgressionSystem.XP_PER_LEVEL);
-      this.currentTier = PlayerProgressionSystem.tierForLevel(this.currentLevel);
-      localStorage.setItem('shiplyp_totalXP', String(this.totalXP));
-      if (this.currentLevel > prevLevel) {
-        this._levelUpCbs.forEach(cb => cb(this.currentLevel));
-      }
-      if (this.currentTier > prevTier) {
-        this._tierUpCbs.forEach(cb => cb(this.currentTier));
-      }
-    }
-
-    onLevelUp(cb) { this._levelUpCbs.push(cb); }
-    onTierUp(cb) { this._tierUpCbs.push(cb); }
-  }
-
-  class VisualTierManager {
-    // Absolute fog density override per tier (Tier 6 = use live curFogDens)
-    static FOG_DENSITY = { 1: 0.026, 2: 0.023, 3: 0.020, 4: 0.017, 5: 0.013 };
+  class VisualStyleManager {
+    static STYLES = ['classic', 'enhanced', 'cinematic'];
+    static DEFAULT_STYLE = 'cinematic'; // matches the original always-on bloom+FXAA look
+    // Absolute fog density override per style (cinematic uses live curFogDens)
+    static FOG_DENSITY = { classic: 0.026, enhanced: 0.017 };
 
     constructor(game) {
       this.game = game;
-      this.currentTier = 0;
+      this.currentStyle = null;
       this.needsNormalPass = false;
+
+      const saved = localStorage.getItem('shiplyp_visualStyle');
+      this.selectedStyle = VisualStyleManager.STYLES.includes(saved) ? saved : VisualStyleManager.DEFAULT_STYLE;
 
       // Normal pre-pass resources for the edge shader (Tier 2)
       this._normalTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
@@ -9144,48 +9054,15 @@
       this.gradePass.enabled = false;
       this.gradePass.renderToScreen = false;
 
-      // --- Scan-line Wipe Transition Shader ---
-      const ScanWipeShader = {
-        uniforms: {
-          tDiffuse: { value: null },
-          progress: { value: 0.0 }
-        },
-        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-        fragmentShader: `
-          uniform sampler2D tDiffuse;
-          uniform float progress;
-          varying vec2 vUv;
-          void main() {
-            vec4 texel = texture2D(tDiffuse, vUv);
-            float sweep = 1.0 - progress;          // sweep line descends 1→0
-            float below = step(vUv.y, sweep);       // 1 below the line (not yet wiped)
-            float scan  = step(0.5, fract(vUv.y * 80.0));
-            vec3 col = texel.rgb;
-            col = mix(col, vec3(scan * 0.35 + 0.05), (1.0 - below) * 0.65);
-            float glow = 1.0 - smoothstep(0.0, 0.025, abs(vUv.y - sweep));
-            col += glow * vec3(0.0, 0.75, 0.65);
-            gl_FragColor = vec4(col, 1.0);
-          }
-        `
-      };
-      this.wipePass = new THREE.ShaderPass(ScanWipeShader);
-      this.wipePass.enabled = false;
-      this.wipePass.renderToScreen = false;
-
       // Insert extra passes into composer at position 1 (after RenderPass)
       // Order: RenderPass | pixelPass | edgePass | bloomPass | filmPass | fxaaPass | gradePass
       const passes = game.composer.passes;
       passes.splice(1, 0, this.pixelPass, this.edgePass);
       passes.push(this.gradePass);
-      // Append wipe pass at end (behind fxaa) — we'll splice it in when needed
-      // (kept outside the normal stack, inserted/removed dynamically)
 
-      this._pendingTierUp = null;
-      this._wipeAnimStart = null;
-      this._wipeDuration = 800; // ms
-
-      // Apply initial tier from progression
-      this.applyTier(window.progression?.tier || 1);
+      // Apply the saved (or default) style immediately — no transition
+      // ceremony, this is a settings choice, not an unlocked reward.
+      this.applyStyle(this.selectedStyle);
     }
 
     resize(w, h) {
@@ -9194,7 +9071,7 @@
       if (this.edgePass.uniforms) this.edgePass.uniforms['resolution'].value.set(w, h);
     }
 
-    // Called by render loop when tier 2 needs the normals pre-pass
+    // Called by render loop when the Enhanced style needs the normals pre-pass
     renderNormalPass() {
       const { renderer, scene, camera } = this.game;
       renderer.setRenderTarget(this._normalTarget);
@@ -9204,61 +9081,48 @@
       renderer.setRenderTarget(null);
     }
 
-    // Tier plan (6 tiers total):
-    //  1: heavy pixelation + posterize (starting look)
-    //  2: eased pixelation — smaller pixel blocks, more posterize steps (transition to edges)
-    //  3: edge-hardening, degraded — coarse/thick threshold
-    //  4: edge-hardening, refined — closer to fine detail, small bump
-    //  5: ultimate — stronger bloom + color-grade polish pass (contrast/saturation lift)
-    //  6: bloom + FXAA on
-    //
-    // Tiers 5 and 6 were originally the other way round (6 = grade pass,
-    // 5 = plain bloom+FXAA), but the grade-pass look reads as less refined
-    // than the plain bloom+FXAA one — the final tier a player reaches
-    // should be the better-looking one, so the two configs are swapped
-    // here rather than reordered structurally.
-    applyTier(tier) {
-      if (tier === this.currentTier) return;
-      this.currentTier = tier;
+    // Style plan (3 styles total, consolidated from the earlier 6-tier system):
+    //  classic:   heavy pixelation + posterize, no bloom — lightest to run
+    //  enhanced:  edge-hardening pass, no bloom — flat-shaded, defined outlines
+    //  cinematic: bloom + FXAA + color grade — the original always-on look
+    applyStyle(style) {
+      if (!VisualStyleManager.STYLES.includes(style)) style = VisualStyleManager.DEFAULT_STYLE;
+      if (style === this.currentStyle) return;
+      this.currentStyle = style;
+      this.selectedStyle = style;
+      localStorage.setItem('shiplyp_visualStyle', style);
 
       const { bloomPass, filmPass, fxaaPass } = this.game;
 
       // --- Enable / disable passes ---
-      this.pixelPass.enabled = (tier === 1 || tier === 2);
-      this.edgePass.enabled  = (tier === 3 || tier === 4);
-      this.needsNormalPass   = (tier === 3 || tier === 4);
-      this.gradePass.enabled = (tier === 5);
+      this.pixelPass.enabled = (style === 'classic');
+      this.edgePass.enabled  = (style === 'enhanced');
+      this.needsNormalPass   = (style === 'enhanced');
+      this.gradePass.enabled = (style === 'cinematic');
 
-      bloomPass.enabled = (tier >= 5);
-      fxaaPass.enabled  = (tier >= 5);
+      bloomPass.enabled = (style === 'cinematic');
+      fxaaPass.enabled  = (style === 'cinematic');
 
-      // --- Pixelation params (tiers 1-2) ---
-      if (tier === 1) { this.pixelPass.uniforms['pixelSize'].value = 6.0; this.pixelPass.uniforms['posterizeSteps'].value = 4.0; }
-      if (tier === 2) { this.pixelPass.uniforms['pixelSize'].value = 3.0; this.pixelPass.uniforms['posterizeSteps'].value = 8.0; }
+      // --- Pixelation params (classic) ---
+      this.pixelPass.uniforms['pixelSize'].value = 6.0;
+      this.pixelPass.uniforms['posterizeSteps'].value = 4.0;
 
-      // --- Edge-hardening params (tiers 3-4) — pushed further apart so the
-      // step reads clearly: tier 3 is deliberately coarse/heavy, tier 4 is
-      // the fine, original-quality edge pass.
-      if (tier === 3) { this.edgePass.uniforms['edgeThreshold'].value = 0.55; this.edgePass.uniforms['edgeDarken'].value = 1.0;  this.edgePass.uniforms['edgeThickness'].value = 2.4; }
-      if (tier === 4) { this.edgePass.uniforms['edgeThreshold'].value = 1.35; this.edgePass.uniforms['edgeDarken'].value = 0.85; this.edgePass.uniforms['edgeThickness'].value = 0.85; }
+      // --- Edge-hardening params (enhanced) ---
+      this.edgePass.uniforms['edgeThreshold'].value = 1.35;
+      this.edgePass.uniforms['edgeDarken'].value = 0.85;
+      this.edgePass.uniforms['edgeThickness'].value = 0.85;
 
-      // --- Bloom strength per tier ---
-      if (tier === 6) { bloomPass.strength = 0.25; bloomPass.radius = 0.35; bloomPass.threshold = 0.94; }
-      if (tier === 5) { bloomPass.strength = 0.4;  bloomPass.radius = 0.4;  bloomPass.threshold = 0.90; }
-
-      // --- Color grade (tier 5 only) ---
+      // --- Bloom + color grade (cinematic) ---
+      bloomPass.strength = 0.25; bloomPass.radius = 0.35; bloomPass.threshold = 0.94;
       this.gradePass.uniforms['contrast'].value = 1.12;
       this.gradePass.uniforms['saturation'].value = 1.15;
 
-      // --- Film shader uniforms per tier ---
+      // --- Film shader uniforms per style ---
       const u = filmPass.uniforms || (filmPass.material && filmPass.material.uniforms);
       if (u) {
-        if (tier === 1)      u.saturationMult.value = 0.68;
-        else if (tier === 2) u.saturationMult.value = 0.72;
-        else if (tier === 3) u.saturationMult.value = 0.76;
-        else if (tier === 4) u.saturationMult.value = 0.80;
-        else if (tier === 6) u.saturationMult.value = 0.82;
-        else                 u.saturationMult.value = 0.85; // tier 5, default+
+        if (style === 'classic')       u.saturationMult.value = 0.68;
+        else if (style === 'enhanced') u.saturationMult.value = 0.80;
+        else                           u.saturationMult.value = 0.82; // cinematic
       }
 
       // --- renderToScreen: must be true on the last enabled pass ---
@@ -9266,56 +9130,14 @@
       this.edgePass.renderToScreen  = false;
       bloomPass.renderToScreen      = false;
       this.gradePass.renderToScreen = false;
-      filmPass.renderToScreen       = (tier <= 4);
-      fxaaPass.renderToScreen       = (tier === 6);
-      // tier 5: gradePass is the final pass in the composer, so it must render to screen
-      if (tier === 5) this.gradePass.renderToScreen = true;
-    }
-
-    // Kick off the scanline wipe to a new tier
-    startTierTransition(newTier, game) {
-      game.inputFrozen = true;
-      this._pendingTierUp = newTier;
-      this._wipeAnimStart = performance.now();
-
-      // Insert wipe pass right before the last active pass
-      const passes = game.composer.passes;
-      const insertIdx = Math.max(0, passes.length - 1);
-      passes.splice(insertIdx, 0, this.wipePass);
-      this.wipePass.enabled = true;
-
-      // Mark the wipe pass as renderToScreen to ensure it outputs to canvas
-      const lastBeforeWipe = passes[insertIdx - 1];
-      if (lastBeforeWipe) lastBeforeWipe.renderToScreen = false;
-      this.wipePass.renderToScreen = true;
-    }
-
-    // Called every frame during active wipe animation
-    tickWipe(now) {
-      if (!this._wipeAnimStart) return;
-      const elapsed = now - this._wipeAnimStart;
-      const t = Math.min(elapsed / this._wipeDuration, 1.0);
-      const u = this.wipePass.uniforms || (this.wipePass.material && this.wipePass.material.uniforms);
-      if (u) u.progress.value = t;
-
-      if (t >= 1.0) {
-        // Wipe complete — apply new tier, remove wipe pass
-        const passes = this.game.composer.passes;
-        const idx = passes.indexOf(this.wipePass);
-        if (idx !== -1) passes.splice(idx, 1);
-        this.wipePass.enabled = false;
-
-        this.applyTier(this._pendingTierUp);
-        this._pendingTierUp = null;
-        this._wipeAnimStart = null;
-        this.game.inputFrozen = false;
-      }
+      filmPass.renderToScreen       = (style === 'classic' || style === 'enhanced');
+      fxaaPass.renderToScreen       = false;
+      if (style === 'cinematic') this.gradePass.renderToScreen = true;
     }
 
     // Pre-render hook — call just before composer.render() each frame
     preRender() {
       if (this.needsNormalPass) this.renderNormalPass();
-      if (this._wipeAnimStart !== null) this.tickWipe(performance.now());
     }
   }
 
@@ -9390,15 +9212,18 @@
       this.inactivityTimer = 0;
       this.inputFrozen = false;
 
-      // Progression system — must be created before initThree so tier is known
-      this.progression = new PlayerProgressionSystem();
-
       this.initThree();
       this.initEvents();
       this.initHUD();
       this.clock = new THREE.Clock();
-      // Async boot: show loading screen, build world in yielded stages, warmup shaders, then startDrive
-      this._bootWithLoader();
+      this._worldBuilt = false;
+
+      // Landing screen first: pick road style / vehicle / visual style,
+      // then DRIVE triggers the loader + world build (see renderDispatchHub).
+      // The full-screen loader overlay is only needed once that starts.
+      const loaderEl = document.getElementById('game-loader');
+      if (loaderEl) loaderEl.style.display = 'none';
+      this.renderDispatchHub();
     }
 
     async _bootWithLoader() {
@@ -9735,24 +9560,8 @@
       this.fxaaPass.renderToScreen = true;
       this.composer.addPass(this.fxaaPass);
 
-      // Progressive visual fidelity — initialises after all base passes are in place
-      this.visualTier = new VisualTierManager(this);
-
-      // Wire tier-up event: freeze input, play wipe, then swap tier
-      this.progression.onTierUp(newTier => {
-        this.visualTier.startTierTransition(newTier, this);
-        this.addNotification(`VISUAL TIER ${newTier} UNLOCKED`, 'success', 3500);
-        // The corner toast above is easy to miss during the wipe transition
-        // (attention is on the screen wipe, not the notification stack), so
-        // also show the same big centered banner used for district
-        // milestones — matches that existing convention of pairing a log
-        // toast with a prominent banner for moments worth noticing.
-        this.showScoreBanner(`${UI.icon('aperture')} VISUAL TIER ${newTier} UNLOCKED`, 'GRAPHICS UPGRADED');
-      });
-      this.progression.onLevelUp(newLevel => {
-        const xpPerLevel = PlayerProgressionSystem.XP_PER_LEVEL;
-        this.addNotification(`LEVEL ${newLevel} REACHED — ${Math.floor(this.progression.totalXP % xpPerLevel)}/${xpPerLevel} XP`, 'info', 2500);
-      });
+      // Visual style — initialises after all base passes are in place
+      this.visualStyle = new VisualStyleManager(this);
     }
 
     buildWorldAndScene() {
@@ -9867,7 +9676,7 @@
           const pr = this.renderer.getPixelRatio();
           this.fxaaPass.material.uniforms['resolution'].value.set(1 / (window.innerWidth * pr), 1 / (window.innerHeight * pr));
         }
-        if (this.visualTier) this.visualTier.resize(window.innerWidth, window.innerHeight);
+        if (this.visualStyle) this.visualStyle.resize(window.innerWidth, window.innerHeight);
       });
 
       const onKey = (e, val) => {
@@ -9904,7 +9713,9 @@
             this.openSettingsModal('gameplay');
           }
         }
-        if ((k === 'enter' || code === 'Enter') && this.gameState === 'menu') this.startDrive();
+        if ((k === 'enter' || code === 'Enter') && this.gameState === 'menu') {
+          document.getElementById('btn-start-dispatch')?.click();
+        }
         if ((k === ' ' || code === 'Space') && this.gameState === 'playing' && !e.repeat) {
           if (this.onFoot) this.tryWalkDelivery();
           else this.tossParcel3D();
@@ -10452,7 +10263,6 @@
       const timeBonus = Math.max(0, Math.round(this.orderTimer * 1.8));
       const earnedBonus = Math.round((target.order.reward + timeBonus) * diffCfg.payoutMult * (1 + this.streakCount * 0.2));
       this.earnings += earnedBonus;
-      this.progression?.addXP(earnedBonus);
 
       this.orderTimer = this.maxOrderTimer; // Reset clock for next order
 
@@ -11279,9 +11089,9 @@
 
       // Fog
       if (this.scene.fog) {
-        const tier = this.progression?.tier || 5;
-        const tierFogBase = VisualTierManager.FOG_DENSITY[tier] ?? curFogDens;
-        const targetFogDens = inTunnel ? 0.0003 : tierFogBase;
+        const style = this.visualStyle?.currentStyle;
+        const styleFogBase = VisualStyleManager.FOG_DENSITY[style] ?? curFogDens;
+        const targetFogDens = inTunnel ? 0.0003 : styleFogBase;
         const targetFogCol = inTunnel ? new THREE.Color(0x1a1512) : curFogCol;
         this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, targetFogDens, 0.08);
         this.scene.fog.color.lerp(targetFogCol, 0.08);
@@ -11602,18 +11412,17 @@
       // undisturbed, so a picker can come back later without rebuilding
       // this from scratch if a second world is ever actually built out.
 
-      const roadStyleList = [
-        { id: 'asphalt', name: 'Asphalt' },
-        { id: 'gravel', name: 'Gravel' },
-        { id: 'mud', name: 'Mud' },
-        { id: 'sand', name: 'Sand' }
-      ];
-
       const vehList = [
-        { id: 'sportscoupe', name: 'Sports Coupe',        stat: '180 km/h • Gasoline' },
         { id: 'musclecoupe', name: 'Muscle Coupe',        stat: '194 km/h • Gasoline' },
         { id: 'cycle',       name: 'Delivery Cycle',      stat: '22 km/h • Pedal Power' },
       ];
+
+      const styleList = [
+        { id: 'classic',   name: 'Classic',   stat: 'Pixelated • Lightest',        gif: 'assets/style-previews/classic.gif' },
+        { id: 'enhanced',  name: 'Enhanced',  stat: 'Outlined • Moderate',         gif: 'assets/style-previews/enhanced.gif' },
+        { id: 'cinematic', name: 'Cinematic', stat: 'Bloom + Grade • Heaviest',    gif: 'assets/style-previews/cinematic.gif' },
+      ];
+      const currentStyle = this.visualStyle?.selectedStyle || VisualStyleManager.DEFAULT_STYLE;
 
       this.modalContainer.innerHTML = `
         <div class="modal-backdrop">
@@ -11623,19 +11432,6 @@
             </div>
             <p class="hub-tagline">Endless Driving • India Roads</p>
 
-            <!-- 2. Select Road Style -->
-            <div class="hub-difficulty-selector">
-              <span class="hub-section-label">SELECT ROAD STYLE</span>
-              <div class="hub-difficulty-grid">
-                ${roadStyleList.map(r => `
-                  <button class="diff-card-btn ${this.selectedRoadTerrain === r.id ? 'active-diff' : ''}" data-rt="${r.id}">
-                    <span class="diff-card-icon">${UI.icon(r.icon, 20)}</span>
-                    <span class="diff-card-title">${r.name.toUpperCase()}</span>
-                  </button>
-                `).join('')}
-              </div>
-            </div>
-
             <!-- 3. Select Vehicle -->
             <div class="hub-vehicle-selector">
               <span class="hub-section-label">SELECT VEHICLE</span>
@@ -11644,6 +11440,20 @@
                   <button class="vehicle-card-btn ${this.selectedVehicle === v.id ? 'active-veh' : ''}" data-veh="${v.id}">
                     <span class="vehicle-card-title">${v.name}</span>
                     <span class="vehicle-card-stat">${v.stat}</span>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+
+            <!-- 4. Select Visual Style -->
+            <div class="hub-difficulty-selector">
+              <span class="hub-section-label">SELECT VISUAL STYLE</span>
+              <div class="hub-style-grid">
+                ${styleList.map(s => `
+                  <button class="style-card-btn ${currentStyle === s.id ? 'active-diff' : ''}" data-style="${s.id}">
+                    <img class="style-card-preview" src="${s.gif}" alt="${s.name} style preview" loading="lazy">
+                    <span class="style-card-title">${s.name.toUpperCase()}</span>
+                    <span class="vehicle-card-stat">${s.stat}</span>
                   </button>
                 `).join('')}
               </div>
@@ -11662,18 +11472,6 @@
       `;
 
 
-      this.modalContainer.querySelectorAll('.diff-card-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          this.selectedRoadTerrain = btn.dataset.rt;
-          this.modalContainer.querySelectorAll('.diff-card-btn').forEach(b => {
-            b.classList.remove('active-diff');
-          });
-          btn.classList.add('active-diff');
-          sound.playTone(700, 'sine', 0.08);
-        });
-      });
-
       this.modalContainer.querySelectorAll('.vehicle-card-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.preventDefault();
@@ -11685,10 +11483,29 @@
         });
       });
 
+      this.modalContainer.querySelectorAll('[data-style]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          this.visualStyle?.applyStyle(btn.dataset.style);
+          this.modalContainer.querySelectorAll('[data-style]').forEach(b => b.classList.remove('active-diff'));
+          btn.classList.add('active-diff');
+          sound.playTone(700, 'sine', 0.08);
+        });
+      });
+
       document.getElementById('btn-start-dispatch')?.addEventListener('click', (e) => {
         e.preventDefault();
-        this.buildWorldAndScene();
-        this.startDrive();
+        if (!this._worldBuilt) {
+          // First launch: show the full-screen loader and build the world
+          // in staged, yielded steps (see _bootWithLoader) before driving.
+          this._worldBuilt = true;
+          const loaderEl = document.getElementById('game-loader');
+          if (loaderEl) { loaderEl.style.display = 'flex'; loaderEl.style.opacity = '1'; }
+          this._bootWithLoader();
+        } else {
+          this.buildWorldAndScene();
+          this.startDrive();
+        }
       });
       document.getElementById('btn-hub-mute')?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -11848,7 +11665,6 @@
             <div class="dock-panel-col">
               <span class="dock-panel-label">VEHICLE</span>
               <div class="dock-btn-row">
-                <button class="dock-sq-btn ${this.selectedVehicle === 'sportscoupe' ? 'active-sq' : ''}" data-v="sportscoupe">COUPE</button>
                 <button class="dock-sq-btn ${this.selectedVehicle === 'musclecoupe' ? 'active-sq' : ''}" data-v="musclecoupe">MUSCLE</button>
                 <button class="dock-sq-btn ${this.selectedVehicle === 'cycle' ? 'active-sq' : ''}" data-v="cycle">CYCLE</button>
               </div>
@@ -12713,7 +12529,7 @@
       }
 
       if (this.composer) {
-        this.visualTier?.preRender();
+        this.visualStyle?.preRender();
         this.composer.render();
       } else {
         this.renderer.render(this.scene, this.camera);

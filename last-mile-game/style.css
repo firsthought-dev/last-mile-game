@@ -1987,6 +1987,66 @@ div.slowroads-status-pill {
   max-width: 100%;
 }
 
+/* Visual style picker — same card language as diff-card-btn, plus an
+   in-engine GIF preview so players see what each style actually looks
+   like before picking, instead of guessing from a label alone. */
+.hub-style-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.hub-style-grid .style-card-btn {
+  flex: 1 1 150px;
+  max-width: 220px;
+}
+
+.style-card-btn {
+  background: rgba(28, 36, 48, 0.03);
+  border: 1px solid rgba(28, 36, 48, 0.08);
+  border-radius: 12px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.style-card-btn:hover {
+  background: rgba(28, 36, 48, 0.06);
+  transform: translateY(-1px);
+}
+
+.style-card-btn.active-diff {
+  background: rgba(79, 125, 120, 0.12);
+  border-color: #4f7d78;
+  box-shadow: none;
+}
+
+.style-card-preview {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid rgba(28, 36, 48, 0.1);
+  background: #1a1f26;
+}
+
+.style-card-title {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #2a333d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin-top: 2px;
+}
+
 .diff-card-stat {
   font-family: var(--font-mono);
   font-size: 0.62rem;
