@@ -8852,6 +8852,336 @@
   }
 
   // --------------------------------------------------------------------------
+  // 7a. PLAYER PROGRESSION & VISUAL FIDELITY SYSTEM
+  // --------------------------------------------------------------------------
+
+  class PlayerProgressionSystem {
+    // XP needed per level, and how many levels make up one visual tier.
+    static XP_PER_LEVEL = 75;
+    static LEVELS_PER_TIER = 3;
+    static MAX_TIER = 6;
+
+    constructor() {
+      this.totalXP = parseInt(localStorage.getItem('shiplyp_totalXP') || '0', 10);
+      this.currentLevel = Math.floor(this.totalXP / PlayerProgressionSystem.XP_PER_LEVEL);
+      this.currentTier = PlayerProgressionSystem.tierForLevel(this.currentLevel);
+      this._levelUpCbs = [];
+      this._tierUpCbs = [];
+      window.progression = this;
+    }
+
+    static tierForLevel(level) {
+      return Math.min(PlayerProgressionSystem.MAX_TIER, Math.max(1, Math.ceil(level / PlayerProgressionSystem.LEVELS_PER_TIER)));
+    }
+
+    get level() { return this.currentLevel; }
+    get tier() { return this.currentTier; }
+
+    addXP(earnedBonus) {
+      const xp = Math.floor(earnedBonus / 10);
+      const prevLevel = this.currentLevel;
+      const prevTier = this.currentTier;
+      this.totalXP += xp;
+      this.currentLevel = Math.floor(this.totalXP / PlayerProgressionSystem.XP_PER_LEVEL);
+      this.currentTier = PlayerProgressionSystem.tierForLevel(this.currentLevel);
+      localStorage.setItem('shiplyp_totalXP', String(this.totalXP));
+      if (this.currentLevel > prevLevel) {
+        this._levelUpCbs.forEach(cb => cb(this.currentLevel));
+      }
+      if (this.currentTier > prevTier) {
+        this._tierUpCbs.forEach(cb => cb(this.currentTier));
+      }
+    }
+
+    onLevelUp(cb) { this._levelUpCbs.push(cb); }
+    onTierUp(cb) { this._tierUpCbs.push(cb); }
+  }
+
+  class VisualTierManager {
+    // Absolute fog density override per tier (Tier 6 = use live curFogDens)
+    static FOG_DENSITY = { 1: 0.026, 2: 0.023, 3: 0.020, 4: 0.017, 5: 0.013 };
+
+    constructor(game) {
+      this.game = game;
+      this.currentTier = 0;
+      this.needsNormalPass = false;
+
+      // Normal pre-pass resources for the edge shader (Tier 2)
+      this._normalTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
+      this._normalMat = new THREE.MeshNormalMaterial();
+
+      // --- Pixelation + Palette Shader (Tier 1) ---
+      const PixelPaletteShader = {
+        uniforms: {
+          tDiffuse: { value: null },
+          resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+          pixelSize: { value: 6.0 },
+          posterizeSteps: { value: 4.0 }
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform vec2 resolution;
+          uniform float pixelSize;
+          uniform float posterizeSteps;
+          varying vec2 vUv;
+          void main() {
+            // Nearest-neighbour pixelation
+            vec2 blocks = floor(vUv * resolution / pixelSize) * pixelSize / resolution;
+            vec4 texel = texture2D(tDiffuse, blocks);
+            // Posterize: posterizeSteps levels per channel
+            vec3 col = floor(texel.rgb * posterizeSteps + 0.5) / posterizeSteps;
+            gl_FragColor = vec4(col, texel.a);
+          }
+        `
+      };
+      this.pixelPass = new THREE.ShaderPass(PixelPaletteShader);
+      this.pixelPass.enabled = false;
+      this.pixelPass.renderToScreen = false;
+
+      // --- Edge Hardening Shader (Tier 2) ---
+      const EdgeHardenShader = {
+        uniforms: {
+          tDiffuse: { value: null },
+          tNormal: { value: this._normalTarget.texture },
+          resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+          edgeThreshold: { value: 1.2 },
+          edgeDarken: { value: 0.90 },
+          edgeThickness: { value: 1.0 }
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform sampler2D tNormal;
+          uniform vec2 resolution;
+          uniform float edgeThreshold;
+          uniform float edgeDarken;
+          uniform float edgeThickness;
+          varying vec2 vUv;
+          void main() {
+            vec4 texel = texture2D(tDiffuse, vUv);
+            vec2 px = (1.0 / resolution) * edgeThickness;
+            // 3x3 Sobel on normal buffer: cancels micro-variations on flat walls,
+            // only true silhouette/corner edges survive the threshold.
+            vec3 tl=texture2D(tNormal,vUv+vec2(-px.x,-px.y)).rgb*2.-1.;
+            vec3 tc=texture2D(tNormal,vUv+vec2( 0.0, -px.y)).rgb*2.-1.;
+            vec3 tr=texture2D(tNormal,vUv+vec2( px.x,-px.y)).rgb*2.-1.;
+            vec3 ml=texture2D(tNormal,vUv+vec2(-px.x,  0.0)).rgb*2.-1.;
+            vec3 mr=texture2D(tNormal,vUv+vec2( px.x,  0.0)).rgb*2.-1.;
+            vec3 bl=texture2D(tNormal,vUv+vec2(-px.x, px.y)).rgb*2.-1.;
+            vec3 bc=texture2D(tNormal,vUv+vec2( 0.0,  px.y)).rgb*2.-1.;
+            vec3 br=texture2D(tNormal,vUv+vec2( px.x, px.y)).rgb*2.-1.;
+            vec3 Gx = -tl + tr - 2.0*ml + 2.0*mr - bl + br;
+            vec3 Gy = -tl - 2.0*tc - tr + bl + 2.0*bc + br;
+            float edge = step(edgeThreshold, sqrt(dot(Gx,Gx) + dot(Gy,Gy)));
+            vec3 col = mix(texel.rgb, vec3(0.04, 0.03, 0.02), edge * edgeDarken);
+            gl_FragColor = vec4(col, texel.a);
+          }
+        `
+      };
+      this.edgePass = new THREE.ShaderPass(EdgeHardenShader);
+      // UniformsUtils.clone copies textures by value (new Texture object), so re-point
+      // tNormal at the actual render target texture after construction.
+      this.edgePass.uniforms['tNormal'].value = this._normalTarget.texture;
+      this.edgePass.enabled = false;
+      this.edgePass.renderToScreen = false;
+
+      // --- Color Grade Shader (Tier 6 — final polish pass) ---
+      const ColorGradeShader = {
+        uniforms: {
+          tDiffuse: { value: null },
+          contrast: { value: 1.0 },
+          saturation: { value: 1.0 }
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform float contrast;
+          uniform float saturation;
+          varying vec2 vUv;
+          void main() {
+            vec4 texel = texture2D(tDiffuse, vUv);
+            vec3 col = (texel.rgb - 0.5) * contrast + 0.5;
+            float lum = dot(col, vec3(0.299, 0.587, 0.114));
+            col = mix(vec3(lum), col, saturation);
+            gl_FragColor = vec4(col, texel.a);
+          }
+        `
+      };
+      this.gradePass = new THREE.ShaderPass(ColorGradeShader);
+      this.gradePass.enabled = false;
+      this.gradePass.renderToScreen = false;
+
+      // --- Scan-line Wipe Transition Shader ---
+      const ScanWipeShader = {
+        uniforms: {
+          tDiffuse: { value: null },
+          progress: { value: 0.0 }
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform float progress;
+          varying vec2 vUv;
+          void main() {
+            vec4 texel = texture2D(tDiffuse, vUv);
+            float sweep = 1.0 - progress;          // sweep line descends 1→0
+            float below = step(vUv.y, sweep);       // 1 below the line (not yet wiped)
+            float scan  = step(0.5, fract(vUv.y * 80.0));
+            vec3 col = texel.rgb;
+            col = mix(col, vec3(scan * 0.35 + 0.05), (1.0 - below) * 0.65);
+            float glow = 1.0 - smoothstep(0.0, 0.025, abs(vUv.y - sweep));
+            col += glow * vec3(0.0, 0.75, 0.65);
+            gl_FragColor = vec4(col, 1.0);
+          }
+        `
+      };
+      this.wipePass = new THREE.ShaderPass(ScanWipeShader);
+      this.wipePass.enabled = false;
+      this.wipePass.renderToScreen = false;
+
+      // Insert extra passes into composer at position 1 (after RenderPass)
+      // Order: RenderPass | pixelPass | edgePass | bloomPass | filmPass | fxaaPass | gradePass
+      const passes = game.composer.passes;
+      passes.splice(1, 0, this.pixelPass, this.edgePass);
+      passes.push(this.gradePass);
+      // Append wipe pass at end (behind fxaa) — we'll splice it in when needed
+      // (kept outside the normal stack, inserted/removed dynamically)
+
+      this._pendingTierUp = null;
+      this._wipeAnimStart = null;
+      this._wipeDuration = 800; // ms
+
+      // Apply initial tier from progression
+      this.applyTier(window.progression?.tier || 1);
+    }
+
+    resize(w, h) {
+      this._normalTarget.setSize(w, h);
+      if (this.pixelPass.uniforms) this.pixelPass.uniforms['resolution'].value.set(w, h);
+      if (this.edgePass.uniforms) this.edgePass.uniforms['resolution'].value.set(w, h);
+    }
+
+    // Called by render loop when tier 2 needs the normals pre-pass
+    renderNormalPass() {
+      const { renderer, scene, camera } = this.game;
+      renderer.setRenderTarget(this._normalTarget);
+      scene.overrideMaterial = this._normalMat;
+      renderer.render(scene, camera);
+      scene.overrideMaterial = null;
+      renderer.setRenderTarget(null);
+    }
+
+    // Tier plan (6 tiers total):
+    //  1: heavy pixelation + posterize (starting look)
+    //  2: eased pixelation — smaller pixel blocks, more posterize steps (transition to edges)
+    //  3: edge-hardening, degraded — coarse/thick threshold
+    //  4: edge-hardening, refined — closer to fine detail, small bump
+    //  5: bloom + FXAA on
+    //  6: ultimate — stronger bloom + color-grade polish pass (contrast/saturation lift)
+    applyTier(tier) {
+      if (tier === this.currentTier) return;
+      this.currentTier = tier;
+
+      const { bloomPass, filmPass, fxaaPass } = this.game;
+
+      // --- Enable / disable passes ---
+      this.pixelPass.enabled = (tier === 1 || tier === 2);
+      this.edgePass.enabled  = (tier === 3 || tier === 4);
+      this.needsNormalPass   = (tier === 3 || tier === 4);
+      this.gradePass.enabled = (tier === 6);
+
+      bloomPass.enabled = (tier >= 5);
+      fxaaPass.enabled  = (tier >= 5);
+
+      // --- Pixelation params (tiers 1-2) ---
+      if (tier === 1) { this.pixelPass.uniforms['pixelSize'].value = 6.0; this.pixelPass.uniforms['posterizeSteps'].value = 4.0; }
+      if (tier === 2) { this.pixelPass.uniforms['pixelSize'].value = 3.0; this.pixelPass.uniforms['posterizeSteps'].value = 8.0; }
+
+      // --- Edge-hardening params (tiers 3-4) — pushed further apart so the
+      // step reads clearly: tier 3 is deliberately coarse/heavy, tier 4 is
+      // the fine, original-quality edge pass.
+      if (tier === 3) { this.edgePass.uniforms['edgeThreshold'].value = 0.55; this.edgePass.uniforms['edgeDarken'].value = 1.0;  this.edgePass.uniforms['edgeThickness'].value = 2.4; }
+      if (tier === 4) { this.edgePass.uniforms['edgeThreshold'].value = 1.35; this.edgePass.uniforms['edgeDarken'].value = 0.85; this.edgePass.uniforms['edgeThickness'].value = 0.85; }
+
+      // --- Bloom strength per tier ---
+      if (tier === 5) { bloomPass.strength = 0.25; bloomPass.radius = 0.35; bloomPass.threshold = 0.94; }
+      if (tier === 6) { bloomPass.strength = 0.4;  bloomPass.radius = 0.4;  bloomPass.threshold = 0.90; }
+
+      // --- Color grade (tier 6 only) ---
+      this.gradePass.uniforms['contrast'].value = 1.12;
+      this.gradePass.uniforms['saturation'].value = 1.15;
+
+      // --- Film shader uniforms per tier ---
+      const u = filmPass.uniforms || (filmPass.material && filmPass.material.uniforms);
+      if (u) {
+        if (tier === 1)      u.saturationMult.value = 0.68;
+        else if (tier === 2) u.saturationMult.value = 0.72;
+        else if (tier === 3) u.saturationMult.value = 0.76;
+        else if (tier === 4) u.saturationMult.value = 0.80;
+        else if (tier === 5) u.saturationMult.value = 0.82;
+        else                 u.saturationMult.value = 0.85; // tier 6, default+
+      }
+
+      // --- renderToScreen: must be true on the last enabled pass ---
+      this.pixelPass.renderToScreen = false;
+      this.edgePass.renderToScreen  = false;
+      bloomPass.renderToScreen      = false;
+      this.gradePass.renderToScreen = false;
+      filmPass.renderToScreen       = (tier <= 4);
+      fxaaPass.renderToScreen       = (tier === 5);
+      // tier 6: gradePass is the final pass in the composer, so it must render to screen
+      if (tier === 6) this.gradePass.renderToScreen = true;
+    }
+
+    // Kick off the scanline wipe to a new tier
+    startTierTransition(newTier, game) {
+      game.inputFrozen = true;
+      this._pendingTierUp = newTier;
+      this._wipeAnimStart = performance.now();
+
+      // Insert wipe pass right before the last active pass
+      const passes = game.composer.passes;
+      const insertIdx = Math.max(0, passes.length - 1);
+      passes.splice(insertIdx, 0, this.wipePass);
+      this.wipePass.enabled = true;
+
+      // Mark the wipe pass as renderToScreen to ensure it outputs to canvas
+      const lastBeforeWipe = passes[insertIdx - 1];
+      if (lastBeforeWipe) lastBeforeWipe.renderToScreen = false;
+      this.wipePass.renderToScreen = true;
+    }
+
+    // Called every frame during active wipe animation
+    tickWipe(now) {
+      if (!this._wipeAnimStart) return;
+      const elapsed = now - this._wipeAnimStart;
+      const t = Math.min(elapsed / this._wipeDuration, 1.0);
+      const u = this.wipePass.uniforms || (this.wipePass.material && this.wipePass.material.uniforms);
+      if (u) u.progress.value = t;
+
+      if (t >= 1.0) {
+        // Wipe complete — apply new tier, remove wipe pass
+        const passes = this.game.composer.passes;
+        const idx = passes.indexOf(this.wipePass);
+        if (idx !== -1) passes.splice(idx, 1);
+        this.wipePass.enabled = false;
+
+        this.applyTier(this._pendingTierUp);
+        this._pendingTierUp = null;
+        this._wipeAnimStart = null;
+        this.game.inputFrozen = false;
+      }
+    }
+
+    // Pre-render hook — call just before composer.render() each frame
+    preRender() {
+      if (this.needsNormalPass) this.renderNormalPass();
+      if (this._wipeAnimStart !== null) this.tickWipe(performance.now());
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // 7. MAIN SHIPLYP DISPATCH & MISSION ENGINE
   // --------------------------------------------------------------------------
   class ShiplypEngine {
@@ -8920,6 +9250,10 @@
 
       this.keys = { up: false, down: false, left: false, right: false, w: false, s: false, a: false, d: false, space: false };
       this.inactivityTimer = 0;
+      this.inputFrozen = false;
+
+      // Progression system — must be created before initThree so tier is known
+      this.progression = new PlayerProgressionSystem();
 
       this.initThree();
       this.initEvents();
@@ -9262,6 +9596,19 @@
       this.fxaaPass.material.uniforms['resolution'].value.set(1 / (size.x * pixelRatio), 1 / (size.y * pixelRatio));
       this.fxaaPass.renderToScreen = true;
       this.composer.addPass(this.fxaaPass);
+
+      // Progressive visual fidelity — initialises after all base passes are in place
+      this.visualTier = new VisualTierManager(this);
+
+      // Wire tier-up event: freeze input, play wipe, then swap tier
+      this.progression.onTierUp(newTier => {
+        this.visualTier.startTierTransition(newTier, this);
+        this.addNotification(`VISUAL TIER ${newTier} UNLOCKED`, 'success', 3500);
+      });
+      this.progression.onLevelUp(newLevel => {
+        const xpPerLevel = PlayerProgressionSystem.XP_PER_LEVEL;
+        this.addNotification(`LEVEL ${newLevel} REACHED — ${Math.floor(this.progression.totalXP % xpPerLevel)}/${xpPerLevel} XP`, 'info', 2500);
+      });
     }
 
     buildWorldAndScene() {
@@ -9376,9 +9723,11 @@
           const pr = this.renderer.getPixelRatio();
           this.fxaaPass.material.uniforms['resolution'].value.set(1 / (window.innerWidth * pr), 1 / (window.innerHeight * pr));
         }
+        if (this.visualTier) this.visualTier.resize(window.innerWidth, window.innerHeight);
       });
 
       const onKey = (e, val) => {
+        if (this.inputFrozen) return;
         this.resetInactivity();
         const k = (e.key || '').toLowerCase();
         const code = e.code || '';
@@ -9959,6 +10308,7 @@
       const timeBonus = Math.max(0, Math.round(this.orderTimer * 1.8));
       const earnedBonus = Math.round((target.order.reward + timeBonus) * diffCfg.payoutMult * (1 + this.streakCount * 0.2));
       this.earnings += earnedBonus;
+      this.progression?.addXP(earnedBonus);
 
       this.orderTimer = this.maxOrderTimer; // Reset clock for next order
 
@@ -10785,7 +11135,9 @@
 
       // Fog
       if (this.scene.fog) {
-        const targetFogDens = inTunnel ? 0.0003 : curFogDens;
+        const tier = this.progression?.tier || 5;
+        const tierFogBase = VisualTierManager.FOG_DENSITY[tier] ?? curFogDens;
+        const targetFogDens = inTunnel ? 0.0003 : tierFogBase;
         const targetFogCol = inTunnel ? new THREE.Color(0x1a1512) : curFogCol;
         this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, targetFogDens, 0.08);
         this.scene.fog.color.lerp(targetFogCol, 0.08);
@@ -12015,6 +12367,23 @@
     }
 
     animate() {
+      // requestAnimationFrame is self-chaining (the call at the bottom of
+      // this method schedules the next frame) — a single uncaught exception
+      // anywhere in the frame body (world streaming, physics, HUD updates)
+      // stops that chain forever, silently freezing the whole game with no
+      // visible error. Wrapping the frame body and rescheduling in `finally`
+      // means one bad frame gets logged and skipped instead of killing the
+      // game outright.
+      try {
+        this._animateFrame();
+      } catch (err) {
+        console.error('animate() frame threw — skipping this frame:', err);
+      } finally {
+        requestAnimationFrame(this.animate.bind(this));
+      }
+    }
+
+    _animateFrame() {
       const dt = Math.min(this.clock.getDelta(), 0.1);
 
       // Live FPS readout for the top-right status pill — smoothed over a
@@ -12033,8 +12402,23 @@
         if (this.onFoot) {
           this.updateWalking(dt);
         } else {
-          this.vehicle.update(dt, this.keys, this.world, this.selectedSeason, this.selectedRoadTerrain);
-          sound.updateDrivingAmbience(this.vehicle.speed, this.vehicle.maxSpeed, (this.vehicle.speed - (this.vehicle.lastSpeed || this.vehicle.speed)) / Math.max(0.01, dt), this.vehicle.vehicleType);
+          // Fixed-step substepping: heavier post-processing (bloom/FXAA at
+          // tier 5-6) can drag render FPS down enough that a single dt=0.1s
+          // physics step overshoots steering/suspension integration and
+          // reads as stutter. Running the vehicle at a steady ~30Hz internal
+          // rate regardless of render framerate keeps driving feel smooth
+          // even when the frame is expensive.
+          const lastSpeed = this.vehicle.speed;
+          const maxSubDt = 1 / 30;
+          let remaining = dt;
+          let substeps = 0;
+          while (remaining > 0.0001 && substeps < 6) {
+            const stepDt = Math.min(remaining, maxSubDt);
+            this.vehicle.update(stepDt, this.keys, this.world, this.selectedSeason, this.selectedRoadTerrain);
+            remaining -= stepDt;
+            substeps++;
+          }
+          sound.updateDrivingAmbience(this.vehicle.speed, this.vehicle.maxSpeed, (this.vehicle.speed - lastSpeed) / Math.max(0.01, dt), this.vehicle.vehicleType);
         }
 
         // Infinite Forward Highway Chunk Streaming (Slow Roads Parity)
@@ -12185,11 +12569,11 @@
       }
 
       if (this.composer) {
+        this.visualTier?.preRender();
         this.composer.render();
       } else {
         this.renderer.render(this.scene, this.camera);
       }
-      requestAnimationFrame(this.animate.bind(this));
     }
   }
 
