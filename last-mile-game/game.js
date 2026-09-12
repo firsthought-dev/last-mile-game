@@ -9742,6 +9742,12 @@
       this.progression.onTierUp(newTier => {
         this.visualTier.startTierTransition(newTier, this);
         this.addNotification(`VISUAL TIER ${newTier} UNLOCKED`, 'success', 3500);
+        // The corner toast above is easy to miss during the wipe transition
+        // (attention is on the screen wipe, not the notification stack), so
+        // also show the same big centered banner used for district
+        // milestones — matches that existing convention of pairing a log
+        // toast with a prominent banner for moments worth noticing.
+        this.showScoreBanner(`${UI.icon('aperture')} VISUAL TIER ${newTier} UNLOCKED`, 'GRAPHICS UPGRADED');
       });
       this.progression.onLevelUp(newLevel => {
         const xpPerLevel = PlayerProgressionSystem.XP_PER_LEVEL;
