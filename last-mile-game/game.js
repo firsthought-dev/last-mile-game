@@ -8766,6 +8766,272 @@
   }
 
   // --------------------------------------------------------------------------
+  // 7a. PLAYER PROGRESSION & VISUAL FIDELITY SYSTEM
+  // --------------------------------------------------------------------------
+
+  class PlayerProgressionSystem {
+    constructor() {
+      this.totalXP = parseInt(localStorage.getItem('shiplyp_totalXP') || '0', 10);
+      this.currentLevel = Math.floor(this.totalXP / 100);
+      this.currentTier = Math.max(1, Math.ceil(this.currentLevel / 3));
+      this._levelUpCbs = [];
+      this._tierUpCbs = [];
+      window.progression = this;
+    }
+
+    get level() { return this.currentLevel; }
+    get tier() { return this.currentTier; }
+
+    addXP(earnedBonus) {
+      const xp = Math.floor(earnedBonus / 10);
+      const prevLevel = this.currentLevel;
+      const prevTier = this.currentTier;
+      this.totalXP += xp;
+      this.currentLevel = Math.floor(this.totalXP / 100);
+      this.currentTier = Math.max(1, Math.ceil(this.currentLevel / 3));
+      localStorage.setItem('shiplyp_totalXP', String(this.totalXP));
+      if (this.currentLevel > prevLevel) {
+        this._levelUpCbs.forEach(cb => cb(this.currentLevel));
+      }
+      if (this.currentTier > prevTier) {
+        this._tierUpCbs.forEach(cb => cb(this.currentTier));
+      }
+    }
+
+    onLevelUp(cb) { this._levelUpCbs.push(cb); }
+    onTierUp(cb) { this._tierUpCbs.push(cb); }
+  }
+
+  class VisualTierManager {
+    // Absolute fog density override per tier (Tier 5 = use live curFogDens)
+    static FOG_DENSITY = { 1: 0.025, 2: 0.020, 3: 0.015, 4: 0.010 };
+
+    constructor(game) {
+      this.game = game;
+      this.currentTier = 0;
+      this.needsNormalPass = false;
+
+      // Normal pre-pass resources for the edge shader (Tier 2)
+      this._normalTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
+      this._normalMat = new THREE.MeshNormalMaterial();
+
+      // --- Pixelation + Palette Shader (Tier 1) ---
+      const PixelPaletteShader = {
+        uniforms: {
+          tDiffuse: { value: null },
+          resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+          pixelSize: { value: 6.0 }
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform vec2 resolution;
+          uniform float pixelSize;
+          varying vec2 vUv;
+          void main() {
+            // Nearest-neighbour pixelation
+            vec2 blocks = floor(vUv * resolution / pixelSize) * pixelSize / resolution;
+            vec4 texel = texture2D(tDiffuse, blocks);
+            // Posterize: 4 steps per channel (~16 effective colours)
+            vec3 col = floor(texel.rgb * 4.0 + 0.5) / 4.0;
+            gl_FragColor = vec4(col, texel.a);
+          }
+        `
+      };
+      this.pixelPass = new THREE.ShaderPass(PixelPaletteShader);
+      this.pixelPass.enabled = false;
+      this.pixelPass.renderToScreen = false;
+
+      // --- Edge Hardening Shader (Tier 2) ---
+      const EdgeHardenShader = {
+        uniforms: {
+          tDiffuse: { value: null },
+          tNormal: { value: this._normalTarget.texture },
+          resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform sampler2D tNormal;
+          uniform vec2 resolution;
+          varying vec2 vUv;
+          void main() {
+            vec4 texel = texture2D(tDiffuse, vUv);
+            vec2 px = 1.0 / resolution;
+            // 3x3 Sobel on normal buffer: cancels micro-variations on flat walls,
+            // only true silhouette/corner edges survive the threshold.
+            vec3 tl=texture2D(tNormal,vUv+vec2(-px.x,-px.y)).rgb*2.-1.;
+            vec3 tc=texture2D(tNormal,vUv+vec2( 0.0, -px.y)).rgb*2.-1.;
+            vec3 tr=texture2D(tNormal,vUv+vec2( px.x,-px.y)).rgb*2.-1.;
+            vec3 ml=texture2D(tNormal,vUv+vec2(-px.x,  0.0)).rgb*2.-1.;
+            vec3 mr=texture2D(tNormal,vUv+vec2( px.x,  0.0)).rgb*2.-1.;
+            vec3 bl=texture2D(tNormal,vUv+vec2(-px.x, px.y)).rgb*2.-1.;
+            vec3 bc=texture2D(tNormal,vUv+vec2( 0.0,  px.y)).rgb*2.-1.;
+            vec3 br=texture2D(tNormal,vUv+vec2( px.x, px.y)).rgb*2.-1.;
+            vec3 Gx = -tl + tr - 2.0*ml + 2.0*mr - bl + br;
+            vec3 Gy = -tl - 2.0*tc - tr + bl + 2.0*bc + br;
+            float edge = step(1.2, sqrt(dot(Gx,Gx) + dot(Gy,Gy)));
+            vec3 col = mix(texel.rgb, vec3(0.04, 0.03, 0.02), edge * 0.90);
+            gl_FragColor = vec4(col, texel.a);
+          }
+        `
+      };
+      this.edgePass = new THREE.ShaderPass(EdgeHardenShader);
+      // UniformsUtils.clone copies textures by value (new Texture object), so re-point
+      // tNormal at the actual render target texture after construction.
+      this.edgePass.uniforms['tNormal'].value = this._normalTarget.texture;
+      this.edgePass.enabled = false;
+      this.edgePass.renderToScreen = false;
+
+      // --- Scan-line Wipe Transition Shader ---
+      const ScanWipeShader = {
+        uniforms: {
+          tDiffuse: { value: null },
+          progress: { value: 0.0 }
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform float progress;
+          varying vec2 vUv;
+          void main() {
+            vec4 texel = texture2D(tDiffuse, vUv);
+            float sweep = 1.0 - progress;          // sweep line descends 1→0
+            float below = step(vUv.y, sweep);       // 1 below the line (not yet wiped)
+            float scan  = step(0.5, fract(vUv.y * 80.0));
+            vec3 col = texel.rgb;
+            col = mix(col, vec3(scan * 0.35 + 0.05), (1.0 - below) * 0.65);
+            float glow = 1.0 - smoothstep(0.0, 0.025, abs(vUv.y - sweep));
+            col += glow * vec3(0.0, 0.75, 0.65);
+            gl_FragColor = vec4(col, 1.0);
+          }
+        `
+      };
+      this.wipePass = new THREE.ShaderPass(ScanWipeShader);
+      this.wipePass.enabled = false;
+      this.wipePass.renderToScreen = false;
+
+      // Insert extra passes into composer at position 1 (after RenderPass)
+      // Order: RenderPass | pixelPass | edgePass | bloomPass | filmPass | fxaaPass
+      const passes = game.composer.passes;
+      passes.splice(1, 0, this.pixelPass, this.edgePass);
+      // Append wipe pass at end (behind fxaa) — we'll splice it in when needed
+      // (kept outside the normal stack, inserted/removed dynamically)
+
+      this._pendingTierUp = null;
+      this._wipeAnimStart = null;
+      this._wipeDuration = 800; // ms
+
+      // Apply initial tier from progression
+      this.applyTier(window.progression?.tier || 1);
+    }
+
+    resize(w, h) {
+      this._normalTarget.setSize(w, h);
+      if (this.pixelPass.uniforms) this.pixelPass.uniforms['resolution'].value.set(w, h);
+      if (this.edgePass.uniforms) this.edgePass.uniforms['resolution'].value.set(w, h);
+    }
+
+    // Called by render loop when tier 2 needs the normals pre-pass
+    renderNormalPass() {
+      const { renderer, scene, camera } = this.game;
+      renderer.setRenderTarget(this._normalTarget);
+      scene.overrideMaterial = this._normalMat;
+      renderer.render(scene, camera);
+      scene.overrideMaterial = null;
+      renderer.setRenderTarget(null);
+    }
+
+    applyTier(tier) {
+      if (tier === this.currentTier) return;
+      this.currentTier = tier;
+
+      const { bloomPass, filmPass, fxaaPass } = this.game;
+
+      // --- Enable / disable passes ---
+      this.pixelPass.enabled = (tier === 1);
+      this.edgePass.enabled  = (tier === 2);
+      this.needsNormalPass   = (tier === 2);
+
+      bloomPass.enabled = (tier >= 3);
+      fxaaPass.enabled  = (tier >= 3);
+
+      // --- Bloom strength per tier ---
+      if (tier === 3) { bloomPass.strength = 0.2; bloomPass.radius = 0.3; bloomPass.threshold = 0.94; }
+      if (tier === 4) { bloomPass.strength = 0.3; bloomPass.radius = 0.4; bloomPass.threshold = 0.94; }
+      if (tier >= 5)  { bloomPass.strength = 0.4; bloomPass.radius = 0.4; bloomPass.threshold = 0.94; }
+
+      // --- Film shader uniforms per tier ---
+      const u = filmPass.uniforms || (filmPass.material && filmPass.material.uniforms);
+      if (u) {
+        if (tier === 1) {
+          // Heavy grain + scanlines — add noise via dither amplitude
+          u.saturationMult.value = 0.70;
+        } else if (tier === 2) {
+          u.saturationMult.value = 0.76;
+        } else if (tier <= 4) {
+          u.saturationMult.value = 0.80;
+        } else {
+          u.saturationMult.value = 0.82; // default
+        }
+      }
+
+      // --- renderToScreen: must be true on the last enabled pass ---
+      this.pixelPass.renderToScreen = false;
+      this.edgePass.renderToScreen  = false;
+      bloomPass.renderToScreen      = false;
+      filmPass.renderToScreen       = (tier <= 2);
+      fxaaPass.renderToScreen       = (tier >= 3);
+    }
+
+    // Kick off the scanline wipe to a new tier
+    startTierTransition(newTier, game) {
+      game.inputFrozen = true;
+      this._pendingTierUp = newTier;
+      this._wipeAnimStart = performance.now();
+
+      // Insert wipe pass right before the last active pass
+      const passes = game.composer.passes;
+      const insertIdx = Math.max(0, passes.length - 1);
+      passes.splice(insertIdx, 0, this.wipePass);
+      this.wipePass.enabled = true;
+
+      // Mark the wipe pass as renderToScreen to ensure it outputs to canvas
+      const lastBeforeWipe = passes[insertIdx - 1];
+      if (lastBeforeWipe) lastBeforeWipe.renderToScreen = false;
+      this.wipePass.renderToScreen = true;
+    }
+
+    // Called every frame during active wipe animation
+    tickWipe(now) {
+      if (!this._wipeAnimStart) return;
+      const elapsed = now - this._wipeAnimStart;
+      const t = Math.min(elapsed / this._wipeDuration, 1.0);
+      const u = this.wipePass.uniforms || (this.wipePass.material && this.wipePass.material.uniforms);
+      if (u) u.progress.value = t;
+
+      if (t >= 1.0) {
+        // Wipe complete — apply new tier, remove wipe pass
+        const passes = this.game.composer.passes;
+        const idx = passes.indexOf(this.wipePass);
+        if (idx !== -1) passes.splice(idx, 1);
+        this.wipePass.enabled = false;
+
+        this.applyTier(this._pendingTierUp);
+        this._pendingTierUp = null;
+        this._wipeAnimStart = null;
+        this.game.inputFrozen = false;
+      }
+    }
+
+    // Pre-render hook — call just before composer.render() each frame
+    preRender() {
+      if (this.needsNormalPass) this.renderNormalPass();
+      if (this._wipeAnimStart !== null) this.tickWipe(performance.now());
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // 7. MAIN SHIPLYP DISPATCH & MISSION ENGINE
   // --------------------------------------------------------------------------
   class ShiplypEngine {
@@ -8834,6 +9100,10 @@
 
       this.keys = { up: false, down: false, left: false, right: false, w: false, s: false, a: false, d: false, space: false };
       this.inactivityTimer = 0;
+      this.inputFrozen = false;
+
+      // Progression system — must be created before initThree so tier is known
+      this.progression = new PlayerProgressionSystem();
 
       this.initThree();
       this.initEvents();
@@ -9176,6 +9446,18 @@
       this.fxaaPass.material.uniforms['resolution'].value.set(1 / (size.x * pixelRatio), 1 / (size.y * pixelRatio));
       this.fxaaPass.renderToScreen = true;
       this.composer.addPass(this.fxaaPass);
+
+      // Progressive visual fidelity — initialises after all base passes are in place
+      this.visualTier = new VisualTierManager(this);
+
+      // Wire tier-up event: freeze input, play wipe, then swap tier
+      this.progression.onTierUp(newTier => {
+        this.visualTier.startTierTransition(newTier, this);
+        this.addNotification(`VISUAL TIER ${newTier} UNLOCKED`, 'success', 3500);
+      });
+      this.progression.onLevelUp(newLevel => {
+        this.addNotification(`LEVEL ${newLevel} REACHED — ${Math.floor(this.progression.totalXP % 100)}/100 XP`, 'info', 2500);
+      });
     }
 
     buildWorldAndScene() {
@@ -9290,9 +9572,11 @@
           const pr = this.renderer.getPixelRatio();
           this.fxaaPass.material.uniforms['resolution'].value.set(1 / (window.innerWidth * pr), 1 / (window.innerHeight * pr));
         }
+        if (this.visualTier) this.visualTier.resize(window.innerWidth, window.innerHeight);
       });
 
       const onKey = (e, val) => {
+        if (this.inputFrozen) return;
         this.resetInactivity();
         const k = (e.key || '').toLowerCase();
         const code = e.code || '';
@@ -9821,6 +10105,7 @@
       const timeBonus = Math.max(0, Math.round(this.orderTimer * 1.8));
       const earnedBonus = Math.round((target.order.reward + timeBonus) * diffCfg.payoutMult * (1 + this.streakCount * 0.2));
       this.earnings += earnedBonus;
+      this.progression?.addXP(earnedBonus);
 
       this.orderTimer = this.maxOrderTimer; // Reset clock for next order
 
@@ -10647,7 +10932,9 @@
 
       // Fog
       if (this.scene.fog) {
-        const targetFogDens = inTunnel ? 0.0003 : curFogDens;
+        const tier = this.progression?.tier || 5;
+        const tierFogBase = VisualTierManager.FOG_DENSITY[tier] ?? curFogDens;
+        const targetFogDens = inTunnel ? 0.0003 : tierFogBase;
         const targetFogCol = inTunnel ? new THREE.Color(0x1a1512) : curFogCol;
         this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, targetFogDens, 0.08);
         this.scene.fog.color.lerp(targetFogCol, 0.08);
@@ -12047,6 +12334,7 @@
       }
 
       if (this.composer) {
+        this.visualTier?.preRender();
         this.composer.render();
       } else {
         this.renderer.render(this.scene, this.camera);
