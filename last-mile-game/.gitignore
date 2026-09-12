@@ -3,6 +3,8 @@ OWNERS_MANUAL.md
 GAME_ARCHITECTURE_AND_VISUALS_GUIDE.md
 FEATURE_VERIFICATION_LOG.md
 CREDITS_AND_REFERENCES.md
+CLAUDE.md
+skills-lock.json
 
 # Dev test harness & scratch files
 dev-checks.js
