@@ -1008,7 +1008,21 @@
     // and coplanar means z-fighting plus terrain triangles poking through
     // the road edge in a ragged sawtooth. 2cm reads as flush.
     ROAD_VERGE_LIFT: 0.02,
-    ROAD_POINTS_COUNT: 500,
+    // Bumped from 500 (=6km) to 700 (=8.4km) at user's request: the
+    // stretch between km 6 and 7.7 is where the first STREAMING chunk
+    // used to appear, and even after seam-snap, seam-normal-blend, road
+    // clearance sweep and 4-style barrier rotation, that zone still
+    // reads as visibly broken to the player. Rather than trying to make
+    // the streaming path bit-identical to the initial build path,
+    // extend the initial build so it covers the whole 0-8.4km region
+    // itself (via createTerrainMesh / createRoadMesh / createFoliageAndProps,
+    // which produce clean geometry). The first streaming chunk now
+    // starts past 8.4km where the driver is less likely to notice the
+    // transition. Trade-off: initial world-build is ~40% more nodes
+    // (500 -> 700) so first-load takes a bit longer, but the visible
+    // driving experience up to and past the previous seam is now
+    // uniformly the correct initial-mesh geometry.
+    ROAD_POINTS_COUNT: 700,
     POINT_SPACING: 45.0,
     TERRAIN_SIZE: 1600.0,
     TERRAIN_SEGMENTS: 100,
@@ -3194,11 +3208,51 @@
         // grass-under-rust look instead of dry dune sand.
         map: isOffWorldTerrain ? RealTextureFactory.sandColor() : RealTextureFactory.grassColor(),
         normalMap: isOffWorldTerrain ? null : RealTextureFactory.grassNormal(),
-        normalScale: new THREE.Vector2(0.6, 0.6)
+        normalScale: new THREE.Vector2(0.6, 0.6),
+        // The warm scene IBL + AmbientLight 0.42 + HemisphereLight 0.22
+        // together lift a #245e33 deep-green vertex colour to RGB(135,171,136)
+        // pale mint after ACES tone-mapping — a photometric ablation on the
+        // rendered pixel showed removing the environment map alone drops it
+        // to (97,136,95), and combining that with a lower diffuse ambient
+        // returns the terrain to a proper forest-green. Because roughness
+        // is 0.95, the env map contribution here is diffuse irradiance, not
+        // meaningful highlights, so dialing it down loses no useful lighting
+        // — it only stops washing out the vertex-colored ground. Restricted
+        // to terrain: trees, buildings, the car all keep full env intensity.
+        envMapIntensity: isOffWorldTerrain ? 1.0 : 0.35
       });
 
       this.terrainMesh = new THREE.Mesh(geom, terrainMat);
       this.terrainMesh.receiveShadow = true;
+      if (!this.terrainMeshes) this.terrainMeshes = [];
+      this.terrainMeshes.push(this.terrainMesh);
+
+      // Cache the LAST row of terrain vertices (24 slice positions at the
+      // final tubular sample) so streaming's row 0 can snap to them
+      // exactly. Without this, the extension re-derives Y from the
+      // re-parameterized curve and lands off by a few decimetres per
+      // vertex, creating the horizontal shelf visible along the ±45m
+      // embankment past ~6km.
+      const _lastRow = [];
+      const _lastRowIdx = tubularSegments * sliceCount;
+      const _computedNormals = geom.attributes.normal;
+      for (let j = 0; j < sliceCount; j++) {
+        const base = (_lastRowIdx + j) * 3;
+        _lastRow.push({
+          lat: lateralSlices[j],
+          x: positions[base],
+          y: positions[base + 1],
+          z: positions[base + 2],
+          nx: _computedNormals.getX(_lastRowIdx + j),
+          ny: _computedNormals.getY(_lastRowIdx + j),
+          nz: _computedNormals.getZ(_lastRowIdx + j),
+          // remember the mesh + vertex index so the streaming path
+          // can average the row-N normal back onto the previous mesh
+          _mesh: this.terrainMesh,
+          _idx: _lastRowIdx + j
+        });
+      }
+      this._lastTerrainEdgeVerts = _lastRow;
       return this.terrainMesh;
     }
 
@@ -6034,6 +6088,27 @@
           new THREE.MeshBasicMaterial({ color: 0xffffff }),
           false
         );
+
+        // Cache barrier geometries + materials for the streaming extension
+        // path so future chunks emit the SAME 4-style rotation (Armco /
+        // dry-stone / wood split-rail / Jersey concrete) instead of the
+        // Armco-only strip that used to replace them past ~6km.
+        this._barrierAssets = {
+          postGeom: new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6),
+          postMat: new THREE.MeshStandardMaterial({ color: 0x8a7a68, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
+          railGeom: new THREE.BoxGeometry(1, 0.08, 0.08),
+          railMat: new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
+          stoneGeom: new THREE.BoxGeometry(1, 0.22, 0.32),
+          stoneMat: new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
+          concreteGeom: new THREE.BoxGeometry(1, 0.35, 0.26),
+          concreteMat: new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.88, metalness: 0.05 }),
+          armcoRailGeom: new THREE.BoxGeometry(1, 0.30, 0.08),
+          armcoRailMat: new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.32 }),
+          armcoPostGeom: new THREE.BoxGeometry(0.10, 1.1, 0.10),
+          armcoPostMat: new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.80, roughness: 0.40 }),
+          armcoReflGeom: new THREE.BoxGeometry(0.04, 0.09, 0.03),
+          armcoReflMat: new THREE.MeshBasicMaterial({ color: 0xffffff })
+        };
       }
 
       // NPC/traffic vehicles (rickshaws/buses/mini-trucks) removed per the
@@ -6311,6 +6386,13 @@
       if (distToEnd < 1600) {
         this._lastStreamBuild = now;
         const oldLength = this.splineNodes.length;
+        // World-space end of the geometry that already exists. Captured
+        // BEFORE extendSpline/resample, because both destroy the old
+        // indexing. buildExtensionMeshes matches against this point
+        // geometrically instead of guessing the join from node counts.
+        const prevEndPos = (this.roadSpacedPoints && this.roadSpacedPoints.length)
+          ? this.roadSpacedPoints[this.roadSpacedPoints.length - 1].clone()
+          : lastNode.clone();
         this.extendSpline(100); // add 1000m of new highway nodes
         const newLength = this.splineNodes.length;
 
@@ -6376,17 +6458,161 @@
         }
 
         // Generate forward extension meshes for road, lane markings, terrain, and roadside props
-        this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, roadTerrainKey);
+        this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, roadTerrainKey, prevEndPos);
+        this.sweepTerrainBelowRoad();
       }
     }
 
-    buildExtensionMeshes(scene, oldNodeCount, newNodeCount, season, difficulty = 'medium', roadTerrainKey = 'asphalt') {
+    // Post-stream road-clearance sweep.
+    //
+    // extendSpline appends control points to the CatmullRom curve, and
+    // CatmullRom interpolation depends on neighboring control points — so
+    // adding new tail nodes SHIFTS the shape of the curve near its old
+    // tail. Every terrain mesh already baked is anchored to its build-time
+    // curve; as the curve mutates over many streams, previously-clamped
+    // embankment vertices at ±45m lateral end up sitting ABOVE the new
+    // road path, especially where the freshly-shifted curve loops back
+    // through what used to be raw hillside. Measured breaches: up to 10m
+    // of terrain planted directly on top of the asphalt after ~70km.
+    //
+    // Cheap fix: after every stream extension, walk every terrain vertex
+    // ever built, look up the current-curve nearest road point through
+    // the spatial grid (built fresh this stream), and clamp any vertex
+    // that lies within the drivable ribbon down 0.22m below the road.
+    // Runs once per stream, not per frame, so cost is fine.
+    sweepTerrainBelowRoad() {
+      if (!this.terrainMeshes || !this.terrainMeshes.length) return;
+      if (!this.roadSpatialGrid) return;
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
+      const vergeLat = CONFIG.ROAD_WIDTH * 0.5 + CONFIG.ROAD_SHOULDER_WIDTH;
+      // Cover the full drivable ribbon plus verge — same envelope the
+      // build-time guard uses so a swept vertex passes the same test the
+      // stream's own inner-loop clearance did at build time.
+      const clearRadius = vergeLat + 0.6;
+      const clearRadiusPlus = clearRadius + 1.0;
+      // Sweep every terrain mesh. Restricting to tail-adjacent meshes
+      // was 10x cheaper but WRONG: the road weaves, and a freshly-added
+      // curve segment can bend back through the territory of a mesh
+      // that was built kilometres of arc length ago and has long since
+      // aged out of the tail. Missing that mesh leaves visible
+      // 2-3m-tall terrain wedges sticking through the road far behind
+      // the player's current position. Correctness before FPS —
+      // widening this back to a full walk.
+      //
+      // Per-vertex grid lookup is O(1) so total cost scales linearly
+      // with total terrain vertex count. Runs at stream cadence
+      // (every ~3s), not per frame.
+      const nearTail = () => true;
+      let clamped = 0, swept = 0;
+      for (let mi = 0; mi < this.terrainMeshes.length; mi++) {
+        const m = this.terrainMeshes[mi];
+        if (!nearTail(m)) continue;
+        swept++;
+        const p = m.geometry.attributes.position;
+        let changed = false;
+        for (let i = 0; i < p.count; i++) {
+          const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+          const nr = this.roadSpatialGrid.getNearestRoadPoint(x, z, clearRadiusPlus);
+          if (!nr || nr.dist > clearRadius) continue;
+          const ceiling = nr.y - 0.22;
+          if (y > ceiling) {
+            p.setY(i, ceiling);
+            clamped++;
+            changed = true;
+          }
+        }
+        if (changed) {
+          p.needsUpdate = true;
+          m.geometry.computeVertexNormals();
+        }
+      }
+      this._lastSweepClamped = clamped;
+      this._lastSweepMeshes = swept;
+
+      // Seam-normal blend across every adjacent mesh boundary.
+      //
+      // Each mesh recomputed its normals independently after any position
+      // clamp above. At every seam, the row-N vertex of mesh i and the
+      // row-0 vertex of mesh i+1 share XYZ (via the seam-snap in
+      // buildExtensionMeshes) but their normals differ — each was
+      // averaged over faces on only one side of the seam, so the two
+      // paint different shades at identical world positions and a visible
+      // band appears across the ground at the boundary (most obvious at
+      // the initial→first-extension seam near 6km). Blending the two
+      // normals into a single averaged value and stamping it onto BOTH
+      // vertices makes the seam light identically on both sides.
+      const sliceCount = 24;
+      for (let mi = 0; mi + 1 < this.terrainMeshes.length; mi++) {
+        const mPrev = this.terrainMeshes[mi];
+        const mNext = this.terrainMeshes[mi + 1];
+        const nPrev = mPrev.geometry.attributes.normal;
+        const nNext = mNext.geometry.attributes.normal;
+        const pPrev = mPrev.geometry.attributes.position;
+        const pNext = mNext.geometry.attributes.position;
+        const rowNStart = pPrev.count - sliceCount;
+        // Cheap safety: only blend if the two rows are geometrically at
+        // the same positions (seam-snap did its job). If they aren't
+        // (mesh count boundary from something unrelated), skip.
+        let same = true;
+        for (let j = 0; j < sliceCount; j++) {
+          const dx = pPrev.getX(rowNStart + j) - pNext.getX(j);
+          const dz = pPrev.getZ(rowNStart + j) - pNext.getZ(j);
+          if (dx * dx + dz * dz > 4) { same = false; break; }
+        }
+        if (!same) continue;
+        for (let j = 0; j < sliceCount; j++) {
+          const px = nPrev.getX(rowNStart + j), py = nPrev.getY(rowNStart + j), pz = nPrev.getZ(rowNStart + j);
+          const nx = nNext.getX(j), ny = nNext.getY(j), nz = nNext.getZ(j);
+          let ax = px + nx, ay = py + ny, az = pz + nz;
+          const len = Math.hypot(ax, ay, az) || 1;
+          ax /= len; ay /= len; az /= len;
+          nPrev.setXYZ(rowNStart + j, ax, ay, az);
+          nNext.setXYZ(j, ax, ay, az);
+        }
+        nPrev.needsUpdate = true;
+        nNext.needsUpdate = true;
+      }
+    }
+
+    buildExtensionMeshes(scene, oldNodeCount, newNodeCount, season, difficulty = 'medium', roadTerrainKey = 'asphalt', prevEndPos = null) {
       const totalSegments = newNodeCount * 3;
-      // Exact arc-length parameter match to the boundary of the previous mesh
-      const startSeg = Math.max(0, Math.round(((oldNodeCount - 1) / (newNodeCount - 1)) * totalSegments));
       const endSeg = totalSegments;
       const points = this.roadSpacedPoints;
       if (!points || points.length <= endSeg) return;
+
+      // Where the previously-built meshes actually stop.
+      //
+      // This used to be `round((oldNodeCount-1)/(newNodeCount-1) * totalSegments)`
+      // — a SPLINE-NODE-COUNT ratio applied to an ARC-LENGTH-parameterized
+      // index. Those two only agree when every node is equally spaced in arc
+      // length, which is never true on a weaving, hilly spline. Each stream
+      // therefore started the new ribbon tens of metres before or after the
+      // old one ended: before => a second terrain ribbon laid straight over
+      // the existing road and terrain (the "terrain bleeds into the road /
+      // meshes overlapping" seam that reappeared every ~1km past the initial
+      // ~6km build), after => a hole. The error also compounded, since each
+      // rebuild re-derived the join from the same bad ratio.
+      //
+      // getSpacedPoints re-parameterizes the WHOLE curve every stream, so the
+      // only stable reference is world space. CatmullRom interpolates its
+      // control points, so the old endpoint still lies on the new curve —
+      // matching it geometrically lands the join within a fraction of a
+      // segment and is self-correcting across successive streams.
+      let startSeg;
+      if (prevEndPos) {
+        let bestIdx = 0, bestSq = Infinity;
+        for (let i = 0; i <= endSeg; i++) {
+          const dx = points[i].x - prevEndPos.x;
+          const dy = points[i].y - prevEndPos.y;
+          const dz = points[i].z - prevEndPos.z;
+          const sq = dx * dx + dy * dy + dz * dz;
+          if (sq < bestSq) { bestSq = sq; bestIdx = i; }
+        }
+        startSeg = bestIdx;
+      } else {
+        startSeg = Math.max(0, Math.round(((oldNodeCount - 1) / (newNodeCount - 1)) * totalSegments));
+      }
+      startSeg = THREE.MathUtils.clamp(startSeg, 0, endSeg - 1);
 
       const roadWidth = CONFIG.ROAD_WIDTH;
       const shoulderWidth = CONFIG.ROAD_SHOULDER_WIDTH;
@@ -6604,13 +6830,23 @@
           } else {
             const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
             const blendFactor = THREE.MathUtils.smoothstep(absDist, 9.0, 45.0);
-            const shoulderDrop = pt.y - 0.5;
-            finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
-            if (rawH > 22.0) {
-              tColors.push(cliffCol.r, cliffCol.g, cliffCol.b);
+            // createTerrainMesh lifts the embankment ABOVE the tunnel roof so
+            // the bore stays open; this path had no tunnel branch at all, so
+            // any tunnel past the initial build got sealed shut by terrain.
+            const inTunnel = this.isInTunnelZone && this.isInTunnelZone(i);
+            if (inTunnel) {
+              const mountainOverhead = Math.max(rawH, pt.y + 14.0);
+              finalY = THREE.MathUtils.lerp(pt.y - 0.5, mountainOverhead, blendFactor);
+              tColors.push(cliffCol.r * 0.9, cliffCol.g * 0.9, cliffCol.b * 0.9);
             } else {
-              const nVal = 0.94 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.07;
-              tColors.push(grassCol.r * nVal, grassCol.g * nVal, grassCol.b * nVal);
+              const shoulderDrop = pt.y - 0.5;
+              finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
+              if (rawH > 22.0) {
+                tColors.push(cliffCol.r, cliffCol.g, cliffCol.b);
+              } else {
+                const nVal = 0.94 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.07;
+                tColors.push(grassCol.r * nVal, grassCol.g * nVal, grassCol.b * nVal);
+              }
             }
           }
 
@@ -6637,7 +6873,13 @@
 
           tPositions.push(worldPos.x, finalY, worldPos.z);
           tNormals.push(0, 1, 0);
-          tUvs.push(latDist * 0.05, i * 0.3);
+          // Must be the SAME world-space mapping createTerrainMesh uses.
+          // This was `latDist * 0.05, i * 0.3`, which spans ~4.5 UV units
+          // across the 90m ribbon where the initial mesh spans 40 — the
+          // grass photo was stretched ~9x laterally the moment the world
+          // streamed past its initial build, so past ~6km the ground read
+          // as smeared and washed out while sharing the exact same material.
+          tUvs.push(worldPos.x * 0.45, worldPos.z * 0.45);
         }
 
         if (i < endSeg) {
@@ -6650,6 +6892,39 @@
         }
       }
 
+      // Snap row 0 vertex positions to the previous mesh's last-row cache
+      // (initial createTerrainMesh, or the previous streaming chunk), so
+      // the two ribbons meet at identical world positions vertex-for-vertex
+      // — kills the horizontal shelf/seam that appears every ~500m past
+      // the initial build.
+      if (this._lastTerrainEdgeVerts && this._lastTerrainEdgeVerts.length === sliceCount) {
+        for (let j = 0; j < sliceCount; j++) {
+          const base = j * 3;
+          const cached = this._lastTerrainEdgeVerts[j];
+          tPositions[base] = cached.x;
+          tPositions[base + 1] = cached.y;
+          tPositions[base + 2] = cached.z;
+        }
+      }
+
+      // Re-cache row N of THIS chunk for the next streaming call.
+      const _rowN = [];
+      const _rowNStart = (endSeg - startSeg) * sliceCount;
+      // Row-N normals will be re-blended when the NEXT chunk arrives —
+      // we still need to know which mesh + vertex to write back to.
+      for (let j = 0; j < sliceCount; j++) {
+        const base = (_rowNStart + j) * 3;
+        _rowN.push({
+          lat: lateralSlices[j],
+          x: tPositions[base],
+          y: tPositions[base + 1],
+          z: tPositions[base + 2],
+          _mesh: null, // filled in right after mesh is created
+          _idx: _rowNStart + j
+        });
+      }
+      this._pendingRowN = _rowN;
+
       tGeom.setAttribute('position', new THREE.Float32BufferAttribute(tPositions, 3));
       tGeom.setAttribute('color', new THREE.Float32BufferAttribute(tColors, 3));
       tGeom.setAttribute('normal', new THREE.Float32BufferAttribute(tNormals, 3));
@@ -6658,9 +6933,58 @@
       tGeom.computeVertexNormals();
       tGeom.computeTangents();
 
+      // Seam normal blend: after computeVertexNormals ran on this chunk in
+      // isolation, its row-0 vertices carry a normal averaged only over the
+      // faces on THIS side of the seam — while the previous mesh's row-N
+      // vertices carry a normal averaged only over faces on its side. The
+      // two shared vertex positions therefore light differently, painting
+      // a visible shading band across the ground at the boundary between
+      // the initial mesh and the first extension (and again at every
+      // extension boundary). The fix is to compute the true full-across
+      // vertex normal — average of both sides' contributions — and stamp
+      // it onto both meshes' shared vertex so they light identically.
+      if (this._lastTerrainEdgeVerts && this._lastTerrainEdgeVerts.length === sliceCount) {
+        const tNormalsAttr = tGeom.attributes.normal;
+        for (let j = 0; j < sliceCount; j++) {
+          const cached = this._lastTerrainEdgeVerts[j];
+          if (!cached._mesh) continue;
+          const prevNormAttr = cached._mesh.geometry.attributes.normal;
+          const pnx = prevNormAttr.getX(cached._idx);
+          const pny = prevNormAttr.getY(cached._idx);
+          const pnz = prevNormAttr.getZ(cached._idx);
+          const cnx = tNormalsAttr.getX(j);
+          const cny = tNormalsAttr.getY(j);
+          const cnz = tNormalsAttr.getZ(j);
+          let ax = pnx + cnx, ay = pny + cny, az = pnz + cnz;
+          const len = Math.hypot(ax, ay, az) || 1;
+          ax /= len; ay /= len; az /= len;
+          tNormalsAttr.setXYZ(j, ax, ay, az);
+          prevNormAttr.setXYZ(cached._idx, ax, ay, az);
+        }
+        tNormalsAttr.needsUpdate = true;
+        this._lastTerrainEdgeVerts[0]._mesh.geometry.attributes.normal.needsUpdate = true;
+      }
+
       const terrainMesh = new THREE.Mesh(tGeom, this.terrainMesh ? this.terrainMesh.material : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0.02, map: RealTextureFactory.grassColor() }));
       terrainMesh.receiveShadow = true;
       scene.add(terrainMesh);
+      if (!this.terrainMeshes) this.terrainMeshes = [];
+      this.terrainMeshes.push(terrainMesh);
+
+      // Bind the pending row-N cache to the new mesh so the NEXT extension
+      // can blend normals across this seam too. Also refresh its cached
+      // normal values from the (now seam-blended) attribute.
+      if (this._pendingRowN) {
+        const nAttr = tGeom.attributes.normal;
+        this._pendingRowN.forEach(rec => {
+          rec._mesh = terrainMesh;
+          rec.nx = nAttr.getX(rec._idx);
+          rec.ny = nAttr.getY(rec._idx);
+          rec.nz = nAttr.getZ(rec._idx);
+        });
+        this._lastTerrainEdgeVerts = this._pendingRowN;
+        this._pendingRowN = null;
+      }
 
       // 3. Roadside Props (Trees) along the new segment — this only ever
       // spawned trees despite the comment (no rocks/fences were actually
@@ -6774,22 +7098,89 @@
           else if (i === points.length - 1) tangent = new THREE.Vector3().subVectors(points[points.length - 1], points[points.length - 2]).normalize();
           else tangent = new THREE.Vector3().subVectors(points[i + 1], points[i - 1]).normalize();
 
-          // 1. Armco guardrail — one post every 4 nodes, one rail beam between posts
-          if (i % 4 === 0) {
-            const nextPt = points[Math.min(points.length - 1, i + 4)];
+          // 1. Barriers — 4-style rotation matching createFoliageAndProps
+          // (Armco / dry-stone / wood split-rail / Jersey concrete). Was
+          // Armco-only every 4 nodes: any wooden split-rail fencing the
+          // player saw for the first ~6km silently vanished the moment
+          // streaming took over, replaced by a thin grey metal rail.
+          // Only runs when the initial pass produced a barrier asset
+          // cache (Earth cities), matches the initial's per-node cadence
+          // (FENCE_STEP=1), and skips vertices inside tunnel zones.
+          if (this._barrierAssets && !this.isInTunnelZone?.(i)) {
+            const BA = this._barrierAssets;
+            const nextPtBar = points[Math.min(points.length - 1, i + 1)];
+            const avgSegStepBar = this.curve.getLength() / (points.length - 1);
+            const railLenBar = avgSegStepBar + 0.6;
+            const _fdummy = new THREE.Object3D();
             [-1, 1].forEach(side => {
-              const railPos = pt.clone().addScaledVector(normal, fenceDist * side);
-              railPos.y = this.groundHeightAt(pt, railPos, fenceDist * side) + 0.55;
+              const fenceDistBar = side * (CONFIG.ROAD_WIDTH * 0.5 + 2.2);
+              const fencePosBar = pt.clone().addScaledVector(normal, fenceDistBar);
+              const endA = fencePosBar.clone().addScaledVector(tangent, -railLenBar / 2);
+              const endB = fencePosBar.clone().addScaledVector(tangent, railLenBar / 2);
+              const yA = this.groundHeightAt(pt, endA, fenceDistBar) + 0.05;
+              const yB = this.groundHeightAt(nextPtBar, endB, fenceDistBar) + 0.05;
+              fencePosBar.y = (yA + yB) / 2;
+              const offsetA = yA - fencePosBar.y;
+              const offsetB = yB - fencePosBar.y;
+              const tiltAngle = Math.atan2(yB - yA, railLenBar);
 
-              const post = new THREE.Mesh(postGeom, postMat);
-              post.position.copy(railPos);
-              scene.add(post);
+              _fdummy.position.copy(fencePosBar);
+              _fdummy.up.set(0, 1, 0);
+              _fdummy.lookAt(fencePosBar.clone().add(normal));
+              _fdummy.updateMatrix();
+              const groupMatrix = _fdummy.matrix;
 
-              const rail = new THREE.Mesh(railGeom, railMat);
-              rail.position.copy(railPos);
-              rail.position.y += 0.05;
-              rail.lookAt(nextPt.x, rail.position.y, nextPt.z);
-              scene.add(rail);
+              const barrierStyle = Math.floor(i / 30) % 4;
+              const emit = (geom, mat, localM) => {
+                const m = new THREE.Mesh(geom, mat);
+                m.applyMatrix4(groupMatrix.clone().multiply(localM));
+                scene.add(m);
+              };
+
+              if (barrierStyle === 0) {
+                // Armco W-Beam
+                [[-railLenBar / 2, offsetA], [railLenBar / 2, offsetB]].forEach(([px, offset]) => {
+                  emit(BA.armcoPostGeom, BA.armcoPostMat, new THREE.Matrix4().makeTranslation(px, offset + 0.55, 0));
+                  emit(BA.armcoReflGeom, BA.armcoReflMat, new THREE.Matrix4().makeTranslation(px, offset + 0.78, 0.08));
+                });
+                emit(BA.armcoRailGeom, BA.armcoRailMat, new THREE.Matrix4().compose(
+                  new THREE.Vector3(0, 0.65, 0),
+                  new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                  new THREE.Vector3(railLenBar, 1, 1)
+                ));
+              } else if (barrierStyle === 1) {
+                // Dry-stone (4 courses)
+                [0.22, 0.44, 0.64, 0.8].forEach((ry, rowIdx) => {
+                  const jitter = 1.0 - rowIdx * 0.04;
+                  emit(BA.stoneGeom, BA.stoneMat, new THREE.Matrix4().compose(
+                    new THREE.Vector3(0, ry, 0),
+                    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                    new THREE.Vector3(railLenBar, 1, jitter)
+                  ));
+                });
+              } else if (barrierStyle === 3) {
+                // Jersey concrete (2 courses)
+                [0.26, 0.62].forEach((ry, rIdx) => {
+                  const bScaleZ = rIdx === 0 ? 1.0 : 0.75;
+                  emit(BA.concreteGeom, BA.concreteMat, new THREE.Matrix4().compose(
+                    new THREE.Vector3(0, ry, 0),
+                    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                    new THREE.Vector3(railLenBar, 1, bScaleZ)
+                  ));
+                });
+              } else {
+                // Wood split-rail (2 posts + 2 rails)
+                [[-railLenBar / 2, offsetA], [railLenBar / 2, offsetB]].forEach(([px, offset]) => {
+                  emit(BA.postGeom, BA.postMat, new THREE.Matrix4().makeTranslation(px, offset + 0.6, 0));
+                });
+                [0.45, 0.85].forEach(ry => {
+                  emit(BA.railGeom, BA.railMat, new THREE.Matrix4().compose(
+                    new THREE.Vector3(0, ry, 0),
+                    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                    new THREE.Vector3(railLenBar, 1, 1)
+                  ));
+                });
+              }
             });
           }
 
