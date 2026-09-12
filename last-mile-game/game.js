@@ -131,6 +131,46 @@
   // 0g. DELIVERY CYCLE — Blender-exported GLB with corrected Y-up orientation.
   const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?t=' + Date.now(), () => {}, 'DeliveryCycleAsset');
 
+  // 0h. COURIER — rigged, animated character (Mixamo base, retextured) shared by
+  // the on-foot player walker and crosser NPCs, so both use one consistent model
+  // instead of separate procedural rigs. Ships with real Walking/Running clips.
+  // Must be cloned with THREE.SkeletonUtils.clone (not Object3D.clone) — a plain
+  // clone shares skeleton bone references across instances and breaks per-instance
+  // animation/deformation for SkinnedMesh.
+  const CourierAsset = {
+    template: null,
+    animations: null,
+    loading: false,
+    pendingControllers: [],
+    load() {
+      if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
+      this.loading = true;
+      new THREE.GLTFLoader().load('assets/models/courier.glb?t=' + Date.now(), (gltf) => {
+        gltf.scene.traverse((child) => {
+          if (!child.isMesh) return;
+          child.castShadow = true;
+          child.receiveShadow = true;
+        });
+        this.template = gltf.scene;
+        this.animations = gltf.animations;
+        this.pendingControllers.forEach((cb) => cb());
+        this.pendingControllers.length = 0;
+      }, undefined, (err) => {
+        console.warn('CourierAsset: failed to load courier.glb', err);
+      });
+    },
+    // Returns { root, mixer, actions } — actions keyed by clip name (Walking/Running/Riding/TPose).
+    clone() {
+      if (!this.template || typeof THREE.SkeletonUtils === 'undefined') return null;
+      const root = THREE.SkeletonUtils.clone(this.template);
+      const mixer = new THREE.AnimationMixer(root);
+      const actions = {};
+      this.animations.forEach((clip) => { actions[clip.name] = mixer.clipAction(clip); });
+      return { root, mixer, actions };
+    }
+  };
+  CourierAsset.load();
+
   // --------------------------------------------------------------------------
   // 1. DETERMINISTIC PRNG
   // --------------------------------------------------------------------------
@@ -2036,7 +2076,17 @@
         const shoulderDrop = pt.y - 0.5;
         return THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
       } else {
-        return this.getRawTerrainHeight(worldPos.x, worldPos.z) - 0.3;
+        // Was `rawH - 0.3` — a hard step discontinuity right at the
+        // EMBANKMENT_BLEND boundary (0.3 units), since the branch just
+        // inside returns `rawH` with blendFactor=1. Any object whose
+        // lateral distance oscillates around 45m (e.g. the on-foot walker,
+        // whose Y snaps straight to this value every frame with no lerp)
+        // visibly jumps/snaps at that seam. Fade the -0.3 lip in over a
+        // few meters past the boundary instead of applying it immediately.
+        const FAR_BLEND = 3.0;
+        const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
+        const farT = THREE.MathUtils.smoothstep(absDist, EMBANKMENT_BLEND, EMBANKMENT_BLEND + FAR_BLEND);
+        return rawH - 0.3 * farT;
       }
     }
 
@@ -4353,7 +4403,39 @@
       // with clean edge loops, polo collars, and jogger cuffs.
       const CROSSER_POLO_PALETTE = [0x228b96, 0xd97706, 0x059669, 0x2563eb, 0x7c3aed, 0xdb2777];
       const CROSSER_PANTS_PALETTE = [0x5f6e43, 0x1e293b, 0x334155, 0x475569, 0x3f3f46];
+      const CROSSER_SKIN_TINTS = [0xffffff, 0xf0d1ab, 0xc68a62, 0x8d5524, 0x5c3a21];
       const buildCrosserMesh = (kind) => {
+        const courierRig = kind === 'pedestrian' ? CourierAsset.clone() : null;
+        if (courierRig) {
+          // Shared rigged CourierAsset (same model as the player's on-foot
+          // walker) — recolored per-instance (skin/top/bottom tint cloned off
+          // the shared materials so tints don't leak across NPCs) and scaled
+          // for a bit of height variety, with its own Walking clip playing at
+          // a randomized speed so a crowd doesn't move in lockstep.
+          const rig = courierRig;
+          const root = rig.root;
+          root.userData.mixer = rig.mixer;
+          root.userData.actions = rig.actions;
+          const skinTint = CROSSER_SKIN_TINTS[Math.floor(this.prng.range(0, CROSSER_SKIN_TINTS.length))];
+          const topTint = CROSSER_POLO_PALETTE[Math.floor(this.prng.range(0, CROSSER_POLO_PALETTE.length))];
+          const pantsTint = CROSSER_PANTS_PALETTE[Math.floor(this.prng.range(0, CROSSER_PANTS_PALETTE.length))];
+          root.traverse((child) => {
+            if (!child.isMesh || !child.material) return;
+            child.material = child.material.clone();
+            if (child.material.name === 'Bodymat') child.material.color.set(skinTint);
+            else if (child.material.name === 'Topmat') child.material.color.set(topTint);
+            else if (child.material.name === 'Bottommat') child.material.color.set(pantsTint);
+          });
+          root.scale.setScalar(this.prng.range(0.92, 1.08));
+          const walkAction = rig.actions['Walking'];
+          if (walkAction) {
+            walkAction.setEffectiveTimeScale(this.prng.range(0.85, 1.2));
+            walkAction.play();
+          }
+          root.userData.hitRadius = 1.1;
+          root.userData.walkSpeed = this.prng.range(1.0, 1.8);
+          return root;
+        }
         const group = new THREE.Group();
         if (kind === 'pedestrian') {
           const skinMat = new THREE.MeshStandardMaterial({ color: 0xc68a62, roughness: 0.55 });
@@ -6290,17 +6372,21 @@
         }
         c.mesh.visible = true;
 
-        c.legPhase += dt * 9.0;
-        const swing = Math.sin(c.legPhase) * 0.35;
-        if (c.mesh.userData.legs) {
-          c.mesh.userData.legs.forEach((leg, idx) => {
-            leg.rotation.x = (idx % 2 === 0 ? swing : -swing);
-          });
-        }
-        if (c.mesh.userData.arms) {
-          c.mesh.userData.arms.forEach((arm, idx) => {
-            arm.rotation.x = (idx % 2 === 0 ? -swing * 0.8 : swing * 0.8);
-          });
+        if (c.mesh.userData.mixer) {
+          c.mesh.userData.mixer.update(dt);
+        } else {
+          c.legPhase += dt * 9.0;
+          const swing = Math.sin(c.legPhase) * 0.35;
+          if (c.mesh.userData.legs) {
+            c.mesh.userData.legs.forEach((leg, idx) => {
+              leg.rotation.x = (idx % 2 === 0 ? swing : -swing);
+            });
+          }
+          if (c.mesh.userData.arms) {
+            c.mesh.userData.arms.forEach((arm, idx) => {
+              arm.rotation.x = (idx % 2 === 0 ? -swing * 0.8 : swing * 0.8);
+            });
+          }
         }
       }
     }
@@ -9400,9 +9486,31 @@
       bindHoldButton('touch-pedal-brake', () => { this.keys.down = this.keys.s = true; }, () => { this.keys.down = this.keys.s = false; });
     }
 
+    // On-foot courier avatar. Uses the shared rigged CourierAsset (real
+    // Walking/Running animation clips) so the player and crosser NPCs share one
+    // consistent character; falls back to the procedural mesh below if the
+    // asset hasn't loaded yet or failed to load.
+    createWalkerMesh() {
+      const rig = CourierAsset.clone();
+      if (rig) {
+        rig.root.userData.mixer = rig.mixer;
+        rig.root.userData.actions = rig.actions;
+        rig.root.userData.currentAction = null;
+        // Start in Idle rather than the raw T-pose bind pose — a clip must
+        // always be playing on this rig, never "no clip".
+        if (rig.actions['Idle']) {
+          rig.actions['Idle'].play();
+          rig.root.userData.currentAction = 'Idle';
+        }
+        return rig.root;
+      }
+      return this.createWalkerMeshProcedural();
+    }
+
     // High-quality stylized courier avatar for on-foot delivery, featuring
     // delivery uniform, cap, thermal backpack, sneakers, and articulated limbs.
-    createWalkerMesh() {
+    // Fallback used only if CourierAsset failed to load.
+    createWalkerMeshProcedural() {
       const group = new THREE.Group();
       
       const skinMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.6 });
@@ -9641,13 +9749,23 @@
         const newPos = this.walkerMesh.position.clone().addScaledVector(forward, moveDir * walkSpeed * dt);
 
         // Find the nearest spline point to the walker's current XZ — local
-        // search ±20 steps of 0.001 u around last known walker u.  Fixes
-        // grow bug: using vehicle.splineProgress was wrong when walker moves
-        // laterally; latDist grew → embankment formula elevated Y.
+        // search around the last known walker u. Step size used to be a
+        // fixed 0.001 u, which on this road's curve (~8360m total length)
+        // is ~8.4m per step — far coarser than the ~0.075m the walker
+        // actually moves per frame at walkSpeed. bestU was frozen for
+        // ~110 frames, then snapped a full 8.4m chunk of curve at once,
+        // producing a periodic position/height pop (visible as a camera
+        // snap, and on sloped ground as legs suddenly poking through the
+        // road). Derive the step from the walker's actual per-frame travel
+        // distance instead, converted to u via the curve's real length, so
+        // bestU tracks continuously.
+        if (!this._curveULen) this._curveULen = this.world.curve.getLength();
+        const distThisFrame = Math.abs(moveDir) * walkSpeed * dt;
+        const uStep = Math.max(distThisFrame / this._curveULen, 1e-6);
         const searchBase = this._walkerU ?? this.vehicle.splineProgress;
         let bestU = searchBase, bestD2 = Infinity;
         for (let step = -20; step <= 20; step++) {
-          const testU = THREE.MathUtils.clamp(searchBase + step * 0.001, 0, 1);
+          const testU = THREE.MathUtils.clamp(searchBase + step * uStep, 0, 1);
           const tp = this.world.curve.getPointAt(testU);
           const d2 = (tp.x - newPos.x) ** 2 + (tp.z - newPos.z) ** 2;
           if (d2 < bestD2) { bestD2 = d2; bestU = testU; }
@@ -9665,17 +9783,37 @@
 
         const legs = this.walkerMesh.userData.legs;
         const arms = this.walkerMesh.userData.arms;
-        this.walkerMesh.userData.legPhase += dt * 10.0;
-        const swing = Math.sin(this.walkerMesh.userData.legPhase) * 0.4;
-        if (legs) {
-          legs[0].rotation.x = swing;
-          legs[1].rotation.x = -swing;
-        }
-        if (arms) {
-          arms[0].rotation.x = -swing * 0.8;
-          arms[1].rotation.x = swing * 0.8;
+        if (legs || arms) {
+          this.walkerMesh.userData.legPhase += dt * 10.0;
+          const swing = Math.sin(this.walkerMesh.userData.legPhase) * 0.4;
+          if (legs) {
+            legs[0].rotation.x = swing;
+            legs[1].rotation.x = -swing;
+          }
+          if (arms) {
+            arms[0].rotation.x = -swing * 0.8;
+            arms[1].rotation.x = swing * 0.8;
+          }
         }
       }
+
+      this.playWalkerClip(moveDir !== 0 ? 'Walking' : 'Idle');
+      if (this.walkerMesh.userData.mixer) this.walkerMesh.userData.mixer.update(dt);
+    }
+
+    // Crossfades the walker's rigged CourierAsset instance to the named clip.
+    // No-op for the procedural fallback mesh (which has no .actions).
+    playWalkerClip(clipName) {
+      const actions = this.walkerMesh && this.walkerMesh.userData.actions;
+      if (!actions) return;
+      if (this.walkerMesh.userData.currentAction === clipName) return;
+      const prev = this.walkerMesh.userData.currentAction ? actions[this.walkerMesh.userData.currentAction] : null;
+      const next = clipName ? actions[clipName] : null;
+      if (prev) prev.fadeOut(0.25);
+      if (next) {
+        next.reset().fadeIn(0.25).play();
+      }
+      this.walkerMesh.userData.currentAction = clipName;
     }
 
     // On-foot equivalent of tossParcel3D's hit-test: walking within the

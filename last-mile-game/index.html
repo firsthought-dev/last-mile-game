@@ -24,6 +24,15 @@
       document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"><\/script>');
     }
   </script>
+  <!-- SkeletonUtils.clone — required for correctly cloning a SkinnedMesh (the courier
+       character); a plain Object3D.clone() shares skeleton bone references across
+       instances and breaks per-instance animation/deformation. -->
+  <script src="https://unpkg.com/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+  <script>
+    if (typeof THREE === 'undefined' || typeof THREE.SkeletonUtils === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"><\/script>');
+    }
+  </script>
 
   <!-- Post-processing pipeline: bloom + SSAO for cinematic look -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
