@@ -6464,13 +6464,21 @@
     updateStreaming(carPos, scene, season, difficulty = 'medium', roadTerrainKey = 'asphalt', vehicle = null) {
       if (!this.curve || !this.splineNodes || this.splineNodes.length < 10) return;
 
+      // A previous stream's build is still running incrementally across
+      // frames (see advanceStreamBuild) — keep feeding it instead of
+      // re-checking distance/starting a second one on top of it.
+      if (this._streamBuildGen) {
+        this.advanceStreamBuild();
+        return;
+      }
+
       const lastNode = this.splineNodes[this.splineNodes.length - 1];
       const distToEnd = carPos.distanceTo(lastNode);
 
-      // Throttle: one chunk build per 3 s maximum. buildExtensionMeshes is a
-      // synchronous O(n) operation (full-spline resample + geometry + normals)
-      // that blocks the render thread. Without this, distToEnd < 1600 stays
-      // true across many consecutive frames during the build, stacking spikes.
+      // Throttle: one chunk build per 3 s maximum, on top of the in-flight
+      // guard above. Kept as a safety margin so a build that finishes very
+      // quickly (or a distance re-check right at the boundary) can't
+      // immediately kick off another one back-to-back.
       const now = Date.now();
       if (this._lastStreamBuild && now - this._lastStreamBuild < 3000) return;
 
@@ -6509,7 +6517,10 @@
           }
         }
 
-        // Recompute banking and spaced points for the extended highway
+        // Recompute spaced points for the extended highway. Banking angles,
+        // mesh building, and the terrain sweep are all spread across
+        // frames by the generator below — only this resample stays
+        // synchronous (measured ~3ms, negligible).
         const totalSegments = newLength * 3;
         this.roadSpacedPoints = this.curve.getSpacedPoints(totalSegments);
         this.roadBankingAngles = new Float32Array(totalSegments + 1);
@@ -6517,42 +6528,126 @@
         this.roadBinormals = new Array(totalSegments + 1);
         this.roadBankedUp = new Array(totalSegments + 1);
 
-        for (let i = 0; i <= totalSegments; i++) {
-          const pt = this.roadSpacedPoints[i];
-          let tangent;
-          if (i === 0) tangent = new THREE.Vector3().subVectors(this.roadSpacedPoints[1], this.roadSpacedPoints[0]).normalize();
-          else if (i === totalSegments) tangent = new THREE.Vector3().subVectors(this.roadSpacedPoints[totalSegments], this.roadSpacedPoints[totalSegments - 1]).normalize();
-          else tangent = new THREE.Vector3().subVectors(this.roadSpacedPoints[i + 1], this.roadSpacedPoints[i - 1]).normalize();
-
-          const worldUp = new THREE.Vector3(0, 1, 0);
-          const normal = new THREE.Vector3().crossVectors(tangent, worldUp).normalize();
-          const binormal = new THREE.Vector3().crossVectors(normal, tangent).normalize();
-
-          let curvature = 0;
-          if (i < totalSegments) {
-            const nextTang = (i < totalSegments - 1)
-              ? new THREE.Vector3().subVectors(this.roadSpacedPoints[i + 2], this.roadSpacedPoints[i]).normalize()
-              : new THREE.Vector3().subVectors(this.roadSpacedPoints[totalSegments], this.roadSpacedPoints[totalSegments - 1]).normalize();
-            curvature = tangent.x * nextTang.z - tangent.z * nextTang.x;
-          }
-
-          const bankingAngle = THREE.MathUtils.clamp(curvature * 2.2, -0.10, 0.10);
-          const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
-          this.roadBankingAngles[i] = bankingAngle;
-          this.roadNormals[i] = normal.clone();
-          this.roadBinormals[i] = binormal.clone();
-          this.roadBankedUp[i] = bankedUp.clone();
-        }
-
-        // Rebuild road spatial grid for fast road corridor clearance lookups
-        if (this.roadSpatialGrid) {
-          this.roadSpatialGrid.build(this.roadSpacedPoints);
-        }
-
-        // Generate forward extension meshes for road, lane markings, terrain, and roadside props
-        this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, roadTerrainKey, prevEndPos);
-        this.sweepTerrainBelowRoad();
+        this._streamBuildGen = this._streamBuildSequence(scene, oldLength, newLength, totalSegments, season, difficulty, roadTerrainKey, prevEndPos);
+        this.advanceStreamBuild(); // start chewing through it this very frame
       }
+    }
+
+    // Runs everything that used to happen synchronously after extendSpline
+    // (banking recompute, spatial grid rebuild, extension mesh geometry,
+    // terrain sweep) as one generator, so advanceStreamBuild can spread it
+    // across many frames instead of freezing the main thread for ~600ms+
+    // in a single call. Nothing here changes the actual math — the
+    // sub-generators (buildExtensionMeshes, sweepTerrainBelowRoad) already
+    // yield internally at their own natural loop boundaries.
+    *_streamBuildSequence(scene, oldLength, newLength, totalSegments, season, difficulty, roadTerrainKey, prevEndPos) {
+      for (let i = 0; i <= totalSegments; i++) {
+        const pt = this.roadSpacedPoints[i];
+        let tangent;
+        if (i === 0) tangent = new THREE.Vector3().subVectors(this.roadSpacedPoints[1], this.roadSpacedPoints[0]).normalize();
+        else if (i === totalSegments) tangent = new THREE.Vector3().subVectors(this.roadSpacedPoints[totalSegments], this.roadSpacedPoints[totalSegments - 1]).normalize();
+        else tangent = new THREE.Vector3().subVectors(this.roadSpacedPoints[i + 1], this.roadSpacedPoints[i - 1]).normalize();
+
+        const worldUp = new THREE.Vector3(0, 1, 0);
+        const normal = new THREE.Vector3().crossVectors(tangent, worldUp).normalize();
+        const binormal = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+
+        let curvature = 0;
+        if (i < totalSegments) {
+          const nextTang = (i < totalSegments - 1)
+            ? new THREE.Vector3().subVectors(this.roadSpacedPoints[i + 2], this.roadSpacedPoints[i]).normalize()
+            : new THREE.Vector3().subVectors(this.roadSpacedPoints[totalSegments], this.roadSpacedPoints[totalSegments - 1]).normalize();
+          curvature = tangent.x * nextTang.z - tangent.z * nextTang.x;
+        }
+
+        const bankingAngle = THREE.MathUtils.clamp(curvature * 2.2, -0.10, 0.10);
+        const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
+        this.roadBankingAngles[i] = bankingAngle;
+        this.roadNormals[i] = normal.clone();
+        this.roadBinormals[i] = binormal.clone();
+        this.roadBankedUp[i] = bankedUp.clone();
+        if (i % 100 === 0) yield;
+      }
+
+      // Rebuild road spatial grid for fast road corridor clearance lookups
+      if (this.roadSpatialGrid) {
+        this.roadSpatialGrid.build(this.roadSpacedPoints);
+      }
+      yield;
+
+      // Generate forward extension meshes for road, lane markings, terrain, and roadside props
+      yield* this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, roadTerrainKey, prevEndPos);
+      yield* this.sweepTerrainBelowRoad();
+    }
+
+    // Resumes the in-flight streaming build (if any) for up to budgetMs of
+    // wall-clock time, then yields control back to the render loop. Called
+    // every frame from Game._animateFrame regardless of distance-to-horizon,
+    // so a build that spans many frames keeps making steady progress.
+    advanceStreamBuild(budgetMs = 6) {
+      if (!this._streamBuildGen) return;
+      const t0 = performance.now();
+      let result = { done: false };
+      while (!result.done && (performance.now() - t0) < budgetMs) {
+        result = this._streamBuildGen.next();
+      }
+      if (result.done) {
+        this._streamBuildGen = null;
+      }
+    }
+
+    // Chunked reimplementation of THREE.BufferGeometry.computeVertexNormals()
+    // for indexed geometry — same standard per-triangle accumulate-then-
+    // normalize algorithm three.js uses internally, just spread across
+    // yields so a single call on a large mesh (tens of thousands of
+    // vertices) can't block the main thread for 100ms+ in one shot the way
+    // the built-in synchronous call did.
+    *chunkedComputeVertexNormals(geometry, chunkSize = 800) {
+      const index = geometry.index;
+      const posAttr = geometry.attributes.position;
+      if (!index || !posAttr) { geometry.computeVertexNormals(); return; }
+
+      let normalAttr = geometry.attributes.normal;
+      if (!normalAttr || normalAttr.count !== posAttr.count) {
+        normalAttr = new THREE.BufferAttribute(new Float32Array(posAttr.count * 3), 3);
+        geometry.setAttribute('normal', normalAttr);
+      } else {
+        for (let i = 0; i < normalAttr.count; i++) {
+          normalAttr.setXYZ(i, 0, 0, 0);
+          if ((i % chunkSize) === chunkSize - 1) yield;
+        }
+      }
+
+      const pA = new THREE.Vector3(), pB = new THREE.Vector3(), pC = new THREE.Vector3();
+      const nA = new THREE.Vector3(), nB = new THREE.Vector3(), nC = new THREE.Vector3();
+      const cb = new THREE.Vector3(), ab = new THREE.Vector3();
+      const triCount = index.count;
+      for (let i = 0; i < triCount; i += 3) {
+        const vA = index.getX(i), vB = index.getX(i + 1), vC = index.getX(i + 2);
+        pA.fromBufferAttribute(posAttr, vA);
+        pB.fromBufferAttribute(posAttr, vB);
+        pC.fromBufferAttribute(posAttr, vC);
+        cb.subVectors(pC, pB);
+        ab.subVectors(pA, pB);
+        cb.cross(ab);
+        nA.fromBufferAttribute(normalAttr, vA);
+        nB.fromBufferAttribute(normalAttr, vB);
+        nC.fromBufferAttribute(normalAttr, vC);
+        nA.add(cb); nB.add(cb); nC.add(cb);
+        normalAttr.setXYZ(vA, nA.x, nA.y, nA.z);
+        normalAttr.setXYZ(vB, nB.x, nB.y, nB.z);
+        normalAttr.setXYZ(vC, nC.x, nC.y, nC.z);
+        if ((i % (chunkSize * 3)) === (chunkSize * 3) - 3) yield;
+      }
+
+      const nrm = new THREE.Vector3();
+      for (let i = 0; i < normalAttr.count; i++) {
+        nrm.fromBufferAttribute(normalAttr, i);
+        nrm.normalize();
+        normalAttr.setXYZ(i, nrm.x, nrm.y, nrm.z);
+        if ((i % chunkSize) === chunkSize - 1) yield;
+      }
+      normalAttr.needsUpdate = true;
     }
 
     // Post-stream road-clearance sweep.
@@ -6572,7 +6667,7 @@
     // the spatial grid (built fresh this stream), and clamp any vertex
     // that lies within the drivable ribbon down 0.22m below the road.
     // Runs once per stream, not per frame, so cost is fine.
-    sweepTerrainBelowRoad() {
+    *sweepTerrainBelowRoad() {
       if (!this.terrainMeshes || !this.terrainMeshes.length) return;
       if (!this.roadSpatialGrid) return;
       const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
@@ -6602,6 +6697,7 @@
         swept++;
         const p = m.geometry.attributes.position;
         let changed = false;
+        let clampedThisMesh = 0;
         for (let i = 0; i < p.count; i++) {
           const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
           const nr = this.roadSpatialGrid.getNearestRoadPoint(x, z, clearRadiusPlus);
@@ -6610,13 +6706,38 @@
           if (y > ceiling) {
             p.setY(i, ceiling);
             clamped++;
+            clampedThisMesh++;
             changed = true;
           }
+          // The original (largest) terrain mesh can carry thousands of
+          // vertices — without a yield inside this inner loop, sweeping
+          // just that one mesh was itself a single ~150-200ms uninterruptible
+          // block, defeating the per-mesh yield below for that mesh alone.
+          if ((i & 511) === 511) yield;
         }
         if (changed) {
           p.needsUpdate = true;
-          m.geometry.computeVertexNormals();
+          // computeVertexNormals() walks every face of the mesh and is a
+          // single opaque call — it can't be chunked with yield the way the
+          // loop above was, so on the largest (original) terrain mesh it was
+          // itself a ~150-200ms uninterruptible block, undoing the point of
+          // yielding above. The vertices it's fixing up here were just
+          // clamped DOWN below the road surface specifically to hide them
+          // under the asphalt (see clearRadius/ceiling above), so their
+          // shading is invisible whenever only a small fraction of the mesh
+          // was touched. Skip the full recompute in that case; still run it
+          // when a large share of the mesh changed, since at that point a
+          // visible normal seam is a real risk worth paying for.
+          if (clampedThisMesh / p.count > 0.02) {
+            yield* this.chunkedComputeVertexNormals(m.geometry);
+          }
         }
+        // This full-terrain-history walk grows with total distance driven
+        // (every mesh ever streamed in gets re-swept every time), so its
+        // cost isn't bounded — yielding per mesh lets the incremental
+        // build driver (advanceStreamBuild) spread it across frames
+        // instead of blocking the whole main thread in one go.
+        yield;
       }
       this._lastSweepClamped = clamped;
       this._lastSweepMeshes = swept;
@@ -6663,10 +6784,11 @@
         }
         nPrev.needsUpdate = true;
         nNext.needsUpdate = true;
+        yield;
       }
     }
 
-    buildExtensionMeshes(scene, oldNodeCount, newNodeCount, season, difficulty = 'medium', roadTerrainKey = 'asphalt', prevEndPos = null) {
+    *buildExtensionMeshes(scene, oldNodeCount, newNodeCount, season, difficulty = 'medium', roadTerrainKey = 'asphalt', prevEndPos = null) {
       const totalSegments = newNodeCount * 3;
       const endSeg = totalSegments;
       const points = this.roadSpacedPoints;
@@ -6795,6 +6917,7 @@
             rIndices.push(row1 + j + 1, row2 + j + 1, row2 + j);
           }
         }
+        yield;
       }
 
       roadGeom.setAttribute('position', new THREE.Float32BufferAttribute(rPositions, 3));
@@ -6982,6 +7105,7 @@
             tIndices.push(row1 + j + 1, row2 + j + 1, row2 + j);
           }
         }
+        yield;
       }
 
       // Snap row 0 vertex positions to the previous mesh's last-row cache
@@ -7117,6 +7241,7 @@
           owRailGroup.position.copy(owRailPos);
           owRailGroup.lookAt(pt.x, owRailPos.y, pt.z);
           scene.add(owRailGroup);
+          yield;
         }
         for (let i = startSeg; i <= endSeg; i += 2) {
           const pt = points[i];
@@ -7151,6 +7276,7 @@
             scene.add(rock);
             this.obstacles.push({ pos: p, radius: 1.2 * rockScale, type: 'rock', mesh: rock });
           });
+          yield;
         }
       } else {
         // City streaming props: Armco guardrails + scenic villas + kiosks + rocks + clustered billboard trees,
@@ -7167,16 +7293,21 @@
         const newTrees = [];
         const isWinter = (seasonCfgExt.id === 'winter');
 
-        const clearsRoadExt = (pos, minClear, sampleIdx = 0) => {
-          const minClearSq = minClear * minClear;
-          // Global road clearance scan: checks the full road points array (stride 2)
-          // Permanently prevents trees, rocks, and buildings from spawning on adjacent loops of hairpin switchbacks
-          for (let k = 0; k < points.length; k += 2) {
-            const dx = pos.x - points[k].x;
-            const dz = pos.z - points[k].z;
-            if (dx * dx + dz * dz < minClearSq) return false;
-          }
-          return true;
+        // Was a linear scan over the FULL road points array (stride 2) on
+        // every single call — correct (still checks every stretch of road,
+        // catching adjacent loops of hairpin switchbacks the way the old
+        // comment describes), but its cost scales with total road length
+        // driven so far, not with this stream's new segment range. Called
+        // many times per node (villa/kiosk/rock/tree checks), this was the
+        // single biggest contributor to the streaming stutter on any drive
+        // long enough to have built up a few thousand road points — one
+        // "unlucky" node with several candidate placements could block the
+        // main thread for 100-300ms by itself. this.roadSpatialGrid is
+        // rebuilt fresh from these exact points right before this generator
+        // runs (see _streamBuildSequence), so a bounded local-cell lookup
+        // finds the same nearest point without walking the whole road.
+        const clearsRoadExt = (pos, minClear) => {
+          return !this.roadSpatialGrid.getNearestRoadPoint(pos.x, pos.z, minClear);
         };
 
         for (let i = startSeg; i <= endSeg; i++) {
@@ -7429,6 +7560,7 @@
               }
             });
           }
+          yield;
         }
 
         if (newTrees.length > 0) {
@@ -8986,7 +9118,7 @@
       this.edgePass.enabled = false;
       this.edgePass.renderToScreen = false;
 
-      // --- Color Grade Shader (Tier 6 — final polish pass) ---
+      // --- Color Grade Shader (Tier 5 — final polish pass) ---
       const ColorGradeShader = {
         uniforms: {
           tDiffuse: { value: null },
@@ -9077,8 +9209,14 @@
     //  2: eased pixelation — smaller pixel blocks, more posterize steps (transition to edges)
     //  3: edge-hardening, degraded — coarse/thick threshold
     //  4: edge-hardening, refined — closer to fine detail, small bump
-    //  5: bloom + FXAA on
-    //  6: ultimate — stronger bloom + color-grade polish pass (contrast/saturation lift)
+    //  5: ultimate — stronger bloom + color-grade polish pass (contrast/saturation lift)
+    //  6: bloom + FXAA on
+    //
+    // Tiers 5 and 6 were originally the other way round (6 = grade pass,
+    // 5 = plain bloom+FXAA), but the grade-pass look reads as less refined
+    // than the plain bloom+FXAA one — the final tier a player reaches
+    // should be the better-looking one, so the two configs are swapped
+    // here rather than reordered structurally.
     applyTier(tier) {
       if (tier === this.currentTier) return;
       this.currentTier = tier;
@@ -9089,7 +9227,7 @@
       this.pixelPass.enabled = (tier === 1 || tier === 2);
       this.edgePass.enabled  = (tier === 3 || tier === 4);
       this.needsNormalPass   = (tier === 3 || tier === 4);
-      this.gradePass.enabled = (tier === 6);
+      this.gradePass.enabled = (tier === 5);
 
       bloomPass.enabled = (tier >= 5);
       fxaaPass.enabled  = (tier >= 5);
@@ -9105,10 +9243,10 @@
       if (tier === 4) { this.edgePass.uniforms['edgeThreshold'].value = 1.35; this.edgePass.uniforms['edgeDarken'].value = 0.85; this.edgePass.uniforms['edgeThickness'].value = 0.85; }
 
       // --- Bloom strength per tier ---
-      if (tier === 5) { bloomPass.strength = 0.25; bloomPass.radius = 0.35; bloomPass.threshold = 0.94; }
-      if (tier === 6) { bloomPass.strength = 0.4;  bloomPass.radius = 0.4;  bloomPass.threshold = 0.90; }
+      if (tier === 6) { bloomPass.strength = 0.25; bloomPass.radius = 0.35; bloomPass.threshold = 0.94; }
+      if (tier === 5) { bloomPass.strength = 0.4;  bloomPass.radius = 0.4;  bloomPass.threshold = 0.90; }
 
-      // --- Color grade (tier 6 only) ---
+      // --- Color grade (tier 5 only) ---
       this.gradePass.uniforms['contrast'].value = 1.12;
       this.gradePass.uniforms['saturation'].value = 1.15;
 
@@ -9119,8 +9257,8 @@
         else if (tier === 2) u.saturationMult.value = 0.72;
         else if (tier === 3) u.saturationMult.value = 0.76;
         else if (tier === 4) u.saturationMult.value = 0.80;
-        else if (tier === 5) u.saturationMult.value = 0.82;
-        else                 u.saturationMult.value = 0.85; // tier 6, default+
+        else if (tier === 6) u.saturationMult.value = 0.82;
+        else                 u.saturationMult.value = 0.85; // tier 5, default+
       }
 
       // --- renderToScreen: must be true on the last enabled pass ---
@@ -9129,9 +9267,9 @@
       bloomPass.renderToScreen      = false;
       this.gradePass.renderToScreen = false;
       filmPass.renderToScreen       = (tier <= 4);
-      fxaaPass.renderToScreen       = (tier === 5);
-      // tier 6: gradePass is the final pass in the composer, so it must render to screen
-      if (tier === 6) this.gradePass.renderToScreen = true;
+      fxaaPass.renderToScreen       = (tier === 6);
+      // tier 5: gradePass is the final pass in the composer, so it must render to screen
+      if (tier === 5) this.gradePass.renderToScreen = true;
     }
 
     // Kick off the scanline wipe to a new tier
