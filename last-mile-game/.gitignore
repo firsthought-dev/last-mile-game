@@ -1,0 +1,23 @@
+# Internal Manuals & Guides (Local pair-programming reference only - NEVER push to GitHub)
+OWNERS_MANUAL.md
+GAME_ARCHITECTURE_AND_VISUALS_GUIDE.md
+FEATURE_VERIFICATION_LOG.md
+CREDITS_AND_REFERENCES.md
+
+# Dev test harness & scratch files
+dev-checks.js
+scratch/
+.chrome_temp/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Generated graph output (local only)
+graphify-out/
+
+# Python venv
+.venv/
+
+# Node
+node_modules/

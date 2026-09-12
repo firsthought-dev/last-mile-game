@@ -128,6 +128,9 @@
   // rotation needed. Brand references stripped per user instruction; see CREDITS.
   const MuscleCoupeAsset = makeVehicleAsset('assets/models/muscle-coupe.glb?t=' + Date.now(), () => {}, 'MuscleCoupeAsset');
 
+  // 0g. DELIVERY CYCLE — Blender-exported GLB with corrected Y-up orientation.
+  const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?t=' + Date.now(), () => {}, 'DeliveryCycleAsset');
+
   // --------------------------------------------------------------------------
   // 1. DETERMINISTIC PRNG
   // --------------------------------------------------------------------------
@@ -787,7 +790,7 @@
       }
     }
 
-    updateDrivingAmbience(speed, maxSpeed, accelRatio) {
+    updateDrivingAmbience(speed, maxSpeed, accelRatio, vehicleType) {
       if (this.suspended || this.sfxMuted || !this.ctx) {
         if (this.engineGain && this.ctx) this.engineGain.gain.setValueAtTime(0, this.ctx.currentTime);
         if (this.windGain && this.ctx) this.windGain.gain.setValueAtTime(0, this.ctx.currentTime);
@@ -796,15 +799,19 @@
       this._initAmbience();
       const now = this.ctx.currentTime;
       const speedRatio = Math.min(1.0, Math.abs(speed || 0) / (maxSpeed || 40));
+      const isPedal = vehicleType === 'cycle';
 
-      // RPM pitch curve with virtual 4-gear cycles
-      const gearCycle = (speedRatio * 3.6) % 1.0;
-      const rpmFreq = 46 + gearCycle * 52 + speedRatio * 38;
-      if (this.engineOsc1) this.engineOsc1.frequency.setTargetAtTime(rpmFreq, now, 0.06);
-      if (this.engineOsc2) this.engineOsc2.frequency.setTargetAtTime(rpmFreq * 1.5, now, 0.06);
-
-      const targetEngineVol = 0.02 + (Math.abs(accelRatio || 0) > 0.5 ? 0.035 : 0.008) + speedRatio * 0.035;
-      if (this.engineGain) this.engineGain.gain.setTargetAtTime(targetEngineVol, now, 0.08);
+      // Engine hum — silent for pedal vehicles
+      if (!isPedal) {
+        const gearCycle = (speedRatio * 3.6) % 1.0;
+        const rpmFreq = 46 + gearCycle * 52 + speedRatio * 38;
+        if (this.engineOsc1) this.engineOsc1.frequency.setTargetAtTime(rpmFreq, now, 0.06);
+        if (this.engineOsc2) this.engineOsc2.frequency.setTargetAtTime(rpmFreq * 1.5, now, 0.06);
+        const targetEngineVol = 0.02 + (Math.abs(accelRatio || 0) > 0.5 ? 0.035 : 0.008) + speedRatio * 0.035;
+        if (this.engineGain) this.engineGain.gain.setTargetAtTime(targetEngineVol, now, 0.08);
+      } else {
+        if (this.engineGain) this.engineGain.gain.setTargetAtTime(0, now, 0.1);
+      }
 
       // Wind noise volume and aerodynamic cutoff scaling
       const windVol = Math.pow(speedRatio, 1.8) * 0.07;
@@ -1001,7 +1008,21 @@
     // and coplanar means z-fighting plus terrain triangles poking through
     // the road edge in a ragged sawtooth. 2cm reads as flush.
     ROAD_VERGE_LIFT: 0.02,
-    ROAD_POINTS_COUNT: 500,
+    // Bumped from 500 (=6km) to 700 (=8.4km) at user's request: the
+    // stretch between km 6 and 7.7 is where the first STREAMING chunk
+    // used to appear, and even after seam-snap, seam-normal-blend, road
+    // clearance sweep and 4-style barrier rotation, that zone still
+    // reads as visibly broken to the player. Rather than trying to make
+    // the streaming path bit-identical to the initial build path,
+    // extend the initial build so it covers the whole 0-8.4km region
+    // itself (via createTerrainMesh / createRoadMesh / createFoliageAndProps,
+    // which produce clean geometry). The first streaming chunk now
+    // starts past 8.4km where the driver is less likely to notice the
+    // transition. Trade-off: initial world-build is ~40% more nodes
+    // (500 -> 700) so first-load takes a bit longer, but the visible
+    // driving experience up to and past the previous seam is now
+    // uniformly the correct initial-mesh geometry.
+    ROAD_POINTS_COUNT: 700,
     POINT_SPACING: 45.0,
     TERRAIN_SIZE: 1600.0,
     TERRAIN_SEGMENTS: 100,
@@ -1038,9 +1059,9 @@
         // (this color) covers a lot of ground next to the road it was
         // visually swamping the green grass, making the whole map read as
         // "no grass, just tan". Sand/soil tone is reserved for Off-World's
-        // dune terrain instead, where it's the correct material.
-        grassColor: 0x8b9e6a,
-        grassLight: 0xa8b87a,
+        // Rich lush natural hillside greens (prevents washout under bright daylight)
+        grassColor: 0x276638,
+        grassLight: 0x3a874d,
         cliffColor: 0x8a7458,
         // Muted sage/olive canopy with a warm-brown bark accent, no pure
         // black outlines anywhere in the set. Brighter than the target
@@ -1261,10 +1282,10 @@
         id: 'foothills',
         name: 'Neelgiri Foothills',
         tagline: 'Lush Mountain Pass & Cedar Forest',
-        grassColor: 0x5e7d32,
-        grassLight: 0x7a9e43,
+        grassColor: 0x276638,
+        grassLight: 0x3a874d,
         cliffColor: 0x5d3c29,
-        shoulderSoil: 0x7a9e43,
+        shoulderSoil: 0x3a874d,
         treeLeaves: [0x366247, 0x3c7652, 0x5baa78, 0x30553f],
         rockColor: 0x6b5c48,
         treeDensity: 0.85
@@ -1273,10 +1294,10 @@
         id: 'ridge',
         name: 'Cloudspire Ridge',
         tagline: 'Misty Pine Bluffs & Cantilever Villas',
-        grassColor: 0x475e3e,
-        grassLight: 0x628052,
+        grassColor: 0x225530,
+        grassLight: 0x327544,
         cliffColor: 0x3e424b,
-        shoulderSoil: 0x546b48,
+        shoulderSoil: 0x327544,
         treeLeaves: [0x2d4f3b, 0x345e45, 0x407052, 0x243e30],
         rockColor: 0x555861,
         treeDensity: 0.75
@@ -1285,10 +1306,10 @@
         id: 'valley',
         name: 'Sonaghati Valley Expressway',
         tagline: 'Golden Grasslands & Contemporary Estates',
-        grassColor: 0x8a7a3b,
-        grassLight: 0xb5a452,
+        grassColor: 0x4a7332,
+        grassLight: 0x669945,
         cliffColor: 0x694b2f,
-        shoulderSoil: 0x9e8f49,
+        shoulderSoil: 0x669945,
         treeLeaves: [0x6b7032, 0x828a38, 0x94782b, 0x575e29],
         rockColor: 0x7a6952,
         treeDensity: 0.65
@@ -1309,10 +1330,10 @@
         id: 'deccan',
         name: 'Mayurakshi Plateau',
         tagline: 'Rolling Open Plateau & Rural Homesteader Groves',
-        grassColor: 0x736c42,
-        grassLight: 0x9e955a,
+        grassColor: 0x356338,
+        grassLight: 0x4d874e,
         cliffColor: 0x4a4332,
-        shoulderSoil: 0x8c824c,
+        shoulderSoil: 0x4d874e,
         treeLeaves: [0x4d5930, 0x667540, 0x78874a, 0x3d4527],
         rockColor: 0x5c5443,
         treeDensity: 0.70
@@ -1324,7 +1345,7 @@
       chotahathi: { id: 'chotahathi', name: 'Gaja 500 Mini Truck', maxSpeed: 30.0, accel: 12.0, drag: 0.85, brake: 26.0 },
       sportscoupe: { id: 'sportscoupe', name: 'Sports Coupe', maxSpeed: 50.0, accel: 20.0, drag: 0.78, brake: 32.0 },
       musclecoupe: { id: 'musclecoupe', name: 'Muscle Coupe', maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0 },
-      cycle: { id: 'cycle', name: 'Pawan Pedaler Bike', maxSpeed: 22.0, accel: 10.0, drag: 0.95, brake: 20.0 }
+      cycle: { id: 'cycle', name: 'Delivery Cycle', maxSpeed: 22.0, accel: 8.0, drag: 0.90, brake: 18.0 }
     },
 
     DIFFICULTY_TIERS: {
@@ -1685,6 +1706,7 @@
           group.add(inst);
         }
       }
+      group.userData.isTreeBatch = true;
       return group;
     }
   };
@@ -1747,6 +1769,72 @@
   };
 
   // --------------------------------------------------------------------------
+  // 4.5. ROAD SPATIAL HASH GRID (Accurate hairpin/switchback road clearance queries)
+  // --------------------------------------------------------------------------
+  class RoadSpatialGrid {
+    constructor(cellSize = 25.0) {
+      this.cellSize = cellSize;
+      this.grid = new Map();
+      this.points = [];
+    }
+
+    _key(cx, cz) {
+      return `${cx},${cz}`;
+    }
+
+    build(roadSpacedPoints) {
+      this.grid.clear();
+      this.points = roadSpacedPoints || [];
+      if (!this.points.length) return;
+
+      const cs = this.cellSize;
+      for (let i = 0; i < this.points.length; i++) {
+        const pt = this.points[i];
+        const cx = Math.floor(pt.x / cs);
+        const cz = Math.floor(pt.z / cs);
+        const key = this._key(cx, cz);
+        let cell = this.grid.get(key);
+        if (!cell) {
+          cell = [];
+          this.grid.set(key, cell);
+        }
+        cell.push(i);
+      }
+    }
+
+    getNearestRoadPoint(x, z, maxDist = 30.0) {
+      if (!this.points.length) return null;
+      const cs = this.cellSize;
+      const minCx = Math.floor((x - maxDist) / cs);
+      const maxCx = Math.floor((x + maxDist) / cs);
+      const minCz = Math.floor((z - maxDist) / cs);
+      const maxCz = Math.floor((z + maxDist) / cs);
+
+      let nearest = null;
+      let minSq = maxDist * maxDist;
+
+      for (let cx = minCx; cx <= maxCx; cx++) {
+        for (let cz = minCz; cz <= maxCz; cz++) {
+          const cell = this.grid.get(this._key(cx, cz));
+          if (!cell) continue;
+          for (let k = 0; k < cell.length; k++) {
+            const idx = cell[k];
+            const pt = this.points[idx];
+            const dx = x - pt.x;
+            const dz = z - pt.z;
+            const dSq = dx * dx + dz * dz;
+            if (dSq < minSq) {
+              minSq = dSq;
+              nearest = { point: pt, dist: Math.sqrt(dSq), distSq: dSq, y: pt.y, index: idx };
+            }
+          }
+        }
+      }
+      return nearest;
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // 5. SLOW ROADS PROCEDURAL TERRAIN & DUAL-GRID ARCHITECTURE
   // --------------------------------------------------------------------------
   class ProceduralWorld {
@@ -1761,6 +1849,7 @@
       this.roadMesh = null;
       this.terrainMesh = null;
       this.skyMesh = null;
+      this.roadSpatialGrid = new RoadSpatialGrid(25.0);
       this.foliageGroup = new THREE.Group();
       this.windowMaterials = [];
       this.trafficVehicles = [];
@@ -1839,7 +1928,7 @@
 
     // Dynamic District Biome Palette Evaluator (interpolating colors along corridor)
     getDistrictPalette(z, defaultSeason) {
-      const defSeason = defaultSeason || (CONFIG.SEASONS && CONFIG.SEASONS.autumn) || { grassColor: 0x8b9e6a, grassLight: 0xa8b87a, cliffColor: 0x8a7458 };
+      const defSeason = defaultSeason || (CONFIG.SEASONS && CONFIG.SEASONS[this.seasonKey]) || (CONFIG.SEASONS && CONFIG.SEASONS.autumn) || { grassColor: 0x276638, grassLight: 0x3a874d, cliffColor: 0x8a7458 };
       if (this.cityKey === 'offworld' || defSeason.isOffWorld || defSeason.id === 'offworld') {
         const baseGrass = new THREE.Color(defSeason.grassColor);
         const baseLight = new THREE.Color(defSeason.grassLight);
@@ -1854,6 +1943,22 @@
           rockColor: 0x7a5a42,
           treeDensity: 0.0,
           districtName: 'Off-World Red Planet'
+        };
+      }
+      if (defSeason.id === 'winter' || this.seasonKey === 'winter') {
+        const baseGrass = new THREE.Color(defSeason.grassColor);
+        const baseLight = new THREE.Color(defSeason.grassLight);
+        const baseCliff = new THREE.Color(defSeason.cliffColor);
+        const baseSoil = new THREE.Color(defSeason.grassLight).lerp(new THREE.Color(0x2a2824), 0.20);
+        return {
+          grassColor: baseGrass,
+          grassLight: baseLight,
+          cliffColor: baseCliff,
+          shoulderSoil: baseSoil,
+          treeLeaves: defSeason.treeLeaves || [0x4a6b58],
+          rockColor: defSeason.snowRockColor || 0xbec4cc,
+          treeDensity: 0.75,
+          districtName: 'Northern Frost & Evergreen'
         };
       }
 
@@ -2465,6 +2570,9 @@
       // occurrence).
       this.roadSpacedPoints = points;
       this.initialRoadSpacedPoints = points;
+      if (this.roadSpatialGrid) {
+        this.roadSpatialGrid.build(points);
+      }
       // Per-point banking angle + frame vectors, cached alongside
       // roadSpacedPoints so createLaneMarkingMeshes() (built right after
       // this) computes its decal ribbons from the EXACT same values the
@@ -2578,6 +2686,9 @@
         this.roadBinormals[i] = binormal.clone();
         this.roadBankedUp[i] = bankedUp.clone();
 
+        const curPalette = this.getDistrictPalette(pt.z, seasonCfg);
+        const curVergeColor = curPalette.grassLight.clone().lerp(baseTarmac, 0.40);
+
         for (let j = 0; j < offsets.length; j++) {
           const off = offsets[j];
           const isVerge = (j === 0 || j === 6);
@@ -2638,7 +2749,7 @@
           } else if (j === 0 || j === 6) {
             // Plain tarmac/verge only — paint is a separate decal mesh now
             // (see createLaneMarkingMeshes), not baked into this ribbon.
-            colors.push(vergeColor.r, vergeColor.g, vergeColor.b);
+            colors.push(curVergeColor.r, curVergeColor.g, curVergeColor.b);
           } else {
             colors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
           }
@@ -2966,6 +3077,12 @@
           ? this.roadBankingAngles[i]
           : 0;
 
+        // Synchronize terrain vertex colors with district biome palette (matching streaming extension)
+        const curPalette = this.getDistrictPalette(pt.z, season);
+        const curGrassCol = curPalette.grassColor;
+        const curCliffCol = curPalette.cliffColor;
+        const curSoilColor = curPalette.shoulderSoil;
+
         for (let j = 0; j < sliceCount; j++) {
           const latDist = lateralSlices[j];
           const absDist = Math.abs(latDist);
@@ -2979,21 +3096,21 @@
           let finalY = pt.y;
 
           if (absDist <= roadHalf) {
-            // 1. Under Asphalt: strictly 0.18m below road surface, banked with the road
-            finalY = pt.y - 0.18 + bankedYOffset;
-            colors.push(shoulderSoilColor.r, shoulderSoilColor.g, shoulderSoilColor.b);
+            // 1. Under Asphalt: strictly 0.22m below road surface, banked with the road (continuous road corridor trench)
+            finalY = pt.y - 0.22 + bankedYOffset;
+            colors.push(curSoilColor.r, curSoilColor.g, curSoilColor.b);
           } else if (absDist <= 9.0) {
             // 2. Road Shoulder Verge: gentle downward slope matching groundHeightAt()
             const t = (absDist - roadHalf) / (9.0 - roadHalf);
-            finalY = pt.y - 0.18 - t * 0.32;
+            finalY = pt.y - 0.22 - t * 0.32;
 
             // Natural organic shoulder blending into biome landscape:
             // Starts at shoulderSoilColor at road edge (t=0), feathering outward into season grass/sand
             const blendT = THREE.MathUtils.smoothstep(t, 0.05, 0.95);
             const bladeNoise = 0.96 + this.simplex.noise2D(worldPos.x * 0.08, worldPos.z * 0.08) * 0.06;
-            const r = THREE.MathUtils.lerp(shoulderSoilColor.r, grassCol.r * bladeNoise, blendT);
-            const g = THREE.MathUtils.lerp(shoulderSoilColor.g, grassCol.g * bladeNoise, blendT);
-            const b = THREE.MathUtils.lerp(shoulderSoilColor.b, grassCol.b * bladeNoise, blendT);
+            const r = THREE.MathUtils.lerp(curSoilColor.r, curGrassCol.r * bladeNoise, blendT);
+            const g = THREE.MathUtils.lerp(curSoilColor.g, curGrassCol.g * bladeNoise, blendT);
+            const b = THREE.MathUtils.lerp(curSoilColor.b, curGrassCol.b * bladeNoise, blendT);
             colors.push(r, g, b);
           } else {
             // 3. Embankment Carving: Smooth terrain transition from road edge to raw hills
@@ -3008,7 +3125,7 @@
               const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
               const mountainOverhead = Math.max(rawH, pt.y + 14.0);
               finalY = THREE.MathUtils.lerp(pt.y - 0.5, mountainOverhead, blendFactor);
-              colors.push(cliffCol.r * 0.9, cliffCol.g * 0.9, cliffCol.b * 0.9);
+              colors.push(curCliffCol.r * 0.9, curCliffCol.g * 0.9, curCliffCol.b * 0.9);
             } else {
               const SHOULDER_TRANSITION = 9.0;  // End of shoulder
               const EMBANKMENT_BLEND = 45.0;    // Fully back to raw terrain
@@ -3017,23 +3134,31 @@
               finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
 
               if (rawH > 22.0) {
-                colors.push(cliffCol.r, cliffCol.g, cliffCol.b);
+                colors.push(curCliffCol.r, curCliffCol.g, curCliffCol.b);
               } else {
                 const nVal = 0.94 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.07;
-                colors.push(grassCol.r * nVal, grassCol.g * nVal, grassCol.b * nVal);
+                colors.push(curGrassCol.r * nVal, curGrassCol.g * nVal, curGrassCol.b * nVal);
               }
             }
           }
 
           // Road clearance guard: if this vertex lies within the drivable road corridor of ANY road segment,
-          // it must never breach above that road segment's surface (prevents terrain from slicing across hairpins/switchbacks)
+          // it must never breach above that road segment's surface (prevents terrain from slicing across hairpins/switchbacks).
+          // Full clearance covers the paved road ribbon plus shoulder verge (vergeLat + 0.6m).
           if (absDist > roadHalf) {
-            for (let s = 0; s < points.length; s += 8) {
-              const dx = worldPos.x - points[s].x;
-              const dz = worldPos.z - points[s].z;
-              if (dx * dx + dz * dz < roadHalf * roadHalf) {
-                finalY = Math.min(finalY, points[s].y - 0.22);
-                break;
+            const clearRadius = vergeLat + 0.6;
+            const nearestRoad = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(worldPos.x, worldPos.z, clearRadius + 1.0) : null;
+            if (nearestRoad && nearestRoad.dist < clearRadius) {
+              finalY = Math.min(finalY, nearestRoad.y - 0.22);
+            } else {
+              const clearSq = clearRadius * clearRadius;
+              for (let s = 0; s < points.length; s += 8) {
+                const dx = worldPos.x - points[s].x;
+                const dz = worldPos.z - points[s].z;
+                if (dx * dx + dz * dz < clearSq) {
+                  finalY = Math.min(finalY, points[s].y - 0.22);
+                  break;
+                }
               }
             }
           }
@@ -3083,11 +3208,51 @@
         // grass-under-rust look instead of dry dune sand.
         map: isOffWorldTerrain ? RealTextureFactory.sandColor() : RealTextureFactory.grassColor(),
         normalMap: isOffWorldTerrain ? null : RealTextureFactory.grassNormal(),
-        normalScale: new THREE.Vector2(0.6, 0.6)
+        normalScale: new THREE.Vector2(0.6, 0.6),
+        // The warm scene IBL + AmbientLight 0.42 + HemisphereLight 0.22
+        // together lift a #245e33 deep-green vertex colour to RGB(135,171,136)
+        // pale mint after ACES tone-mapping — a photometric ablation on the
+        // rendered pixel showed removing the environment map alone drops it
+        // to (97,136,95), and combining that with a lower diffuse ambient
+        // returns the terrain to a proper forest-green. Because roughness
+        // is 0.95, the env map contribution here is diffuse irradiance, not
+        // meaningful highlights, so dialing it down loses no useful lighting
+        // — it only stops washing out the vertex-colored ground. Restricted
+        // to terrain: trees, buildings, the car all keep full env intensity.
+        envMapIntensity: isOffWorldTerrain ? 1.0 : 0.35
       });
 
       this.terrainMesh = new THREE.Mesh(geom, terrainMat);
       this.terrainMesh.receiveShadow = true;
+      if (!this.terrainMeshes) this.terrainMeshes = [];
+      this.terrainMeshes.push(this.terrainMesh);
+
+      // Cache the LAST row of terrain vertices (24 slice positions at the
+      // final tubular sample) so streaming's row 0 can snap to them
+      // exactly. Without this, the extension re-derives Y from the
+      // re-parameterized curve and lands off by a few decimetres per
+      // vertex, creating the horizontal shelf visible along the ±45m
+      // embankment past ~6km.
+      const _lastRow = [];
+      const _lastRowIdx = tubularSegments * sliceCount;
+      const _computedNormals = geom.attributes.normal;
+      for (let j = 0; j < sliceCount; j++) {
+        const base = (_lastRowIdx + j) * 3;
+        _lastRow.push({
+          lat: lateralSlices[j],
+          x: positions[base],
+          y: positions[base + 1],
+          z: positions[base + 2],
+          nx: _computedNormals.getX(_lastRowIdx + j),
+          ny: _computedNormals.getY(_lastRowIdx + j),
+          nz: _computedNormals.getZ(_lastRowIdx + j),
+          // remember the mesh + vertex index so the streaming path
+          // can average the row-N normal back onto the previous mesh
+          _mesh: this.terrainMesh,
+          _idx: _lastRowIdx + j
+        });
+      }
+      this._lastTerrainEdgeVerts = _lastRow;
       return this.terrainMesh;
     }
 
@@ -3692,7 +3857,7 @@
         // A wider blend window (25->45, tried first) broke that guard —
         // this narrower 40->45 band is the widest that respects it.
         const BLEND_START = 40.0;
-        const SAFETY_ZONE = 65.0;
+        const SAFETY_ZONE = 75.0;
         if (dist <= BLEND_START) {
           finalY = nearestRoadY - 25.0;
         } else if (dist < RIBBON_COVERAGE) {
@@ -3708,11 +3873,16 @@
         }
         pos.setY(i, finalY);
 
+        const curPalette = this.getDistrictPalette(z, season);
+        const curGrassCol = curPalette.grassColor;
+        const curGrassLight = curPalette.grassLight;
+        const curCliffCol = curPalette.cliffColor;
+
         if (rawH > 22.0) {
-          colors.push(cliffCol.r, cliffCol.g, cliffCol.b);
+          colors.push(curCliffCol.r, curCliffCol.g, curCliffCol.b);
         } else {
           const mixT = (this.simplex.noise2D(x * 0.008, z * 0.008) + 1) / 2;
-          const c = grassCol.clone().lerp(grassLight, mixT * 0.5);
+          const c = curGrassCol.clone().lerp(curGrassLight, mixT * 0.5);
           colors.push(c.r, c.g, c.b);
         }
       }
@@ -4178,57 +4348,120 @@
       // Low-poly pedestrian/animal road-crosser builder — same flat-shaded
       // block-figure style as the porch resident so crossers read as part
       // of the world rather than a mismatched asset dropped in.
-      const CROSSER_PALETTE = [0xef4444, 0x3b82f6, 0x22c55e, 0xf59e0b, 0x8b5cf6, 0xec4899];
+      // Stylized Indian humanoid road-crosser builder — matching the
+      // polished character turnaround sheet and bicycle courier aesthetic
+      // with clean edge loops, polo collars, and jogger cuffs.
+      const CROSSER_POLO_PALETTE = [0x228b96, 0xd97706, 0x059669, 0x2563eb, 0x7c3aed, 0xdb2777];
+      const CROSSER_PANTS_PALETTE = [0x5f6e43, 0x1e293b, 0x334155, 0x475569, 0x3f3f46];
       const buildCrosserMesh = (kind) => {
         const group = new THREE.Group();
         if (kind === 'pedestrian') {
-          const skinMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.6 });
-          const shirtMat = new THREE.MeshStandardMaterial({ color: CROSSER_PALETTE[Math.floor(this.prng.range(0, CROSSER_PALETTE.length))], roughness: 0.6 });
-          const legMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 });
-          const shoeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
-          const hairMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9 });
+          const skinMat = new THREE.MeshStandardMaterial({ color: 0xc68a62, roughness: 0.55 });
+          const poloColor = CROSSER_POLO_PALETTE[Math.floor(this.prng.range(0, CROSSER_POLO_PALETTE.length))];
+          const shirtMat = new THREE.MeshStandardMaterial({ color: poloColor, roughness: 0.60 });
+          const collarMat = new THREE.MeshStandardMaterial({ color: 0xa4d4d8, roughness: 0.65 });
+          const pantsColor = CROSSER_PANTS_PALETTE[Math.floor(this.prng.range(0, CROSSER_PANTS_PALETTE.length))];
+          const legMat = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.70 });
+          const cuffMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85 });
+          const shoeMat = new THREE.MeshStandardMaterial({ color: 0x2a2421, roughness: 0.65 });
+          const soleMat = new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.45 });
+          const hairMat = new THREE.MeshStandardMaterial({ color: 0x181412, roughness: 0.45 });
 
-          // Head & Hair
+          // Head & Stylized Hair
           const headGroup = new THREE.Group();
-          const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.15, 1), skinMat);
+          const headGeom = new THREE.SphereGeometry(0.145, 12, 10);
+          headGeom.scale(0.95, 1.05, 1.0);
+          const head = new THREE.Mesh(headGeom, skinMat);
           headGroup.add(head);
-          const hair = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.10, 0.30), hairMat);
-          hair.position.y = 0.08;
+
+          // Sculpted Hair Cap
+          const hairGeom = new THREE.SphereGeometry(0.152, 12, 10);
+          hairGeom.scale(0.98, 1.02, 1.05);
+          const hair = new THREE.Mesh(hairGeom, hairMat);
+          hair.position.set(0, 0.03, -0.02);
           headGroup.add(hair);
-          headGroup.position.y = 1.46;
+
+          // Stylized Nose
+          const nose = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.06, 5), skinMat);
+          nose.rotation.x = Math.PI / 2;
+          nose.position.set(0, 0, 0.145);
+          headGroup.add(nose);
+
+          headGroup.position.y = 1.48;
           group.add(headGroup);
 
-          // Torso
-          const torso = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.58, 0.24), shirtMat);
-          torso.position.y = 1.02;
+          // Torso & Polo Collar
+          const torsoGeom = new THREE.CylinderGeometry(0.16, 0.14, 0.52, 12);
+          torsoGeom.scale(1.15, 1.0, 0.75);
+          const torso = new THREE.Mesh(torsoGeom, shirtMat);
+          torso.position.y = 1.04;
           group.add(torso);
 
-          // Articulated Arms (with shoulder pivots)
-          const armGeom = new THREE.BoxGeometry(0.10, 0.46, 0.11);
-          const armL = new THREE.Mesh(armGeom, shirtMat);
-          armL.position.set(-0.25, 0.98, 0);
-          const armR = new THREE.Mesh(armGeom, shirtMat);
-          armR.position.set(0.25, 0.98, 0);
+          const collarMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.08, 10), collarMat);
+          collarMesh.position.y = 1.32;
+          group.add(collarMesh);
+
+          // Articulated Arms (Polo sleeves + skin forearms)
+          const makeArm = (sign) => {
+            const armPivot = new THREE.Group();
+            armPivot.position.set(sign * 0.22, 1.25, 0);
+
+            // Polo sleeve
+            const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.18, 8), shirtMat);
+            sleeve.position.y = -0.09;
+            armPivot.add(sleeve);
+
+            // Forearm
+            const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.042, 0.26, 8), skinMat);
+            forearm.position.y = -0.29;
+            armPivot.add(forearm);
+
+            // Hand
+            const hand = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 6), skinMat);
+            hand.position.y = -0.43;
+            armPivot.add(hand);
+
+            return armPivot;
+          };
+
+          const armL = makeArm(-1);
+          const armR = makeArm(1);
           group.add(armL, armR);
 
-          // Articulated Legs & Shoes
-          const legL = new THREE.Group();
-          const legMeshL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.54, 0.15), legMat);
-          legMeshL.position.y = -0.27;
-          const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.10, 0.22), shoeMat);
-          shoeL.position.set(0, -0.56, 0.03);
-          legL.add(legMeshL, shoeL);
-          legL.position.set(-0.11, 0.70, 0);
+          // Articulated Legs (Joggers + Cuffs + Sneakers)
+          const makeLeg = (sign) => {
+            const legPivot = new THREE.Group();
+            legPivot.position.set(sign * 0.11, 0.78, 0);
 
-          const legR = new THREE.Group();
-          const legMeshR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.54, 0.15), legMat);
-          legMeshR.position.y = -0.27;
-          const shoeR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.10, 0.22), shoeMat);
-          shoeR.position.set(0, -0.56, 0.03);
-          legR.add(legMeshR, shoeR);
-          legR.position.set(0.11, 0.70, 0);
+            // Thigh & Knee jogger
+            const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.38, 8), legMat);
+            thigh.position.y = -0.19;
+            legPivot.add(thigh);
 
+            // Shin jogger
+            const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.055, 0.32, 8), legMat);
+            shin.position.y = -0.48;
+            legPivot.add(shin);
+
+            // Ribbed Ankle Cuff
+            const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.06, 8), cuffMat);
+            cuff.position.y = -0.65;
+            legPivot.add(cuff);
+
+            // Sneaker
+            const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.08, 0.20), shoeMat);
+            shoe.position.set(0, -0.71, 0.03);
+            const sole = new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.025, 0.21), soleMat);
+            sole.position.set(0, -0.75, 0.03);
+            legPivot.add(shoe, sole);
+
+            return legPivot;
+          };
+
+          const legL = makeLeg(-1);
+          const legR = makeLeg(1);
           group.add(legL, legR);
+
           group.userData.legs = [legL, legR];
           group.userData.arms = [armL, armR];
           group.userData.hitRadius = 1.1;
@@ -4443,7 +4676,11 @@
               speed: walkMesh.userData.walkSpeed * 0.75, // ambling shoulder pace, slower than a road-crossing dash
               hitRadius: walkMesh.userData.hitRadius,
               struck: false,
-              legPhase: this.prng.next() * Math.PI * 2
+              legPhase: this.prng.next() * Math.PI * 2,
+              // Endpoints never move (the patrol flip just swaps them), so the
+              // path length is constant — cache it instead of paying a sqrt
+              // per crosser per frame in updateCrossers.
+              pathLen: startPos.distanceTo(endPos)
             });
           }
         }
@@ -5676,7 +5913,9 @@
         if (overlapsBuilding) return;
         // Same hairpin/switchback risk as skyscrapers, just at a shorter
         // offset — the curve can loop back near a tree's local placement.
-        if (!clearsRoad(d.pos, CONFIG.ROAD_WIDTH * 0.55 + d.radius)) return;
+        // Billboard sweep clearance: account for camera rotation sweep width (radius * 1.25 + 1.2)
+        const treeSweepClearance = (CONFIG.ROAD_WIDTH * 0.5) + (d.radius * 1.25) + 1.2;
+        if (!clearsRoad(d.pos, treeSweepClearance)) return;
         acceptedTrees.push(d);
         this.obstacles.push({ pos: d.pos, radius: d.radius, type: 'tree' });
       });
@@ -5732,6 +5971,23 @@
         pendingRocks = pendingRocks.filter(r =>
           !buildings.some(b => r.pos.distanceTo(b.pos) < (r.radius + b.radius))
         );
+
+        // Rule 16: Unconditional road corridor clearance sweep - prune any prop breaching the asphalt corridor
+        const minCorridorClear = CONFIG.ROAD_WIDTH * 0.5 + 1.0;
+        this.obstacles = this.obstacles.filter(o => {
+          if (o.type === 'rock' || o.type === 'tree') {
+            const reqDist = minCorridorClear + (o.radius || 1.0);
+            if (!clearsRoad(o.pos, reqDist)) {
+              if (o.mesh) this.foliageGroup.remove(o.mesh);
+              return false;
+            }
+          }
+          return true;
+        });
+        pendingRocks = pendingRocks.filter(r => {
+          const reqDist = minCorridorClear + (r.radius || 1.0);
+          return clearsRoad(r.pos, reqDist);
+        });
       }
 
       // Build InstancedMesh batches for all accepted rocks (6 distinct rock geometry shapes)
@@ -5836,6 +6092,27 @@
           new THREE.MeshBasicMaterial({ color: 0xffffff }),
           false
         );
+
+        // Cache barrier geometries + materials for the streaming extension
+        // path so future chunks emit the SAME 4-style rotation (Armco /
+        // dry-stone / wood split-rail / Jersey concrete) instead of the
+        // Armco-only strip that used to replace them past ~6km.
+        this._barrierAssets = {
+          postGeom: new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6),
+          postMat: new THREE.MeshStandardMaterial({ color: 0x8a7a68, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
+          railGeom: new THREE.BoxGeometry(1, 0.08, 0.08),
+          railMat: new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
+          stoneGeom: new THREE.BoxGeometry(1, 0.22, 0.32),
+          stoneMat: new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
+          concreteGeom: new THREE.BoxGeometry(1, 0.35, 0.26),
+          concreteMat: new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.88, metalness: 0.05 }),
+          armcoRailGeom: new THREE.BoxGeometry(1, 0.30, 0.08),
+          armcoRailMat: new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.32 }),
+          armcoPostGeom: new THREE.BoxGeometry(0.10, 1.1, 0.10),
+          armcoPostMat: new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.80, roughness: 0.40 }),
+          armcoReflGeom: new THREE.BoxGeometry(0.04, 0.09, 0.03),
+          armcoReflMat: new THREE.MeshBasicMaterial({ color: 0xffffff })
+        };
       }
 
       // NPC/traffic vehicles (rickshaws/buses/mini-trucks) removed per the
@@ -5969,7 +6246,7 @@
       // when re-entering range. Empirically this was the single largest
       // win: frame time 27.18ms → 17.70ms (35% speedup) before any other
       // change.
-      const vehiclePos = this._vehiclePos || new THREE.Vector3();
+      const vehiclePos = this._vehiclePos || (this._vehiclePos = new THREE.Vector3());
       if (this._game && this._game.vehicle && this._game.vehicle.mesh) {
         vehiclePos.copy(this._game.vehicle.mesh.position);
       }
@@ -5979,7 +6256,7 @@
         const c = this.crossers[i];
         if (c.struck) continue; // frozen at impact position until cleanup below
 
-        c.progress += (c.speed * dt) / c.start.distanceTo(c.end);
+        c.progress += (c.speed * dt) / (c.pathLen || (c.pathLen = c.start.distanceTo(c.end)));
         if (c.progress >= 1.0) {
           // Reached the far side — walk back the other way so the same
           // crosser keeps patrolling instead of despawning mid-street.
@@ -5990,7 +6267,9 @@
           const tmpLat = c.latStart;
           c.latStart = c.latEnd;
           c.latEnd = tmpLat;
-          c.mesh.lookAt(c.end);
+          // flatten: an un-flattened lookAt on sloped terrain pitches/rolls the
+          // whole figure (see the lookAt-tilt pattern used throughout).
+          c.mesh.lookAt(c.end.x, c.mesh.position.y, c.end.z);
         }
 
         // X/Z still lerp in a straight line (fine — that's genuinely
@@ -6045,13 +6324,34 @@
       const children = this.foliageGroup.children;
       for (let i = 0; i < children.length; i++) {
         const child = children[i];
+
+        // Never cull instanced meshes, multi-instance billboard tree groups,
+        // driveways, or delivery checkpoints — their vertices/instances span
+        // the entire highway route or need to remain visible for navigation.
+        if (child.isInstancedMesh ||
+            child.userData?.isDriveway ||
+            child.userData?.isTreeBatch ||
+            child.userData?.isRock ||
+            (child.userData && child.userData._isGlobalBatch)) {
+          child.visible = true;
+          continue;
+        }
+
         const pos = child.position;
+        // If an object's position is sitting at (0, 0, 0) while having complex children,
+        // it is a root batch/group rather than an individual roadside prop.
+        if (pos.x === 0 && pos.y === 0 && pos.z === 0 && child.children && child.children.length > 0) {
+          // Check if any child has non-zero position or if it's a composite world mesh
+          child.visible = true;
+          continue;
+        }
+
         const dx = pos.x - vehiclePos.x;
         const dz = pos.z - vehiclePos.z;
         const distSq = dx * dx + dz * dz;
 
         if (distSq > MAJOR_DIST_SQ) {
-          // Beyond 750m — hide everything regardless of type.
+          // Beyond 750m — hide individual props regardless of type.
           child.visible = false;
         } else if (distSq > MINOR_DIST_SQ) {
           // 350–750m — hide minor props but keep large landmark skyscrapers.
@@ -6092,6 +6392,13 @@
       if (distToEnd < 1600) {
         this._lastStreamBuild = now;
         const oldLength = this.splineNodes.length;
+        // World-space end of the geometry that already exists. Captured
+        // BEFORE extendSpline/resample, because both destroy the old
+        // indexing. buildExtensionMeshes matches against this point
+        // geometrically instead of guessing the join from node counts.
+        const prevEndPos = (this.roadSpacedPoints && this.roadSpacedPoints.length)
+          ? this.roadSpacedPoints[this.roadSpacedPoints.length - 1].clone()
+          : lastNode.clone();
         this.extendSpline(100); // add 1000m of new highway nodes
         const newLength = this.splineNodes.length;
 
@@ -6151,20 +6458,173 @@
           this.roadBankedUp[i] = bankedUp.clone();
         }
 
+        // Rebuild road spatial grid for fast road corridor clearance lookups
+        if (this.roadSpatialGrid) {
+          this.roadSpatialGrid.build(this.roadSpacedPoints);
+        }
+
         // Generate forward extension meshes for road, lane markings, terrain, and roadside props
-        this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, roadTerrainKey);
+        this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, roadTerrainKey, prevEndPos);
+        this.sweepTerrainBelowRoad();
       }
     }
 
-    buildExtensionMeshes(scene, oldNodeCount, newNodeCount, season, difficulty = 'medium', roadTerrainKey = 'asphalt') {
-      const startSeg = Math.max(0, (oldNodeCount - 1) * 3);
-      const endSeg = (newNodeCount) * 3;
+    // Post-stream road-clearance sweep.
+    //
+    // extendSpline appends control points to the CatmullRom curve, and
+    // CatmullRom interpolation depends on neighboring control points — so
+    // adding new tail nodes SHIFTS the shape of the curve near its old
+    // tail. Every terrain mesh already baked is anchored to its build-time
+    // curve; as the curve mutates over many streams, previously-clamped
+    // embankment vertices at ±45m lateral end up sitting ABOVE the new
+    // road path, especially where the freshly-shifted curve loops back
+    // through what used to be raw hillside. Measured breaches: up to 10m
+    // of terrain planted directly on top of the asphalt after ~70km.
+    //
+    // Cheap fix: after every stream extension, walk every terrain vertex
+    // ever built, look up the current-curve nearest road point through
+    // the spatial grid (built fresh this stream), and clamp any vertex
+    // that lies within the drivable ribbon down 0.22m below the road.
+    // Runs once per stream, not per frame, so cost is fine.
+    sweepTerrainBelowRoad() {
+      if (!this.terrainMeshes || !this.terrainMeshes.length) return;
+      if (!this.roadSpatialGrid) return;
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
+      const vergeLat = CONFIG.ROAD_WIDTH * 0.5 + CONFIG.ROAD_SHOULDER_WIDTH;
+      // Cover the full drivable ribbon plus verge — same envelope the
+      // build-time guard uses so a swept vertex passes the same test the
+      // stream's own inner-loop clearance did at build time.
+      const clearRadius = vergeLat + 0.6;
+      const clearRadiusPlus = clearRadius + 1.0;
+      // Sweep every terrain mesh. Restricting to tail-adjacent meshes
+      // was 10x cheaper but WRONG: the road weaves, and a freshly-added
+      // curve segment can bend back through the territory of a mesh
+      // that was built kilometres of arc length ago and has long since
+      // aged out of the tail. Missing that mesh leaves visible
+      // 2-3m-tall terrain wedges sticking through the road far behind
+      // the player's current position. Correctness before FPS —
+      // widening this back to a full walk.
+      //
+      // Per-vertex grid lookup is O(1) so total cost scales linearly
+      // with total terrain vertex count. Runs at stream cadence
+      // (every ~3s), not per frame.
+      const nearTail = () => true;
+      let clamped = 0, swept = 0;
+      for (let mi = 0; mi < this.terrainMeshes.length; mi++) {
+        const m = this.terrainMeshes[mi];
+        if (!nearTail(m)) continue;
+        swept++;
+        const p = m.geometry.attributes.position;
+        let changed = false;
+        for (let i = 0; i < p.count; i++) {
+          const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+          const nr = this.roadSpatialGrid.getNearestRoadPoint(x, z, clearRadiusPlus);
+          if (!nr || nr.dist > clearRadius) continue;
+          const ceiling = nr.y - 0.22;
+          if (y > ceiling) {
+            p.setY(i, ceiling);
+            clamped++;
+            changed = true;
+          }
+        }
+        if (changed) {
+          p.needsUpdate = true;
+          m.geometry.computeVertexNormals();
+        }
+      }
+      this._lastSweepClamped = clamped;
+      this._lastSweepMeshes = swept;
+
+      // Seam-normal blend across every adjacent mesh boundary.
+      //
+      // Each mesh recomputed its normals independently after any position
+      // clamp above. At every seam, the row-N vertex of mesh i and the
+      // row-0 vertex of mesh i+1 share XYZ (via the seam-snap in
+      // buildExtensionMeshes) but their normals differ — each was
+      // averaged over faces on only one side of the seam, so the two
+      // paint different shades at identical world positions and a visible
+      // band appears across the ground at the boundary (most obvious at
+      // the initial→first-extension seam near 6km). Blending the two
+      // normals into a single averaged value and stamping it onto BOTH
+      // vertices makes the seam light identically on both sides.
+      const sliceCount = 24;
+      for (let mi = 0; mi + 1 < this.terrainMeshes.length; mi++) {
+        const mPrev = this.terrainMeshes[mi];
+        const mNext = this.terrainMeshes[mi + 1];
+        const nPrev = mPrev.geometry.attributes.normal;
+        const nNext = mNext.geometry.attributes.normal;
+        const pPrev = mPrev.geometry.attributes.position;
+        const pNext = mNext.geometry.attributes.position;
+        const rowNStart = pPrev.count - sliceCount;
+        // Cheap safety: only blend if the two rows are geometrically at
+        // the same positions (seam-snap did its job). If they aren't
+        // (mesh count boundary from something unrelated), skip.
+        let same = true;
+        for (let j = 0; j < sliceCount; j++) {
+          const dx = pPrev.getX(rowNStart + j) - pNext.getX(j);
+          const dz = pPrev.getZ(rowNStart + j) - pNext.getZ(j);
+          if (dx * dx + dz * dz > 4) { same = false; break; }
+        }
+        if (!same) continue;
+        for (let j = 0; j < sliceCount; j++) {
+          const px = nPrev.getX(rowNStart + j), py = nPrev.getY(rowNStart + j), pz = nPrev.getZ(rowNStart + j);
+          const nx = nNext.getX(j), ny = nNext.getY(j), nz = nNext.getZ(j);
+          let ax = px + nx, ay = py + ny, az = pz + nz;
+          const len = Math.hypot(ax, ay, az) || 1;
+          ax /= len; ay /= len; az /= len;
+          nPrev.setXYZ(rowNStart + j, ax, ay, az);
+          nNext.setXYZ(j, ax, ay, az);
+        }
+        nPrev.needsUpdate = true;
+        nNext.needsUpdate = true;
+      }
+    }
+
+    buildExtensionMeshes(scene, oldNodeCount, newNodeCount, season, difficulty = 'medium', roadTerrainKey = 'asphalt', prevEndPos = null) {
+      const totalSegments = newNodeCount * 3;
+      const endSeg = totalSegments;
       const points = this.roadSpacedPoints;
       if (!points || points.length <= endSeg) return;
+
+      // Where the previously-built meshes actually stop.
+      //
+      // This used to be `round((oldNodeCount-1)/(newNodeCount-1) * totalSegments)`
+      // — a SPLINE-NODE-COUNT ratio applied to an ARC-LENGTH-parameterized
+      // index. Those two only agree when every node is equally spaced in arc
+      // length, which is never true on a weaving, hilly spline. Each stream
+      // therefore started the new ribbon tens of metres before or after the
+      // old one ended: before => a second terrain ribbon laid straight over
+      // the existing road and terrain (the "terrain bleeds into the road /
+      // meshes overlapping" seam that reappeared every ~1km past the initial
+      // ~6km build), after => a hole. The error also compounded, since each
+      // rebuild re-derived the join from the same bad ratio.
+      //
+      // getSpacedPoints re-parameterizes the WHOLE curve every stream, so the
+      // only stable reference is world space. CatmullRom interpolates its
+      // control points, so the old endpoint still lies on the new curve —
+      // matching it geometrically lands the join within a fraction of a
+      // segment and is self-correcting across successive streams.
+      let startSeg;
+      if (prevEndPos) {
+        let bestIdx = 0, bestSq = Infinity;
+        for (let i = 0; i <= endSeg; i++) {
+          const dx = points[i].x - prevEndPos.x;
+          const dy = points[i].y - prevEndPos.y;
+          const dz = points[i].z - prevEndPos.z;
+          const sq = dx * dx + dy * dy + dz * dz;
+          if (sq < bestSq) { bestSq = sq; bestIdx = i; }
+        }
+        startSeg = bestIdx;
+      } else {
+        startSeg = Math.max(0, Math.round(((oldNodeCount - 1) / (newNodeCount - 1)) * totalSegments));
+      }
+      startSeg = THREE.MathUtils.clamp(startSeg, 0, endSeg - 1);
 
       const roadWidth = CONFIG.ROAD_WIDTH;
       const shoulderWidth = CONFIG.ROAD_SHOULDER_WIDTH;
       const laneHalf = roadWidth * 0.5;
+      const roadHalf = roadWidth * 0.52;
+      const vergeLat = roadWidth * 0.5 + shoulderWidth;
       const isOffWorldExt = this.cityKey === 'offworld';
       // Same single-vehicle-track narrowing as createRoadMesh — outer
       // verge (points 0/6) stays at the wide laneHalf+shoulderWidth so it
@@ -6172,13 +6632,13 @@
       // the inner track columns pull in narrow.
       const trackHalf = isOffWorldExt ? 1.15 : laneHalf;
       const offsets = [
-        -laneHalf - shoulderWidth,
+        -vergeLat,
         -trackHalf,
         -trackHalf * 0.46 / 0.5,
         0.0,
         trackHalf * 0.46 / 0.5,
         trackHalf,
-        laneHalf + shoulderWidth
+        vergeLat
       ];
 
       // Was hardcoded generic dark-asphalt colors (0x3a3d40/0x2d3033)
@@ -6333,8 +6793,7 @@
       // keeping formula/mesh agreement without dangerous 320m wild quads that sliced across hairpin curves.
       const lateralSlices = [
         -45.0, -41.0, -37.0, -33.0, -29.0, -25.0, -21.0, -17.0, -13.0, -9.0,
-        -laneHalf - shoulderWidth,
-        laneHalf + shoulderWidth,
+        -vergeLat, -roadHalf, roadHalf, vergeLat,
         9.0, 13.0, 17.0, 21.0, 25.0, 29.0, 33.0, 37.0, 41.0, 45.0
       ];
       const sliceCount = lateralSlices.length;
@@ -6360,13 +6819,13 @@
           const worldPos = pt.clone().addScaledVector(normal, latDist);
           let finalY = pt.y;
 
-          if (absDist <= laneHalf) {
-            // Hidden under road — use shoulder soil colour (matches createTerrainMesh)
-            finalY = pt.y - 0.18 + bankedYOffset;
+          if (absDist <= roadHalf) {
+            // Hidden under road — strictly 0.22m below road surface (matches createTerrainMesh)
+            finalY = pt.y - 0.22 + bankedYOffset;
             tColors.push(shoulderSoil.r, shoulderSoil.g, shoulderSoil.b);
           } else if (absDist <= 9.0) {
-            const t = (absDist - laneHalf) / (9.0 - laneHalf);
-            finalY = pt.y - 0.18 - t * 0.32;
+            const t = (absDist - roadHalf) / (9.0 - roadHalf);
+            finalY = pt.y - 0.22 - t * 0.32;
             const blendT = THREE.MathUtils.smoothstep(t, 0.05, 0.95);
             const bladeNoise = 0.96 + this.simplex.noise2D(worldPos.x * 0.08, worldPos.z * 0.08) * 0.06;
             tColors.push(
@@ -6377,32 +6836,56 @@
           } else {
             const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
             const blendFactor = THREE.MathUtils.smoothstep(absDist, 9.0, 45.0);
-            const shoulderDrop = pt.y - 0.5;
-            finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
-            if (rawH > 22.0) {
-              tColors.push(cliffCol.r, cliffCol.g, cliffCol.b);
+            // createTerrainMesh lifts the embankment ABOVE the tunnel roof so
+            // the bore stays open; this path had no tunnel branch at all, so
+            // any tunnel past the initial build got sealed shut by terrain.
+            const inTunnel = this.isInTunnelZone && this.isInTunnelZone(i);
+            if (inTunnel) {
+              const mountainOverhead = Math.max(rawH, pt.y + 14.0);
+              finalY = THREE.MathUtils.lerp(pt.y - 0.5, mountainOverhead, blendFactor);
+              tColors.push(cliffCol.r * 0.9, cliffCol.g * 0.9, cliffCol.b * 0.9);
             } else {
-              const nVal = 0.94 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.07;
-              tColors.push(grassCol.r * nVal, grassCol.g * nVal, grassCol.b * nVal);
+              const shoulderDrop = pt.y - 0.5;
+              finalY = THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
+              if (rawH > 22.0) {
+                tColors.push(cliffCol.r, cliffCol.g, cliffCol.b);
+              } else {
+                const nVal = 0.94 + this.simplex.noise2D(worldPos.x * 0.04, worldPos.z * 0.04) * 0.07;
+                tColors.push(grassCol.r * nVal, grassCol.g * nVal, grassCol.b * nVal);
+              }
             }
           }
 
           // Road clearance guard: if this vertex lies within the drivable road corridor of ANY road segment,
           // clamp finalY below that road surface to eliminate terrain poking through the asphalt.
-          if (absDist > laneHalf) {
-            for (let s = 0; s < points.length; s += 8) {
-              const dx = worldPos.x - points[s].x;
-              const dz = worldPos.z - points[s].z;
-              if (dx * dx + dz * dz < laneHalf * laneHalf) {
-                finalY = Math.min(finalY, points[s].y - 0.22);
-                break;
+          // Full clearance covers the paved road ribbon plus shoulder verge (vergeLat + 0.6m).
+          if (absDist > roadHalf) {
+            const clearRadius = vergeLat + 0.6;
+            const nearestRoad = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(worldPos.x, worldPos.z, clearRadius + 1.0) : null;
+            if (nearestRoad && nearestRoad.dist < clearRadius) {
+              finalY = Math.min(finalY, nearestRoad.y - 0.22);
+            } else {
+              const clearSq = clearRadius * clearRadius;
+              for (let s = 0; s < points.length; s += 8) {
+                const dx = worldPos.x - points[s].x;
+                const dz = worldPos.z - points[s].z;
+                if (dx * dx + dz * dz < clearSq) {
+                  finalY = Math.min(finalY, points[s].y - 0.22);
+                  break;
+                }
               }
             }
           }
 
           tPositions.push(worldPos.x, finalY, worldPos.z);
           tNormals.push(0, 1, 0);
-          tUvs.push(latDist * 0.05, i * 0.3);
+          // Must be the SAME world-space mapping createTerrainMesh uses.
+          // This was `latDist * 0.05, i * 0.3`, which spans ~4.5 UV units
+          // across the 90m ribbon where the initial mesh spans 40 — the
+          // grass photo was stretched ~9x laterally the moment the world
+          // streamed past its initial build, so past ~6km the ground read
+          // as smeared and washed out while sharing the exact same material.
+          tUvs.push(worldPos.x * 0.45, worldPos.z * 0.45);
         }
 
         if (i < endSeg) {
@@ -6415,6 +6898,39 @@
         }
       }
 
+      // Snap row 0 vertex positions to the previous mesh's last-row cache
+      // (initial createTerrainMesh, or the previous streaming chunk), so
+      // the two ribbons meet at identical world positions vertex-for-vertex
+      // — kills the horizontal shelf/seam that appears every ~500m past
+      // the initial build.
+      if (this._lastTerrainEdgeVerts && this._lastTerrainEdgeVerts.length === sliceCount) {
+        for (let j = 0; j < sliceCount; j++) {
+          const base = j * 3;
+          const cached = this._lastTerrainEdgeVerts[j];
+          tPositions[base] = cached.x;
+          tPositions[base + 1] = cached.y;
+          tPositions[base + 2] = cached.z;
+        }
+      }
+
+      // Re-cache row N of THIS chunk for the next streaming call.
+      const _rowN = [];
+      const _rowNStart = (endSeg - startSeg) * sliceCount;
+      // Row-N normals will be re-blended when the NEXT chunk arrives —
+      // we still need to know which mesh + vertex to write back to.
+      for (let j = 0; j < sliceCount; j++) {
+        const base = (_rowNStart + j) * 3;
+        _rowN.push({
+          lat: lateralSlices[j],
+          x: tPositions[base],
+          y: tPositions[base + 1],
+          z: tPositions[base + 2],
+          _mesh: null, // filled in right after mesh is created
+          _idx: _rowNStart + j
+        });
+      }
+      this._pendingRowN = _rowN;
+
       tGeom.setAttribute('position', new THREE.Float32BufferAttribute(tPositions, 3));
       tGeom.setAttribute('color', new THREE.Float32BufferAttribute(tColors, 3));
       tGeom.setAttribute('normal', new THREE.Float32BufferAttribute(tNormals, 3));
@@ -6423,9 +6939,58 @@
       tGeom.computeVertexNormals();
       tGeom.computeTangents();
 
+      // Seam normal blend: after computeVertexNormals ran on this chunk in
+      // isolation, its row-0 vertices carry a normal averaged only over the
+      // faces on THIS side of the seam — while the previous mesh's row-N
+      // vertices carry a normal averaged only over faces on its side. The
+      // two shared vertex positions therefore light differently, painting
+      // a visible shading band across the ground at the boundary between
+      // the initial mesh and the first extension (and again at every
+      // extension boundary). The fix is to compute the true full-across
+      // vertex normal — average of both sides' contributions — and stamp
+      // it onto both meshes' shared vertex so they light identically.
+      if (this._lastTerrainEdgeVerts && this._lastTerrainEdgeVerts.length === sliceCount) {
+        const tNormalsAttr = tGeom.attributes.normal;
+        for (let j = 0; j < sliceCount; j++) {
+          const cached = this._lastTerrainEdgeVerts[j];
+          if (!cached._mesh) continue;
+          const prevNormAttr = cached._mesh.geometry.attributes.normal;
+          const pnx = prevNormAttr.getX(cached._idx);
+          const pny = prevNormAttr.getY(cached._idx);
+          const pnz = prevNormAttr.getZ(cached._idx);
+          const cnx = tNormalsAttr.getX(j);
+          const cny = tNormalsAttr.getY(j);
+          const cnz = tNormalsAttr.getZ(j);
+          let ax = pnx + cnx, ay = pny + cny, az = pnz + cnz;
+          const len = Math.hypot(ax, ay, az) || 1;
+          ax /= len; ay /= len; az /= len;
+          tNormalsAttr.setXYZ(j, ax, ay, az);
+          prevNormAttr.setXYZ(cached._idx, ax, ay, az);
+        }
+        tNormalsAttr.needsUpdate = true;
+        this._lastTerrainEdgeVerts[0]._mesh.geometry.attributes.normal.needsUpdate = true;
+      }
+
       const terrainMesh = new THREE.Mesh(tGeom, this.terrainMesh ? this.terrainMesh.material : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0.02, map: RealTextureFactory.grassColor() }));
       terrainMesh.receiveShadow = true;
       scene.add(terrainMesh);
+      if (!this.terrainMeshes) this.terrainMeshes = [];
+      this.terrainMeshes.push(terrainMesh);
+
+      // Bind the pending row-N cache to the new mesh so the NEXT extension
+      // can blend normals across this seam too. Also refresh its cached
+      // normal values from the (now seam-blended) attribute.
+      if (this._pendingRowN) {
+        const nAttr = tGeom.attributes.normal;
+        this._pendingRowN.forEach(rec => {
+          rec._mesh = terrainMesh;
+          rec.nx = nAttr.getX(rec._idx);
+          rec.ny = nAttr.getY(rec._idx);
+          rec.nz = nAttr.getZ(rec._idx);
+        });
+        this._lastTerrainEdgeVerts = this._pendingRowN;
+        this._pendingRowN = null;
+      }
 
       // 3. Roadside Props (Trees) along the new segment — this only ever
       // spawned trees despite the comment (no rocks/fences were actually
@@ -6539,22 +7104,89 @@
           else if (i === points.length - 1) tangent = new THREE.Vector3().subVectors(points[points.length - 1], points[points.length - 2]).normalize();
           else tangent = new THREE.Vector3().subVectors(points[i + 1], points[i - 1]).normalize();
 
-          // 1. Armco guardrail — one post every 4 nodes, one rail beam between posts
-          if (i % 4 === 0) {
-            const nextPt = points[Math.min(points.length - 1, i + 4)];
+          // 1. Barriers — 4-style rotation matching createFoliageAndProps
+          // (Armco / dry-stone / wood split-rail / Jersey concrete). Was
+          // Armco-only every 4 nodes: any wooden split-rail fencing the
+          // player saw for the first ~6km silently vanished the moment
+          // streaming took over, replaced by a thin grey metal rail.
+          // Only runs when the initial pass produced a barrier asset
+          // cache (Earth cities), matches the initial's per-node cadence
+          // (FENCE_STEP=1), and skips vertices inside tunnel zones.
+          if (this._barrierAssets && !this.isInTunnelZone?.(i)) {
+            const BA = this._barrierAssets;
+            const nextPtBar = points[Math.min(points.length - 1, i + 1)];
+            const avgSegStepBar = this.curve.getLength() / (points.length - 1);
+            const railLenBar = avgSegStepBar + 0.6;
+            const _fdummy = new THREE.Object3D();
             [-1, 1].forEach(side => {
-              const railPos = pt.clone().addScaledVector(normal, fenceDist * side);
-              railPos.y = this.groundHeightAt(pt, railPos, fenceDist * side) + 0.55;
+              const fenceDistBar = side * (CONFIG.ROAD_WIDTH * 0.5 + 2.2);
+              const fencePosBar = pt.clone().addScaledVector(normal, fenceDistBar);
+              const endA = fencePosBar.clone().addScaledVector(tangent, -railLenBar / 2);
+              const endB = fencePosBar.clone().addScaledVector(tangent, railLenBar / 2);
+              const yA = this.groundHeightAt(pt, endA, fenceDistBar) + 0.05;
+              const yB = this.groundHeightAt(nextPtBar, endB, fenceDistBar) + 0.05;
+              fencePosBar.y = (yA + yB) / 2;
+              const offsetA = yA - fencePosBar.y;
+              const offsetB = yB - fencePosBar.y;
+              const tiltAngle = Math.atan2(yB - yA, railLenBar);
 
-              const post = new THREE.Mesh(postGeom, postMat);
-              post.position.copy(railPos);
-              scene.add(post);
+              _fdummy.position.copy(fencePosBar);
+              _fdummy.up.set(0, 1, 0);
+              _fdummy.lookAt(fencePosBar.clone().add(normal));
+              _fdummy.updateMatrix();
+              const groupMatrix = _fdummy.matrix;
 
-              const rail = new THREE.Mesh(railGeom, railMat);
-              rail.position.copy(railPos);
-              rail.position.y += 0.05;
-              rail.lookAt(nextPt.x, rail.position.y, nextPt.z);
-              scene.add(rail);
+              const barrierStyle = Math.floor(i / 30) % 4;
+              const emit = (geom, mat, localM) => {
+                const m = new THREE.Mesh(geom, mat);
+                m.applyMatrix4(groupMatrix.clone().multiply(localM));
+                scene.add(m);
+              };
+
+              if (barrierStyle === 0) {
+                // Armco W-Beam
+                [[-railLenBar / 2, offsetA], [railLenBar / 2, offsetB]].forEach(([px, offset]) => {
+                  emit(BA.armcoPostGeom, BA.armcoPostMat, new THREE.Matrix4().makeTranslation(px, offset + 0.55, 0));
+                  emit(BA.armcoReflGeom, BA.armcoReflMat, new THREE.Matrix4().makeTranslation(px, offset + 0.78, 0.08));
+                });
+                emit(BA.armcoRailGeom, BA.armcoRailMat, new THREE.Matrix4().compose(
+                  new THREE.Vector3(0, 0.65, 0),
+                  new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                  new THREE.Vector3(railLenBar, 1, 1)
+                ));
+              } else if (barrierStyle === 1) {
+                // Dry-stone (4 courses)
+                [0.22, 0.44, 0.64, 0.8].forEach((ry, rowIdx) => {
+                  const jitter = 1.0 - rowIdx * 0.04;
+                  emit(BA.stoneGeom, BA.stoneMat, new THREE.Matrix4().compose(
+                    new THREE.Vector3(0, ry, 0),
+                    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                    new THREE.Vector3(railLenBar, 1, jitter)
+                  ));
+                });
+              } else if (barrierStyle === 3) {
+                // Jersey concrete (2 courses)
+                [0.26, 0.62].forEach((ry, rIdx) => {
+                  const bScaleZ = rIdx === 0 ? 1.0 : 0.75;
+                  emit(BA.concreteGeom, BA.concreteMat, new THREE.Matrix4().compose(
+                    new THREE.Vector3(0, ry, 0),
+                    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                    new THREE.Vector3(railLenBar, 1, bScaleZ)
+                  ));
+                });
+              } else {
+                // Wood split-rail (2 posts + 2 rails)
+                [[-railLenBar / 2, offsetA], [railLenBar / 2, offsetB]].forEach(([px, offset]) => {
+                  emit(BA.postGeom, BA.postMat, new THREE.Matrix4().makeTranslation(px, offset + 0.6, 0));
+                });
+                [0.45, 0.85].forEach(ry => {
+                  emit(BA.railGeom, BA.railMat, new THREE.Matrix4().compose(
+                    new THREE.Vector3(0, ry, 0),
+                    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                    new THREE.Vector3(railLenBar, 1, 1)
+                  ));
+                });
+              }
             });
           }
 
@@ -6668,7 +7300,8 @@
 
                 const scale = 0.85 + rng() * 0.6;
                 const radius = 1.8 * scale;
-                if (!clearsRoadExt(cPos, CONFIG.ROAD_WIDTH * 0.55 + radius + 1.2, i)) continue;
+                const treeClearance = (CONFIG.ROAD_WIDTH * 0.5) + (radius * 1.25) + 1.2;
+                if (!clearsRoadExt(cPos, treeClearance, i)) continue;
                 if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(cPos) < (o.radius + radius + 1.0))) continue;
 
                 newTrees.push({
@@ -6698,7 +7331,8 @@
 
                 const bgScale = 0.9 + rng() * 0.65;
                 const bgRadius = 2.2 * bgScale;
-                if (!clearsRoadExt(cBgPos, CONFIG.ROAD_WIDTH * 0.55 + bgRadius + 1.5, i)) continue;
+                const bgClearance = (CONFIG.ROAD_WIDTH * 0.5) + (bgRadius * 1.25) + 1.2;
+                if (!clearsRoadExt(cBgPos, bgClearance, i)) continue;
                 if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(cBgPos) < (o.radius + bgRadius + 1.0))) continue;
 
                 newTrees.push({
@@ -6733,7 +7367,7 @@
           }
         }
 
-        // Rule 15 & 16: Unconditional final sweep for rock/tree overlaps with buildings
+        // Rule 15 & 16: Unconditional final sweep for rock/tree overlaps with buildings and road corridor
         {
           const buildings = this.obstacles.filter(o => o.type === 'building');
           const stillOverlapping = this.obstacles.filter(o =>
@@ -6745,6 +7379,22 @@
           });
           if (stillOverlapping.length > 0) {
             this.obstacles = this.obstacles.filter(o => !stillOverlapping.includes(o));
+          }
+
+          // Road corridor clearance sweep
+          const minCorridorClear = CONFIG.ROAD_WIDTH * 0.5 + 1.0;
+          const breachingRoad = this.obstacles.filter(o => {
+            if (o.type === 'rock' || o.type === 'tree') {
+              const reqDist = minCorridorClear + (o.radius || 1.0);
+              return !clearsRoadExt(o.pos, reqDist);
+            }
+            return false;
+          });
+          breachingRoad.forEach(o => {
+            if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
+          });
+          if (breachingRoad.length > 0) {
+            this.obstacles = this.obstacles.filter(o => !breachingRoad.includes(o));
           }
         }
       }
@@ -6816,6 +7466,17 @@
         this.applyVehicleConfig();
         this.buildModel();
       }
+    }
+
+    updateTrolleyParcels(deliveriesMade) {
+      if (!this.trolleyParcels || this.trolleyParcels.length === 0) return;
+      const totalParcels = this.trolleyParcels.length; // 9 parcels
+      // Deplete top parcels first, then middle, then bottom
+      const parcelsRemaining = Math.max(1, totalParcels - deliveriesMade);
+      this.trolleyParcels.forEach((p, idx) => {
+        // Earlier indices are bottom layer, later indices are top layer
+        p.visible = idx < parcelsRemaining;
+      });
     }
 
     getCamOffsets() {
@@ -7191,6 +7852,82 @@
           this.wheels.push(w);
         });
 
+      } else if (this.vehicleType === 'cycle' && DeliveryCycleAsset.template) {
+        const cycleModel = DeliveryCycleAsset.clone();
+        // Authored nose-toward--Y in Blender, so the Y-up GLB export already lands the
+        // nose on +Z road-forward. No rotation correction needed.
+        cycleModel.scale.setScalar(1.0);
+        this.mesh.add(cycleModel);
+        cycleModel.traverse(child => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            // Hide the static placeholder cargo box in the trolley so our dynamic depleting stack takes its place!
+            if (child.name && (child.name.includes('cargo_trolley') || child.name.includes('Canvas') || child.name.includes('Leather'))) {
+              if (child.name === 'cargo_trolley005_3' || child.name === 'cargo_trolley005_4') {
+                child.visible = false;
+              }
+            }
+          }
+        });
+
+        // Dynamic Depleting Parcel Stack on the Cargo Trolley:
+        // Positions correspond to the wooden trolley bed (X: +-0.18, Y: 0.58-0.95, Z: -1.24 in Three.js road coordinates)
+        this.trolleyParcels = [];
+        const parcelGroup = new THREE.Group();
+        const parcelDefs = [
+          // Bottom layer (4 sturdy parcels)
+          { size: [0.26, 0.18, 0.28], pos: [-0.14, 0.52, -1.10], col: 0xd97706, tape: 0x1e293b },
+          { size: [0.24, 0.19, 0.28], pos: [0.14, 0.52, -1.10],  col: 0xb45309, tape: 0xf59e0b },
+          { size: [0.25, 0.17, 0.26], pos: [-0.13, 0.52, -1.38], col: 0xc2410c, tape: 0x1e293b },
+          { size: [0.24, 0.18, 0.27], pos: [0.13, 0.52, -1.38],  col: 0xca8a04, tape: 0x475569 },
+          // Middle layer (3 parcels)
+          { size: [0.28, 0.16, 0.26], pos: [-0.08, 0.69, -1.14], col: 0x0284c7, tape: 0xffffff }, // Express Blue
+          { size: [0.26, 0.16, 0.26], pos: [0.10, 0.69, -1.32],  col: 0x16a34a, tape: 0xd97706 }, // Organic Green
+          { size: [0.22, 0.15, 0.24], pos: [-0.10, 0.69, -1.36], col: 0xd97706, tape: 0x1e293b },
+          // Top tier parcels (deplete first as courier delivers!)
+          { size: [0.22, 0.14, 0.22], pos: [0.00, 0.84, -1.22],  col: 0xe11d48, tape: 0xffffff }, // Fragile Red
+          { size: [0.18, 0.13, 0.20], pos: [-0.09, 0.83, -1.18], col: 0xf59e0b, tape: 0x1e293b }
+        ];
+
+        parcelDefs.forEach((p, idx) => {
+          const pMesh = new THREE.Group();
+          const box = new THREE.Mesh(
+            new THREE.BoxGeometry(...p.size),
+            new THREE.MeshStandardMaterial({ color: p.col, roughness: 0.75, metalness: 0.05 })
+          );
+          box.castShadow = true;
+          box.receiveShadow = true;
+          pMesh.add(box);
+
+          // Realistic cross packaging strap / tape
+          const tapeGeom = new THREE.BoxGeometry(p.size[0] * 1.02, p.size[1] * 1.02, p.size[2] * 0.18);
+          const tapeMesh = new THREE.Mesh(tapeGeom, new THREE.MeshBasicMaterial({ color: p.tape }));
+          pMesh.add(tapeMesh);
+
+          pMesh.position.set(...p.pos);
+          parcelGroup.add(pMesh);
+          this.trolleyParcels.push(pMesh);
+        });
+
+        this.mesh.add(parcelGroup);
+      } else if (this.vehicleType === 'cycle') {
+        if (DeliveryCycleAsset.pendingControllers.indexOf(this) === -1) {
+          DeliveryCycleAsset.pendingControllers.push(this);
+        }
+        const wheelGeom = new THREE.CylinderGeometry(0.44, 0.44, 0.06, 16);
+        wheelGeom.rotateZ(Math.PI / 2);
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+        [[0, 0.44, 0.78], [0, 0.44, -0.82]].forEach(p => {
+          const w = new THREE.Mesh(wheelGeom, wheelMat);
+          w.position.set(...p);
+          this.mesh.add(w);
+          this.wheels.push(w);
+        });
+        const box = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.28, 0.52), new THREE.MeshLambertMaterial({ color: 0xff9f1c }));
+        box.position.set(0, 1.05, 0.68);
+        this.mesh.add(box);
+
       } else if (this.vehicleType === 'musclecoupe' && MuscleCoupeAsset.template) {
         // ====================================================================
         // 4. MUSCLE COUPE (user-supplied model, see MuscleCoupeAsset comment
@@ -7257,7 +7994,7 @@
 
       } else {
         // ====================================================================
-        // 4. PAWAN PEDALER BICYCLE (Eco Zen Delivery MTB)
+        // PROCEDURAL BICYCLE (fallback for unknown vehicle types)
         // ====================================================================
         const frameMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, flatShading: true });
         const tubeGeom = new THREE.CylinderGeometry(0.035, 0.035, 1.1, 8);
@@ -8029,6 +8766,336 @@
   }
 
   // --------------------------------------------------------------------------
+  // 7a. PLAYER PROGRESSION & VISUAL FIDELITY SYSTEM
+  // --------------------------------------------------------------------------
+
+  class PlayerProgressionSystem {
+    // XP needed per level, and how many levels make up one visual tier.
+    static XP_PER_LEVEL = 75;
+    static LEVELS_PER_TIER = 3;
+    static MAX_TIER = 6;
+
+    constructor() {
+      this.totalXP = parseInt(localStorage.getItem('shiplyp_totalXP') || '0', 10);
+      this.currentLevel = Math.floor(this.totalXP / PlayerProgressionSystem.XP_PER_LEVEL);
+      this.currentTier = PlayerProgressionSystem.tierForLevel(this.currentLevel);
+      this._levelUpCbs = [];
+      this._tierUpCbs = [];
+      window.progression = this;
+    }
+
+    static tierForLevel(level) {
+      return Math.min(PlayerProgressionSystem.MAX_TIER, Math.max(1, Math.ceil(level / PlayerProgressionSystem.LEVELS_PER_TIER)));
+    }
+
+    get level() { return this.currentLevel; }
+    get tier() { return this.currentTier; }
+
+    addXP(earnedBonus) {
+      const xp = Math.floor(earnedBonus / 10);
+      const prevLevel = this.currentLevel;
+      const prevTier = this.currentTier;
+      this.totalXP += xp;
+      this.currentLevel = Math.floor(this.totalXP / PlayerProgressionSystem.XP_PER_LEVEL);
+      this.currentTier = PlayerProgressionSystem.tierForLevel(this.currentLevel);
+      localStorage.setItem('shiplyp_totalXP', String(this.totalXP));
+      if (this.currentLevel > prevLevel) {
+        this._levelUpCbs.forEach(cb => cb(this.currentLevel));
+      }
+      if (this.currentTier > prevTier) {
+        this._tierUpCbs.forEach(cb => cb(this.currentTier));
+      }
+    }
+
+    onLevelUp(cb) { this._levelUpCbs.push(cb); }
+    onTierUp(cb) { this._tierUpCbs.push(cb); }
+  }
+
+  class VisualTierManager {
+    // Absolute fog density override per tier (Tier 6 = use live curFogDens)
+    static FOG_DENSITY = { 1: 0.026, 2: 0.023, 3: 0.020, 4: 0.017, 5: 0.013 };
+
+    constructor(game) {
+      this.game = game;
+      this.currentTier = 0;
+      this.needsNormalPass = false;
+
+      // Normal pre-pass resources for the edge shader (Tier 2)
+      this._normalTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
+      this._normalMat = new THREE.MeshNormalMaterial();
+
+      // --- Pixelation + Palette Shader (Tier 1) ---
+      const PixelPaletteShader = {
+        uniforms: {
+          tDiffuse: { value: null },
+          resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+          pixelSize: { value: 6.0 },
+          posterizeSteps: { value: 4.0 }
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform vec2 resolution;
+          uniform float pixelSize;
+          uniform float posterizeSteps;
+          varying vec2 vUv;
+          void main() {
+            // Nearest-neighbour pixelation
+            vec2 blocks = floor(vUv * resolution / pixelSize) * pixelSize / resolution;
+            vec4 texel = texture2D(tDiffuse, blocks);
+            // Posterize: posterizeSteps levels per channel
+            vec3 col = floor(texel.rgb * posterizeSteps + 0.5) / posterizeSteps;
+            gl_FragColor = vec4(col, texel.a);
+          }
+        `
+      };
+      this.pixelPass = new THREE.ShaderPass(PixelPaletteShader);
+      this.pixelPass.enabled = false;
+      this.pixelPass.renderToScreen = false;
+
+      // --- Edge Hardening Shader (Tier 2) ---
+      const EdgeHardenShader = {
+        uniforms: {
+          tDiffuse: { value: null },
+          tNormal: { value: this._normalTarget.texture },
+          resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+          edgeThreshold: { value: 1.2 },
+          edgeDarken: { value: 0.90 },
+          edgeThickness: { value: 1.0 }
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform sampler2D tNormal;
+          uniform vec2 resolution;
+          uniform float edgeThreshold;
+          uniform float edgeDarken;
+          uniform float edgeThickness;
+          varying vec2 vUv;
+          void main() {
+            vec4 texel = texture2D(tDiffuse, vUv);
+            vec2 px = (1.0 / resolution) * edgeThickness;
+            // 3x3 Sobel on normal buffer: cancels micro-variations on flat walls,
+            // only true silhouette/corner edges survive the threshold.
+            vec3 tl=texture2D(tNormal,vUv+vec2(-px.x,-px.y)).rgb*2.-1.;
+            vec3 tc=texture2D(tNormal,vUv+vec2( 0.0, -px.y)).rgb*2.-1.;
+            vec3 tr=texture2D(tNormal,vUv+vec2( px.x,-px.y)).rgb*2.-1.;
+            vec3 ml=texture2D(tNormal,vUv+vec2(-px.x,  0.0)).rgb*2.-1.;
+            vec3 mr=texture2D(tNormal,vUv+vec2( px.x,  0.0)).rgb*2.-1.;
+            vec3 bl=texture2D(tNormal,vUv+vec2(-px.x, px.y)).rgb*2.-1.;
+            vec3 bc=texture2D(tNormal,vUv+vec2( 0.0,  px.y)).rgb*2.-1.;
+            vec3 br=texture2D(tNormal,vUv+vec2( px.x, px.y)).rgb*2.-1.;
+            vec3 Gx = -tl + tr - 2.0*ml + 2.0*mr - bl + br;
+            vec3 Gy = -tl - 2.0*tc - tr + bl + 2.0*bc + br;
+            float edge = step(edgeThreshold, sqrt(dot(Gx,Gx) + dot(Gy,Gy)));
+            vec3 col = mix(texel.rgb, vec3(0.04, 0.03, 0.02), edge * edgeDarken);
+            gl_FragColor = vec4(col, texel.a);
+          }
+        `
+      };
+      this.edgePass = new THREE.ShaderPass(EdgeHardenShader);
+      // UniformsUtils.clone copies textures by value (new Texture object), so re-point
+      // tNormal at the actual render target texture after construction.
+      this.edgePass.uniforms['tNormal'].value = this._normalTarget.texture;
+      this.edgePass.enabled = false;
+      this.edgePass.renderToScreen = false;
+
+      // --- Color Grade Shader (Tier 6 — final polish pass) ---
+      const ColorGradeShader = {
+        uniforms: {
+          tDiffuse: { value: null },
+          contrast: { value: 1.0 },
+          saturation: { value: 1.0 }
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform float contrast;
+          uniform float saturation;
+          varying vec2 vUv;
+          void main() {
+            vec4 texel = texture2D(tDiffuse, vUv);
+            vec3 col = (texel.rgb - 0.5) * contrast + 0.5;
+            float lum = dot(col, vec3(0.299, 0.587, 0.114));
+            col = mix(vec3(lum), col, saturation);
+            gl_FragColor = vec4(col, texel.a);
+          }
+        `
+      };
+      this.gradePass = new THREE.ShaderPass(ColorGradeShader);
+      this.gradePass.enabled = false;
+      this.gradePass.renderToScreen = false;
+
+      // --- Scan-line Wipe Transition Shader ---
+      const ScanWipeShader = {
+        uniforms: {
+          tDiffuse: { value: null },
+          progress: { value: 0.0 }
+        },
+        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `
+          uniform sampler2D tDiffuse;
+          uniform float progress;
+          varying vec2 vUv;
+          void main() {
+            vec4 texel = texture2D(tDiffuse, vUv);
+            float sweep = 1.0 - progress;          // sweep line descends 1→0
+            float below = step(vUv.y, sweep);       // 1 below the line (not yet wiped)
+            float scan  = step(0.5, fract(vUv.y * 80.0));
+            vec3 col = texel.rgb;
+            col = mix(col, vec3(scan * 0.35 + 0.05), (1.0 - below) * 0.65);
+            float glow = 1.0 - smoothstep(0.0, 0.025, abs(vUv.y - sweep));
+            col += glow * vec3(0.0, 0.75, 0.65);
+            gl_FragColor = vec4(col, 1.0);
+          }
+        `
+      };
+      this.wipePass = new THREE.ShaderPass(ScanWipeShader);
+      this.wipePass.enabled = false;
+      this.wipePass.renderToScreen = false;
+
+      // Insert extra passes into composer at position 1 (after RenderPass)
+      // Order: RenderPass | pixelPass | edgePass | bloomPass | filmPass | fxaaPass | gradePass
+      const passes = game.composer.passes;
+      passes.splice(1, 0, this.pixelPass, this.edgePass);
+      passes.push(this.gradePass);
+      // Append wipe pass at end (behind fxaa) — we'll splice it in when needed
+      // (kept outside the normal stack, inserted/removed dynamically)
+
+      this._pendingTierUp = null;
+      this._wipeAnimStart = null;
+      this._wipeDuration = 800; // ms
+
+      // Apply initial tier from progression
+      this.applyTier(window.progression?.tier || 1);
+    }
+
+    resize(w, h) {
+      this._normalTarget.setSize(w, h);
+      if (this.pixelPass.uniforms) this.pixelPass.uniforms['resolution'].value.set(w, h);
+      if (this.edgePass.uniforms) this.edgePass.uniforms['resolution'].value.set(w, h);
+    }
+
+    // Called by render loop when tier 2 needs the normals pre-pass
+    renderNormalPass() {
+      const { renderer, scene, camera } = this.game;
+      renderer.setRenderTarget(this._normalTarget);
+      scene.overrideMaterial = this._normalMat;
+      renderer.render(scene, camera);
+      scene.overrideMaterial = null;
+      renderer.setRenderTarget(null);
+    }
+
+    // Tier plan (6 tiers total):
+    //  1: heavy pixelation + posterize (starting look)
+    //  2: eased pixelation — smaller pixel blocks, more posterize steps (transition to edges)
+    //  3: edge-hardening, degraded — coarse/thick threshold
+    //  4: edge-hardening, refined — closer to fine detail, small bump
+    //  5: bloom + FXAA on
+    //  6: ultimate — stronger bloom + color-grade polish pass (contrast/saturation lift)
+    applyTier(tier) {
+      if (tier === this.currentTier) return;
+      this.currentTier = tier;
+
+      const { bloomPass, filmPass, fxaaPass } = this.game;
+
+      // --- Enable / disable passes ---
+      this.pixelPass.enabled = (tier === 1 || tier === 2);
+      this.edgePass.enabled  = (tier === 3 || tier === 4);
+      this.needsNormalPass   = (tier === 3 || tier === 4);
+      this.gradePass.enabled = (tier === 6);
+
+      bloomPass.enabled = (tier >= 5);
+      fxaaPass.enabled  = (tier >= 5);
+
+      // --- Pixelation params (tiers 1-2) ---
+      if (tier === 1) { this.pixelPass.uniforms['pixelSize'].value = 6.0; this.pixelPass.uniforms['posterizeSteps'].value = 4.0; }
+      if (tier === 2) { this.pixelPass.uniforms['pixelSize'].value = 3.0; this.pixelPass.uniforms['posterizeSteps'].value = 8.0; }
+
+      // --- Edge-hardening params (tiers 3-4) — pushed further apart so the
+      // step reads clearly: tier 3 is deliberately coarse/heavy, tier 4 is
+      // the fine, original-quality edge pass.
+      if (tier === 3) { this.edgePass.uniforms['edgeThreshold'].value = 0.55; this.edgePass.uniforms['edgeDarken'].value = 1.0;  this.edgePass.uniforms['edgeThickness'].value = 2.4; }
+      if (tier === 4) { this.edgePass.uniforms['edgeThreshold'].value = 1.35; this.edgePass.uniforms['edgeDarken'].value = 0.85; this.edgePass.uniforms['edgeThickness'].value = 0.85; }
+
+      // --- Bloom strength per tier ---
+      if (tier === 5) { bloomPass.strength = 0.25; bloomPass.radius = 0.35; bloomPass.threshold = 0.94; }
+      if (tier === 6) { bloomPass.strength = 0.4;  bloomPass.radius = 0.4;  bloomPass.threshold = 0.90; }
+
+      // --- Color grade (tier 6 only) ---
+      this.gradePass.uniforms['contrast'].value = 1.12;
+      this.gradePass.uniforms['saturation'].value = 1.15;
+
+      // --- Film shader uniforms per tier ---
+      const u = filmPass.uniforms || (filmPass.material && filmPass.material.uniforms);
+      if (u) {
+        if (tier === 1)      u.saturationMult.value = 0.68;
+        else if (tier === 2) u.saturationMult.value = 0.72;
+        else if (tier === 3) u.saturationMult.value = 0.76;
+        else if (tier === 4) u.saturationMult.value = 0.80;
+        else if (tier === 5) u.saturationMult.value = 0.82;
+        else                 u.saturationMult.value = 0.85; // tier 6, default+
+      }
+
+      // --- renderToScreen: must be true on the last enabled pass ---
+      this.pixelPass.renderToScreen = false;
+      this.edgePass.renderToScreen  = false;
+      bloomPass.renderToScreen      = false;
+      this.gradePass.renderToScreen = false;
+      filmPass.renderToScreen       = (tier <= 4);
+      fxaaPass.renderToScreen       = (tier === 5);
+      // tier 6: gradePass is the final pass in the composer, so it must render to screen
+      if (tier === 6) this.gradePass.renderToScreen = true;
+    }
+
+    // Kick off the scanline wipe to a new tier
+    startTierTransition(newTier, game) {
+      game.inputFrozen = true;
+      this._pendingTierUp = newTier;
+      this._wipeAnimStart = performance.now();
+
+      // Insert wipe pass right before the last active pass
+      const passes = game.composer.passes;
+      const insertIdx = Math.max(0, passes.length - 1);
+      passes.splice(insertIdx, 0, this.wipePass);
+      this.wipePass.enabled = true;
+
+      // Mark the wipe pass as renderToScreen to ensure it outputs to canvas
+      const lastBeforeWipe = passes[insertIdx - 1];
+      if (lastBeforeWipe) lastBeforeWipe.renderToScreen = false;
+      this.wipePass.renderToScreen = true;
+    }
+
+    // Called every frame during active wipe animation
+    tickWipe(now) {
+      if (!this._wipeAnimStart) return;
+      const elapsed = now - this._wipeAnimStart;
+      const t = Math.min(elapsed / this._wipeDuration, 1.0);
+      const u = this.wipePass.uniforms || (this.wipePass.material && this.wipePass.material.uniforms);
+      if (u) u.progress.value = t;
+
+      if (t >= 1.0) {
+        // Wipe complete — apply new tier, remove wipe pass
+        const passes = this.game.composer.passes;
+        const idx = passes.indexOf(this.wipePass);
+        if (idx !== -1) passes.splice(idx, 1);
+        this.wipePass.enabled = false;
+
+        this.applyTier(this._pendingTierUp);
+        this._pendingTierUp = null;
+        this._wipeAnimStart = null;
+        this.game.inputFrozen = false;
+      }
+    }
+
+    // Pre-render hook — call just before composer.render() each frame
+    preRender() {
+      if (this.needsNormalPass) this.renderNormalPass();
+      if (this._wipeAnimStart !== null) this.tickWipe(performance.now());
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // 7. MAIN SHIPLYP DISPATCH & MISSION ENGINE
   // --------------------------------------------------------------------------
   class ShiplypEngine {
@@ -8097,6 +9164,10 @@
 
       this.keys = { up: false, down: false, left: false, right: false, w: false, s: false, a: false, d: false, space: false };
       this.inactivityTimer = 0;
+      this.inputFrozen = false;
+
+      // Progression system — must be created before initThree so tier is known
+      this.progression = new PlayerProgressionSystem();
 
       this.initThree();
       this.initEvents();
@@ -8439,6 +9510,19 @@
       this.fxaaPass.material.uniforms['resolution'].value.set(1 / (size.x * pixelRatio), 1 / (size.y * pixelRatio));
       this.fxaaPass.renderToScreen = true;
       this.composer.addPass(this.fxaaPass);
+
+      // Progressive visual fidelity — initialises after all base passes are in place
+      this.visualTier = new VisualTierManager(this);
+
+      // Wire tier-up event: freeze input, play wipe, then swap tier
+      this.progression.onTierUp(newTier => {
+        this.visualTier.startTierTransition(newTier, this);
+        this.addNotification(`VISUAL TIER ${newTier} UNLOCKED`, 'success', 3500);
+      });
+      this.progression.onLevelUp(newLevel => {
+        const xpPerLevel = PlayerProgressionSystem.XP_PER_LEVEL;
+        this.addNotification(`LEVEL ${newLevel} REACHED — ${Math.floor(this.progression.totalXP % xpPerLevel)}/${xpPerLevel} XP`, 'info', 2500);
+      });
     }
 
     buildWorldAndScene() {
@@ -8553,9 +9637,11 @@
           const pr = this.renderer.getPixelRatio();
           this.fxaaPass.material.uniforms['resolution'].value.set(1 / (window.innerWidth * pr), 1 / (window.innerHeight * pr));
         }
+        if (this.visualTier) this.visualTier.resize(window.innerWidth, window.innerHeight);
       });
 
       const onKey = (e, val) => {
+        if (this.inputFrozen) return;
         this.resetInactivity();
         const k = (e.key || '').toLowerCase();
         const code = e.code || '';
@@ -8580,7 +9666,14 @@
         if (k === 'p' || code === 'KeyP') this.toggleWeather();
         if (k === 'e' || code === 'KeyE') this.toggleOnFoot();
         if (k === 'h' || k === '?' || code === 'KeyH') this.openSettingsModal('controls');
-        if (k === 'escape' || code === 'Escape') this.openSettingsModal('gameplay');
+        if (k === 'escape' || code === 'Escape') {
+          if (this.modalContainer && this.modalContainer.querySelector('.settings-modal')) {
+            this.modalContainer.innerHTML = '';
+            if (this.gameState === 'menu') this.renderDispatchHub();
+          } else {
+            this.openSettingsModal('gameplay');
+          }
+        }
         if ((k === 'enter' || code === 'Enter') && this.gameState === 'menu') this.startDrive();
         if ((k === ' ' || code === 'Space') && this.gameState === 'playing' && !e.repeat) {
           if (this.onFoot) this.tryWalkDelivery();
@@ -9077,6 +10170,7 @@
       const timeBonus = Math.max(0, Math.round(this.orderTimer * 1.8));
       const earnedBonus = Math.round((target.order.reward + timeBonus) * diffCfg.payoutMult * (1 + this.streakCount * 0.2));
       this.earnings += earnedBonus;
+      this.progression?.addXP(earnedBonus);
 
       this.orderTimer = this.maxOrderTimer; // Reset clock for next order
 
@@ -9094,6 +10188,9 @@
       });
 
       this.activeOrderIndex++;
+      if (this.vehicle && this.vehicle.updateTrolleyParcels) {
+        this.vehicle.updateTrolleyParcels(this.deliveriesMade);
+      }
       this.updateActiveOrderCard();
       this.updateHUDStats();
       this.refreshStatusPanel();
@@ -9900,7 +10997,9 @@
 
       // Fog
       if (this.scene.fog) {
-        const targetFogDens = inTunnel ? 0.0003 : curFogDens;
+        const tier = this.progression?.tier || 5;
+        const tierFogBase = VisualTierManager.FOG_DENSITY[tier] ?? curFogDens;
+        const targetFogDens = inTunnel ? 0.0003 : tierFogBase;
         const targetFogCol = inTunnel ? new THREE.Color(0x1a1512) : curFogCol;
         this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, targetFogDens, 0.08);
         this.scene.fog.color.lerp(targetFogCol, 0.08);
@@ -10229,8 +11328,9 @@
       ];
 
       const vehList = [
-        { id: 'sportscoupe', name: 'Sports Coupe', stat: '180 km/h • Gasoline' },
-        { id: 'musclecoupe', name: 'Muscle Coupe', stat: '194 km/h • Gasoline' }
+        { id: 'sportscoupe', name: 'Sports Coupe',        stat: '180 km/h • Gasoline' },
+        { id: 'musclecoupe', name: 'Muscle Coupe',        stat: '194 km/h • Gasoline' },
+        { id: 'cycle',       name: 'Delivery Cycle',      stat: '22 km/h • Pedal Power' },
       ];
 
       this.modalContainer.innerHTML = `
@@ -10468,6 +11568,7 @@
               <div class="dock-btn-row">
                 <button class="dock-sq-btn ${this.selectedVehicle === 'sportscoupe' ? 'active-sq' : ''}" data-v="sportscoupe">COUPE</button>
                 <button class="dock-sq-btn ${this.selectedVehicle === 'musclecoupe' ? 'active-sq' : ''}" data-v="musclecoupe">MUSCLE</button>
+                <button class="dock-sq-btn ${this.selectedVehicle === 'cycle' ? 'active-sq' : ''}" data-v="cycle">CYCLE</button>
               </div>
             </div>
           </div>
@@ -11128,6 +12229,23 @@
     }
 
     animate() {
+      // requestAnimationFrame is self-chaining (the call at the bottom of
+      // this method schedules the next frame) — a single uncaught exception
+      // anywhere in the frame body (world streaming, physics, HUD updates)
+      // stops that chain forever, silently freezing the whole game with no
+      // visible error. Wrapping the frame body and rescheduling in `finally`
+      // means one bad frame gets logged and skipped instead of killing the
+      // game outright.
+      try {
+        this._animateFrame();
+      } catch (err) {
+        console.error('animate() frame threw — skipping this frame:', err);
+      } finally {
+        requestAnimationFrame(this.animate.bind(this));
+      }
+    }
+
+    _animateFrame() {
       const dt = Math.min(this.clock.getDelta(), 0.1);
 
       // Live FPS readout for the top-right status pill — smoothed over a
@@ -11146,8 +12264,23 @@
         if (this.onFoot) {
           this.updateWalking(dt);
         } else {
-          this.vehicle.update(dt, this.keys, this.world, this.selectedSeason, this.selectedRoadTerrain);
-          sound.updateDrivingAmbience(this.vehicle.speed, this.vehicle.maxSpeed, (this.vehicle.speed - (this.vehicle.lastSpeed || this.vehicle.speed)) / Math.max(0.01, dt));
+          // Fixed-step substepping: heavier post-processing (bloom/FXAA at
+          // tier 5-6) can drag render FPS down enough that a single dt=0.1s
+          // physics step overshoots steering/suspension integration and
+          // reads as stutter. Running the vehicle at a steady ~30Hz internal
+          // rate regardless of render framerate keeps driving feel smooth
+          // even when the frame is expensive.
+          const lastSpeed = this.vehicle.speed;
+          const maxSubDt = 1 / 30;
+          let remaining = dt;
+          let substeps = 0;
+          while (remaining > 0.0001 && substeps < 6) {
+            const stepDt = Math.min(remaining, maxSubDt);
+            this.vehicle.update(stepDt, this.keys, this.world, this.selectedSeason, this.selectedRoadTerrain);
+            remaining -= stepDt;
+            substeps++;
+          }
+          sound.updateDrivingAmbience(this.vehicle.speed, this.vehicle.maxSpeed, (this.vehicle.speed - lastSpeed) / Math.max(0.01, dt), this.vehicle.vehicleType);
         }
 
         // Infinite Forward Highway Chunk Streaming (Slow Roads Parity)
@@ -11157,6 +12290,9 @@
 
         this.world.updateTraffic(dt);
         this.world.updateCrossers(dt);
+        if (this.vehicle && this.vehicle.mesh && this.world.updateFoliageVisibility) {
+          this.world.updateFoliageVisibility(this.vehicle.mesh.position);
+        }
         this.checkCrosserCollisions();
         if (this.rain && this.vehicle && this.vehicle.mesh) {
           const rainForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion);
@@ -11295,11 +12431,11 @@
       }
 
       if (this.composer) {
+        this.visualTier?.preRender();
         this.composer.render();
       } else {
         this.renderer.render(this.scene, this.camera);
       }
-      requestAnimationFrame(this.animate.bind(this));
     }
   }
 
