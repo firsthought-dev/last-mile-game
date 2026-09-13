@@ -117,19 +117,27 @@
     else if (child.name.startsWith('wheel')) child.material = wheelMat;
   }, 'ChotaHathiAsset');
 
+  // Cache key for .glb models, which (unlike game.js/style.css) get no
+  // automatic busting. This used to be `Date.now()`, which is not a cache key
+  // at all — it made every launch a cache MISS and re-downloaded 14MB of
+  // models each time, most painfully on the Android WebView's cold start.
+  // Bump this by hand whenever a file under assets/models/ changes; that
+  // invalidates the old copy exactly when it should and never otherwise.
+  const ASSET_VERSION = '4';
+
   // 0f. MUSCLE COUPE — user-supplied model; headlights already face +Z, no
   // rotation needed. Brand references stripped per user instruction; see CREDITS.
   // Paint swapped from the model's stock fire-engine red ("Default Metallic
   // Paint") to a muted dusty-blue slate — the red read as too loud against
   // the game's soft, desaturated visual styles.
-  const MuscleCoupeAsset = makeVehicleAsset('assets/models/muscle-coupe.glb?t=' + Date.now(), (child) => {
+  const MuscleCoupeAsset = makeVehicleAsset('assets/models/muscle-coupe.glb?v=' + ASSET_VERSION, (child) => {
     if (child.material && child.material.name && child.material.name.startsWith('Default Metallic Paint')) {
       child.material = new THREE.MeshStandardMaterial({ color: 0x5c7285, metalness: 0.55, roughness: 0.35 });
     }
   }, 'MuscleCoupeAsset');
 
   // 0g. DELIVERY CYCLE — Blender-exported GLB with corrected Y-up orientation.
-  const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?t=' + Date.now(), () => {}, 'DeliveryCycleAsset');
+  const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?v=' + ASSET_VERSION, () => {}, 'DeliveryCycleAsset');
 
   // 0h. COURIER — rigged, animated character (Mixamo base, retextured) shared by
   // the on-foot player walker and crosser NPCs, so both use one consistent model
@@ -145,7 +153,13 @@
     load() {
       if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
       this.loading = true;
-      new THREE.GLTFLoader().load('assets/models/courier.glb?t=' + Date.now(), (gltf) => {
+      // courier-crowd.glb, not courier.glb: the original is a 35k-tri, 7-mesh
+      // hero model, and every pedestrian pays 7 draw calls for it. The crowd
+      // build is decimated to 5.7k tris and merged down to 5 meshes (Eyes
+      // folded into Body — it already shared Bodymat — and Eyelashes dropped),
+      // keeping all 67 bones, all five clips, and the Body/Top/Bottom/Hair
+      // materials the per-NPC tinting recolours.
+      new THREE.GLTFLoader().load('assets/models/courier-crowd.glb?v=' + ASSET_VERSION, (gltf) => {
         gltf.scene.traverse((child) => {
           if (!child.isMesh) return;
           child.castShadow = true;
@@ -1918,6 +1932,8 @@
       this.deliveryTargets = [];
       this.potholes = [];
       this.crossers = [];
+      this.patrons = [];
+      this.trafficSignals = [];
       // Thin roadside props (poles, lampposts) the camera can end up
       // staring straight through when the on-foot courier walks up close
       // to one — tracked separately from `obstacles` (which only stores a
@@ -4026,18 +4042,38 @@
         kettle.position.set(-0.9, 1.2, 0.4);
         kioskGroup.add(kettle);
 
+        // Patron: the same rigged courier used for roadside pedestrians,
+        // standing on the Idle clip with a cutting-chai glass. Was a
+        // BoxGeometry torso and a Dodecahedron head, which read as a crate
+        // with a rock on it at the distance you actually pass a tapri.
+        //
+        // The model loads async, so a stall built before it arrives gets the
+        // glass and an empty spot; CourierAsset.pendingControllers re-runs this
+        // once the template lands, matching how every other rig here is built.
         const patron = new THREE.Group();
-        const pSkin = new THREE.MeshLambertMaterial({ color: 0xd4a373 });
-        const pShirt = new THREE.MeshLambertMaterial({ color: 0x10b981 });
-        const pTorso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.7, 0.28), pShirt);
-        pTorso.position.set(0, 1.1, 0);
-        const pHead = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 0), pSkin);
-        pHead.position.set(0, 1.62, 0);
         const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.09, 6), new THREE.MeshLambertMaterial({ color: 0xc2410c }));
         cup.position.set(0.28, 1.15, 0.22);
-        patron.add(pTorso);
-        patron.add(pHead);
         patron.add(cup);
+
+        const addPatronRig = () => {
+          const rig = this.buildPedestrian();
+          if (!rig) return;
+          // Idle, not Walking — buildPedestrian starts the walk cycle for
+          // strollers, so stop it before the standing clip is faded in.
+          const actions = rig.userData.actions || {};
+          if (actions['Walking']) actions['Walking'].stop();
+          if (actions['Idle']) actions['Idle'].play();
+          rig.rotation.y = Math.PI; // face the counter
+          // Not a crosser — updateCrossers never sees it, so it must not be
+          // skipped by the foliage visibility pass the way strollers are.
+          rig.userData.isCrosser = false;
+          patron.add(rig);
+          this.patrons = this.patrons || [];
+          this.patrons.push({ mixer: rig.userData.mixer, obj: rig });
+        };
+        if (CourierAsset.template) addPatronRig();
+        else CourierAsset.pendingControllers.push(addPatronRig);
+
         patron.position.set(0.7, 0, 1.4);
         kioskGroup.add(patron);
       } else {
@@ -4388,6 +4424,10 @@
       this.repairBays = [];
       this.obstacles = [];
       this.crossers = [];
+      // Rebuilding foliage removes the patron rigs with it — drop the stale
+      // mixer references too or updatePatrons keeps skinning orphans.
+      this.patrons = [];
+      this.trafficSignals = [];
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
       const cityCfg = CONFIG.CITIES[this.cityKey] || CONFIG.CITIES.offworld;
@@ -4475,6 +4515,7 @@
           }
           root.userData.hitRadius = 1.1;
           root.userData.walkSpeed = this.prng.range(1.0, 1.8);
+          root.userData.isCrosser = true;
           return root;
         }
         const group = new THREE.Group();
@@ -4767,45 +4808,14 @@
         // instruction — this is now a much denser roll than the original
         // sparse solo-walker spacing.
         if (!isOpenRoad && i % 16 === 0 && this.prng.next() > 0.2 && !inTunnel) {
-          const clusterSize = Math.floor(this.prng.range(2, 5));
-          const walkSide = this.prng.next() > 0.5 ? 1 : -1;
-          for (let c = 0; c < clusterSize; c++) {
-            const walkLat = walkSide * (CONFIG.ROAD_WIDTH * 0.5 + 3.5 + this.prng.range(0, 4.0));
-            const walkRange = this.prng.range(10.0, 22.0);
-            const tangentJitter = this.prng.range(-6.0, 6.0);
+          this.spawnPedestrianCluster(pt, normal, tangent);
+        }
 
-            const walkMesh = buildCrosserMesh('pedestrian');
-            const startPos = pt.clone().addScaledVector(tangent, tangentJitter - walkRange).addScaledVector(normal, walkLat);
-            const endPos = pt.clone().addScaledVector(tangent, tangentJitter + walkRange).addScaledVector(normal, walkLat);
-            startPos.y = this.groundHeightAt(pt, startPos, walkLat) + 0.15;
-            endPos.y = this.groundHeightAt(pt, endPos, walkLat) + 0.15;
-
-            const initialProgress = this.prng.next();
-            walkMesh.position.lerpVectors(startPos, endPos, initialProgress);
-            walkMesh.position.y = this.groundHeightAt(pt, walkMesh.position, walkLat) + 0.15;
-            walkMesh.lookAt(endPos.x, walkMesh.position.y, endPos.z);
-            this.foliageGroup.add(walkMesh);
-
-            this.crossers.push({
-              mesh: walkMesh,
-              kind: 'pedestrian',
-              start: startPos,
-              end: endPos,
-              pt: pt.clone(),
-              normal: normal.clone(),
-              latStart: walkLat,
-              latEnd: walkLat,
-              progress: initialProgress,
-              speed: walkMesh.userData.walkSpeed * 0.75, // ambling shoulder pace, slower than a road-crossing dash
-              hitRadius: walkMesh.userData.hitRadius,
-              struck: false,
-              legPhase: this.prng.next() * Math.PI * 2,
-              // Endpoints never move (the patrol flip just swaps them), so the
-              // path length is constant — cache it instead of paying a sqrt
-              // per crosser per frame in updateCrossers.
-              pathLen: startPos.distanceTo(endPos)
-            });
-          }
+        // 1b. Signalled zebra crossing. Rarer than the strolling clusters, and
+        // never inside a tunnel bore or on an open-road stretch with no reason
+        // for anyone to be crossing.
+        if (!isOpenRoad && !inTunnel && i % 112 === 0 && i > 0) {
+          this.buildZebraCrossing(pt, scene);
         }
 
         // 2. Roadside Chevron Turn Warning Signs (Yellow/Black <<< >>> on metal poles)
@@ -6362,6 +6372,318 @@
       return baseClamp;
     }
 
+    // Appearance presets for rigged pedestrians.
+    //
+    // Built ONCE and shared: every NPC assigned a given variant points at the
+    // same five materials. The previous code cloned all five per instance, so
+    // 114 pedestrians meant 570 material objects and 570 uniform sets with no
+    // sort batching. Cloning from the template preserves each material's type,
+    // defines and maps, so Three.js reuses the compiled shader program and the
+    // mobile WebView never takes a recompile stall mid-drive.
+    //
+    // Bodymat also covers the eyes (they share its atlas region), which is why
+    // skin tints stay close to white — they multiply the diffuse map rather
+    // than replacing it, so fabric weave, hair strands and face detail survive.
+    _pedestrianVariants() {
+      if (this._pedVariants) return this._pedVariants;
+      const tpl = CourierAsset.template;
+      if (!tpl) return null;
+
+      // Match on the base name: a re-export can hand back `Bodymat.002` when
+      // duplicate datablocks existed, and an exact-name check would then miss
+      // every slot and silently ship one uniform crowd.
+      const slot = (n) => String(n || '').replace(/\.\d{3}$/, '');
+      const src = {};
+      tpl.traverse((c) => {
+        if (c.isMesh && c.material && c.material.name && !src[slot(c.material.name)]) src[slot(c.material.name)] = c.material;
+      });
+      if (!Object.keys(src).length) return null;
+
+      const SKIN   = [0xfff0e0, 0xf0d1ab, 0xd9a273, 0xc68a62, 0xa9714b, 0x8d5524];
+      const TOP    = [0xd97706, 0x2563eb, 0x059669, 0xc2410c, 0xca8a04, 0xe7e5e4, 0x0f766e, 0x9f1239];
+      const BOTTOM = [0x334155, 0x1e293b, 0x3f3f46, 0x6b7280, 0x854d0e, 0x475569];
+      const HAIR   = [0x121011, 0x1c1512, 0x3b2417, 0x5c3a21, 0x6b7280, 0xd6d3d1];
+      const SHOES  = [0x2a2421, 0x1c1917, 0x44403c, 0x7c2d12];
+
+      const variants = [];
+      for (let i = 0; i < 10; i++) {
+        const set = {};
+        for (const name in src) {
+          const m = src[name].clone();
+          if (name === 'Bodymat') m.color.set(SKIN[i % SKIN.length]);
+          else if (name === 'Topmat') m.color.set(TOP[i % TOP.length]);
+          else if (name === 'Bottommat') m.color.set(BOTTOM[i % BOTTOM.length]);
+          else if (name === 'Hairmat') m.color.set(HAIR[i % HAIR.length]);
+          else if (name === 'Shoesmat') m.color.set(SHOES[i % SHOES.length]);
+          set[name] = m;
+        }
+        variants.push(set);
+      }
+      this._pedVariants = variants;
+      return variants;
+    }
+
+    // Rigged pedestrian, or null when courier-crowd.glb hasn't loaded yet.
+    // A method rather than a closure local so the streaming builder can reach
+    // it too — roadside pedestrians used to stop existing past the initial
+    // spline entirely.
+    buildPedestrian() {
+      const rig = CourierAsset.clone();
+      if (!rig) return null;
+      const root = rig.root;
+      root.userData.mixer = rig.mixer;
+      root.userData.actions = rig.actions;
+
+      const variants = this._pedestrianVariants();
+      if (variants && variants.length) {
+        const v = variants[Math.floor(this.prng.range(0, variants.length))];
+        const slot = (n) => String(n || '').replace(/\.\d{3}$/, '');
+        root.traverse((c) => {
+          if (c.isMesh && c.material && v[slot(c.material.name)]) c.material = v[slot(c.material.name)];
+        });
+      }
+
+      root.scale.setScalar(this.prng.range(0.92, 1.08));
+      const walk = rig.actions['Walking'];
+      if (walk) {
+        walk.setEffectiveTimeScale(this.prng.range(0.85, 1.2));
+        walk.play();
+      }
+      root.userData.hitRadius = 1.1;
+      root.userData.walkSpeed = this.prng.range(1.0, 1.8);
+      root.userData.isCrosser = true;
+      return root;
+    }
+
+    // One cluster of pedestrians strolling the verge at a road sample.
+    // Shared by the initial build and the streaming builder.
+    spawnPedestrianCluster(pt, normal, tangent, count) {
+      if (!this.foliageGroup) return 0;
+      const clusterSize = count || Math.floor(this.prng.range(2, 5));
+      let spawned = 0;
+      for (let c = 0; c < clusterSize; c++) {
+        const mesh = this.buildPedestrian();
+        if (!mesh) break; // model not loaded yet — skip rather than spawn boxes
+
+        // On the shoulder, not lost in the field. This was
+        // ROAD_WIDTH*0.5 + 3.5 + rand(0,4) => 7.2-11.2m out, well past the
+        // 5.5m verge, which read as distant scenery rather than a populated
+        // roadside.
+        const side = this.prng.next() > 0.5 ? 1 : -1;
+        const lat = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.0 + this.prng.range(0, 1.8));
+        const range = this.prng.range(10.0, 22.0);
+        const jitter = this.prng.range(-6.0, 6.0);
+        // Half the cluster walks against the flow so a verge isn't a parade.
+        const dir = this.prng.next() > 0.5 ? 1 : -1;
+
+        const startPos = pt.clone().addScaledVector(tangent, jitter - range * dir).addScaledVector(normal, lat);
+        const endPos = pt.clone().addScaledVector(tangent, jitter + range * dir).addScaledVector(normal, lat);
+        startPos.y = this.groundHeightAt(pt, startPos, lat) + 0.15;
+        endPos.y = this.groundHeightAt(pt, endPos, lat) + 0.15;
+
+        const progress = this.prng.next();
+        mesh.position.lerpVectors(startPos, endPos, progress);
+        mesh.position.y = this.groundHeightAt(pt, mesh.position, lat) + 0.15;
+        mesh.lookAt(endPos.x, mesh.position.y, endPos.z);
+        this.foliageGroup.add(mesh);
+
+        this.crossers.push({
+          mesh,
+          kind: 'pedestrian',
+          start: startPos,
+          end: endPos,
+          pt: pt.clone(),
+          normal: normal.clone(),
+          latStart: lat,
+          latEnd: lat,
+          progress,
+          speed: mesh.userData.walkSpeed * 0.75,
+          hitRadius: mesh.userData.hitRadius,
+          struck: false,
+          legPhase: this.prng.next() * Math.PI * 2,
+          pathLen: startPos.distanceTo(endPos)
+        });
+        spawned++;
+      }
+      return spawned;
+    }
+
+    // Zebra crossing + signal post at a road position.
+    //
+    // Placed from a WORLD point rather than a loop index on purpose: the
+    // initial build walks getSpacedPoints(800) while the road frames
+    // (roadNormals / roadBankedUp / roadSpacedPoints) are indexed by a
+    // different, denser sampling, and the streaming builder uses a third. The
+    // spatial grid maps a position back to the right frame index for all of
+    // them.
+    buildZebraCrossing(worldPt, scene) {
+      if (!this.roadSpatialGrid || !this.roadSpacedPoints || !this.roadNormals) return null;
+      const near = this.roadSpatialGrid.getNearestRoadPoint(worldPt.x, worldPt.z, 14.0);
+      if (!near || near.index == null) return null;
+      const i = near.index;
+      const pts = this.roadSpacedPoints;
+      if (i < 1 || i >= pts.length - 1) return null;
+
+      const pt = pts[i];
+      const normal = this.roadNormals[i];
+      const binormal = this.roadBinormals[i];
+      const bankedUp = this.roadBankedUp[i];
+      if (!normal || !binormal || !bankedUp) return null;
+      const bankingAngle = this.roadBankingAngles[i] || 0;
+      const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle))
+        .addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
+      const tangent = new THREE.Vector3().subVectors(pts[i + 1], pts[i - 1]).normalize();
+
+      // Same 0.12 slab lift + paint clearance the lane markings use; anything
+      // less z-fights with the asphalt.
+      const LIFT = 0.12 + 0.02;
+      const DEPTH = 4.0;
+      const STRIPE_W = 0.55;
+      const PERIOD = 1.0;
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.5;
+
+      const positions = [];
+      const indices = [];
+      let v = 0;
+      for (let lat = -roadHalf + 0.35; lat <= roadHalf - STRIPE_W - 0.3; lat += PERIOD) {
+        for (const [dLat, dDepth] of [[0, -1], [STRIPE_W, -1], [STRIPE_W, 1], [0, 1]]) {
+          // Built LOCAL to pt, with the mesh positioned there below. World-space
+          // verts on an object still sitting at the origin make
+          // updateFoliageVisibility measure distance from (0,0,0), which culled
+          // every crossing the instant it was added.
+          const p = new THREE.Vector3()
+            .addScaledVector(bankedNormal, lat + dLat)
+            .addScaledVector(tangent, dDepth * DEPTH * 0.5)
+            .addScaledVector(bankedUp, LIFT);
+          positions.push(p.x, p.y, p.z);
+        }
+        indices.push(v, v + 1, v + 2, v, v + 2, v + 3);
+        v += 4;
+      }
+      if (!positions.length) return null;
+
+      // One merged geometry per crossing — a mesh per stripe would be seven
+      // extra draw calls for a few square metres of paint.
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geom.setIndex(indices);
+      geom.computeVertexNormals();
+      const zebra = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({
+        color: 0xb8bdc4, side: THREE.DoubleSide, depthWrite: false
+      }));
+      zebra.renderOrder = 1;
+      zebra.position.copy(pt);
+      (this.foliageGroup || scene).add(zebra);
+
+      // Signal post on the verge.
+      const side = this.prng.next() > 0.5 ? 1 : -1;
+      const postLat = side * (roadHalf + 1.4);
+      const postPos = pt.clone().addScaledVector(normal, postLat);
+      postPos.y = this.groundHeightAt(pt, postPos, postLat);
+
+      const post = new THREE.Group();
+      const poleMat = new THREE.MeshStandardMaterial({ color: 0x3f4550, roughness: 0.7, metalness: 0.3 });
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 3.1, 8), poleMat);
+      pole.position.y = 1.55;
+      post.add(pole);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.8, 0.24),
+        new THREE.MeshStandardMaterial({ color: 0x23272e, roughness: 0.8 }));
+      head.position.y = 3.15;
+      post.add(head);
+
+      // Unlit base colours stay dark so an off lamp never crosses the 0.94
+      // bloom threshold; the lit one is driven by emissive, same as the
+      // vehicle headlight/taillight lenses.
+      const lampGeom = new THREE.SphereGeometry(0.075, 8, 6);
+      const lamps = [];
+      [['red', 0xff3b30, 0.30], ['amber', 0xffb300, 0.0], ['green', 0x27d17c, -0.30]].forEach(([name, hex, dy]) => {
+        const mat = new THREE.MeshStandardMaterial({ color: 0x14161a, emissive: hex, emissiveIntensity: 0.0, roughness: 0.4 });
+        const lamp = new THREE.Mesh(lampGeom, mat);
+        lamp.position.set(0, 3.15 + dy, 0.13);
+        post.add(lamp);
+        lamps.push({ name, mat, hex });
+      });
+
+      post.position.copy(postPos);
+      post.lookAt(pt.x, postPos.y, pt.z);
+      (this.foliageGroup || scene).add(post);
+      this.obstacles.push({ pos: postPos.clone(), radius: 0.7, type: 'pole' });
+      if (this.occluderMeshes) this.occluderMeshes.push(post);
+
+      const signal = {
+        lamps,
+        phase: Math.floor(this.prng.range(0, 3)), // staggered so a route isn't in lockstep
+        t: this.prng.range(0, 4),
+        durations: [11.0, 2.5, 8.0] // GO, AMBER, STOP(+walk)
+      };
+      this.trafficSignals = this.trafficSignals || [];
+      this.trafficSignals.push(signal);
+      this._applySignalPhase(signal);
+
+      // Two pedestrians who actually use the crossing. They hold at the kerb
+      // and only step off on the STOP phase — see updateCrossers' gate.
+      for (let k = 0; k < 2; k++) {
+        const mesh = this.buildPedestrian();
+        if (!mesh) break;
+        const latA = (roadHalf + 1.6) * (k === 0 ? 1 : -1);
+        const latB = -latA;
+        const depthOff = this.prng.range(-1.2, 1.2);
+        const startPos = pt.clone().addScaledVector(normal, latA).addScaledVector(tangent, depthOff);
+        const endPos = pt.clone().addScaledVector(normal, latB).addScaledVector(tangent, depthOff);
+        startPos.y = this.groundHeightAt(pt, startPos, latA) + 0.15;
+        endPos.y = this.groundHeightAt(pt, endPos, latB) + 0.15;
+        mesh.position.copy(startPos);
+        mesh.lookAt(endPos.x, mesh.position.y, endPos.z);
+        (this.foliageGroup || scene).add(mesh);
+        this.crossers.push({
+          mesh, kind: 'pedestrian', start: startPos, end: endPos,
+          pt: pt.clone(), normal: normal.clone(),
+          latStart: latA, latEnd: latB, progress: 0,
+          speed: mesh.userData.walkSpeed * 1.15,
+          hitRadius: mesh.userData.hitRadius, struck: false,
+          legPhase: this.prng.next() * Math.PI * 2,
+          pathLen: startPos.distanceTo(endPos),
+          signal
+        });
+      }
+      return signal;
+    }
+
+    _applySignalPhase(s) {
+      const lit = s.phase === 0 ? 'green' : (s.phase === 1 ? 'amber' : 'red');
+      for (const l of s.lamps) l.mat.emissiveIntensity = (l.name === lit) ? 2.0 : 0.0;
+    }
+
+    updateTrafficSignals(dt) {
+      if (!this.trafficSignals) return;
+      for (let i = 0; i < this.trafficSignals.length; i++) {
+        const s = this.trafficSignals[i];
+        s.t += dt;
+        if (s.t >= s.durations[s.phase]) {
+          s.t = 0;
+          s.phase = (s.phase + 1) % 3;
+          this._applySignalPhase(s);
+        }
+      }
+    }
+
+    // Tea-stall patrons stand still, so they aren't crossers and updateCrossers
+    // never sees them — but their Idle clip still needs stepping. Same distance
+    // cull as the strollers so a route's worth of stalls isn't skinning rigs
+    // kilometres behind the car.
+    updatePatrons(dt, vehiclePos) {
+      if (!this.patrons || !this.patrons.length) return;
+      const CULL_SQ = 130 * 130;
+      const tmp = new THREE.Vector3();
+      for (let i = 0; i < this.patrons.length; i++) {
+        const p = this.patrons[i];
+        p.obj.getWorldPosition(tmp);
+        const near = tmp.distanceToSquared(vehiclePos) < CULL_SQ;
+        p.obj.visible = near;
+        if (near) p.mixer.update(dt);
+      }
+    }
+
     updateCrossers(dt) {
       // Crossers beyond 130m are sub-2px tall and fully occluded by fog.
       // Skip expensive per-limb trig math and matrix updates beyond that
@@ -6379,7 +6701,23 @@
         const c = this.crossers[i];
         if (c.struck) continue; // frozen at impact position until cleanup below
 
-        c.progress += (c.speed * dt) / (c.pathLen || (c.pathLen = c.start.distanceTo(c.end)));
+        // Signalled crossers wait at the kerb unless their light says STOP
+        // (phase 2). One already off the kerb keeps going regardless — a
+        // pedestrian stranded mid-carriageway when the light changes is worse
+        // than one who finishes the crossing. Holds the walk cycle and the
+        // progress only; position and culling below still run, or a waiting
+        // pedestrian would never become visible again once culled.
+        let hold = false;
+        if (c.signal) {
+          const midCrossing = c.progress > 0.02 && c.progress < 0.98;
+          hold = (c.signal.phase !== 2 && !midCrossing);
+          const walk = c.mesh.userData.actions && c.mesh.userData.actions['Walking'];
+          if (walk) walk.paused = hold;
+        }
+
+        if (!hold) {
+          c.progress += (c.speed * dt) / (c.pathLen || (c.pathLen = c.start.distanceTo(c.end)));
+        }
         if (c.progress >= 1.0) {
           // Reached the far side — walk back the other way so the same
           // crosser keeps patrolling instead of despawning mid-street.
@@ -6414,7 +6752,20 @@
         c.mesh.visible = true;
 
         if (c.mesh.userData.mixer) {
-          c.mesh.userData.mixer.update(dt);
+          // Animation LOD: skinning a 67-bone rig is the expensive half, and
+          // past ~40m nobody can read a gait cycle. Step distant rigs every
+          // third frame with the accumulated dt so they still move, at a third
+          // of the cost — this is the cheapest headroom available on mobile.
+          if (distSq < 1600) {
+            c.mesh.userData.mixer.update(dt);
+          } else {
+            c._lodAccum = (c._lodAccum || 0) + dt;
+            c._lodTick = ((c._lodTick || 0) + 1) % 3;
+            if (c._lodTick === 0) {
+              c.mesh.userData.mixer.update(c._lodAccum);
+              c._lodAccum = 0;
+            }
+          }
         } else {
           c.legPhase += dt * 9.0;
           const swing = Math.sin(c.legPhase) * 0.35;
@@ -6451,6 +6802,13 @@
       const children = this.foliageGroup.children;
       for (let i = 0; i < children.length; i++) {
         const child = children[i];
+
+        // Crossers own their own visibility (updateCrossers culls them at
+        // 130m). This pass runs AFTER it and forces visible=true on anything
+        // inside 350m, so without this skip it resurrects every crosser in the
+        // 130-350m band each 10th frame — drawn with a frozen pose, because
+        // the cull path in updateCrossers skips their mixer update.
+        if (child.userData && child.userData.isCrosser) continue;
 
         // Never cull instanced meshes, multi-instance billboard tree groups,
         // driveways, or delivery checkpoints — their vertices/instances span
@@ -7637,6 +7995,26 @@
                 targetParentGroup: this.foliageGroup || scene
               });
             }
+          }
+
+          // 3d. Roadside pedestrians.
+          //
+          // Streamed chunks used to spawn none at all, so every pedestrian in
+          // the game lived on the initial ~8.4km spline and the world emptied
+          // of people the moment streaming took over. Same cadence and cluster
+          // shape as the initial build; yields because this is a generator and
+          // a rig clone per pedestrian would otherwise hitch the stream.
+          if (i % 16 === 0 && this.prng.next() > 0.2) {
+            this.spawnPedestrianCluster(pt, normal, tangent);
+            yield;
+          }
+
+          // 3e. Signalled zebra crossing — streamed chunks get these too, or
+          // crossings would stop existing past the initial spline exactly the
+          // way pedestrians did.
+          if (i % 224 === 0) {
+            this.buildZebraCrossing(pt, scene);
+            yield;
           }
 
           // 4. District Biome Rocks (scatter 12–40m off road, adaptive district rock color)
@@ -12528,6 +12906,8 @@
 
         this.world.updateTraffic(dt);
         this.world.updateCrossers(dt);
+        this.world.updatePatrons(dt, this.vehicle.mesh.position);
+        this.world.updateTrafficSignals(dt);
         if (this.vehicle && this.vehicle.mesh && this.world.updateFoliageVisibility) {
           this.world.updateFoliageVisibility(this.vehicle.mesh.position);
         }
