@@ -247,11 +247,18 @@
     </div>
   </div>
 
-  <!-- Main Game Engine Bundle with Absolute Cache Busting -->
+  <!-- Save layer + main game engine bundle, with absolute cache busting.
+       async=false is load-bearing: dynamically inserted scripts default to
+       async, which would let game.js run before save.js and leave
+       window.ShiplypSave undefined at engine construction. Setting it false
+       restores document-order execution while keeping the cache-buster. -->
   <script>
-    const s = document.createElement('script');
-    s.src = 'game.js?t=' + Date.now();
-    document.body.appendChild(s);
+    ['save.js', 'game.js'].forEach(function (src) {
+      const s = document.createElement('script');
+      s.src = src + '?t=' + Date.now();
+      s.async = false;
+      document.body.appendChild(s);
+    });
   </script>
 </body>
 </html>

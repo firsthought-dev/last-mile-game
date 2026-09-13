@@ -1023,6 +1023,22 @@
   }
 
   const sound = new SoundEngine();
+
+  // --------------------------------------------------------------------------
+  // CAREER PROFILE (save.js)
+  // Persistent wallet, lifetime stats, courier rank, daily streak and stars.
+  // Held as a module-level singleton next to `sound` for the same reason: it
+  // is one shared service, not per-engine state, and the engine can be torn
+  // down and rebuilt without touching it.
+  //
+  // Deliberately tolerant of being absent. save.js is a separate file loaded
+  // before this one; if it ever fails to load, every call site below is
+  // guarded so the game still runs — it just stops remembering anything.
+  // --------------------------------------------------------------------------
+  const Career = (typeof window !== 'undefined' && window.ShiplypSave) ? window.ShiplypSave : null;
+  if (!Career && typeof console !== 'undefined') {
+    console.warn('[Shiplyp] save.js not loaded — career progress will not persist this session.');
+  }
   window.sound = sound;
   window.RADIO_PLAYLISTS = RADIO_PLAYLISTS;
   window.noteToFreq = noteToFreq;
@@ -9694,6 +9710,12 @@
       // The full-screen loader overlay is only needed once that starts.
       const loaderEl = document.getElementById('game-loader');
       if (loaderEl) loaderEl.style.display = 'none';
+
+      // Daily check-in runs once per session, before the hub is rendered so
+      // the strip below already reflects today's streak and bonus. It is
+      // idempotent within a calendar day — reopening the hub does not pay twice.
+      this._dailyCheckIn = Career ? Career.checkIn() : null;
+
       this.renderDispatchHub();
     }
 
@@ -10413,18 +10435,46 @@
       this.deliveriesMade++;
       this.streakCount++;
 
+      // Capture the clock BEFORE it is reset for the next order. Both the
+      // star rating and the "express speed" banner describe how much time
+      // was left when the parcel landed, and reading them after the reset
+      // below made every delivery look like a full-time-remaining one.
+      const timeLeftRatio = this.maxOrderTimer > 0 ? (this.orderTimer / this.maxOrderTimer) : 0;
+
       const diffCfg = CONFIG.DIFFICULTY_TIERS[this.selectedDifficulty];
       const timeBonus = Math.max(0, Math.round(this.orderTimer * 1.8));
       const earnedBonus = Math.round((target.order.reward + timeBonus) * diffCfg.payoutMult * (1 + this.streakCount * 0.2));
       this.earnings += earnedBonus;
 
+      // Bank it into the career wallet the instant it is earned, not at the
+      // end of the shift: on Android the WebView process can be killed while
+      // backgrounded, and a player who loses an hour of deliveries to that
+      // does not come back. `this.earnings` remains the per-shift HUD counter.
+      const stars = timeLeftRatio > 0.55 ? 3 : (timeLeftRatio > 0.25 ? 2 : 1);
+      let careerResult = null;
+      if (Career) {
+        careerResult = Career.recordDelivery({
+          orderId: target.order?.id,
+          payout: earnedBonus,
+          stars,
+          streak: this.streakCount
+        });
+      }
+
       this.orderTimer = this.maxOrderTimer; // Reset clock for next order
 
       sound.playCombo();
-      const bonusMsg = (this.orderTimer > this.maxOrderTimer * 0.5 ? `${UI.icon('bolt')} EXPRESS SPEED BONUS!` : `${UI.icon('target')} ON-TIME BULLSEYE!`);
+      const bonusMsg = (timeLeftRatio > 0.5 ? `${UI.icon('bolt')} EXPRESS SPEED BONUS!` : `${UI.icon('target')} ON-TIME BULLSEYE!`);
       this.spawnConfetti(target.pos, 36);
       this.showScoreBanner(`${bonusMsg} +₹${earnedBonus}`, `${UI.icon('flame')} ${this.streakCount}x STREAK • +${timeBonus} TIME BONUS`);
       this.addNotification(`${UI.icon('check')} DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
+
+      // Rank-up is the only career event loud enough to interrupt a shift.
+      // Everything else about the profile is read back at the hub.
+      if (careerResult && careerResult.promoted) {
+        sound.playRepair();
+        this.addNotification(`${UI.icon('flame')} PROMOTED — ${careerResult.promoted.name.toUpperCase()}`, 'success', 6000);
+      }
 
       this.deliveryHistory.unshift({
         name: target.order?.name || 'Delivery',
@@ -11476,6 +11526,12 @@
 
     startDrive() {
       this.gameState = 'playing';
+      // Career bookkeeping for the shift that is about to start. The distance
+      // marker is what makes banking idempotent: VehicleController.distanceTraveled
+      // is cumulative on a vehicle instance that outlives a single shift, so
+      // only the delta since this point may be added to the career total.
+      if (Career) Career.beginShift();
+      this._distanceBanked = this.vehicle ? this.vehicle.distanceTraveled : 0;
       sound.resumeForGameplay();
       this.modalContainer.innerHTML = '';
       this.hudOverlay.style.display = 'block';
@@ -11527,6 +11583,16 @@
     }
 
     renderDispatchHub() {
+      // Coming back from a drive: close the shift out BEFORE gameState flips,
+      // since that flag is the only signal that a shift was in progress. Only
+      // the distance travelled since the shift began is banked — distanceTraveled
+      // is cumulative across shifts on a surviving vehicle instance.
+      if (Career && this.gameState === 'playing') {
+        const traveled = this.vehicle ? this.vehicle.distanceTraveled : 0;
+        Career.endShift({ distanceKm: Math.max(0, traveled - (this._distanceBanked || 0)) });
+        this._distanceBanked = traveled;
+      }
+
       this.gameState = 'menu';
       sound.suspendForMenu();
       this.hudOverlay.style.display = 'none';
@@ -11558,6 +11624,46 @@
       ];
       const currentStyle = this.visualStyle?.selectedStyle || VisualStyleManager.DEFAULT_STYLE;
 
+      // Career strip: the only place a returning player sees that the last
+      // session actually counted. Rendered from the persisted profile, never
+      // from live engine state, so what it shows is exactly what was saved.
+      let careerStrip = '';
+      if (Career) {
+        const rank = Career.rank();
+        const stats = Career.career();
+        const daily = this._dailyCheckIn;
+        const pct = Math.round(rank.progress * 100);
+        const nextLine = rank.next
+          ? `₹${rank.toNext.toLocaleString('en-IN')} to ${rank.next.name}`
+          : 'Top rank reached';
+        const dailyLine = (daily && daily.bonus > 0)
+          ? `<div class="career-daily-row">${UI.icon('flame', 13)} Day ${daily.streak} check-in &bull; +₹${daily.bonus} paid into your account</div>`
+          : '';
+
+        careerStrip = `
+          <div class="hub-career-strip">
+            <div class="career-top-row">
+              <div class="career-identity">
+                <span class="career-rank-name">${rank.name}</span>
+                <span class="career-rank-next">${nextLine}</span>
+              </div>
+              <div class="career-bank">
+                <span class="career-bank-label">ACCOUNT</span>
+                <span class="career-bank-value">₹${Career.wallet().toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+            <div class="career-rank-track"><div class="career-rank-fill" style="width: ${pct}%"></div></div>
+            <div class="career-stats-row">
+              <span><b>${stats.deliveries.toLocaleString('en-IN')}</b> ${stats.deliveries === 1 ? 'DROP' : 'DROPS'}</span>
+              <span><b>${stats.distanceKm.toFixed(1)}</b> KM</span>
+              <span><b>${stats.bestStreak}x</b> BEST STREAK</span>
+              <span><b>${stats.shifts}</b> ${stats.shifts === 1 ? 'SHIFT' : 'SHIFTS'}</span>
+            </div>
+            ${dailyLine}
+          </div>
+        `;
+      }
+
       this.modalContainer.innerHTML = `
         <div class="modal-backdrop">
           <div class="shiplyp-hub-card">
@@ -11565,6 +11671,8 @@
               <h1 class="hub-brand-title">SHIP<span>LYP</span></h1>
             </div>
             <p class="hub-tagline">Endless Driving • India Roads</p>
+
+            ${careerStrip}
 
             <!-- 3. Select Vehicle -->
             <div class="hub-vehicle-selector">
@@ -12552,6 +12660,7 @@
           }
           const bonus = 150;
           this.earnings += bonus;
+          if (Career) Career.credit(bonus, 'district');
           sound.playRepair();
           const distIcon = isOffWorldDistrict ? UI.icon('planet') : UI.icon('building');
           const distLabel = isOffWorldDistrict ? 'SECTOR' : 'DISTRICT';
