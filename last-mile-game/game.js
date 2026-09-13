@@ -6577,6 +6577,7 @@
       // Generate forward extension meshes for road, lane markings, terrain, and roadside props
       yield* this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, roadTerrainKey, prevEndPos);
       yield* this.sweepTerrainBelowRoad();
+      yield* this.sweepFloorBelowRoad();
     }
 
     // Resumes the in-flight streaming build (if any) for up to budgetMs of
@@ -6784,6 +6785,104 @@
         nPrev.needsUpdate = true;
         nNext.needsUpdate = true;
         yield;
+      }
+    }
+
+    // Post-stream floor re-clamp.
+    //
+    // createFloorMesh bakes every floor vertex against the road as it exists
+    // at world-build time: buried 25m under the ribbon within 40m, blended to
+    // natural terrain height by 45m, and never above roadY-1.5 within 75m.
+    // Streaming then grows the road for kilometres past that original spline,
+    // and wherever the weaving new road re-enters the floor plane's footprint
+    // those vertices were baked with NO road anywhere near them — so they sit
+    // at raw terrain height, which on any cut/graded stretch is ABOVE the new
+    // asphalt. The floor then renders on top of the road and the car, which
+    // reads as the road breaking into disconnected fragments with the car
+    // adrift on grass (measured: first breach at 8.5km on a 700-node spline,
+    // peaking at 2.07m of floor over the asphalt).
+    //
+    // sweepTerrainBelowRoad cannot cover this: it walks `terrainMeshes`, and
+    // floorMesh is deliberately not one of them — it needs the floor's own
+    // -25/-1.5 offsets and 75m reach, not the ribbon's 0.22m/6.1m. So re-apply
+    // createFloorMesh's own rules against the CURRENT road instead. Clamps
+    // downward only, so repeated sweeps converge and can never raise the floor
+    // back out from under geometry it is already meant to hide beneath.
+    *sweepFloorBelowRoad() {
+      if (!this.floorMesh || !this.floorMesh.geometry) return;
+      const pts = this.roadSpacedPoints;
+      if (!pts || pts.length < 2) return;
+
+      // Identical to createFloorMesh's constants on purpose — two copies of
+      // "how high may the floor sit here" that drift apart is the exact
+      // failure this pass exists to clean up after.
+      const RIBBON_COVERAGE = 45.0;
+      const BLEND_START = 40.0;
+      const SAFETY_ZONE = 75.0;
+      const OUTER = SAFETY_ZONE + 20.0; // past this createFloorMesh leaves raw terrain
+
+      // Coarse hash so the ~140k-vertex walk only pays the full nearest-point
+      // search for the handful of vertices actually near the road. Cell size
+      // >= OUTER with one neighbour ring means the true nearest sample can
+      // never fall outside the searched 3x3 block.
+      const CELL = 100.0;
+      const key = (cx, cz) => cx + ',' + cz;
+      const hash = new Map();
+      for (let s = 0; s < pts.length; s++) {
+        const k = key(Math.floor(pts[s].x / CELL), Math.floor(pts[s].z / CELL));
+        let bucket = hash.get(k);
+        if (!bucket) { bucket = []; hash.set(k, bucket); }
+        bucket.push(s);
+      }
+
+      const pos = this.floorMesh.geometry.attributes.position;
+      let lowered = 0;
+      for (let i = 0; i < pos.count; i++) {
+        if ((i & 1023) === 1023) yield;
+        const x = pos.getX(i), z = pos.getZ(i);
+        const vcx = Math.floor(x / CELL), vcz = Math.floor(z / CELL);
+
+        let nearestSq = Infinity, roadY = 0;
+        for (let dcx = -1; dcx <= 1; dcx++) {
+          for (let dcz = -1; dcz <= 1; dcz++) {
+            const bucket = hash.get(key(vcx + dcx, vcz + dcz));
+            if (!bucket) continue;
+            for (let bi = 0; bi < bucket.length; bi++) {
+              const p = pts[bucket[bi]];
+              const dx = x - p.x, dz = z - p.z;
+              const dSq = dx * dx + dz * dz;
+              if (dSq < nearestSq) { nearestSq = dSq; roadY = p.y; }
+            }
+          }
+        }
+        if (nearestSq === Infinity) continue;
+        const dist = Math.sqrt(nearestSq);
+        if (dist >= OUTER) continue;
+
+        const naturalY = this.getRawTerrainHeight(x, z) - 0.3;
+        let targetY = naturalY;
+        if (dist <= BLEND_START) {
+          targetY = roadY - 25.0;
+        } else if (dist < RIBBON_COVERAGE) {
+          targetY = THREE.MathUtils.lerp(roadY - 25.0, naturalY, THREE.MathUtils.smoothstep(dist, BLEND_START, RIBBON_COVERAGE));
+        }
+        if (dist < SAFETY_ZONE) {
+          targetY = Math.min(targetY, roadY - 1.5);
+        } else {
+          targetY = THREE.MathUtils.lerp(Math.min(targetY, roadY - 1.5), naturalY, THREE.MathUtils.smoothstep(dist, SAFETY_ZONE, OUTER));
+        }
+
+        if (targetY < pos.getY(i)) { pos.setY(i, targetY); lowered++; }
+      }
+
+      this._lastFloorSweepLowered = lowered;
+      if (lowered) {
+        pos.needsUpdate = true;
+        // Unlike the terrain sweep — whose clamps all end up hidden under the
+        // asphalt — the 45-95m band here is VISIBLE floor (the ribbon only
+        // draws out to ±40m), so these moved vertices really do need their
+        // shading rebuilt or the re-clamped basin lights wrong.
+        yield* this.chunkedComputeVertexNormals(this.floorMesh.geometry);
       }
     }
 
