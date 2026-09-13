@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Stylized Delivery Van / Courier Box Icon in Brand Saffron -->
+    <path
+        android:fillColor="#FF9F1C"
+        android:pathData="M30,38 L68,38 L78,50 L78,68 L30,68 Z" />
+    <path
+        android:fillColor="#00D4BF"
+        android:pathData="M38,68 A6,6 0 1,0 38,80 A6,6 0 1,0 38,68 Z" />
+    <path
+        android:fillColor="#00D4BF"
+        android:pathData="M70,68 A6,6 0 1,0 70,80 A6,6 0 1,0 70,68 Z" />
+</vector>

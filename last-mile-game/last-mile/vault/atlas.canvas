@@ -1,0 +1,50 @@
+{
+  "nodes": [
+    {"id": "hub", "type": "file", "file": "Projects/Last-Mile Game.md", "x": 0, "y": 0, "width": 320, "height": 90, "color": "4"},
+
+    {"id": "shiplyp", "type": "file", "file": "Architecture/ShiplypEngine.md", "x": 500, "y": -260, "width": 280, "height": 80, "color": "6"},
+    {"id": "procworld", "type": "file", "file": "Architecture/ProceduralWorld.md", "x": 500, "y": -60, "width": 280, "height": 80, "color": "6"},
+    {"id": "sound", "type": "file", "file": "Architecture/SoundEngine.md", "x": 500, "y": 140, "width": 260, "height": 70, "color": "6"},
+
+    {"id": "vehicle", "type": "file", "file": "Architecture/VehicleController.md", "x": 900, "y": -320, "width": 250, "height": 70, "color": "5"},
+    {"id": "visualstyle", "type": "file", "file": "Architecture/VisualStyleManager.md", "x": 900, "y": -160, "width": 250, "height": 60, "color": "5"},
+    {"id": "roadgrid", "type": "file", "file": "Architecture/RoadSpatialGrid.md", "x": 900, "y": -20, "width": 250, "height": 60, "color": "5"},
+    {"id": "rain", "type": "file", "file": "Architecture/RainSystem.md", "x": 900, "y": 120, "width": 250, "height": 60, "color": "5"},
+    {"id": "prng", "type": "file", "file": "Architecture/PRNG.md", "x": 900, "y": 260, "width": 250, "height": 60, "color": "5"},
+
+    {"id": "ideas", "type": "file", "file": "Ideas/Wishlist.md", "x": -500, "y": -160, "width": 260, "height": 70, "color": "3"},
+
+    {"id": "home", "type": "file", "file": "Home.md", "x": -500, "y": 200, "width": 220, "height": 60, "color": "2"},
+    {"id": "board", "type": "file", "file": "Boards/Engineering.md", "x": -500, "y": 320, "width": 220, "height": 60, "color": "2"},
+
+    {"id": "claude", "type": "file", "file": "_CLAUDE.md", "x": -900, "y": 20, "width": 220, "height": 60, "color": "1"}
+  ],
+  "edges": [
+    {"id": "e1", "fromNode": "hub", "toNode": "shiplyp"},
+    {"id": "e2", "fromNode": "hub", "toNode": "procworld"},
+    {"id": "e3", "fromNode": "hub", "toNode": "sound"},
+    {"id": "e4", "fromNode": "hub", "toNode": "vehicle"},
+    {"id": "e5", "fromNode": "hub", "toNode": "visualstyle"},
+    {"id": "e6", "fromNode": "hub", "toNode": "roadgrid"},
+    {"id": "e7", "fromNode": "hub", "toNode": "rain"},
+    {"id": "e8", "fromNode": "hub", "toNode": "prng"},
+    {"id": "e9", "fromNode": "hub", "toNode": "ideas"},
+
+    {"id": "e10", "fromNode": "shiplyp", "toNode": "procworld"},
+    {"id": "e11", "fromNode": "shiplyp", "toNode": "sound"},
+    {"id": "e12", "fromNode": "shiplyp", "toNode": "vehicle"},
+    {"id": "e13", "fromNode": "shiplyp", "toNode": "visualstyle"},
+
+    {"id": "e14", "fromNode": "procworld", "toNode": "roadgrid"},
+    {"id": "e15", "fromNode": "procworld", "toNode": "prng"},
+    {"id": "e16", "fromNode": "procworld", "toNode": "rain"},
+
+    {"id": "e17", "fromNode": "rain", "toNode": "visualstyle"},
+    {"id": "e18", "fromNode": "rain", "toNode": "vehicle"},
+    {"id": "e19", "fromNode": "rain", "toNode": "sound", "label": "audio ties to weather (speculation)"},
+
+    {"id": "e20", "fromNode": "vehicle", "toNode": "roadgrid"},
+
+    {"id": "e21", "fromNode": "home", "toNode": "board"}
+  ]
+}
