@@ -737,11 +737,6 @@
       setTimeout(() => this.playTone(55, 'sine', 0.2, 0.25), 40);
     }
 
-    playCash() {
-      if (this.suspended || this.sfxMuted) return;
-      this.playTone(987, 'sine', 0.12, 0.22);
-      setTimeout(() => this.playTone(1318, 'sine', 0.2, 0.18), 90);
-    }
 
     playCombo() {
       if (this.suspended || this.sfxMuted) return;
@@ -750,12 +745,6 @@
       setTimeout(() => this.playTone(1174, 'sine', 0.2, 0.20), 160);
     }
 
-    playSpeedCam() {
-      if (this.suspended || this.sfxMuted) return;
-      this.playTone(1600, 'sine', 0.08, 0.30);
-      setTimeout(() => this.playTone(450, 'sine', 0.25, 0.30), 80);
-      setTimeout(() => this.playTone(350, 'sine', 0.35, 0.25), 280);
-    }
 
     playCrash() {
       if (this.suspended || this.sfxMuted) return;
@@ -1930,7 +1919,6 @@
       this.windowMaterials = [];
       this.trafficVehicles = [];
       this.deliveryTargets = [];
-      this.potholes = [];
       this.crossers = [];
       this.patrons = [];
       this.trafficSignals = [];
@@ -4419,7 +4407,6 @@
       this.foliageGroup.clear();
       this.deliveryTargets = [];
       this.trafficVehicles = [];
-      this.potholes = [];
       this.speedCameras = [];
       this.repairBays = [];
       this.obstacles = [];
@@ -8245,19 +8232,6 @@
       });
     }
 
-    getCamOffsets() {
-      // Pulled back + raised (slowroads-style) so roadside props recede instead of
-      // smearing past the periphery, which destroyed the sense of forward motion.
-      if (this.vehicleType === 'chotahathi') {
-        return { dist: -12.5, height: 6.2, lookAhead: 15.0, lookHeight: 1.0 };
-      } else if (this.vehicleType === 'scooter') {
-        return { dist: -10.5, height: 5.0, lookAhead: 12.5, lookHeight: 0.85 };
-      } else if (this.vehicleType === 'cycle') {
-        return { dist: -10.0, height: 4.8, lookAhead: 12.5, lookHeight: 0.85 };
-      } else {
-        return { dist: -11.5, height: 5.4, lookAhead: 13.0, lookHeight: 0.9 };
-      }
-    }
 
     buildModel() {
       this.mesh.clear();
@@ -9381,9 +9355,6 @@
       return new THREE.CanvasTexture(c);
     }
 
-    setActive(active) {
-      this.points.visible = !!active;
-    }
 
     // `center` is the point the volume rides around (the vehicle position)
     // — passed unconditionally every frame regardless of vehicle speed, so
@@ -9699,13 +9670,8 @@
       this.wantedDecayTimer = 0;
       this.isJailed = false;
 
-      // Get-out-and-walk delivery (car/truck only — two-wheelers always
-      // toss from the saddle, see toggleOnFoot). WALK_TIME_BONUS
-      // compensates for the extra time walking costs vs. a drive-by toss;
-      // granted once per order (walkBonusOrderIndex) so re-toggling E
-      // can't be farmed for free time.
-      this.onFoot = false;
-      this.walkerMesh = null;
+      // Vestige of the removed get-out-and-walk delivery mode: the bonus
+      // fields below are still read by the toss path.
       this.walkerParkedVehiclePos = null;
       this.walkBonusOrderIndex = -1;
       this.WALK_TIME_BONUS = 22.0;
@@ -10166,9 +10132,6 @@
 
     renderStatusPanel() {}
 
-    updateOrderTimer(dt) {
-      // Penalty timer disabled for peaceful open-world driving
-    }
 
     initEvents() {
       const handleResize = () => {
@@ -10219,7 +10182,6 @@
         if (k === 'n' || code === 'KeyN') this.toggleSfxMute();
         if (k === 'l' || code === 'KeyL') this.cycleRadioChannel();
         if (k === 'p' || code === 'KeyP') this.toggleWeather();
-        if (k === 'e' || code === 'KeyE') this.toggleOnFoot();
         if (k === 'h' || k === '?' || code === 'KeyH') this.openSettingsModal('controls');
         if (k === 'escape' || code === 'Escape') {
           if (this.modalContainer && this.modalContainer.querySelector('.settings-modal')) {
@@ -10317,352 +10279,21 @@
     // Walking/Running animation clips) so the player and crosser NPCs share one
     // consistent character; falls back to the procedural mesh below if the
     // asset hasn't loaded yet or failed to load.
-    createWalkerMesh() {
-      const rig = CourierAsset.clone();
-      if (rig) {
-        rig.root.userData.mixer = rig.mixer;
-        rig.root.userData.actions = rig.actions;
-        rig.root.userData.currentAction = null;
-        // Start in Idle rather than the raw T-pose bind pose — a clip must
-        // always be playing on this rig, never "no clip".
-        if (rig.actions['Idle']) {
-          rig.actions['Idle'].play();
-          rig.root.userData.currentAction = 'Idle';
-        }
-        return rig.root;
-      }
-      return this.createWalkerMeshProcedural();
-    }
 
     // High-quality stylized courier avatar for on-foot delivery, featuring
     // delivery uniform, cap, thermal backpack, sneakers, and articulated limbs.
     // Fallback used only if CourierAsset failed to load.
-    createWalkerMeshProcedural() {
-      const group = new THREE.Group();
-      
-      const skinMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.6 });
-      const uniformMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.5 }); // High-vis Crimson Delivery Uniform
-      const darkUniformMat = new THREE.MeshStandardMaterial({ color: 0x9f1239, roughness: 0.5 });
-      const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 }); // Slate cargo pants
-      const shoeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 }); // Black athletic sneakers
-      const soleMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.3 }); // White sneaker sole
-      const reflexMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.2, metalness: 0.4 }); // High-vis reflective stripe
-      const packMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.65 }); // Thermal delivery backpack
-      const capMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.5 }); // Dark courier cap
-      const visorMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.4 });
-
-      // 1. Head & Courier Cap
-      const headGroup = new THREE.Group();
-      const headMesh = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16, 1), skinMat);
-      headMesh.position.y = 0;
-      headGroup.add(headMesh);
-
-      // Neck
-      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.12, 8), skinMat);
-      neck.position.y = -0.12;
-      headGroup.add(neck);
-
-      // Courier Cap Crown & Forward Visor (+Z)
-      const capCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.175, 0.10, 10), capMat);
-      capCrown.position.y = 0.08;
-      headGroup.add(capCrown);
-
-      const capVisor = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.03, 0.16), visorMat);
-      capVisor.position.set(0, 0.04, 0.16);
-      capVisor.rotateX(0.12);
-      headGroup.add(capVisor);
-
-      headGroup.position.y = 1.54;
-      group.add(headGroup);
-
-      // 2. Torso with Delivery Jacket & High-Vis Bands
-      const torsoGroup = new THREE.Group();
-      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.60, 0.26), uniformMat);
-      torso.position.y = 1.04;
-      torsoGroup.add(torso);
-
-      // Chest reflective stripe
-      const chestBand = new THREE.Mesh(new THREE.BoxGeometry(0.43, 0.08, 0.27), reflexMat);
-      chestBand.position.y = 1.10;
-      torsoGroup.add(chestBand);
-
-      // Waist belt
-      const belt = new THREE.Mesh(new THREE.BoxGeometry(0.425, 0.07, 0.265), darkUniformMat);
-      belt.position.y = 0.76;
-      torsoGroup.add(belt);
-
-      // 3. Courier Thermal Backpack on back (-Z)
-      const pack = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.44, 0.20), packMat);
-      pack.position.set(0, 1.08, -0.22);
-      torsoGroup.add(pack);
-
-      // Glowing delivery logo beacon on pack
-      const beacon = new THREE.Mesh(
-        new THREE.BoxGeometry(0.14, 0.14, 0.02),
-        new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 1.5 })
-      );
-      beacon.position.set(0, 1.12, -0.325);
-      torsoGroup.add(beacon);
-
-      // Shoulder harness straps
-      [-0.12, 0.12].forEach(sx => {
-        const strap = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.48, 0.28), darkUniformMat);
-        strap.position.set(sx, 1.10, 0);
-        torsoGroup.add(strap);
-      });
-      group.add(torsoGroup);
-
-      // 4. Articulated Arms (Left & Right with Shoulder Pivots)
-      const buildArm = (isLeft) => {
-        const armGroup = new THREE.Group();
-        const sideMult = isLeft ? -1 : 1;
-        
-        // Shoulder / Upper sleeve
-        const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.32, 0.13), uniformMat);
-        sleeve.position.set(0, -0.16, 0);
-        armGroup.add(sleeve);
-
-        // Forearm / Skin
-        const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.26, 0.11), skinMat);
-        forearm.position.set(0, -0.42, 0.04);
-        armGroup.add(forearm);
-
-        // Hand
-        const hand = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.10, 0.10), skinMat);
-        hand.position.set(0, -0.58, 0.06);
-        armGroup.add(hand);
-
-        if (!isLeft) {
-          // Right hand holds digital delivery handheld scanner
-          const scanner = new THREE.Mesh(
-            new THREE.BoxGeometry(0.11, 0.18, 0.04),
-            new THREE.MeshStandardMaterial({ color: 0x0284c7, emissive: 0x38bdf8, emissiveIntensity: 0.6 })
-          );
-          scanner.position.set(0, -0.58, 0.12);
-          scanner.rotateX(0.4);
-          armGroup.add(scanner);
-        }
-
-        armGroup.position.set(sideMult * 0.27, 1.28, 0);
-        return armGroup;
-      };
-
-      const armL = buildArm(true);
-      const armR = buildArm(false);
-      group.add(armL);
-      group.add(armR);
-
-      // 5. Articulated Legs (with Hip Pivots, Cargo Pants & Sneakers)
-      const buildLeg = (isLeft) => {
-        const legGroup = new THREE.Group();
-        const sideMult = isLeft ? -1 : 1;
-
-        // Thigh & Shin
-        const legMesh = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.54, 0.16), pantsMat);
-        legMesh.position.set(0, -0.27, 0);
-        legGroup.add(legMesh);
-
-        // Sneaker Upper
-        const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.24), shoeMat);
-        shoe.position.set(0, -0.58, 0.04);
-        legGroup.add(shoe);
-
-        // White Sneaker Sole
-        const sole = new THREE.Mesh(new THREE.BoxGeometry(0.155, 0.04, 0.25), soleMat);
-        sole.position.set(0, -0.63, 0.04);
-        legGroup.add(sole);
-
-        legGroup.position.set(sideMult * 0.12, 0.72, 0);
-        return legGroup;
-      };
-
-      const legL = buildLeg(true);
-      const legR = buildLeg(false);
-      group.add(legL);
-      group.add(legR);
-
-      group.userData.legs = [legL, legR];
-      group.userData.arms = [armL, armR];
-      group.userData.legPhase = 0;
-      return group;
-    }
 
     // Toggle between driving and walking a car/truck delivery up to the
     // door. Two-wheelers never get out — per the queued design decision,
     // they always toss from the saddle (aimed-throw risk mechanic covers
     // them instead; that's a separate follow-up feature).
-    toggleOnFoot() {
-      if (!this.vehicle || !this.world || this.gameState !== 'playing') return;
-      const isTwoWheeler = this.selectedVehicle === 'cycle' || this.selectedVehicle === 'scooter' || this.vehicle?.vehicleType === 'cycle' || this.vehicle?.vehicleType === 'scooter';
-      if (isTwoWheeler) {
-        this.addNotification(`${UI.icon('scooter')} Two-wheelers stay mounted — toss from the saddle instead`, 'neutral', 2500);
-        return;
-      }
-
-      if (this.onFoot) {
-        // Return to vehicle — warp back rather than requiring the player
-        // to walk all the way back, which wouldn't add anything fun, just
-        // travel time.
-        this.onFoot = false;
-        if (this.walkerMesh) {
-          this.scene.remove(this.walkerMesh);
-          this.walkerMesh = null;
-        }
-        if (this.walkerParkedVehiclePos) {
-          this.vehicle.mesh.position.copy(this.walkerParkedVehiclePos);
-        }
-        this.vehicle.speed = 0;
-        this.addNotification(`${UI.icon('car')} BACK IN VEHICLE`, 'neutral', 2000);
-        return;
-      }
-
-      if (Math.abs(this.vehicle.speed) > 1.5) {
-        this.addNotification(`${UI.icon('alertTriangle')} STOP THE VEHICLE FIRST`, 'warning', 2200);
-        return;
-      }
-
-      this.onFoot = true;
-      this.vehicle.speed = 0;
-      this.walkerParkedVehiclePos = this.vehicle.mesh.position.clone();
-      this.walkerMesh = this.createWalkerMesh();
-      this.walkerMesh.quaternion.copy(this.vehicle.mesh.quaternion);
-
-      // Spawning the walker mesh at the car's own origin planted its feet
-      // at car-body height (the walker's local origin is ground-level, the
-      // car's is roughly seat height), so the torso/head clipped straight
-      // through the roof. Step out to the driver's side instead, like
-      // exiting through the door, and snap to actual ground height the
-      // same way updateWalking() does every frame.
-      const doorSide = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion);
-      const exitPos = this.vehicle.mesh.position.clone().addScaledVector(doorSide, 1.7);
-      this._walkerU = THREE.MathUtils.clamp(this.vehicle.splineProgress, 0, 1);
-      if (this.world && this.world.curve) {
-        const pt = this.world.curve.getPointAt(this._walkerU);
-        const tangent = this.world.curve.getTangentAt(this._walkerU).normalize();
-        const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
-        const latDist = exitPos.clone().sub(pt).dot(normal);
-        exitPos.y = this.world.groundHeightAt(pt, exitPos, latDist) + 0.30;
-      }
-      this.walkerMesh.position.copy(exitPos);
-      this.scene.add(this.walkerMesh);
-
-      // One-time timer bonus per order — walking to the door and back
-      // costs real time a drive-by toss doesn't, so the clock needs to
-      // absorb that instead of just punishing the choice to walk.
-      if (this.walkBonusOrderIndex !== this.activeOrderIndex) {
-        this.walkBonusOrderIndex = this.activeOrderIndex;
-        this.orderTimer += this.WALK_TIME_BONUS;
-        this.maxOrderTimer += this.WALK_TIME_BONUS;
-        this.addNotification(`${UI.icon('car')} ON FOOT — +${this.WALK_TIME_BONUS}s DELIVERY WINDOW`, 'success', 3000);
-      } else {
-        this.addNotification(`${UI.icon('car')} ON FOOT`, 'neutral', 1800);
-      }
-    }
-
-    updateWalking(dt) {
-      if (!this.walkerMesh || !this.world || !this.world.curve) return;
-
-      const turnSpeed = 2.6;
-      if (this.keys.a || this.keys.left) this.walkerMesh.rotation.y += turnSpeed * dt;
-      if (this.keys.d || this.keys.right) this.walkerMesh.rotation.y -= turnSpeed * dt;
-
-      let moveDir = 0;
-      if (this.keys.w || this.keys.up) moveDir = 1;
-      else if (this.keys.s || this.keys.down) moveDir = -0.6;
-
-      const walkSpeed = 4.5;
-      if (moveDir !== 0) {
-        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.walkerMesh.quaternion);
-        const newPos = this.walkerMesh.position.clone().addScaledVector(forward, moveDir * walkSpeed * dt);
-
-        // Find the nearest spline point to the walker's current XZ — local
-        // search around the last known walker u. Step size used to be a
-        // fixed 0.001 u, which on this road's curve (~8360m total length)
-        // is ~8.4m per step — far coarser than the ~0.075m the walker
-        // actually moves per frame at walkSpeed. bestU was frozen for
-        // ~110 frames, then snapped a full 8.4m chunk of curve at once,
-        // producing a periodic position/height pop (visible as a camera
-        // snap, and on sloped ground as legs suddenly poking through the
-        // road). Derive the step from the walker's actual per-frame travel
-        // distance instead, converted to u via the curve's real length, so
-        // bestU tracks continuously.
-        if (!this._curveULen) this._curveULen = this.world.curve.getLength();
-        const distThisFrame = Math.abs(moveDir) * walkSpeed * dt;
-        const uStep = Math.max(distThisFrame / this._curveULen, 1e-6);
-        const searchBase = this._walkerU ?? this.vehicle.splineProgress;
-        let bestU = searchBase, bestD2 = Infinity;
-        for (let step = -20; step <= 20; step++) {
-          const testU = THREE.MathUtils.clamp(searchBase + step * uStep, 0, 1);
-          const tp = this.world.curve.getPointAt(testU);
-          const d2 = (tp.x - newPos.x) ** 2 + (tp.z - newPos.z) ** 2;
-          if (d2 < bestD2) { bestD2 = d2; bestU = testU; }
-        }
-        this._walkerU = bestU;
-        const pt = this.world.curve.getPointAt(bestU);
-        const tangent = this.world.curve.getTangentAt(bestU).normalize();
-        const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
-        const latDist = newPos.clone().sub(pt).dot(normal);
-        // +0.30 bridges groundHeightAt's road offset (pt.y-0.18) up to the
-        // actual road mesh surface (pt.y+0.12), keeping walker soles above road.
-        newPos.y = this.world.groundHeightAt(pt, newPos, latDist) + 0.30;
-
-        this.walkerMesh.position.copy(newPos);
-
-        const legs = this.walkerMesh.userData.legs;
-        const arms = this.walkerMesh.userData.arms;
-        if (legs || arms) {
-          this.walkerMesh.userData.legPhase += dt * 10.0;
-          const swing = Math.sin(this.walkerMesh.userData.legPhase) * 0.4;
-          if (legs) {
-            legs[0].rotation.x = swing;
-            legs[1].rotation.x = -swing;
-          }
-          if (arms) {
-            arms[0].rotation.x = -swing * 0.8;
-            arms[1].rotation.x = swing * 0.8;
-          }
-        }
-      }
-
-      this.playWalkerClip(moveDir !== 0 ? 'Walking' : 'Idle');
-      if (this.walkerMesh.userData.mixer) this.walkerMesh.userData.mixer.update(dt);
-    }
-
     // Crossfades the walker's rigged CourierAsset instance to the named clip.
     // No-op for the procedural fallback mesh (which has no .actions).
-    playWalkerClip(clipName) {
-      const actions = this.walkerMesh && this.walkerMesh.userData.actions;
-      if (!actions) return;
-      if (this.walkerMesh.userData.currentAction === clipName) return;
-      const prev = this.walkerMesh.userData.currentAction ? actions[this.walkerMesh.userData.currentAction] : null;
-      const next = clipName ? actions[clipName] : null;
-      if (prev) prev.fadeOut(0.25);
-      if (next) {
-        next.reset().fadeIn(0.25).play();
-      }
-      this.walkerMesh.userData.currentAction = clipName;
-    }
 
     // On-foot equivalent of tossParcel3D's hit-test: walking within the
     // difficulty's tossRadius of the current target's porch ring completes
     // the delivery directly (SPACE), instead of needing a physics toss.
-    tryWalkDelivery() {
-      if (!this.onFoot || !this.walkerMesh || !this.world) return;
-      let nearestTarget = null;
-      let minD = 50.0;
-      this.world.deliveryTargets.forEach(t => {
-        if (t.delivered) return;
-        const d = this.walkerMesh.position.distanceTo(t.pos);
-        if (d < minD) { minD = d; nearestTarget = t; }
-      });
-      if (!nearestTarget) return;
-      const hitRadius = Math.max(nearestTarget.tossRadius || 5.0, 6.5);
-      if (minD < hitRadius) {
-        this.fulfillDelivery(nearestTarget);
-      } else {
-        this.addNotification(`${UI.icon('car')} Get closer to the door to deliver (${Math.round(minD)}m away)`, 'warning', 2000);
-      }
-    }
 
     tossParcel3D() {
       if (!this.vehicle || !this.world) return;
@@ -10906,26 +10537,6 @@
       }
     }
 
-    spawnPotholeSplash(pos, count = 14) {
-      if (!this.scene) return;
-      const geom = new THREE.BoxGeometry(0.12, 0.12, 0.12);
-      for (let i = 0; i < count; i++) {
-        const mat = new THREE.MeshBasicMaterial({ color: (Math.random() > 0.5 ? 0x2b1e16 : 0x1a1a1a) });
-        const mesh = new THREE.Mesh(geom, mat);
-        mesh.position.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 1.2, 0.2, (Math.random() - 0.5) * 1.2));
-        this.scene.add(mesh);
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 2.0 + Math.random() * 5.0;
-        this.particles.push({
-          mesh: mesh,
-          vel: new THREE.Vector3(Math.cos(angle) * speed, 4.0 + Math.random() * 6.0, Math.sin(angle) * speed),
-          rotVel: new THREE.Vector3(Math.random() * 8, Math.random() * 8, Math.random() * 8),
-          life: 0.8 + Math.random() * 0.4,
-          maxLife: 1.2,
-          gravity: 16.0
-        });
-      }
-    }
 
     updateParticles(dt) {
       for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -12392,22 +12003,6 @@
     }
 
     updateCamera(dt) {
-      if (this.onFoot && this.walkerMesh) {
-        // Simple third-person follow cam for the on-foot courier — reuses
-        // the same spring-lerp feel as the chase cam, just closer/lower
-        // since the subject is a person, not a vehicle.
-        const walkerPos = this.walkerMesh.position;
-        const walkerForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.walkerMesh.quaternion).normalize();
-        const targetCamPos = walkerPos.clone()
-          .addScaledVector(walkerForward, -3.4)
-          .add(new THREE.Vector3(0, 1.9, 0));
-        const posLerp = Math.min(1.0, 1.0 - Math.exp(-16.0 * dt));
-        this.camera.position.lerp(targetCamPos, posLerp);
-        const lookTarget = walkerPos.clone().add(new THREE.Vector3(0, 1.1, 0));
-        this.camera.lookAt(lookTarget);
-        this.updateOccluderFade(dt, lookTarget);
-        return;
-      }
 
       if (typeof window !== 'undefined' && window.location.search.includes('view_villa=1') && this.world?.deliveryTargets?.length) {
         const target = this.world.deliveryTargets[0];
@@ -12573,10 +12168,8 @@
 
     updateGPSNavigation() {
       if (!this.world || !this.vehicle) return;
-      const playerPos = (this.onFoot && this.walkerMesh) ? this.walkerMesh.position : this.vehicle.mesh.position;
-      const playerForward = (this.onFoot && this.walkerMesh)
-        ? new THREE.Vector3(0, 0, 1).applyQuaternion(this.walkerMesh.quaternion).normalize()
-        : new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
+      const playerPos = this.vehicle.mesh.position;
+      const playerForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
       const carPos = playerPos;
 
       // Find next undelivered target
@@ -12608,9 +12201,7 @@
 
       if (nextTarget) {
         const toTarget = nextTarget.pos.clone().sub(playerPos);
-        const playerRight = (this.onFoot && this.walkerMesh)
-          ? new THREE.Vector3(-1, 0, 0).applyQuaternion(this.walkerMesh.quaternion)
-          : new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion);
+        const playerRight = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion);
         const sideDot = playerRight.dot(toTarget);
         const sideText = sideDot > 0 ? 'RIGHT' : 'LEFT';
         const distMeters = Math.round(minDistance);
@@ -12623,7 +12214,7 @@
         if (gpsDistEl) gpsDistEl.textContent = `${distMeters}m`;
 
         // Modern Delivery Capsule update
-        if (tagTextEl) tagTextEl.textContent = this.onFoot ? 'DOORSTEP' : 'EXPRESS DROP';
+        if (tagTextEl) tagTextEl.textContent = 'EXPRESS DROP';
         if (payoutTextEl) payoutTextEl.textContent = `+₹${nextTarget.order?.reward || 85}`;
         if (destNameEl) destNameEl.textContent = nextTarget.order?.name || 'Scenic Drop Point';
         if (cargoDescEl) cargoDescEl.textContent = nextTarget.order?.cargo || 'Express Package';
@@ -12877,9 +12468,7 @@
       }
 
       if (this.gameState === 'playing') {
-        if (this.onFoot) {
-          this.updateWalking(dt);
-        } else {
+        {
           // Fixed-step substepping: heavier post-processing (bloom/FXAA at
           // tier 5-6) can drag render FPS down enough that a single dt=0.1s
           // physics step overshoots steering/suspension integration and
@@ -12939,7 +12528,7 @@
 
         // Infinite Highway District Milestones (Seamless progression every 4 km)
         const nextDistrictThreshold = (this.currentDistrict || 1) * 4.0;
-        if (!this.onFoot && this.vehicle.distanceTraveled >= nextDistrictThreshold && !this.districtTransitioning) {
+        if (this.vehicle.distanceTraveled >= nextDistrictThreshold && !this.districtTransitioning) {
           this.districtTransitioning = true;
           this.currentDistrict = (this.currentDistrict || 1) + 1;
           const isOffWorldDistrict = this.selectedCity === 'offworld';
@@ -12978,9 +12567,7 @@
         // foot: the vehicle is deliberately parked and stationary, so the
         // same conditions that mean "stuck" while driving are just normal
         // here.
-        if (this.onFoot) {
-          this.stuckTimer = 0;
-        } else if (this.vehicle.health <= 0) {
+        if (this.vehicle.health <= 0) {
           this.showStuckRecoveryModal(this.crashReason || 'VEHICLE BREAKDOWN: Suspension & Engine Failure');
           this.crashReason = null;
         } else if ((this.keys.w || this.keys.up || this.keys.s || this.keys.down) && Math.abs(this.vehicle.speed) < 0.45 && Math.abs(this.vehicle.lateralOffset) > (CONFIG.ROAD_WIDTH * 0.45)) {
@@ -12994,7 +12581,7 @@
 
         // Off-Road Lost Detection — show Return to Road banner (skipped on
         // foot for the same reason as above)
-        if (!this.onFoot && this.world && this.world.curve && this.vehicle) {
+        if (this.world && this.world.curve && this.vehicle) {
           const latDist = Math.abs(this.vehicle.lateralOffset || 0);
           const vp = this.vehicle.mesh.position;
           const nearU = this.vehicle.splineProgress;
