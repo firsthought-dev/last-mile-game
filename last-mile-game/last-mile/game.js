@@ -9716,6 +9716,12 @@
       // idempotent within a calendar day — reopening the hub does not pay twice.
       this._dailyCheckIn = Career ? Career.checkIn() : null;
 
+      // First-run onboarding: active when the player has zero career deliveries.
+      // Cleared permanently after their first successful drop.
+      const careerStats = Career ? Career.career() : null;
+      this._onboardingActive = careerStats ? (careerStats.deliveries === 0 && careerStats.shifts === 0) : false;
+      this._firstOpenTime = this._onboardingActive ? Date.now() : null;
+
       this.renderDispatchHub();
     }
 
@@ -9775,6 +9781,8 @@
       await frame();
 
       // --- Stage 4: Foliage, props, villas, rocks (heaviest stage) ---
+      // First-run: force easy so the first house spawns close and the timer is generous.
+      if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
 
       setProgress(82, 'Seeding subtropical forests & Sahyadri rockfaces...');
@@ -10107,6 +10115,7 @@
       this.scene.add(this.world.createTerrainMesh(season));
       this.scene.add(this.world.createTunnelMeshes());
       this.world.createMountainArches(this.scene, season);
+      if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
 
       if (!this.vehicle) {
@@ -10490,6 +10499,16 @@
       this.updateActiveOrderCard();
       this.updateHUDStats();
       this.refreshStatusPanel();
+
+      // First-run: clear onboarding after the first successful delivery.
+      if (this._onboardingActive && this.deliveriesMade === 1) {
+        this._onboardingActive = false;
+        this._dismissOnboardingHint();
+        if (this._firstOpenTime) {
+          const ms = Date.now() - this._firstOpenTime;
+          console.info('[Shiplyp] first_open_to_first_delivery_ms', ms);
+        }
+      }
     }
 
     spawnParcelTrail(pos) {
@@ -10994,6 +11013,34 @@
           setTimeout(() => item.remove(), 250);
         }, duration);
       }
+    }
+
+    _showOnboardingHint(step) {
+      this._dismissOnboardingHint();
+      const el = document.createElement('div');
+      el.id = 'onboarding-hint';
+      el.className = 'onboarding-hint';
+      if (step === 'drive') {
+        el.innerHTML = `
+          <span class="onboarding-hint-icon">&#9650;</span>
+          <span class="onboarding-hint-text">Drive to the glowing ring</span>
+          <span class="onboarding-hint-sub">Press <kbd>SPACE</kbd> to drop when you're close</span>
+        `;
+      } else if (step === 'toss') {
+        el.innerHTML = `
+          <span class="onboarding-hint-icon">&#9632;</span>
+          <span class="onboarding-hint-text">You're close — press <kbd>SPACE</kbd> to drop!</span>
+        `;
+      }
+      document.body.appendChild(el);
+      requestAnimationFrame(() => el.classList.add('visible'));
+    }
+
+    _dismissOnboardingHint() {
+      const existing = document.getElementById('onboarding-hint');
+      if (!existing) return;
+      existing.classList.remove('visible');
+      setTimeout(() => existing.remove(), 350);
     }
 
     toggleRadioMute() {
@@ -11571,6 +11618,24 @@
         this.updateGPSNavigation();
       }
 
+      // First-run: teleport the vehicle close to the first target so the player
+      // sees it immediately and can complete a delivery within ~30 seconds.
+      if (this._onboardingActive && this.world?.deliveryTargets?.length && this.world.curve) {
+        const target = this.world.deliveryTargets[0];
+        const targetU = target.splineU;
+        const totalL = this.world.curve.getLength();
+        const approachU = Math.max(0, targetU - 18.0 / totalL);
+        const pt = this.world.curve.getPointAt(approachU);
+        const tang = this.world.curve.getTangentAt(approachU);
+        this.vehicle.mesh.position.copy(pt).add(new THREE.Vector3(0, 0.39, 0));
+        this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
+        this.vehicle.heading = this.vehicle.velocityHeading;
+        this.vehicle.splineProgress = approachU;
+        this.vehicle.speed = 8.0;
+        this.updateGPSNavigation();
+        this._showOnboardingHint('drive');
+      }
+
       if (this.vehicle) {
         const carPos = this.vehicle.mesh.position;
         const vh = this.vehicle.velocityHeading;
@@ -11664,6 +11729,13 @@
         `;
       }
 
+      const onboardingBanner = this._onboardingActive ? `
+        <div class="hub-onboarding-banner">
+          <span class="onboarding-banner-title">Welcome to Shiplyp</span>
+          <span class="onboarding-banner-body">Your first delivery is waiting just down the road. Drive up to the glowing ring and press SPACE to drop the parcel.</span>
+        </div>
+      ` : '';
+
       this.modalContainer.innerHTML = `
         <div class="modal-backdrop">
           <div class="shiplyp-hub-card">
@@ -11672,6 +11744,7 @@
             </div>
             <p class="hub-tagline">Endless Driving • India Roads</p>
 
+            ${onboardingBanner}
             ${careerStrip}
 
             <!-- 3. Select Vehicle -->
@@ -11702,7 +11775,7 @@
             </div>
 
             <button id="btn-start-dispatch" class="btn-launch-dispatch">
-              <span>DRIVE</span>
+              <span>${this._onboardingActive ? 'FIRST DELIVERY' : 'DRIVE'}</span>
             </button>
 
             <div class="hub-footer-links">
@@ -12626,6 +12699,21 @@
         this.updateGPSNavigation();
         this.updateClimateHUD();
         this.updateHealthHUD();
+
+        // Switch onboarding hint from "drive" to "toss" when close to target
+        if (this._onboardingActive && this.vehicle && this.world?.deliveryTargets?.length) {
+          const firstTarget = this.world.deliveryTargets.find(t => !t.delivered);
+          if (firstTarget) {
+            const d = this.vehicle.mesh.position.distanceTo(firstTarget.pos);
+            if (d < 22 && this._onboardingHintStep !== 'toss') {
+              this._onboardingHintStep = 'toss';
+              this._showOnboardingHint('toss');
+            } else if (d >= 22 && this._onboardingHintStep !== 'drive') {
+              this._onboardingHintStep = 'drive';
+              this._showOnboardingHint('drive');
+            }
+          }
+        }
 
         // Continuous Diurnal Cycle, Atmosphere, Auto-Headlights & Lighting
         this.updateDayNightCycle(dt);
