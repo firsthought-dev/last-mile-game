@@ -40,18 +40,28 @@
 
 ---
 
+## MANDATORY COMPULSION: Continuous Vault Maintenance
+
+> **NON-NEGOTIABLE FOR ALL SESSIONS AND AGENTS:**
+> Updating this Obsidian vault is a mandatory hard requirement on every unit of work.
+> Every session MUST keep `Daily/`, `Dev Logs/`, `Boards/Engineering.md`, `Projects/`,
+> and `Architecture/` fully synchronized before and after completing tasks.
+
+---
+
 ## Auto-Save Rules
 
-Claude should auto-save the following **without asking**:
-- Decisions made in conversation → relevant project note + daily note
-- New people mentioned → People/ (create stub if needed)
-- Tasks assigned or committed to → kanban board + Tasks/ note
-- Dev work done → Dev Logs/ + project note + daily note
-- Mentions/recognition → Mentions Log + person's note + daily note
-- Completed tasks → move on kanban to ✅ Done
+Claude should auto-save the following **automatically and without asking**:
+- **Dev work done / Bug fixed** → `Dev Logs/` (`YYYY-MM-DD - Description.md`) + `Projects/` note + `Daily/YYYY-MM-DD.md`
+- **Completed tasks** → Move immediately on `Boards/Engineering.md` to `✅ Done`
+- **New tasks / Backlog** → Add to `Boards/Engineering.md` `📥 Backlog` or `🏃 Sprint`
+- **New architecture/systems** → Create/update note under `Architecture/`
+- **Decisions made in conversation** → Relevant `Projects/` note (Key Decisions) + `Daily/` note
+- **New people mentioned** → `People/` (create stub if needed)
+- **Mentions/recognition** → Mentions Log + person's note + daily note
 
 Claude should **ask before saving**:
-- Anything in Finances/ with personal financial data
+- Anything in `Finances/` with personal financial data
 - Anything involving deleting or archiving an existing note
 
 ---

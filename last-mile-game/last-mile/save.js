@@ -125,8 +125,10 @@
       // distinguishable if a later fail path wants to record one.
       stars: {},
 
+      selectedVehicle: 'cycle', // Active vehicle in fleet (defaults to free starter cycle)
+
       unlocks: {
-        vehicles: ['cycle', 'musclecoupe'],  // everything currently offered in the hub
+        vehicles: ['cycle'],  // musclecoupe must be purchased (see purchase('vehicles','musclecoupe',6000))
         cities: ['mumbai']
       }
     };
@@ -154,6 +156,12 @@
     for (const k of Object.keys(out.career)) out.career[k] = safeNum(out.career[k], 0);
     if (!Array.isArray(out.unlocks.vehicles)) out.unlocks.vehicles = base.unlocks.vehicles;
     if (!Array.isArray(out.unlocks.cities)) out.unlocks.cities = base.unlocks.cities;
+
+    // Defensively clamp selectedVehicle to an unlocked vehicle (never allow locked vehicle on boot/reload)
+    const validVehicles = out.unlocks.vehicles;
+    if (typeof out.selectedVehicle !== 'string' || validVehicles.indexOf(out.selectedVehicle) === -1) {
+      out.selectedVehicle = validVehicles[0] || 'cycle';
+    }
 
     return out;
   }
@@ -377,6 +385,17 @@
       };
     },
 
+    recordShift(earnings) {
+      const e = Math.max(0, Math.round(safeNum(earnings, 0)));
+      profile.career.shifts += 1;
+      if (e > profile.career.bestShiftEarnings) {
+        profile.career.bestShiftEarnings = e;
+      }
+      touch();
+      writeNow();
+      return { shifts: profile.career.shifts, bestShiftEarnings: profile.career.bestShiftEarnings };
+    },
+
     starsFor(orderId) { return safeNum(profile.stars[String(orderId)], 0); },
 
     addDistance(km) {
@@ -430,6 +449,36 @@
     },
 
     dailyStreak() { return profile.daily.streak; },
+
+    // ---- active vehicle selection -----------------------------------------
+    // Guaranteed to always return an unlocked vehicle. If the profile holds
+    // a corrupted, missing, or locked vehicle key, it automatically falls back
+    // to the player's first unlocked starter vehicle.
+    selectedVehicle() {
+      if (!this.isUnlocked('vehicles', profile.selectedVehicle)) {
+        profile.selectedVehicle = (profile.unlocks.vehicles && profile.unlocks.vehicles[0]) || 'cycle';
+        touch();
+      }
+      return profile.selectedVehicle;
+    },
+
+    setSelectedVehicle(id) {
+      if (this.isUnlocked('vehicles', id)) {
+        profile.selectedVehicle = id;
+        touch();
+        return true;
+      }
+      return false;
+    },
+
+    defaultVehicle() {
+      return (profile.unlocks.vehicles && profile.unlocks.vehicles[0]) || 'cycle';
+    },
+
+    unlocked(kind) {
+      const list = profile.unlocks[kind];
+      return Array.isArray(list) ? list.slice() : [];
+    },
 
     // ---- unlocks ---------------------------------------------------------
     // The mechanism exists and is persisted; what is actually gated is a
@@ -487,5 +536,6 @@
   };
 
   global.ShiplypSave = Save.init();
+  global.Career = global.ShiplypSave;
 
 })(typeof window !== 'undefined' ? window : this);

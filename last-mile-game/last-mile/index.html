@@ -6,10 +6,10 @@
   <title>Shiplyp: Last Mile — Scenic Courier 3D Action Driving</title>
   <meta name="description" content="Action-packed 3D last-mile courier delivery driving game across scenic winding highways, misty ridges, and bustling fictional districts.">
   
-  <!-- Modern Typography -->
+  <!-- Game Typography: Pack 4 Comic & Arcade Dispatch -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,500;0,600;0,700;0,800;0,900;1,700&family=Bebas+Neue&family=Bungee&family=Chakra+Petch:ital,wght@0,600;0,700;1,700&family=Russo+One&display=swap" rel="stylesheet">
   
   <!-- Three.js 3D Library with Multi-CDN Fallback -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -105,24 +105,59 @@
           <button id="btn-hud-sound" class="slowroads-icon-btn" title="Toggle All Audio" style="display:none;" tabindex="-1">MUTE</button>
         </div>
         <div class="slowroads-sys-btns">
-          <div class="slowroads-status-pill" id="hud-fps-pill"><span id="hud-fps-value">60</span> FPS</div>
+          <button id="btn-hud-photo" class="slowroads-icon-btn" title="Scenic Postcard / Photo Mode [P]" tabindex="-1">PHOTO</button>
           <button id="btn-hud-tod" class="slowroads-status-pill" title="Cycle Time of Day [T]" tabindex="-1"><span id="label-tod">DAY</span></button>
+          <div class="slowroads-status-pill" id="hud-fps-pill"><span id="hud-fps-value">60</span> FPS</div>
         </div>
       </div>
 
       <!-- Touch Controls: shown on touch/coarse-pointer devices -->
       <div id="touch-controls" class="touch-controls" aria-hidden="true">
-        <!-- Left: Steering Cluster -->
+        <!-- Drag-to-Steer Zone (cycle only): full left-half swipe area -->
+        <div id="touch-drag-steer" class="touch-drag-steer" aria-label="Drag to Steer">
+          <div class="drag-steer-indicator"></div>
+        </div>
+
+        <!-- Left: Steering Cluster (car/truck only) -->
         <div class="touch-steer-cluster">
           <button id="touch-steer-left" class="touch-btn touch-steer-btn" aria-label="Steer Left">◀</button>
           <button id="touch-steer-right" class="touch-btn touch-steer-btn" aria-label="Steer Right">▶</button>
         </div>
 
-        <!-- Utility Bar: Quick Actions (Recenter, Camera, Autopilot) -->
+        <!-- Utility Bar: Primary Autopilot & Collapsible Quick Tools -->
         <div class="touch-utility-cluster">
-          <button id="touch-btn-recenter" class="touch-btn touch-util-btn" title="Recenter Car">RECENTER</button>
-          <button id="touch-btn-cam" class="touch-btn touch-util-btn" title="Camera View">CAM</button>
-          <button id="touch-btn-autopilot" class="touch-btn touch-util-btn" title="Toggle Autopilot">AUTO</button>
+          <button id="touch-btn-autopilot" class="touch-btn touch-util-btn touch-btn-auto" title="Autopilot (AI Driver)" aria-pressed="false">
+            <span class="util-icon">🤖</span>
+            <span class="util-text-always">AUTO</span>
+          </button>
+          <button id="touch-btn-tools" class="touch-btn touch-util-btn touch-btn-tools" title="Quick Tools Menu" aria-expanded="false">
+            <span class="util-icon">⚙️</span>
+            <span class="util-text-always">TOOLS</span>
+          </button>
+
+          <!-- Collapsible Quick Tools Popover Drawer -->
+          <div id="touch-tools-drawer" class="touch-tools-drawer" style="display: none;">
+            <div class="tools-drawer-header">
+              <span class="tools-drawer-title">QUICK TOOLS</span>
+              <button id="touch-tools-close" class="tools-drawer-close" aria-label="Close Tools">✕</button>
+            </div>
+            <button id="touch-btn-cam" class="tools-drawer-item" title="Switch Camera View">
+              <span class="drawer-item-icon">🎥</span>
+              <span class="drawer-item-label">CAMERA VIEW</span>
+            </button>
+            <button id="touch-btn-recenter" class="tools-drawer-item" title="Recenter on Road">
+              <span class="drawer-item-icon">↺</span>
+              <span class="drawer-item-label">RECENTER CAR</span>
+            </button>
+            <button id="touch-btn-photo" class="tools-drawer-item" title="Scenic Postcard Photo">
+              <span class="drawer-item-icon">📷</span>
+              <span class="drawer-item-label">PHOTO MODE</span>
+            </button>
+            <button id="touch-btn-horn" class="tools-drawer-item" title="Sound Horn / Bell">
+              <span class="drawer-item-icon">🔔</span>
+              <span class="drawer-item-label">HORN / BELL</span>
+            </button>
+          </div>
         </div>
 
         <!-- Right: Pedals & Express Drop Cluster -->
@@ -177,7 +212,7 @@
             <span class="telemetry-unit">KM/H</span>
           </div>
           <div class="telemetry-sub-row">
-            <span class="telemetry-gear">DRIVE</span>
+            <span id="telemetry-gear" class="telemetry-gear">DRIVE</span>
             <span class="meta-sep">/</span>
             <span id="telemetry-distance" class="telemetry-trip">0.0 KM</span>
           </div>
@@ -247,13 +282,13 @@
     </div>
   </div>
 
-  <!-- Save layer + main game engine bundle, with absolute cache busting.
+  <!-- Save layer + ads SDK + main game engine bundle, with absolute cache busting.
        async=false is load-bearing: dynamically inserted scripts default to
-       async, which would let game.js run before save.js and leave
-       window.ShiplypSave undefined at engine construction. Setting it false
+       async, which would let game.js run before save.js/ads.js and leave
+       window.ShiplypSave/ShiplypAds undefined at engine construction. Setting it false
        restores document-order execution while keeping the cache-buster. -->
   <script>
-    ['save.js', 'game.js'].forEach(function (src) {
+    ['save.js', 'ads.js', 'game.js'].forEach(function (src) {
       const s = document.createElement('script');
       s.src = src + '?t=' + Date.now();
       s.async = false;

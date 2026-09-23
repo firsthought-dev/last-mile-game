@@ -10,6 +10,7 @@ mkdir -p "$ASSETS_DIR"
 cp "$DIR/index.html" "$ASSETS_DIR/"
 cp "$DIR/game.js" "$ASSETS_DIR/"
 cp "$DIR/save.js" "$ASSETS_DIR/"
+cp "$DIR/ads.js" "$ASSETS_DIR/"
 cp "$DIR/style.css" "$ASSETS_DIR/"
 
 # --delete, because this used to be `cp -r`, which only ever adds and

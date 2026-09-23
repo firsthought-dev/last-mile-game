@@ -137,7 +137,7 @@
   }, 'MuscleCoupeAsset');
 
   // 0g. DELIVERY CYCLE — Blender-exported GLB with corrected Y-up orientation.
-  const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?v=' + ASSET_VERSION, () => {}, 'DeliveryCycleAsset');
+  const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?t=' + Date.now(), () => {}, 'DeliveryCycleAsset');
 
   // 0h. COURIER — rigged, animated character (Mixamo base, retextured) shared by
   // the on-foot player walker and crosser NPCs, so both use one consistent model
@@ -745,6 +745,14 @@
       setTimeout(() => this.playTone(1174, 'sine', 0.2, 0.20), 160);
     }
 
+    playDeliverySuccess() {
+      if (this.suspended || this.sfxMuted) return;
+      this.playTone(523, 'sine', 0.12, 0.22);
+      setTimeout(() => this.playTone(659, 'sine', 0.12, 0.22), 90);
+      setTimeout(() => this.playTone(784, 'sine', 0.15, 0.25), 180);
+      setTimeout(() => this.playTone(1046, 'sine', 0.25, 0.28), 270);
+    }
+
 
     playCrash() {
       if (this.suspended || this.sfxMuted) return;
@@ -768,6 +776,52 @@
       this._lastScrapeTime = now;
       this.playTone(180, 'triangle', 0.12, 0.18);
       setTimeout(() => this.playTone(120, 'sine', 0.15, 0.15), 40);
+    }
+
+    playHorn(vehicleType = 'musclecoupe') {
+      if (this.suspended || this.sfxMuted) return;
+      const ctx = this.ensure();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      if (this._lastHornTime && now - this._lastHornTime < 0.28) return;
+      this._lastHornTime = now;
+
+      if (vehicleType === 'cycle' || vehicleType === 'scooter') {
+        // Bicycle Bell: classic high-pitch twin-chime "ting-ting"
+        const ringBell = (t, freq) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(0.35, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+          osc.connect(gain);
+          gain.connect(this.masterFilter || ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.2);
+        };
+        ringBell(now, 1760);        // A6
+        ringBell(now + 0.08, 2093);  // C7
+        ringBell(now + 0.18, 1760);  // A6
+      } else {
+        // Automotive Dual-Tone Electric Horn: 392Hz (G4) + 494Hz (B4)
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc1.type = 'sawtooth';
+        osc2.type = 'triangle';
+        osc1.frequency.setValueAtTime(392, now);
+        osc2.frequency.setValueAtTime(494, now);
+        gain.gain.setValueAtTime(0.26, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(this.masterFilter || ctx.destination);
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 0.35);
+        osc2.stop(now + 0.35);
+      }
     }
 
     // Procedural Driving Ambience (Engine load pitch & wind noise filter)
@@ -1039,6 +1093,7 @@
   if (!Career && typeof console !== 'undefined') {
     console.warn('[Shiplyp] save.js not loaded — career progress will not persist this session.');
   }
+  const Ads = (typeof window !== 'undefined' && window.ShiplypAds) ? window.ShiplypAds : null;
   window.sound = sound;
   window.RADIO_PLAYLISTS = RADIO_PLAYLISTS;
   window.noteToFreq = noteToFreq;
@@ -1403,11 +1458,12 @@
       swift: { id: 'swift', name: 'Raftaar GT Hatch', maxSpeed: 44.0, accel: 18.0, drag: 0.80, brake: 30.0 },
       chotahathi: { id: 'chotahathi', name: 'Gaja 500 Mini Truck', maxSpeed: 30.0, accel: 12.0, drag: 0.85, brake: 26.0 },
       musclecoupe: { id: 'musclecoupe', name: 'Muscle Coupe', maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0 },
-      cycle: { id: 'cycle', name: 'Delivery Cycle', maxSpeed: 22.0, accel: 8.0, drag: 0.90, brake: 18.0 }
+      // maxSpeed = end of the ride-time ramp (52 km/h); baseSpeed = start of it (32 km/h). Both m/s.
+      cycle: { id: 'cycle', name: 'Delivery Cycle', maxSpeed: 14.44, baseSpeed: 8.89, rampSeconds: 120, accel: 6.5, drag: 0.55, brake: 14.0 }
     },
 
     DIFFICULTY_TIERS: {
-      easy: { id: 'easy', name: 'Relaxed Shift', timeLimit: 55.0, minHouseDist: 4.5, maxHouseDist: 7.0, tossRadius: 7.5, payoutMult: 1.0 },
+      easy: { id: 'easy', name: 'Relaxed Shift', timeLimit: 55.0, minHouseDist: 5.2, maxHouseDist: 8.0, tossRadius: 7.5, payoutMult: 1.0 },
       medium: { id: 'medium', name: 'City Standard', timeLimit: 36.0, minHouseDist: 7.0, maxHouseDist: 14.0, tossRadius: 5.2, payoutMult: 1.5 },
       hard: { id: 'hard', name: 'Rush Hour Express', timeLimit: 22.0, minHouseDist: 10.0, maxHouseDist: 25.0, tossRadius: 3.6, payoutMult: 2.5 }
     },
@@ -6403,21 +6459,24 @@
       if (!Object.keys(src).length) return null;
 
       const SKIN   = [0xfff0e0, 0xf0d1ab, 0xd9a273, 0xc68a62, 0xa9714b, 0x8d5524];
-      const TOP    = [0xd97706, 0x2563eb, 0x059669, 0xc2410c, 0xca8a04, 0xe7e5e4, 0x0f766e, 0x9f1239];
-      const BOTTOM = [0x334155, 0x1e293b, 0x3f3f46, 0x6b7280, 0x854d0e, 0x475569];
+      const TOP    = [0xd97706, 0x2563eb, 0x059669, 0xc2410c, 0xca8a04, 0xe7e5e4, 0x0f766e, 0x9f1239,
+                      0x7c3aed, 0x0891b2, 0xb91c1c, 0x4338ca, 0x166534, 0xfbbf24, 0x64748b, 0xf472b6];
+      const BOTTOM = [0x334155, 0x1e293b, 0x3f3f46, 0x6b7280, 0x854d0e, 0x475569, 0x1e3a5f, 0x44403c];
       const HAIR   = [0x121011, 0x1c1512, 0x3b2417, 0x5c3a21, 0x6b7280, 0xd6d3d1];
-      const SHOES  = [0x2a2421, 0x1c1917, 0x44403c, 0x7c2d12];
+      const SHOES  = [0x2a2421, 0x1c1917, 0x44403c, 0x7c2d12, 0x1e293b, 0x78350f];
 
+      const pick = (arr, seed) => arr[Math.abs(seed) % arr.length];
       const variants = [];
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 24; i++) {
         const set = {};
+        const s1 = i * 7 + 3, s2 = i * 13 + 5, s3 = i * 11 + 7, s4 = i * 17 + 1, s5 = i * 19 + 9;
         for (const name in src) {
           const m = src[name].clone();
-          if (name === 'Bodymat') m.color.set(SKIN[i % SKIN.length]);
-          else if (name === 'Topmat') m.color.set(TOP[i % TOP.length]);
-          else if (name === 'Bottommat') m.color.set(BOTTOM[i % BOTTOM.length]);
-          else if (name === 'Hairmat') m.color.set(HAIR[i % HAIR.length]);
-          else if (name === 'Shoesmat') m.color.set(SHOES[i % SHOES.length]);
+          if (name === 'Bodymat') m.color.set(pick(SKIN, s1));
+          else if (name === 'Topmat') m.color.set(pick(TOP, s2));
+          else if (name === 'Bottommat') m.color.set(pick(BOTTOM, s3));
+          else if (name === 'Hairmat') m.color.set(pick(HAIR, s4));
+          else if (name === 'Shoesmat') m.color.set(pick(SHOES, s5));
           set[name] = m;
         }
         variants.push(set);
@@ -6462,21 +6521,16 @@
     // Shared by the initial build and the streaming builder.
     spawnPedestrianCluster(pt, normal, tangent, count) {
       if (!this.foliageGroup) return 0;
-      const clusterSize = count || Math.floor(this.prng.range(2, 5));
+      const clusterSize = count || Math.floor(this.prng.range(1, 4));
       let spawned = 0;
       for (let c = 0; c < clusterSize; c++) {
         const mesh = this.buildPedestrian();
-        if (!mesh) break; // model not loaded yet — skip rather than spawn boxes
+        if (!mesh) break;
 
-        // On the shoulder, not lost in the field. This was
-        // ROAD_WIDTH*0.5 + 3.5 + rand(0,4) => 7.2-11.2m out, well past the
-        // 5.5m verge, which read as distant scenery rather than a populated
-        // roadside.
         const side = this.prng.next() > 0.5 ? 1 : -1;
-        const lat = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.0 + this.prng.range(0, 1.8));
-        const range = this.prng.range(10.0, 22.0);
-        const jitter = this.prng.range(-6.0, 6.0);
-        // Half the cluster walks against the flow so a verge isn't a parade.
+        const lat = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.0 + this.prng.range(0, 2.2));
+        const range = this.prng.range(14.0, 30.0);
+        const jitter = this.prng.range(-18.0, 18.0);
         const dir = this.prng.next() > 0.5 ? 1 : -1;
 
         const startPos = pt.clone().addScaledVector(tangent, jitter - range * dir).addScaledVector(normal, lat);
@@ -6744,7 +6798,6 @@
         const curLat = THREE.MathUtils.lerp(c.latStart, c.latEnd, c.progress);
         c.mesh.position.x = THREE.MathUtils.lerp(c.start.x, c.end.x, c.progress);
         c.mesh.position.z = THREE.MathUtils.lerp(c.start.z, c.end.z, c.progress);
-        c.mesh.position.y = this.groundHeightAt(c.pt, c.mesh.position, curLat) + 0.15;
 
         // Distance cull: skip expensive limb-swing math for far-away crossers.
         const distSq = vehiclePos.distanceToSquared(c.mesh.position);
@@ -6753,6 +6806,22 @@
           continue;
         }
         c.mesh.visible = true;
+
+        // Ground height must come from the road point nearest to where the
+        // walker IS, not c.pt (its spawn point): roadside walkers patrol up to
+        // ~50m along the road, and on a grade the spawn point's height is
+        // metres off there, so they floated or sank.
+        let footY;
+        try {
+          const near = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(c.mesh.position.x, c.mesh.position.z, 40.0) : null;
+          footY = near
+            ? this.groundHeightAt(near.point, c.mesh.position, near.dist)
+            : this.groundHeightAt(c.pt, c.mesh.position, curLat);
+        } catch (err) {
+          console.error('Crosser ground height failed:', err);
+          footY = this.groundHeightAt(c.pt, c.mesh.position, curLat);
+        }
+        c.mesh.position.y = footY + 0.15;
 
         if (c.mesh.userData.mixer) {
           // Animation LOD: skinning a 67-bone rig is the expensive half, and
@@ -8174,7 +8243,7 @@
   // 6. ENHANCED INDIAN SPORTS/DELIVERY VEHICLES
   // --------------------------------------------------------------------------
   class VehicleController {
-    constructor(scene, vehicleType = 'car') {
+    constructor(scene, vehicleType = 'cycle') {
       this.scene = scene;
       this.vehicleType = vehicleType;
       this.mesh = new THREE.Group();
@@ -8216,9 +8285,13 @@
       this.distanceTraveled = 0;
       this.isAutodrive = false; // Default: 100% MANUAL DRIVING
       this.splineProgress = 0.008;
+      this.cycleRideTime = 0;
+      this.cycleSteerSpeedPenalty = 0;
+      this.smoothSteerInput = 0;
 
       this.applyVehicleConfig();
       this.buildModel();
+      document.body.classList.toggle('vehicle-cycle', vehicleType === 'cycle' || vehicleType === 'scooter');
     }
 
     applyVehicleConfig() {
@@ -8234,6 +8307,7 @@
         this.vehicleType = type;
         this.applyVehicleConfig();
         this.buildModel();
+        document.body.classList.toggle('vehicle-cycle', type === 'cycle' || type === 'scooter');
       }
     }
 
@@ -8555,63 +8629,20 @@
 
       } else if (this.vehicleType === 'cycle' && DeliveryCycleAsset.template) {
         const cycleModel = DeliveryCycleAsset.clone();
-        // Authored nose-toward--Y in Blender, so the Y-up GLB export already lands the
-        // nose on +Z road-forward. No rotation correction needed.
-        cycleModel.scale.setScalar(1.0);
+        // Blender -Y forward exports to glTF +Z forward, so no rotation correction is needed.
         this.mesh.add(cycleModel);
+        const isWheelNode = (o) => !!o && /^Wheel_(Front|Rear)/.test(o.name || '');
         cycleModel.traverse(child => {
           if (child.isMesh) {
             child.castShadow = true;
             child.receiveShadow = true;
-            // Hide the static placeholder cargo box in the trolley so our dynamic depleting stack takes its place!
-            if (child.name && (child.name.includes('cargo_trolley') || child.name.includes('Canvas') || child.name.includes('Leather'))) {
-              if (child.name === 'cargo_trolley005_3' || child.name === 'cargo_trolley005_4') {
-                child.visible = false;
-              }
-            }
           }
+          // A multi-material wheel loads as a group plus one mesh per material, and all
+          // share the name prefix; spin only the outermost node or the wheel turns twice.
+          if (isWheelNode(child) && !isWheelNode(child.parent)) this.wheels.push(child);
         });
-
-        // Dynamic Depleting Parcel Stack on the Cargo Trolley:
-        // Positions correspond to the wooden trolley bed (X: +-0.18, Y: 0.58-0.95, Z: -1.24 in Three.js road coordinates)
+        // The rear box is a closed thermal box, so there is no open parcel stack to deplete.
         this.trolleyParcels = [];
-        const parcelGroup = new THREE.Group();
-        const parcelDefs = [
-          // Bottom layer (4 sturdy parcels)
-          { size: [0.26, 0.18, 0.28], pos: [-0.14, 0.52, -1.10], col: 0xd97706, tape: 0x1e293b },
-          { size: [0.24, 0.19, 0.28], pos: [0.14, 0.52, -1.10],  col: 0xb45309, tape: 0xf59e0b },
-          { size: [0.25, 0.17, 0.26], pos: [-0.13, 0.52, -1.38], col: 0xc2410c, tape: 0x1e293b },
-          { size: [0.24, 0.18, 0.27], pos: [0.13, 0.52, -1.38],  col: 0xca8a04, tape: 0x475569 },
-          // Middle layer (3 parcels)
-          { size: [0.28, 0.16, 0.26], pos: [-0.08, 0.69, -1.14], col: 0x0284c7, tape: 0xffffff }, // Express Blue
-          { size: [0.26, 0.16, 0.26], pos: [0.10, 0.69, -1.32],  col: 0x16a34a, tape: 0xd97706 }, // Organic Green
-          { size: [0.22, 0.15, 0.24], pos: [-0.10, 0.69, -1.36], col: 0xd97706, tape: 0x1e293b },
-          // Top tier parcels (deplete first as courier delivers!)
-          { size: [0.22, 0.14, 0.22], pos: [0.00, 0.84, -1.22],  col: 0xe11d48, tape: 0xffffff }, // Fragile Red
-          { size: [0.18, 0.13, 0.20], pos: [-0.09, 0.83, -1.18], col: 0xf59e0b, tape: 0x1e293b }
-        ];
-
-        parcelDefs.forEach((p, idx) => {
-          const pMesh = new THREE.Group();
-          const box = new THREE.Mesh(
-            new THREE.BoxGeometry(...p.size),
-            new THREE.MeshStandardMaterial({ color: p.col, roughness: 0.75, metalness: 0.05 })
-          );
-          box.castShadow = true;
-          box.receiveShadow = true;
-          pMesh.add(box);
-
-          // Realistic cross packaging strap / tape
-          const tapeGeom = new THREE.BoxGeometry(p.size[0] * 1.02, p.size[1] * 1.02, p.size[2] * 0.18);
-          const tapeMesh = new THREE.Mesh(tapeGeom, new THREE.MeshBasicMaterial({ color: p.tape }));
-          pMesh.add(tapeMesh);
-
-          pMesh.position.set(...p.pos);
-          parcelGroup.add(pMesh);
-          this.trolleyParcels.push(pMesh);
-        });
-
-        this.mesh.add(parcelGroup);
       } else if (this.vehicleType === 'cycle') {
         if (DeliveryCycleAsset.pendingControllers.indexOf(this) === -1) {
           DeliveryCycleAsset.pendingControllers.push(this);
@@ -8841,17 +8872,19 @@
 
       let climateGrip = terrainGrip;
       if (isRain) {
-        if (this.vehicleType === 'cycle') climateGrip *= 0.48;
+        if (this.vehicleType === 'cycle') climateGrip *= 0.62;
         else climateGrip *= 0.68;
       }
 
-      const windDrag = isWind ? (this.vehicleType === 'cycle' ? 2.8 : 1.4) : 0.0;
+      const windDrag = isWind ? (this.vehicleType === 'cycle' ? 1.8 : 1.4) : 0.0;
+
+      // 1. Throttle / Acceleration, Service Brakes & Emergency Handbrake
+      const isBicycle = (this.vehicleType === 'cycle' || this.vehicleType === 'scooter');
 
       // Health degradation penalty on top speed & engine performance
       const healthFactor = (this.health >= 50) ? 1.0 : Math.max(0.25, 0.4 + 0.6 * (this.health / 50));
-      const effectiveMaxSpeed = (this.health <= 0) ? 0.0 : Math.max(8.0, (this.maxSpeed - windDrag * 3.5) * healthFactor);
-
-      // 1. Throttle / Acceleration, Service Brakes & Emergency Handbrake
+      const speedFloor = isBicycle ? 3.0 : 8.0;
+      const effectiveMaxSpeed = (this.health <= 0) ? 0.0 : Math.max(speedFloor, (this.maxSpeed - windDrag * (isBicycle ? 0.8 : 3.5)) * healthFactor);
       const isDrifting = !!keys.space;
       const driftGripMult = isDrifting ? 0.40 : 1.0; // 60% friction reduction during power-slide drift
 
@@ -8902,7 +8935,14 @@
 
         // Curve-adaptive speed limit: slow down automatically when entering sharp turns
         const cornerSpeedFactor = THREE.MathUtils.clamp(1.0 - (turnDeflection / Math.PI) * 1.5, 0.35, 1.0);
-        const autoTargetSpeed = effectiveMaxSpeed * 0.72 * cornerSpeedFactor;
+        let autoMaxSpeed = effectiveMaxSpeed;
+        if (isBicycle) {
+          this.cycleRideTime += dt;
+          const cycleCfg = CONFIG.VEHICLES.cycle;
+          const escalation = Math.min(this.cycleRideTime / cycleCfg.rampSeconds, 1.0);
+          autoMaxSpeed = Math.min(effectiveMaxSpeed, cycleCfg.baseSpeed + (cycleCfg.maxSpeed - cycleCfg.baseSpeed) * escalation);
+        }
+        const autoTargetSpeed = autoMaxSpeed * (isBicycle ? 0.90 : 0.72) * cornerSpeedFactor;
 
         if (this.speed < autoTargetSpeed) {
           this.speed += this.accel * dt;
@@ -8957,11 +8997,23 @@
             this.speed += (this.brake || 30.0) * dt * 2.4;
             if (this.speed >= -0.08) this.speed = 0;
           } else if (this.vehicleType === 'cycle') {
-            // Bicycle pedaling power curve: punchy cadence power band (16-26 km/h) with effortless coasting
-            const cycleMax = Math.min(26.0, effectiveMaxSpeed);
-            const cadenceRatio = Math.max(0.15, 1.0 - Math.pow(this.speed / cycleMax, 1.8));
-            const cyclePush = (this.accel * 1.4) * cadenceRatio * climateGrip;
-            this.speed = Math.min(cycleMax, this.speed + cyclePush * dt);
+            try {
+              this.cycleRideTime += dt;
+              const cycleCfg = CONFIG.VEHICLES.cycle;
+              const escalation = Math.min(this.cycleRideTime / cycleCfg.rampSeconds, 1.0);
+              const targetBaseSpeed = cycleCfg.baseSpeed + (cycleCfg.maxSpeed - cycleCfg.baseSpeed) * escalation;
+
+              // cycleSteerSpeedPenalty is updated in the steering block below (once per step).
+              const cycleMax = Math.min(effectiveMaxSpeed, targetBaseSpeed * (1.0 - (this.cycleSteerSpeedPenalty || 0)));
+              const cadenceRatio = Math.max(0.2, 1.0 - Math.pow(Math.min(1.0, this.speed / Math.max(0.1, cycleMax)), 1.5));
+              const cyclePush = this.accel * cadenceRatio * climateGrip;
+              this.speed = Math.min(cycleMax, this.speed + cyclePush * dt);
+              if (this.speed > cycleMax) {
+                this.speed = Math.max(cycleMax, this.speed - (this.drag * 1.5 + 0.5) * dt);
+              }
+            } catch (err) {
+              console.error('Error in cycle speed calculation:', err);
+            }
           } else {
             // Multi-gear progressive torque for cars: punchy 1st/2nd gear low-end torque, tapering at high gear
             const speedRatio = THREE.MathUtils.clamp(this.speed / effectiveMaxSpeed, 0, 1);
@@ -8972,46 +9024,102 @@
         } else {
           // Natural coasting / drag; clear hold mode so fresh press can reverse
           this._downBrakingFromForward = false;
-          const rollingDrag = (this.vehicleType === 'cycle') ? this.drag * 0.45 : this.drag * 0.85;
+          const rollingDrag = (this.vehicleType === 'cycle') ? this.drag * 0.30 : this.drag * 0.85;
           this.speed *= Math.exp(-rollingDrag * dt);
           if (Math.abs(this.speed) < 0.08) this.speed = 0;
         }
 
-        // 2. FREE STEERING — turns the car's actual heading, not a lateral lane-offset.
-        const isBicycle = (this.vehicleType === 'cycle' || this.vehicleType === 'scooter');
-        const baseTurnRate = isBicycle ? 1.85 : 1.55;
-        const turnRateLimit = baseTurnRate * (isDrifting ? 1.4 : 1.0) * climateGrip;
-        const speedScale = THREE.MathUtils.clamp(Math.abs(this.speed) / (isBicycle ? 4.0 : 6.0), 0.25, 1.0);
-        const reverseFlip = this.speed < -0.05 ? -1 : 1;
-        const turnRate = turnRateLimit * speedScale * reverseFlip;
+        // 2. FREE STEERING — completely separate physics for cycle vs car.
+        if (isBicycle) {
+          // ============================================================
+          // BICYCLE STEERING — smooth progressive analog handlebar model.
+          // Fluid path-following with progressive steering inertia.
+          // ============================================================
 
-        const steerResponse = isBicycle ? 0.28 : (isDrifting ? 0.24 : 0.18);
-        const steerLimit = (isBicycle ? 0.48 : (isDrifting ? 0.65 : 0.42)) * climateGrip;
-        if (keys.left || keys.a) {
-          this.heading += turnRate * dt;
-          this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, steerLimit, steerResponse);
-        } else if (keys.right || keys.d) {
-          this.heading -= turnRate * dt;
-          this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, -steerLimit, steerResponse);
+          // Analog input: keys.steerInput is −1 to +1 from touch drag zone;
+          // keyboard left/right feed as ±1.0 digital fallback.
+          let rawSteer = keys.steerInput || 0;
+          if (!rawSteer) {
+            if (keys.left || keys.a) rawSteer = 1.0;
+            else if (keys.right || keys.d) rawSteer = -1.0;
+          }
+
+          // Smooth steering input filter to eliminate sudden snap/jerks on keyboard and touch
+          const steerFilterRate = rawSteer !== 0 ? 8.5 : 12.0;
+          this.smoothSteerInput = THREE.MathUtils.lerp(this.smoothSteerInput || 0, rawSteer, 1.0 - Math.exp(-steerFilterRate * dt));
+
+          // Steer penalty tracking while coasting as well
+          const steerIntensity = Math.min(1.0, Math.abs(rawSteer));
+          if (steerIntensity > 0.05) {
+            const targetPenalty = steerIntensity * 0.15;
+            this.cycleSteerSpeedPenalty = THREE.MathUtils.lerp(this.cycleSteerSpeedPenalty || 0, targetPenalty, 0.20);
+          } else {
+            this.cycleSteerSpeedPenalty = Math.max(0, (this.cycleSteerSpeedPenalty || 0) - (dt / 0.5) * 0.15);
+          }
+
+          // Bicycle turn rate: nimble and progressive, perfectly balanced for road curves
+          const cycleBaseTurn = 1.65;
+          const absSpd = Math.abs(this.speed);
+          const lowSpeedRamp = THREE.MathUtils.clamp(absSpd / 2.0, 0.30, 1.0);
+          const highSpeedTaper = THREE.MathUtils.clamp(1.0 - (absSpd - 10.0) / 18.0, 0.50, 1.0);
+          const reverseFlip = this.speed < -0.05 ? -1 : 1;
+          const cycleTurnRate = cycleBaseTurn * lowSpeedRamp * highSpeedTaper * reverseFlip * climateGrip;
+
+          // Apply heading change with smooth progressive steering
+          this.heading += this.smoothSteerInput * cycleTurnRate * dt;
+
+          // Steer angle (cosmetic handlebar + lean): smooth natural response
+          const cycleSteerLimit = 0.50 * climateGrip;
+          const targetSteer = this.smoothSteerInput * cycleSteerLimit;
+          const steerLerpRate = 1.0 - Math.exp(-12.0 * dt);
+          this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, targetSteer, steerLerpRate);
+
         } else {
-          this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, 0, isBicycle ? 0.20 : 0.14);
+          // ============================================================
+          // CAR / TRUCK STEERING — heavier, grip-limited, drift-capable.
+          // ============================================================
+          const carBaseTurnRate = 1.55;
+          const carTurnRateLimit = carBaseTurnRate * (isDrifting ? 1.4 : 1.0) * climateGrip;
+          const carSpeedScale = THREE.MathUtils.clamp(Math.abs(this.speed) / 6.0, 0.25, 1.0);
+          const carReverseFlip = this.speed < -0.05 ? -1 : 1;
+          const carTurnRate = carTurnRateLimit * carSpeedScale * carReverseFlip;
+
+          const carSteerResponse = isDrifting ? 0.24 : 0.18;
+          const carSteerLimit = (isDrifting ? 0.65 : 0.42) * climateGrip;
+          if (keys.left || keys.a) {
+            this.heading += carTurnRate * dt;
+            this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, carSteerLimit, carSteerResponse);
+          } else if (keys.right || keys.d) {
+            this.heading -= carTurnRate * dt;
+            this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, -carSteerLimit, carSteerResponse);
+          } else {
+            this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, 0, 0.14);
+          }
         }
       }
 
-      // 2b. Pacejka-Style Progressive Tire Slip Friction & Drift Model
+      // 2b. Tire Slip Friction — separate models for bicycle vs car.
       let headingDelta = this.heading - this.velocityHeading;
       headingDelta = Math.atan2(Math.sin(headingDelta), Math.cos(headingDelta));
       this.driftAngle = headingDelta;
 
-      const B = 4.0, C = 1.35, D = 1.0;
-      const slipTireForce = D * Math.sin(C * Math.atan(B * Math.abs(headingDelta)));
-      const lateralEfficiency = THREE.MathUtils.clamp(1.0 - Math.abs(headingDelta) * 0.45, 0.25, 1.0);
-
-      const isBicycle = (this.vehicleType === 'cycle' || this.vehicleType === 'scooter');
-      const convergeRate = this.isAutodrive
-        ? 14.0
-        : (isBicycle ? 12.0 : (8.8 * climateGrip * driftGripMult * lateralEfficiency));
-      this.velocityHeading += headingDelta * (1 - Math.exp(-convergeRate * dt));
+      if (isBicycle) {
+        // Bicycle: tighter grip, less slide than a car, but with enough
+        // lag for satisfying momentum carry-through on direction changes.
+        // At low speed, nearly instant tracking; at high speed, slight drift.
+        const speedRatio = THREE.MathUtils.clamp(Math.abs(this.speed) / 20.0, 0, 1);
+        const cycleConverge = this.isAutodrive ? 14.0 : THREE.MathUtils.lerp(18.0, 8.0, speedRatio) * climateGrip;
+        this.velocityHeading += headingDelta * (1 - Math.exp(-cycleConverge * dt));
+      } else {
+        // Car: Pacejka-style progressive tire slip with drift capability
+        const B = 4.0, C = 1.35, D = 1.0;
+        const slipTireForce = D * Math.sin(C * Math.atan(B * Math.abs(headingDelta)));
+        const lateralEfficiency = THREE.MathUtils.clamp(1.0 - Math.abs(headingDelta) * 0.45, 0.25, 1.0);
+        const carConvergeRate = this.isAutodrive
+          ? 14.0
+          : (8.8 * climateGrip * driftGripMult * lateralEfficiency);
+        this.velocityHeading += headingDelta * (1 - Math.exp(-carConvergeRate * dt));
+      }
 
       // 3. Move freely along the car's actual direction of travel
       const moveDist = this.speed * dt;
@@ -9122,15 +9230,28 @@
         terrainRollJitter = Math.sin(Date.now() * 0.006) * 0.0022;
       }
 
-      // Authentic 2-wheel bicycle inward lean vs 4-wheel centrifugal body roll
+      // Bicycle inward lean vs car centrifugal body roll — separated.
       let dynamicRoll = 0;
       if (isBicycle) {
-        // Bicycle leans inward into the turn to counteract cornering forces:
-        const speedFactor = THREE.MathUtils.clamp(Math.abs(this.speed) / 12.0, 0.25, 1.0);
-        const inwardLean = -this.steerAngle * speedFactor * 0.38;
-        dynamicRoll = trueRoadRoll + inwardLean + terrainRollJitter;
+        // A cyclist leans relative to GRAVITY, not the road surface, so road
+        // banking only bleeds through slightly. The lean itself is the balance
+        // angle for the ACTUAL turn (player steer or a road bend on autopilot):
+        // tan(lean) = v * yawRate / g.
+        try {
+          const prevHeading = (this._leanPrevHeading === undefined) ? this.heading : this._leanPrevHeading;
+          const dHeading = Math.atan2(Math.sin(this.heading - prevHeading), Math.cos(this.heading - prevHeading));
+          this._leanPrevHeading = this.heading;
+          const rawYawRate = dt > 0 ? THREE.MathUtils.clamp(dHeading / dt, -3.0, 3.0) : 0;
+          this._leanYawRate = THREE.MathUtils.lerp(this._leanYawRate || 0, rawYawRate, 1.0 - Math.exp(-12.0 * dt));
+          const MAX_LEAN = 0.56; // 32 deg
+          const balanceLean = Math.atan((this.speed * this._leanYawRate) / 9.81);
+          const inwardLean = -THREE.MathUtils.clamp(balanceLean, -MAX_LEAN, MAX_LEAN);
+          dynamicRoll = trueRoadRoll * 0.12 + inwardLean + terrainRollJitter;
+        } catch (err) {
+          console.error('Cycle lean calculation failed:', err);
+          dynamicRoll = trueRoadRoll * 0.12 + terrainRollJitter;
+        }
       } else {
-        // 4-wheel car body rolls outward
         const centrifugalBodyRoll = this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.12;
         dynamicRoll = trueRoadRoll + centrifugalBodyRoll + terrainRollJitter;
       }
@@ -9140,14 +9261,14 @@
 
       // 2nd-Order Spring-Mass-Damper Suspension Filter
       const subDt = Math.min(dt, 0.05);
-      const omegaPitch = isBicycle ? 22.0 : 16.0;
-      const zetaPitch = 0.90;
+      const omegaPitch = isBicycle ? 13.0 : 16.0;
+      const zetaPitch = isBicycle ? 1.05 : 0.90;
       const pitchAccel = (omegaPitch * omegaPitch) * (targetPitchWithJitter - this.currentPitch) - 2.0 * zetaPitch * omegaPitch * this.pitchVelocity;
       this.pitchVelocity += pitchAccel * subDt;
       this.currentPitch += this.pitchVelocity * subDt;
 
-      const omegaRoll = isBicycle ? 24.0 : 16.0;
-      const zetaRoll = 0.88;
+      const omegaRoll = isBicycle ? 14.0 : 16.0;
+      const zetaRoll = isBicycle ? 1.05 : 0.88;
       const rollAccel = (omegaRoll * omegaRoll) * (targetRoll - this.currentRoll) - 2.0 * zetaRoll * omegaRoll * this.rollVelocity;
       this.rollVelocity += rollAccel * subDt;
       this.currentRoll += this.rollVelocity * subDt;
@@ -9160,16 +9281,46 @@
       this.mesh.rotateX(this.currentPitch);
       this.mesh.rotateZ(this.currentRoll);
 
-      // 4-Wheel Visual Dynamics:
-      // Turn front steering knuckles/wheels in yaw with Ackerman steering angle
-      if (this.frontWheels && this.frontWheels.length > 0) {
+      if (isBicycle) {
+        // ============================================================
+        // BICYCLE VISUAL DYNAMICS — purely rotational, never touches
+        // position.y (that's owned by the ground-height system).
+        // ============================================================
+        const absSpeed = Math.abs(this.speed);
+        const isPedaling = (keys.up || keys.w) && absSpeed > 0.5;
+        const time = performance.now() * 0.001;
+
+        // Realistic human pedaling cadence: ~65-85 RPM (1.1 - 1.45 Hz)
+        const pedalFreq = isPedaling ? THREE.MathUtils.lerp(1.1, 1.45, Math.min(absSpeed / 14.44, 1.0)) : 0;
+
+        // 1. Pedaling pitch rock: subtle organic forward-back nod during pedal strokes
+        if (isPedaling) {
+          const pitchAmp = THREE.MathUtils.lerp(0.004, 0.002, Math.min(absSpeed / 10.0, 1.0));
+          this.mesh.rotateX(Math.sin(time * pedalFreq * Math.PI * 2) * pitchAmp);
+        }
+
+        // 2. Pedaling lateral rock: gentle rhythmic side-to-side sway
+        if (isPedaling) {
+          const rockAmp = THREE.MathUtils.lerp(0.005, 0.0025, Math.min(absSpeed / 10.0, 1.0));
+          this.mesh.rotateZ(Math.sin(time * pedalFreq * 0.5 * Math.PI * 2) * rockAmp);
+        }
+
+        // 3. Handlebar counter-steer: subtle yaw when steering
+        if (Math.abs(this.steerAngle) > 0.01) {
+          this.mesh.rotateY(-this.steerAngle * 0.04);
+        }
+      }
+
+      // 4-Wheel Visual Dynamics (cars):
+      if (!isBicycle && this.frontWheels && this.frontWheels.length > 0) {
         this.frontWheels.forEach(w => {
           w.rotation.y = this.steerAngle * 0.85;
         });
       }
-      // Spin all 4 wheels along pitch axis with forward ground speed
+      // Spin all wheels along pitch axis with forward ground speed
       if (this.wheels && this.wheels.length > 0) {
-        this.wheels.forEach(w => w.rotateX((this.speed * dt) / 0.38));
+        const wheelRadius = isBicycle ? 0.365 : 0.38;
+        this.wheels.forEach(w => w.rotateX((this.speed * dt) / wheelRadius));
       }
 
       const carPos = this.mesh.position;
@@ -9216,8 +9367,11 @@
       this.mesh.position.y = pt.y + 0.02;
       this.heading = Math.atan2(tangent.x, tangent.z);
       this.velocityHeading = this.heading;
+      this._leanPrevHeading = this.heading;
+      this._leanYawRate = 0;
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
       this.speed = preserveSpeed ? prevSpeed : 0;
+      if (!preserveSpeed) this.cycleRideTime = 0;
       this.steerAngle = 0;
       this.currentPitch = 0;
       this.currentRoll = 0;
@@ -9246,6 +9400,8 @@
       this.mesh.position.y = pt.y + 0.02;
       this.heading = Math.atan2(tangent.x, tangent.z);
       this.velocityHeading = this.heading;
+      this._leanPrevHeading = this.heading;
+      this._leanYawRate = 0;
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
       this.speed = 0;
       this.steerAngle = 0;
@@ -9655,7 +9811,9 @@
       this.selectedWeather = 'clear';
       this.weather = 'clear'; // 'clear', 'blizzard', 'rain' — see SLOWROADS_PARITY_LOG.md item 4
       this.selectedSeed = '5927cd04';
-      this.selectedVehicle = 'musclecoupe';
+      this.selectedVehicle = (typeof Career !== 'undefined' && Career && typeof Career.selectedVehicle === 'function')
+        ? Career.selectedVehicle()
+        : 'cycle';
       this.selectedDifficulty = 'medium';
       this.activeDockPanel = null;
       this.activeCameraMode = 'chase';
@@ -9695,9 +9853,27 @@
       this.parcels = []; // 3D In-flight projectiles
       this.particles = []; // 3D Procedural Particle FX System
 
-      this.keys = { up: false, down: false, left: false, right: false, w: false, s: false, a: false, d: false, space: false };
+      this.keys = { up: false, down: false, left: false, right: false, w: false, s: false, a: false, d: false, space: false, steerInput: 0 };
+      this._touchSteerActive = false;
+      this._touchSteerStartX = 0;
+      this._touchSteerPointerId = -1;
       this.inactivityTimer = 0;
       this.inputFrozen = false;
+      this._adPaused = false;
+      this._shiftDoubleClaimed = false;
+      this._sponsorAdCooldown = 0;
+
+      if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+        ShiplypAds.init(
+          { debug: false },
+          {
+            onPauseGame: () => { this._adPaused = true; },
+            onResumeGame: () => { this._adPaused = false; },
+            onMuteAudio: () => { sound.mute(); },
+            onResumeAudio: () => { sound.unmute(); }
+          }
+        );
+      }
 
       this.initThree();
       this.initEvents();
@@ -9789,6 +9965,7 @@
       await frame();
 
       // --- Stage 5: Vehicle, weather, order card ---
+      this.reconcileSelectedVehicle();
       if (!this.vehicle) {
         this.vehicle = new VehicleController(this.scene, this.selectedVehicle);
       } else {
@@ -9838,11 +10015,11 @@
       this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 850);
 
       try {
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false });
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true, failIfMajorPerformanceCaveat: false });
       } catch (e) {
         console.warn('High-performance WebGL initialization failed, falling back to standard WebGL:', e);
         try {
-          this.renderer = new THREE.WebGLRenderer({ antialias: false, failIfMajorPerformanceCaveat: false });
+          this.renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true, failIfMajorPerformanceCaveat: false });
         } catch (e2) {
           console.warn('Standard WebGL initialization failed, using headless fallback renderer:', e2);
           const c = document.createElement('canvas');
@@ -10118,6 +10295,7 @@
       if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
 
+      this.reconcileSelectedVehicle();
       if (!this.vehicle) {
         this.vehicle = new VehicleController(this.scene, this.selectedVehicle);
       } else {
@@ -10212,8 +10390,12 @@
         if (k === 'm' || code === 'KeyM') this.toggleRadioMute();
         if (k === 'n' || code === 'KeyN') this.toggleSfxMute();
         if (k === 'l' || code === 'KeyL') this.cycleRadioChannel();
-        if (k === 'p' || code === 'KeyP') this.toggleWeather();
-        if (k === 'h' || k === '?' || code === 'KeyH') this.openSettingsModal('controls');
+        if (k === 'p' || code === 'KeyP') this.openPostcardMode();
+        if (k === 'h' || code === 'KeyH') {
+          sound.playHorn(this.selectedVehicle);
+          if (navigator.vibrate) navigator.vibrate(35);
+        }
+        if (k === '?' || k === 'o' || code === 'KeyO') this.openSettingsModal('controls');
         if (k === 'escape' || code === 'Escape') {
           if (this.modalContainer && this.modalContainer.querySelector('.settings-modal')) {
             this.modalContainer.innerHTML = '';
@@ -10290,20 +10472,104 @@
         });
       };
 
-      // Steering & Pedals
+      // Steering & Pedals (button mode — used for cars; cycle uses drag zone)
       bindHoldButton('touch-steer-left', () => { this.keys.left = this.keys.a = true; }, () => { this.keys.left = this.keys.a = false; });
       bindHoldButton('touch-steer-right', () => { this.keys.right = this.keys.d = true; }, () => { this.keys.right = this.keys.d = false; });
       bindHoldButton('touch-pedal-gas', () => { this.keys.up = this.keys.w = true; }, () => { this.keys.up = this.keys.w = false; });
       bindHoldButton('touch-pedal-brake', () => { this.keys.down = this.keys.s = true; }, () => { this.keys.down = this.keys.s = false; });
 
+      // Drag-to-steer zone (cycle-only): horizontal finger drag across the
+      // left half of the screen controls analog steering intensity.
+      const dragZone = document.getElementById('touch-drag-steer');
+      const dragIndicator = dragZone?.querySelector('.drag-steer-indicator');
+      if (dragZone) {
+        const DRAG_SENSITIVITY = 120; // pixels for full-lock (±1.0)
+        dragZone.addEventListener('pointerdown', (e) => {
+          if (this._touchSteerActive) return;
+          e.preventDefault();
+          this.resetInactivity();
+          dragZone.setPointerCapture(e.pointerId);
+          this._touchSteerActive = true;
+          this._touchSteerStartX = e.clientX;
+          this._touchSteerPointerId = e.pointerId;
+          this.keys.steerInput = 0;
+          dragZone.classList.add('dragging');
+          if (dragIndicator) {
+            const rect = dragZone.getBoundingClientRect();
+            dragIndicator.style.left = `${e.clientX - rect.left}px`;
+            dragIndicator.style.top = `${e.clientY - rect.top}px`;
+          }
+          if (navigator.vibrate) navigator.vibrate(8);
+        });
+        dragZone.addEventListener('pointermove', (e) => {
+          if (!this._touchSteerActive || e.pointerId !== this._touchSteerPointerId) return;
+          e.preventDefault();
+          const dx = e.clientX - this._touchSteerStartX;
+          this.keys.steerInput = THREE.MathUtils.clamp(dx / DRAG_SENSITIVITY, -1, 1);
+          if (dragIndicator) {
+            const rect = dragZone.getBoundingClientRect();
+            dragIndicator.style.left = `${e.clientX - rect.left}px`;
+            dragIndicator.style.top = `${e.clientY - rect.top}px`;
+          }
+        });
+        const endDrag = (e) => {
+          if (!this._touchSteerActive || e.pointerId !== this._touchSteerPointerId) return;
+          this._touchSteerActive = false;
+          this._touchSteerPointerId = -1;
+          this.keys.steerInput = 0;
+          dragZone.classList.remove('dragging');
+        };
+        dragZone.addEventListener('pointerup', endDrag);
+        dragZone.addEventListener('pointercancel', endDrag);
+      }
+
       // Action & Utility buttons
+      const toolsDrawer = document.getElementById('touch-tools-drawer');
+      const toolsBtn = document.getElementById('touch-btn-tools');
+      const closeTools = () => {
+        if (toolsDrawer) toolsDrawer.style.display = 'none';
+        if (toolsBtn) toolsBtn.setAttribute('aria-expanded', 'false');
+      };
+      const toggleTools = () => {
+        if (!toolsDrawer) return;
+        const isOpen = toolsDrawer.style.display === 'flex';
+        toolsDrawer.style.display = isOpen ? 'none' : 'flex';
+        if (toolsBtn) toolsBtn.setAttribute('aria-expanded', String(!isOpen));
+      };
+
+      bindTapButton('touch-btn-tools', toggleTools);
+      bindTapButton('touch-tools-close', closeTools);
+
       bindTapButton('touch-btn-drop', () => {
         if (navigator.vibrate) navigator.vibrate([25, 40, 25]);
         this.tossParcel3D();
       });
-      bindTapButton('touch-btn-recenter', () => this.returnToRoad());
-      bindTapButton('touch-btn-cam', () => this.toggleCameraMode());
+      bindTapButton('touch-btn-horn', () => {
+        closeTools();
+        sound.playHorn(this.selectedVehicle);
+        if (navigator.vibrate) navigator.vibrate(35);
+      });
+      bindTapButton('touch-btn-photo', () => {
+        closeTools();
+        this.openPostcardMode();
+      });
+      bindTapButton('touch-btn-recenter', () => {
+        closeTools();
+        this.returnToRoad();
+      });
+      bindTapButton('touch-btn-cam', () => {
+        closeTools();
+        this.toggleCameraMode();
+      });
       bindTapButton('touch-btn-autopilot', () => this.toggleAutodrive());
+
+      // Close tools drawer on tap outside
+      document.addEventListener('pointerdown', (e) => {
+        if (!toolsDrawer || toolsDrawer.style.display !== 'flex') return;
+        if (!toolsDrawer.contains(e.target) && !toolsBtn?.contains(e.target)) {
+          closeTools();
+        }
+      });
     }
 
     // On-foot courier avatar. Uses the shared rigged CourierAsset (real
@@ -10473,9 +10739,11 @@
       this.orderTimer = this.maxOrderTimer; // Reset clock for next order
 
       sound.playCombo();
-      const bonusMsg = (timeLeftRatio > 0.5 ? `${UI.icon('bolt')} EXPRESS SPEED BONUS!` : `${UI.icon('target')} ON-TIME BULLSEYE!`);
+      if (stars >= 3 && typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+        ShiplypAds.happyTime();
+      }
       this.spawnConfetti(target.pos, 36);
-      this.showScoreBanner(`${bonusMsg} +₹${earnedBonus}`, `${UI.icon('flame')} ${this.streakCount}x STREAK • +${timeBonus} TIME BONUS`);
+      this._showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak: this.streakCount, orderId: target.order?.id, orderName: target.order?.name || 'Delivery', base: target.order?.reward || 0, diffMult: diffCfg.payoutMult });
       this.addNotification(`${UI.icon('check')} DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
 
       // Rank-up is the only career event loud enough to interrupt a shift.
@@ -10508,6 +10776,11 @@
           const ms = Date.now() - this._firstOpenTime;
           console.info('[Shiplyp] first_open_to_first_delivery_ms', ms);
         }
+      }
+
+      // Shift Milestone: trigger shift celebration modal every 5 drops
+      if (this.deliveriesMade > 0 && this.deliveriesMade % 5 === 0) {
+        setTimeout(() => this.showShiftSummary(), 1400);
       }
     }
 
@@ -10776,6 +11049,370 @@
       this.weatherMesh.geometry.attributes.position.needsUpdate = true;
     }
 
+    // ── Vehicle canvas illustration helper ────────────────────────────────
+    _drawVehicleThumb(canvas, vehId) {
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+      const sx = W / 220, sy = H / 80;
+      const x = v => v * sx, y = v => v * sy;
+      const isLocked = canvas.closest && canvas.closest('.veh-locked');
+      ctx.save();
+      ctx.globalAlpha = isLocked ? 0.3 : 0.92;
+      const lw = Math.max(1.2, 1.5 * Math.min(sx, sy));
+      ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+      if (vehId === 'cycle') {
+        ctx.strokeStyle = '#00d4bf';
+        const rwx=x(42),rwy=y(57),rwr=x(17),fwx=x(166),fwy=y(57),fwr=x(17);
+        ctx.beginPath();ctx.arc(rwx,rwy,rwr,0,Math.PI*2);ctx.stroke();
+        ctx.beginPath();ctx.arc(fwx,fwy,fwr,0,Math.PI*2);ctx.stroke();
+        ctx.lineWidth=lw*0.35;ctx.globalAlpha=(isLocked?0.1:0.28);
+        for(const[cx,cy]of[[42,57],[166,57]]){for(let i=0;i<6;i++){const a=i*Math.PI/3;ctx.beginPath();ctx.moveTo(x(cx),y(cy));ctx.lineTo(x(cx)+x(15)*Math.cos(a),y(cy)+x(15)*Math.sin(a));ctx.stroke();}}
+        ctx.lineWidth=lw;ctx.globalAlpha=(isLocked?0.3:0.92);
+        const bbx=x(104),bby=y(56),scx=x(78),scy=y(24),htx=x(152),hty=y(30);
+        for(const[ax,ay,bx2,by2]of[[rwx,rwy,bbx,bby],[rwx,rwy,scx,scy],[bbx,bby,scx,scy],[scx,scy,htx,hty],[bbx,bby,htx,hty],[htx,hty,fwx,fwy]]){ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx2,by2);ctx.stroke();}
+        ctx.beginPath();ctx.moveTo(htx,hty);ctx.lineTo(x(155),y(22));ctx.stroke();
+        ctx.beginPath();ctx.moveTo(x(148),y(22));ctx.lineTo(x(162),y(22));ctx.stroke();
+        ctx.beginPath();ctx.moveTo(x(68),y(22));ctx.lineTo(x(88),y(22));ctx.stroke();
+        ctx.beginPath();ctx.moveTo(scx,scy);ctx.lineTo(x(22),y(36));ctx.stroke();
+        ctx.beginPath();ctx.moveTo(rwx,rwy-rwr);ctx.lineTo(x(22),y(36));ctx.stroke();
+        ctx.strokeRect(x(14),y(18),x(50),y(20));
+        ctx.beginPath();ctx.moveTo(x(14),y(18)+y(20)*0.28);ctx.lineTo(x(14)+x(50),y(18)+y(20)*0.28);ctx.stroke();
+        ctx.beginPath();ctx.arc(bbx,bby,x(4),0,Math.PI*2);ctx.stroke();
+      } else {
+        // musclecoupe
+        ctx.strokeStyle = '#ff9f1c';
+        const rwy2=y(60),rwx2=x(44),rwr2=x(16),fwx2=x(168);
+        ctx.beginPath();ctx.arc(rwx2,rwy2,rwr2,0,Math.PI*2);ctx.stroke();
+        ctx.beginPath();ctx.arc(fwx2,rwy2,rwr2,0,Math.PI*2);ctx.stroke();
+        ctx.lineWidth=lw*0.5;ctx.globalAlpha=(isLocked?0.1:0.45);
+        for(const cx of[44,168]){ctx.beginPath();ctx.arc(x(cx),rwy2,x(6),0,Math.PI*2);ctx.stroke();}
+        ctx.lineWidth=lw;ctx.globalAlpha=(isLocked?0.3:0.92);
+        const body=[[18,60],[18,52],[26,48],[52,32],[70,22],[136,20],[158,28],[180,40],[202,44],[202,52],[184,60],[156,56],[130,60],[60,60],[36,56],[18,60]];
+        ctx.beginPath();body.forEach(([px,py],i)=>{if(i===0)ctx.moveTo(x(px),y(py));else ctx.lineTo(x(px),y(py));});ctx.stroke();
+        ctx.lineWidth=lw*0.7;ctx.globalAlpha=(isLocked?0.15:0.55);
+        ctx.beginPath();ctx.moveTo(x(136),y(20));ctx.lineTo(x(158),y(28));ctx.stroke();
+        ctx.beginPath();ctx.moveTo(x(70),y(22));ctx.lineTo(x(52),y(32));ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ── Post-delivery result banner with tachometer arcs ─────────────────
+    _showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak, orderName, base, diffMult }) {
+      if (!this.scorePopupContainer) return;
+      const timeFill  = Math.max(0.04, Math.min(1, timeLeftRatio));
+      const accFill   = stars === 3 ? 0.9 : (stars === 2 ? 0.65 : 0.3);
+      const strFill   = Math.min(1, Math.max(0.04, (streak - 1) / 9));
+      const timeColor = timeFill > 0.55 ? '#00d4bf' : (timeFill > 0.25 ? '#ff9f1c' : '#ff2d4e');
+      const strColor  = streak >= 3 ? '#ff9f1c' : 'rgba(255,255,255,0.3)';
+      const circ = Math.PI * 28;
+      const arc = (fill, colour, label) => {
+        const offset = circ * (1 - fill);
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:5px">
+          <div style="position:relative;width:62px;height:36px;overflow:hidden">
+            <svg width="62" height="36" viewBox="0 0 70 40">
+              <path d="M7,36 A28,28 0 0,1 63,36" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="5" stroke-linecap="round"/>
+              <path d="M7,36 A28,28 0 0,1 63,36" fill="none" stroke="${colour}" stroke-width="5" stroke-linecap="round"
+                stroke-dasharray="${circ.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"/>
+            </svg>
+          </div>
+          <span style="font-size:8px;letter-spacing:.12em;color:rgba(232,238,242,0.45);text-transform:uppercase">${label}</span>
+        </div>`;
+      };
+      const label = timeLeftRatio > 0.55 ? `${UI.icon('bolt')} EXPRESS SPEED` : (timeLeftRatio > 0.25 ? `${UI.icon('target')} ON-TIME` : `${UI.icon('clock')} LATE DROP`);
+      const banner = document.createElement('div');
+      banner.className = 'score-popup-banner score-popup-delivery';
+      banner.innerHTML = `
+        <div style="font-size:10px;letter-spacing:.16em;color:var(--comic-green,#22e565);font-family:var(--font-telemetry,'Chakra Petch',monospace);font-weight:800;text-transform:uppercase;margin-bottom:4px">${label}</div>
+        <div style="font-size:24px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-weight:800;color:var(--comic-yellow,#ffe600);text-shadow:2px 2px 0px #000;margin-bottom:10px">+₹${earnedBonus.toLocaleString('en-IN')}</div>
+        <div style="display:flex;gap:14px;margin-bottom:10px;justify-content:center">
+          ${arc(timeFill, timeColor, 'Time')}
+          ${arc(accFill, '#ffe600', 'Accuracy')}
+          ${arc(strFill, strColor, `${streak}× Streak`)}
+        </div>
+        <div style="font-size:10px;font-family:var(--font-telemetry,'Chakra Petch',monospace);color:rgba(232,238,242,0.65);letter-spacing:.08em">₹${(base||0)} base • ×${(diffMult||1).toFixed(1)} diff • +${streak > 1 ? Math.round((streak-1)*20) : 0}% streak</div>
+      `;
+      this.scorePopupContainer.appendChild(banner);
+      setTimeout(() => {
+        banner.style.opacity = '0';
+        banner.style.transform = 'translateY(-12px) scale(0.95)';
+        banner.style.transition = 'all 0.3s ease';
+        setTimeout(() => banner.remove(), 300);
+      }, 3200);
+    }
+
+    // ── Unlock confirmation sheet ─────────────────────────────────────────
+    _showUnlockSheet(vehId) {
+      const VEH_META_SHEET = {
+        musclecoupe: { name: 'Muscle Coupe', stat: 'Gasoline • Top speed class', price: 6000, topSpeedKmh: 194, accel: 19, brake: 30, tint: '#ffe600' },
+      };
+      const meta = VEH_META_SHEET[vehId];
+      if (!meta) return;
+      const wallet = Career ? Career.wallet() : 0;
+      const canAfford = wallet >= meta.price;
+      const after = wallet - meta.price;
+
+      const existing = document.getElementById('veh-unlock-sheet');
+      if (existing) existing.remove();
+
+      const sheet = document.createElement('div');
+      sheet.id = 'veh-unlock-sheet';
+      sheet.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;background:rgba(7,9,15,0.7);backdrop-filter:blur(4px)';
+      sheet.innerHTML = `
+        <div style="width:100%;max-width:480px;background:#0e131d;border:3px solid #000;border-bottom:none;border-radius:18px 18px 0 0;padding:24px 24px 32px;box-shadow:0 -8px 0px #000">
+          <div style="font-size:10px;letter-spacing:.18em;color:#ffe600;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-weight:800;text-transform:uppercase;margin-bottom:14px">Unlock vehicle</div>
+          <canvas id="unlock-sheet-hero" width="800" height="220" style="width:100%;height:110px;border-radius:8px;margin-bottom:16px;border:2px solid #000;display:block"></canvas>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+            <div>
+              <div style="font-family:var(--font-display,'Russo One',sans-serif);font-size:22px;font-weight:900">${meta.name}</div>
+              <div style="font-size:11px;color:rgba(232,238,242,0.65);margin-top:2px">${meta.stat}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:10px;letter-spacing:1.5px;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);font-weight:800">COST</div>
+              <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:26px;font-weight:800;color:#ffe600;text-shadow:2px 2px 0px #000">₹${meta.price.toLocaleString('en-IN')}</div>
+            </div>
+          </div>
+          <div style="display:flex;border:2px solid #000;border-radius:10px;overflow:hidden;margin-bottom:14px;background:#151c2a">
+            <div style="flex:1;padding:10px 12px;border-right:2px solid #000"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Top speed</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">${meta.topSpeedKmh} km/h</div></div>
+            <div style="flex:1;padding:10px 12px;border-right:2px solid #000"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Accel</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">${meta.accel} m/s²</div></div>
+            <div style="flex:1;padding:10px 12px"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Brake</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">${meta.brake} m/s²</div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:10px 12px;background:rgba(255,255,255,0.06);border:1.5px solid #000;border-radius:8px;margin-bottom:16px;font-size:11px">
+            <span style="color:rgba(232,238,242,0.6)">Account after unlock</span>
+            <span style="color:${canAfford ? '#00f0ff' : '#ff006e'};font-weight:800;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-variant-numeric:tabular-nums">${canAfford ? '₹' + after.toLocaleString('en-IN') : 'Insufficient funds'}</span>
+          </div>
+          <div style="display:flex;gap:10px">
+            <button id="unlock-confirm-btn" style="flex:1;background:${canAfford ? '#ffe600' : 'rgba(255,255,255,0.08)'};color:${canAfford ? '#000000' : 'rgba(232,238,242,0.3)'};border:2.5px solid #000;border-radius:10px;padding:13px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;letter-spacing:.1em;box-shadow:3px 3px 0px #000;cursor:${canAfford ? 'pointer' : 'not-allowed'}">${canAfford ? 'CLAIM SHIFT' : `NEED ₹${(meta.price - wallet).toLocaleString('en-IN')} MORE`}</button>
+            <button id="unlock-cancel-btn" style="flex:0 0 auto;background:rgba(255,255,255,0.08);border:2px solid #000;border-radius:10px;padding:13px 18px;color:rgba(232,238,242,0.8);font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;box-shadow:2px 2px 0px #000;cursor:pointer">BACK</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(sheet);
+
+      // Draw hero canvas
+      const heroCanvas = document.getElementById('unlock-sheet-hero');
+      if (heroCanvas) {
+        const hctx = heroCanvas.getContext('2d');
+        hctx.fillStyle = 'rgba(10,14,22,1)';
+        hctx.fillRect(0, 0, heroCanvas.width, heroCanvas.height);
+        hctx.strokeStyle = 'rgba(255,230,0,0.08)';
+        hctx.lineWidth = 1;
+        for (let gx = 0; gx < heroCanvas.width; gx += 40) { hctx.beginPath(); hctx.moveTo(gx, 0); hctx.lineTo(gx, heroCanvas.height); hctx.stroke(); }
+        for (let gy = 0; gy < heroCanvas.height; gy += 40) { hctx.beginPath(); hctx.moveTo(0, gy); hctx.lineTo(heroCanvas.width, gy); hctx.stroke(); }
+        const grd = hctx.createRadialGradient(heroCanvas.width*0.5, heroCanvas.height*0.65, 8, heroCanvas.width*0.5, heroCanvas.height*0.65, heroCanvas.width*0.4);
+        grd.addColorStop(0, 'rgba(255,230,0,0.15)'); grd.addColorStop(1, 'rgba(255,230,0,0)');
+        hctx.fillStyle = grd; hctx.fillRect(0, 0, heroCanvas.width, heroCanvas.height);
+        this._drawVehicleThumb(heroCanvas, vehId);
+      }
+
+      sheet.querySelector('#unlock-cancel-btn').addEventListener('click', () => sheet.remove());
+      sheet.addEventListener('click', e => { if (e.target === sheet) sheet.remove(); });
+      if (canAfford) {
+        sheet.querySelector('#unlock-confirm-btn').addEventListener('click', () => {
+          if (!Career) return;
+          const result = Career.purchase('vehicles', vehId, meta.price);
+          if (result.ok) {
+            sheet.remove();
+            this.selectedVehicle = vehId;
+            if (Career && typeof Career.setSelectedVehicle === 'function') {
+              Career.setSelectedVehicle(vehId);
+            }
+            if (this.vehicle) this.vehicle.setVehicleType(vehId);
+            sound.playTone(880, 'sine', 0.12);
+            this.addNotification(`${UI.icon('check')} ${meta.name.toUpperCase()} UNLOCKED!`, 'success', 4000);
+            this.renderDispatchHub(); // re-render hub to show owned state
+          }
+        });
+      }
+    }
+
+    // ── Scenic Postcard & Photo Mode ──────────────────────────────────────
+    openPostcardMode() {
+      const currentBiome = this.currentDistrictName || this.currentBiomeName || 'The Grand Nilambari Corridor';
+      const speedKmh = this.vehicle ? Math.abs(Math.round(this.vehicle.speed * 3.6)) : 0;
+      const totalLen = this.world?.curve?.getLength() || 5000;
+      const distKm = this.vehicle ? (this.vehicle.splineProgress * totalLen / 1000).toFixed(1) : '0.0';
+      const vehName = this.selectedVehicle === 'cycle' ? 'Delivery Cycle' : 'Muscle Coupe';
+      const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+
+      const existing = document.getElementById('postcard-modal');
+      if (existing) existing.remove();
+
+      // Render 1 frame to ensure buffer has current view
+      if (this.composer) this.composer.render();
+      else if (this.renderer && this.scene && this.camera) this.renderer.render(this.scene, this.camera);
+
+      let imgData = '';
+      try {
+        imgData = this.renderer.domElement.toDataURL('image/jpeg', 0.92);
+      } catch (e) {
+        console.warn('Postcard snapshot capture failed:', e);
+      }
+
+      const modal = document.createElement('div');
+      modal.id = 'postcard-modal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(7,9,15,0.85);backdrop-filter:blur(8px);padding:16px;';
+
+      modal.innerHTML = `
+        <div style="max-width:540px;width:100%;background:#0e131d;border:3px solid #000;border-radius:16px;overflow:hidden;box-shadow:6px 6px 0px #000;display:flex;flex-direction:column;">
+          <div style="padding:14px 18px;border-bottom:2px solid #000;background:#151c2a;display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:11px;font-weight:800;letter-spacing:.18em;color:#ffe600;text-transform:uppercase;">SCENIC POSTCARD &bull; PHOTO MODE</span>
+            <button id="postcard-close-x" style="background:none;border:none;color:#ffffff;font-size:18px;font-weight:900;cursor:pointer;padding:4px 8px;">✕</button>
+          </div>
+          <div style="padding:16px;background:#06080d;display:flex;justify-content:center;">
+            <div id="postcard-frame" style="position:relative;width:100%;max-width:480px;border-radius:8px;overflow:hidden;border:3px solid #000;box-shadow:4px 4px 0px #000;">
+              ${imgData ? `<img src="${imgData}" style="width:100%;height:auto;display:block;" alt="Scenic Snapshot">` : `<div style="height:240px;background:#1a2230;"></div>`}
+              <div style="position:absolute;top:10px;left:10px;padding:4px 10px;background:#000000;border:2px solid #ffe600;border-radius:6px;font-family:var(--font-display,'Russo One',sans-serif);font-weight:900;font-size:12px;letter-spacing:1px;color:#ffe600;box-shadow:2px 2px 0px #000;">
+                SHIP<span style="color:#fff;">LYP</span>
+              </div>
+              <div style="position:absolute;bottom:0;left:0;right:0;padding:12px 14px;background:linear-gradient(0deg,rgba(7,9,15,0.95) 0%,rgba(7,9,15,0) 100%);display:flex;justify-content:space-between;align-items:flex-end;">
+                <div>
+                  <div style="font-family:var(--font-display,'Russo One',sans-serif);font-size:15px;font-weight:900;color:#fff;text-shadow:2px 2px 0px #000">${currentBiome.toUpperCase()}</div>
+                  <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:9.5px;font-weight:800;color:rgba(255,255,255,0.85);margin-top:2px;">${vehName.toUpperCase()} &bull; ${speedKmh} KM/H &bull; KM ${distKm}</div>
+                </div>
+                <div style="text-align:right;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:9px;font-weight:800;letter-spacing:1px;color:#ffe600;">
+                  ${today}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="padding:14px 18px;display:flex;gap:10px;background:#0e131d;border-top:2px solid #000;">
+            <button id="postcard-download-btn" style="flex:1.2;background:#ffe600;color:#000000;border:2.5px solid #000;border-radius:10px;padding:12px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;letter-spacing:.1em;box-shadow:3px 3px 0px #000;cursor:pointer;">DOWNLOAD POSTCARD</button>
+            <button id="postcard-resume-btn" style="flex:1;background:rgba(255,255,255,0.08);color:#fff;border:2px solid #000;border-radius:10px;padding:12px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;box-shadow:2px 2px 0px #000;cursor:pointer;">RESUME DRIVE</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      const closeModal = () => modal.remove();
+      modal.querySelector('#postcard-close-x')?.addEventListener('click', closeModal);
+      modal.querySelector('#postcard-resume-btn')?.addEventListener('click', closeModal);
+      modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+      modal.querySelector('#postcard-download-btn')?.addEventListener('click', () => {
+        if (!imgData) return;
+        const a = document.createElement('a');
+        a.href = imgData;
+        a.download = `ShipLyp-Postcard-${distKm}km.jpg`;
+        a.click();
+        this.addNotification(`${UI.icon('camera')} POSTCARD SAVED!`, 'success', 3000);
+      });
+    }
+
+    // ── Multi-Drop Shift Milestone Summary ────────────────────────────────
+    showShiftSummary() {
+      if (this._shiftSummaryActive) return;
+      this._shiftSummaryActive = true;
+
+      const wallet = Career ? Career.wallet() : this.earnings;
+      const rank = Career ? Career.rank() : { name: 'Rookie Courier', progress: 0.5 };
+      const shiftEarnings = this.earnings;
+
+      if (Career) {
+        Career.recordShift(shiftEarnings);
+      }
+
+      sound.playRepair();
+
+      const existing = document.getElementById('shift-summary-modal');
+      if (existing) existing.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'shift-summary-modal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(7,9,15,0.85);backdrop-filter:blur(8px);padding:16px;';
+
+      modal.innerHTML = `
+        <div style="max-width:440px;width:100%;background:#0e131d;border:3px solid #000;border-radius:18px;padding:24px;box-shadow:6px 6px 0px #000;display:flex;flex-direction:column;text-align:center;">
+          <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:11px;letter-spacing:.2em;color:var(--comic-cyan,#00f0ff);font-weight:800;text-transform:uppercase;margin-bottom:8px;">★ SHIFT COMPLETED ★</div>
+          <div style="font-family:var(--font-display,'Russo One',sans-serif);font-size:28px;font-weight:900;color:#fff;text-shadow:3px 3px 0px #000;margin-bottom:4px;">EXCELLENT WORK</div>
+          <div style="font-size:12px;font-family:var(--font-primary,'Barlow',sans-serif);font-weight:600;color:rgba(232,238,242,0.65);margin-bottom:20px;">${this.deliveriesMade} Deliveries Completed This Shift</div>
+
+          <div style="background:rgba(255,255,255,0.05);border:2px solid #000;border-radius:12px;padding:16px;margin-bottom:18px;display:flex;justify-content:space-around;box-shadow:2px 2px 0px #000">
+            <div>
+              <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:9px;letter-spacing:1.2px;color:rgba(232,238,242,0.5);font-weight:800;text-transform:uppercase;">SHIFT EARNED</div>
+              <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:24px;font-weight:800;color:#ffe600;text-shadow:2px 2px 0px #000;margin-top:2px;">+₹${shiftEarnings.toLocaleString('en-IN')}</div>
+            </div>
+            <div style="border-left:2px solid #000;padding-left:16px;">
+              <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:9px;letter-spacing:1.2px;color:rgba(232,238,242,0.5);font-weight:800;text-transform:uppercase;">TOTAL BALANCE</div>
+              <div id="shift-wallet-val" style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:24px;font-weight:800;color:var(--comic-green,#22e565);text-shadow:2px 2px 0px #000;margin-top:2px;">₹${wallet.toLocaleString('en-IN')}</div>
+            </div>
+          </div>
+
+          <div style="margin-bottom:16px;text-align:left;">
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px;">
+              <span style="font-family:var(--font-display,'Russo One',sans-serif);font-weight:800;color:#fff;">${rank.name}</span>
+              <span style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-weight:800;color:var(--comic-cyan,#00f0ff);">${Math.round(rank.progress * 100)}%</span>
+            </div>
+            <div style="width:100%;height:6px;background:rgba(0,0,0,0.6);border:1.5px solid #000;border-radius:4px;overflow:hidden;">
+              <div style="width:${Math.round(rank.progress * 100)}%;height:100%;background:linear-gradient(90deg, var(--comic-yellow), var(--comic-cyan));"></div>
+            </div>
+          </div>
+
+          <button id="shift-double-btn" style="width:100%;margin-bottom:12px;background:linear-gradient(135deg, #00f0ff, #22e565);color:#000;border:2.5px solid #000;border-radius:10px;padding:12px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:900;letter-spacing:.08em;box-shadow:3px 3px 0px #000;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+            <span>📺</span> <span>WATCH AD FOR 2x PAYOUT (+₹${shiftEarnings.toLocaleString('en-IN')})</span>
+          </button>
+
+          <div style="display:flex;gap:10px;">
+            <button id="shift-next-btn" style="flex:1.2;background:#ffe600;color:#000000;border:2.5px solid #000;border-radius:10px;padding:13px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;letter-spacing:.1em;box-shadow:3px 3px 0px #000;cursor:pointer;">NEXT SHIFT</button>
+            <button id="shift-hub-btn" style="flex:1;background:rgba(255,255,255,0.08);color:#fff;border:2px solid #000;border-radius:10px;padding:13px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;box-shadow:2px 2px 0px #000;cursor:pointer;">DISPATCH HUB</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      this._shiftDoubleClaimed = false;
+      const doubleBtn = modal.querySelector('#shift-double-btn');
+      doubleBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (this._shiftDoubleClaimed) return;
+        if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+          ShiplypAds.showRewarded('shift_double', {
+            onReward: () => {
+              this._shiftDoubleClaimed = true;
+              const bonus = shiftEarnings;
+              if (Career) {
+                Career.credit(bonus, 'rewarded_ad');
+              }
+              sound.playDeliverySuccess();
+              doubleBtn.style.background = '#22e565';
+              doubleBtn.innerHTML = `<span>✅</span> <span>2X BONUS CLAIMED (+₹${bonus.toLocaleString('en-IN')})</span>`;
+              doubleBtn.disabled = true;
+              doubleBtn.style.cursor = 'default';
+              const walletValEl = modal.querySelector('#shift-wallet-val');
+              if (walletValEl && Career) {
+                walletValEl.textContent = `₹${Career.wallet().toLocaleString('en-IN')}`;
+              }
+              this.addNotification(`📺 2x SHIFT BONUS: +₹${bonus.toLocaleString('en-IN')} CREDITED!`, 'success', 4000);
+            },
+            onError: () => {
+              this.addNotification('Sponsor message unavailable', 'info', 2000);
+            }
+          });
+        }
+      });
+
+      modal.querySelector('#shift-next-btn')?.addEventListener('click', () => {
+        modal.remove();
+        this._shiftSummaryActive = false;
+        if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+          ShiplypAds.showInterstitial('shift_next');
+        }
+        this.addNotification(`${UI.icon('bolt')} NEW SHIFT STARTED`, 'success', 3000);
+      });
+
+      modal.querySelector('#shift-hub-btn')?.addEventListener('click', () => {
+        modal.remove();
+        this._shiftSummaryActive = false;
+        if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+          ShiplypAds.showInterstitial('shift_hub');
+        }
+        this.renderDispatchHub();
+      });
+    }
+
     showScoreBanner(title, sub) {
       if (!this.scorePopupContainer) return;
       const banner = document.createElement('div');
@@ -10950,6 +11587,7 @@
       document.getElementById('btn-hud-reset')?.addEventListener('click', () => {
         this.returnToRoad();
       });
+      document.getElementById('btn-hud-photo')?.addEventListener('click', () => this.openPostcardMode());
       document.getElementById('btn-hud-tod')?.addEventListener('click', () => this.cycleTimeOfDay());
       document.getElementById('btn-dock-tod')?.addEventListener('click', () => this.cycleTimeOfDay());
       document.getElementById('btn-hud-camera')?.addEventListener('click', () => this.toggleCameraMode());
@@ -11017,6 +11655,9 @@
 
     _showOnboardingHint(step) {
       this._dismissOnboardingHint();
+      const isTouch = document.body.classList.contains('touch-controls-active') || ('ontouchstart' in window);
+      const dropKey = isTouch ? 'DROP' : 'SPACE';
+      const dropAction = isTouch ? 'Tap' : 'Press';
       const el = document.createElement('div');
       el.id = 'onboarding-hint';
       el.className = 'onboarding-hint';
@@ -11024,12 +11665,12 @@
         el.innerHTML = `
           <span class="onboarding-hint-icon">&#9650;</span>
           <span class="onboarding-hint-text">Drive to the glowing ring</span>
-          <span class="onboarding-hint-sub">Press <kbd>SPACE</kbd> to drop when you're close</span>
+          <span class="onboarding-hint-sub">${dropAction} <kbd>${dropKey}</kbd> to drop when you're close</span>
         `;
       } else if (step === 'toss') {
         el.innerHTML = `
           <span class="onboarding-hint-icon">&#9632;</span>
-          <span class="onboarding-hint-text">You're close — press <kbd>SPACE</kbd> to drop!</span>
+          <span class="onboarding-hint-text">You're close — ${dropAction.toLowerCase()} <kbd>${dropKey}</kbd> to drop!</span>
         `;
       }
       document.body.appendChild(el);
@@ -11158,10 +11799,13 @@
       // stale lateralVelocity the instant control returns — zero it here
       // so there's no timing window at all, not just a fast one.
       if (!this.vehicle.isAutodrive) this.vehicle.lateralVelocity = 0;
+      const isAuto = this.vehicle.isAutodrive;
+
+      // Desktop HUD Pill
       const pill = document.getElementById('btn-hud-autodrive');
       const text = document.getElementById('autodrive-text');
       if (pill && text) {
-        if (this.vehicle.isAutodrive) {
+        if (isAuto) {
           pill.classList.add('autodrive-active');
           text.textContent = 'AUTOPILOT [ON]';
         } else {
@@ -11169,6 +11813,23 @@
           text.textContent = 'AUTOPILOT [F]';
         }
       }
+
+      // Mobile Touch HUD Button
+      const touchAutoBtn = document.getElementById('touch-btn-autopilot');
+      if (touchAutoBtn) {
+        if (isAuto) {
+          touchAutoBtn.classList.add('autodrive-active');
+          touchAutoBtn.setAttribute('aria-pressed', 'true');
+        } else {
+          touchAutoBtn.classList.remove('autodrive-active');
+          touchAutoBtn.setAttribute('aria-pressed', 'false');
+        }
+      }
+
+      // Haptic and audio feedback
+      if (navigator.vibrate) navigator.vibrate(isAuto ? [30, 40, 30] : 35);
+      sound.playTone(isAuto ? 880 : 440, 'sine', 0.1);
+      this.showScorePopup(0, isAuto ? '🤖 AUTOPILOT ENGAGED' : '🕹️ MANUAL DRIVE');
     }
 
     toggleCameraMode() {
@@ -11530,19 +12191,21 @@
         'bottom: 120px',
         'left: 50%',
         'transform: translateX(-50%)',
-        'background: linear-gradient(135deg, rgba(255,60,0,0.96) 0%, rgba(200,10,10,0.96) 100%)',
+        'background: linear-gradient(135deg, #ff0055 0%, #e60000 100%)',
         'color: #fff',
         'padding: 14px 32px',
-        'border-radius: 50px',
-        'font-family: Outfit, sans-serif',
-        'font-size: 1.1rem',
-        'font-weight: 700',
-        'letter-spacing: 0.04em',
+        'border-radius: 12px',
+        'font-family: var(--font-display, "Russo One", sans-serif)',
+        'font-size: 1.05rem',
+        'font-weight: 900',
+        'font-style: italic',
+        'text-transform: uppercase',
+        'letter-spacing: 0.05em',
         'text-align: center',
-        'box-shadow: 0 8px 40px rgba(255,60,0,0.55), 0 2px 0 rgba(255,255,255,0.1) inset',
+        'box-shadow: 4px 4px 0px #000',
         'z-index: 8888',
         'cursor: pointer',
-        'border: 2px solid rgba(255,200,120,0.45)',
+        'border: 3px solid #000',
         'animation: rtrPulse 1.2s ease-in-out infinite alternate'
       ].join(';');
       banner.innerHTML = UI.icon('map') + '&nbsp; YOU ARE OFF-ROAD &nbsp;|&nbsp; Press <kbd style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:6px;">R</kbd> or tap here to Return to Road';
@@ -11573,6 +12236,13 @@
 
     startDrive() {
       this.gameState = 'playing';
+      if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+        ShiplypAds.gameplayStart();
+      }
+      this.reconcileSelectedVehicle();
+      if (this.vehicle && this.vehicle.vehicleType !== this.selectedVehicle) {
+        this.vehicle.setVehicleType(this.selectedVehicle);
+      }
       // Career bookkeeping for the shift that is about to start. The distance
       // marker is what makes banking idempotent: VehicleController.distanceTraveled
       // is cumulative on a vehicle instance that outlives a single shift, so
@@ -11589,6 +12259,8 @@
       this.wantedDecayTimer = 0;
       this.isJailed = false;
       this.updateWantedHUD();
+      const gearEl = document.getElementById('telemetry-gear');
+      if (gearEl) gearEl.textContent = this.selectedVehicle === 'cycle' ? 'PEDAL' : 'DRIVE';
 
       if (this.savedProgressCheckpoint === null) {
         this.savedProgressCheckpoint = {
@@ -11614,7 +12286,7 @@
         this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
         this.vehicle.heading = this.vehicle.velocityHeading;
         this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = 10.0;
+        this.vehicle.speed = (this.vehicle.vehicleType === 'cycle') ? 8.89 : 10.0;
         this.updateGPSNavigation();
       }
 
@@ -11631,7 +12303,7 @@
         this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
         this.vehicle.heading = this.vehicle.velocityHeading;
         this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = 8.0;
+        this.vehicle.speed = (this.vehicle.vehicleType === 'cycle') ? 8.89 : 8.0;
         this.updateGPSNavigation();
         this._showOnboardingHint('drive');
       }
@@ -11647,7 +12319,28 @@
       this.updateAudioHUDButtons();
     }
 
+    reconcileSelectedVehicle() {
+      const fallback = 'cycle';
+      if (typeof Career !== 'undefined' && Career && typeof Career.isUnlocked === 'function') {
+        if (!Career.isUnlocked('vehicles', this.selectedVehicle)) {
+          const validVeh = (typeof Career.selectedVehicle === 'function' ? Career.selectedVehicle() : null)
+            || (typeof Career.defaultVehicle === 'function' ? Career.defaultVehicle() : null)
+            || fallback;
+          this.selectedVehicle = validVeh;
+        }
+        if (typeof Career.setSelectedVehicle === 'function') {
+          Career.setSelectedVehicle(this.selectedVehicle);
+        }
+      } else {
+        if (this.selectedVehicle !== 'cycle' && this.selectedVehicle !== 'musclecoupe') {
+          this.selectedVehicle = fallback;
+        }
+      }
+      return this.selectedVehicle;
+    }
+
     renderDispatchHub() {
+      this.reconcileSelectedVehicle();
       // Coming back from a drive: close the shift out BEFORE gameState flips,
       // since that flag is the only signal that a shift was in progress. Only
       // the distance travelled since the shift began is banked — distanceTraveled
@@ -11659,6 +12352,9 @@
       }
 
       this.gameState = 'menu';
+      if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+        ShiplypAds.gameplayStop();
+      }
       sound.suspendForMenu();
       this.hudOverlay.style.display = 'none';
       this.dockEl.style.display = 'none';
@@ -11677,9 +12373,13 @@
       // undisturbed, so a picker can come back later without rebuilding
       // this from scratch if a second world is ever actually built out.
 
+      const VEH_META = {
+        musclecoupe: { price: 6000, topSpeedKmh: 194, accel: 19, brake: 30, tint: '#ff9f1c' },
+        cycle:       { price: 0,     topSpeedKmh: 52,  accel: 4,  brake: 8,  tint: '#00d4bf' },
+      };
       const vehList = [
-        { id: 'musclecoupe', name: 'Muscle Coupe',        stat: '194 km/h • Gasoline' },
-        { id: 'cycle',       name: 'Delivery Cycle',      stat: '22 km/h • Pedal Power' },
+        { id: 'cycle',       name: 'Delivery Cycle', stat: '32–52 km/h • Pedal Power' },
+        { id: 'musclecoupe', name: 'Muscle Coupe',   stat: '194 km/h • Gasoline'  },
       ];
 
       const styleList = [
@@ -11751,12 +12451,22 @@
             <div class="hub-vehicle-selector">
               <span class="hub-section-label">SELECT VEHICLE</span>
               <div class="hub-vehicle-grid">
-                ${vehList.map(v => `
-                  <button class="vehicle-card-btn ${this.selectedVehicle === v.id ? 'active-veh' : ''}" data-veh="${v.id}">
-                    <span class="vehicle-card-title">${v.name}</span>
-                    <span class="vehicle-card-stat">${v.stat}</span>
-                  </button>
-                `).join('')}
+                ${vehList.map(v => {
+                  const meta = VEH_META[v.id] || {};
+                  const unlocked = Career ? Career.isUnlocked('vehicles', v.id) : true;
+                  const wallet = Career ? Career.wallet() : 0;
+                  const canAfford = wallet >= (meta.price || 0);
+                  const shortfall = (meta.price || 0) - wallet;
+                  const ctaLabel = canAfford ? 'CLAIM SHIFT' : `NEED ₹${shortfall.toLocaleString('en-IN')} MORE`;
+                  const isSelected = this.selectedVehicle === v.id;
+                  return `
+                    <button class="vehicle-card-btn ${isSelected ? 'active-veh' : ''} ${unlocked ? '' : 'veh-locked'}" data-veh="${v.id}" data-unlocked="${unlocked}">
+                      <span class="vehicle-card-title">${v.name}</span>
+                      <span class="vehicle-card-stat">${v.stat}</span>
+                      ${!unlocked ? `<span class="veh-lock-cost">₹${(meta.price||0).toLocaleString('en-IN')}</span><span class="veh-lock-cta">${ctaLabel}</span>` : ''}
+                    </button>
+                  `;
+                }).join('')}
               </div>
             </div>
 
@@ -11779,6 +12489,7 @@
             </button>
 
             <div class="hub-footer-links">
+              <button id="btn-hub-sponsor" class="hub-link-btn" style="color:var(--comic-green,#22e565);font-weight:800;"><span>📺 SPONSOR (+₹500)</span></button>
               <button id="btn-hub-mute" class="hub-link-btn"><span>${sound.muted ? 'UNMUTE [M]' : 'MUTE [M]'}</span></button>
               <button id="btn-hub-fleet" class="hub-link-btn">SETTINGS</button>
             </div>
@@ -11786,11 +12497,19 @@
         </div>
       `;
 
-
       this.modalContainer.querySelectorAll('.vehicle-card-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.preventDefault();
-          this.selectedVehicle = btn.dataset.veh;
+          const vehId = btn.dataset.veh;
+          const unlocked = btn.dataset.unlocked === 'true';
+          if (!unlocked) {
+            this._showUnlockSheet(vehId);
+            return;
+          }
+          this.selectedVehicle = vehId;
+          if (Career && typeof Career.setSelectedVehicle === 'function') {
+            Career.setSelectedVehicle(vehId);
+          }
           this.modalContainer.querySelectorAll('.vehicle-card-btn').forEach(b => b.classList.remove('active-veh'));
           btn.classList.add('active-veh');
           if (this.vehicle) this.vehicle.setVehicleType(this.selectedVehicle);
@@ -11820,6 +12539,31 @@
         } else {
           this.buildWorldAndScene();
           this.startDrive();
+        }
+      });
+      document.getElementById('btn-hub-sponsor')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const now = Date.now();
+        if (this._sponsorAdCooldown && now < this._sponsorAdCooldown) {
+          const waitSecs = Math.ceil((this._sponsorAdCooldown - now) / 1000);
+          this.addNotification(`⏳ SPONSOR COOLDOWN: WAIT ${waitSecs}s`, 'info', 2000);
+          return;
+        }
+        if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+          ShiplypAds.showRewarded('sponsor_cash', {
+            onReward: () => {
+              this._sponsorAdCooldown = Date.now() + 60000;
+              if (Career) {
+                Career.credit(500, 'sponsor_ad');
+              }
+              sound.playDeliverySuccess();
+              this.addNotification('📺 +₹500 SPONSOR CASH CREDITED TO ACCOUNT!', 'success', 3500);
+              this.renderDispatchHub();
+            },
+            onError: () => {
+              this.addNotification('Sponsor ad unavailable, try again later', 'info', 2000);
+            }
+          });
         }
       });
       document.getElementById('btn-hub-mute')?.addEventListener('click', (e) => {
@@ -11974,21 +12718,31 @@
             sound.playTone(680, 'sine', 0.1);
           };
         });
-      } else if (type === 'vehicle') {
+        const isMuscleUnlocked = Career ? Career.isUnlocked('vehicles', 'musclecoupe') : true;
+        const isCycleUnlocked = Career ? Career.isUnlocked('vehicles', 'cycle') : true;
         el.innerHTML = `
           <div class="dock-panel-grid">
             <div class="dock-panel-col">
               <span class="dock-panel-label">VEHICLE</span>
               <div class="dock-btn-row">
-                <button class="dock-sq-btn ${this.selectedVehicle === 'musclecoupe' ? 'active-sq' : ''}" data-v="musclecoupe">MUSCLE</button>
-                <button class="dock-sq-btn ${this.selectedVehicle === 'cycle' ? 'active-sq' : ''}" data-v="cycle">CYCLE</button>
+                <button class="dock-sq-btn ${this.selectedVehicle === 'musclecoupe' ? 'active-sq' : ''} ${!isMuscleUnlocked ? 'veh-dock-locked' : ''}" data-v="musclecoupe" title="${!isMuscleUnlocked ? 'Locked (Requires ₹6,000 in Career)' : 'Muscle Coupe'}">${!isMuscleUnlocked ? '🔒 ' : ''}MUSCLE</button>
+                <button class="dock-sq-btn ${this.selectedVehicle === 'cycle' ? 'active-sq' : ''} ${!isCycleUnlocked ? 'veh-dock-locked' : ''}" data-v="cycle" title="${!isCycleUnlocked ? 'Locked' : 'Delivery Cycle'}">${!isCycleUnlocked ? '🔒 ' : ''}CYCLE</button>
               </div>
             </div>
           </div>
         `;
         el.querySelectorAll('[data-v]').forEach(b => {
           b.onclick = () => {
-            this.selectedVehicle = b.dataset.v;
+            const vehId = b.dataset.v;
+            if (Career && !Career.isUnlocked('vehicles', vehId)) {
+              sound.playTone(300, 'square', 0.1);
+              this.addNotification('🔒 VEHICLE LOCKED — UNLOCK IN DISPATCH HUB', 'warning', 3000);
+              return;
+            }
+            this.selectedVehicle = vehId;
+            if (Career && typeof Career.setSelectedVehicle === 'function') {
+              Career.setSelectedVehicle(vehId);
+            }
             this.vehicle.setVehicleType(this.selectedVehicle);
             this.renderDockPanelContent('vehicle');
             sound.playTone(800, 'sine', 0.1);
@@ -12284,31 +13038,41 @@
         this.camLookTarget.lerp(rawLookTarget, Math.min(1.0, 1.0 - Math.exp(-16.0 * dt)));
         this.camera.lookAt(this.camLookTarget);
       } else {
-        // Slow Roads Default Chase Cam — intimate framing (~7.8m back, 2.6m up, 64-72 deg FOV)
+        // Slow Roads Default Chase Cam — intimate framing (~7.8m back for cars, ~5.6m back for cycle)
+        const isCycle = (this.vehicle && this.vehicle.vehicleType === 'cycle');
+        const camDist = isCycle ? -5.6 : -7.8;
+        const camHeight = isCycle ? 2.1 : 2.6;
         const targetCamPos = carPos.clone()
-          .addScaledVector(carForward, -7.8)
-          .add(new THREE.Vector3(0, 2.6, 0));
+          .addScaledVector(carForward, camDist)
+          .add(new THREE.Vector3(0, camHeight, 0));
 
-        // High responsiveness spring-lerp (keeps camera tightly bound to vehicle at any speed)
-        const posLerp = Math.min(1.0, 1.0 - Math.exp(-14.0 * dt));
+        // High responsiveness spring-lerp tuned for vehicle scale
+        const posLerpRate = isCycle ? 8.5 : 14.0;
+        const posLerp = Math.min(1.0, 1.0 - Math.exp(-posLerpRate * dt));
         this.camera.position.lerp(targetCamPos, posLerp);
 
         // Ground clearance check relative strictly to roadbed
-        const minY = carPos.y + 1.4;
-        const maxY = carPos.y + 4.5;
+        const minY = carPos.y + (isCycle ? 1.1 : 1.4);
+        const maxY = carPos.y + (isCycle ? 3.8 : 4.5);
         this.camera.position.y = THREE.MathUtils.clamp(this.camera.position.y, minY, maxY);
 
         // Look-ahead target down the road centerline / motion direction
+        const lookAheadDist = isCycle ? 16.0 : 20.0;
+        const lookHeight = isCycle ? 0.75 : 0.85;
         const rawLookTarget = carPos.clone()
-          .addScaledVector(carForward, 20.0)
-          .add(new THREE.Vector3(0, 0.85, 0));
-        const lookLerp = Math.min(1.0, 1.0 - Math.exp(-20.0 * dt));
+          .addScaledVector(carForward, lookAheadDist)
+          .add(new THREE.Vector3(0, lookHeight, 0));
+        const lookLerpRate = isCycle ? 11.0 : 20.0;
+        const lookLerp = Math.min(1.0, 1.0 - Math.exp(-lookLerpRate * dt));
         this.camLookTarget.lerp(rawLookTarget, lookLerp);
         this.camera.lookAt(this.camLookTarget);
 
-        // Dynamic Speed FOV (64 deg baseline -> 72 deg at top speed)
-        const speedRatio = Math.min(1.0, Math.abs(this.vehicle.speed) / (this.vehicle.maxSpeed || 40));
-        const targetFOV = 64.0 + speedRatio * 8.0;
+        // Dynamic Speed FOV
+        const maxVSpd = this.vehicle.maxSpeed || (isCycle ? 10.56 : 40);
+        const speedRatio = Math.min(1.0, Math.abs(this.vehicle.speed) / maxVSpd);
+        const baseFOV = isCycle ? 62.0 : 64.0;
+        const rangeFOV = isCycle ? 6.0 : 8.0;
+        const targetFOV = baseFOV + speedRatio * rangeFOV;
         this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFOV, 0.1);
         this.camera.updateProjectionMatrix();
       }
@@ -12648,6 +13412,16 @@
         this._fpsAccumFrames = 0;
       }
 
+      if (this._adPaused) {
+        if (this.composer) {
+          this.visualStyle?.preRender();
+          this.composer.render();
+        } else {
+          this.renderer.render(this.scene, this.camera);
+        }
+        return;
+      }
+
       if (this.gameState === 'playing') {
         {
           // Fixed-step substepping: heavier post-processing (bloom/FXAA at
@@ -12826,6 +13600,15 @@
 
         const distEl = document.getElementById('telemetry-distance');
         if (distEl) distEl.textContent = `${this.vehicle.distanceTraveled.toFixed(1)} KM`;
+
+        const gearEl = document.getElementById('telemetry-gear');
+        if (gearEl) {
+          if (this.selectedVehicle === 'cycle') {
+            gearEl.textContent = speedKmh > 2 ? 'PEDAL' : 'CRUISE';
+          } else {
+            gearEl.textContent = this.vehicle.speed < -0.1 ? 'REVERSE' : (speedKmh < 0.5 ? 'PARK' : 'DRIVE');
+          }
+        }
       } else {
         const t = Date.now() * 0.0003;
         this.camera.position.set(Math.sin(t) * 14, 6, Math.cos(t) * 14);
@@ -12848,8 +13631,8 @@
         if (app && !document.getElementById('engine-loading-toast')) {
           const loadingToast = document.createElement('div');
           loadingToast.id = 'engine-loading-toast';
-          loadingToast.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; background: rgba(10, 14, 20, 0.92); padding: 32px 48px; border-radius: 20px; text-align: center; font-family: Outfit, sans-serif; border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 20px 60px rgba(0,0,0,0.8); z-index: 999999;';
-          loadingToast.innerHTML = '<h2 style="font-size: 1.2rem; margin: 0 0 8px 0; color: #00d4bf; font-family: monospace; letter-spacing: 2px;">SHIPLYP // ENGINE</h2><p style="margin: 0; color: rgba(255,255,255,0.7); font-size: 0.82rem; font-family: monospace; letter-spacing: 1px;">INITIALIZING 3D HIGHWAY ENVIRONMENT...</p>';
+          loadingToast.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; background: #11141c; padding: 32px 48px; border-radius: 16px; text-align: center; font-family: var(--font-display, "Russo One", sans-serif); border: 3px solid #000; box-shadow: 6px 6px 0px #000; z-index: 999999;';
+          loadingToast.innerHTML = '<h2 style="font-size: 1.3rem; margin: 0 0 8px 0; color: #ffe600; font-family: var(--font-display, \'Russo One\', sans-serif); letter-spacing: 2px; text-shadow: 2px 2px 0px #000;">SHIPLYP // DISPATCH</h2><p style="margin: 0; color: rgba(255,255,255,0.8); font-size: 0.85rem; font-family: var(--font-telemetry, \'Chakra Petch\', monospace); letter-spacing: 1px; text-transform: uppercase;">INITIALIZING 3D HIGHWAY ENVIRONMENT...</p>';
           app.appendChild(loadingToast);
         }
         setTimeout(boot, 300);
