@@ -315,6 +315,24 @@
   };
   RepairShopAsset.load();
 
+  // 0g4b. MOTOR GARAGE — second repair-stop type (cars/two-wheelers), placed on
+  // its own spacing on the other side of the road from the cycle repair shops.
+  const MotorGarageAsset = {
+    template: null,
+    pending: [],
+    load() {
+      if (typeof THREE.GLTFLoader === 'undefined') return;
+      new THREE.GLTFLoader().load('assets/models/motor-garage.glb?v=garage1', (gltf) => {
+        gltf.scene.traverse((child) => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
+        this.template = gltf.scene;
+        this.pending.forEach((fn) => { try { fn(); } catch (err) { console.error('MotorGarageAsset: swap failed', err); } });
+        this.pending.length = 0;
+      }, undefined, (err) => { console.warn('MotorGarageAsset: failed to load motor-garage.glb', err); });
+    },
+    clone() { return this.template ? this.template.clone(true) : null; }
+  };
+  MotorGarageAsset.load();
+
   // 0g5. STREET FURNITURE — `StreetLamp` (arm reaches toward +Z, the road after
   // the lamp group's lookAt) and `UtilityPole` (cross-arms along X, i.e. parallel
   // to the road). Origins at the base.
@@ -5192,6 +5210,7 @@
       // cohesive sandstone/cream set (was 7 widely varied vivid hues —
       // same "random blob through the trees" problem as the skyscrapers).
       const LOWRISE_PALETTE = [0xd9c9a8, 0xe8b04b, 0xc9a876];
+      this._skylineKit = { tex: skyscraperWindowTex, glass: SKYSCRAPER_GLASS_COLOR, lowrise: LOWRISE_PALETTE };
 
       const sampledPoints = this.curve.getSpacedPoints(800);
       // getSpacedPoints divides the curve into equal-arc-length segments,
@@ -5317,182 +5336,21 @@
         // 2. Roadside Chevron Turn Warning Signs (Yellow/Black <<< >>> on metal poles)
         // Skipped on Off-World — DOT-style highway signage doesn't belong
         // on an alien dust road; slowroads.io's own Mars reference has none.
-        if (!isOffWorld && i % 14 === 0 && i < sampledPoints.length - 4) {
+        if (!isOffWorld && i % 14 === 0 && i > 0 && i < sampledPoints.length - 4) {
           const nextTang = new THREE.Vector3().subVectors(sampledPoints[i + 3], sampledPoints[i - 1]).normalize();
-          const turnCurvature = tangent.x * nextTang.z - tangent.z * nextTang.x;
-
-          if (Math.abs(turnCurvature) > 0.015) {
-            const outerSide = turnCurvature > 0 ? 1 : -1;
-            const signDist = outerSide * (CONFIG.ROAD_WIDTH * 0.5 + 1.8);
-            const signPos = pt.clone().addScaledVector(normal, signDist);
-            signPos.y = calcTerrainY(signPos, signDist);
-
-            // Chevrons point into the bend as the approaching rider sees them
-            // (verified in game: a left-hand bend shows <<< on the outer side).
-            const signGroup = this.buildChevronSign(outerSide);
-            signGroup.position.copy(signPos);
-            signGroup.lookAt(pt.clone().addScaledVector(tangent, -6.0));
-            this.foliageGroup.add(signGroup);
-            this.obstacles.push({ pos: signPos.clone(), radius: 0.9, type: 'sign' });
-          }
+          this.spawnCurveSign(pt, normal, tangent, tangent.x * nextTang.z - tangent.z * nextTang.x);
         }
 
         // 3. Roadside Electric Utility Poles
-        if (!isOpenRoad && i % 24 === 0) {
-          const latDist = CONFIG.ROAD_WIDTH * 0.5 + 2.9; // just behind the fence line (2.2), not on it
-          const polePos = pt.clone().addScaledVector(normal, latDist);
-          polePos.y = calcTerrainY(polePos, latDist);
-          // Per-instance material clone (not the shared `poleMat`) so the
-          // camera occlusion fade can dim this one pole without dimming
-          // every utility pole in the world at once.
-          const poleInstMat = poleMat.clone();
-          const pole = new THREE.Group();
-          pole.position.copy(polePos);
-          const standIn = new THREE.Mesh(poleGeom, poleInstMat);
-          standIn.position.y = 3.2;
-          const crossbar = new THREE.Mesh(crossbarGeom, poleInstMat);
-          crossbar.position.set(0, 2.6, 0);
-          standIn.add(crossbar);
-          const usePoleModel = () => {
-            const model = StreetFurnitureAsset.clone('UtilityPole');
-            if (!model) return;
-            pole.remove(standIn);
-            pole.add(model);
-          };
-          if (StreetFurnitureAsset.template) usePoleModel();
-          else { pole.add(standIn); StreetFurnitureAsset.pending.push(usePoleModel); }
-          pole.lookAt(pt.x, polePos.y, pt.z); // flatten (Pattern 8): cross-arms end up parallel to the road
-          this.foliageGroup.add(pole);
-          this.obstacles.push({ pos: polePos.clone(), radius: 0.9, type: 'pole' });
-          this.occluderMeshes.push(pole);
-        }
+        if (!isOpenRoad && i % 24 === 0) this.spawnUtilityPole(pt, normal);
 
         // 4. Overhead Traffic Police Speed Radar Gantries
-        if (!isOpenRoad && i % 52 === 0 && i > 15) {
-          const gantryGroup = new THREE.Group();
-          const gantryHeight = 5.2;
-          const gantrySpan = CONFIG.ROAD_WIDTH + 2.8;
-
-          // Side pillars
-          [-gantrySpan / 2, gantrySpan / 2].forEach(xOff => {
-            const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, gantryHeight, 8), poleMat);
-            pillar.position.set(xOff, gantryHeight / 2, 0);
-            gantryGroup.add(pillar);
-          });
-
-          // Overhead Crossbeam
-          const beam = new THREE.Mesh(new THREE.BoxGeometry(gantrySpan, 0.35, 0.35), poleMat);
-          beam.position.set(0, gantryHeight - 0.2, 0);
-          gantryGroup.add(beam);
-
-          // Speed Limit 75 Sign Board
-          const signBoard = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.1, 0.1), new THREE.MeshLambertMaterial({ color: 0xffffff }));
-          signBoard.position.set(0, gantryHeight + 0.5, 0);
-          const innerRing = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.12, 16), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
-          innerRing.rotateX(Math.PI / 2);
-          innerRing.position.set(0, gantryHeight + 0.5, 0.02);
-          gantryGroup.add(signBoard);
-          gantryGroup.add(innerRing);
-
-          // Camera Lens Units with Strobes
-          [-1.4, 1.4].forEach(cx => {
-            const camBox = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 0.5), new THREE.MeshLambertMaterial({ color: 0x111827 }));
-            camBox.position.set(cx, gantryHeight - 0.45, 0.2);
-            const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.1, 8), new THREE.MeshBasicMaterial({ color: 0x00f5d4 }));
-            lens.rotateX(Math.PI / 2);
-            lens.position.set(cx, gantryHeight - 0.45, 0.48);
-            gantryGroup.add(camBox);
-            gantryGroup.add(lens);
-          });
-
-          gantryGroup.position.copy(pt);
-          gantryGroup.lookAt(pt.clone().add(tangent));
-          this.foliageGroup.add(gantryGroup);
-
-          this.speedCameras.push({
-            pos: pt.clone(),
-            speedLimit: 20.8, // 75 km/h in m/s
-            speedLimitKmh: 75,
-            triggeredRecently: false
-          });
-
-          this.obstacles.push({ pos: pt.clone().addScaledVector(normal, -gantrySpan / 2), radius: 0.8, type: 'gantry' });
-          this.obstacles.push({ pos: pt.clone().addScaledVector(normal, gantrySpan / 2), radius: 0.8, type: 'gantry' });
-        }
+        if (!isOpenRoad && i % 52 === 0 && i > 15) this.spawnGantry(pt, normal, tangent);
 
         // 5. Roadside Garage & Pitstop Repair Bay
-        if (!isOpenRoad && i % 45 === 0 && i > 20) {
-          const baySide = 1;
-          const bayDist = CONFIG.ROAD_WIDTH * 0.5 + 4.8;
-          const bayPos = pt.clone().addScaledVector(normal, baySide * bayDist);
-          bayPos.y = calcTerrainY(bayPos, baySide * bayDist);
-
-          const garageGroup = new THREE.Group();
-          // Garage Shed
-          const shedGeom = new THREE.BoxGeometry(5.5, 3.5, 4.8);
-          const shedMat = new THREE.MeshLambertMaterial({ color: 0x0284c7 });
-          const shed = new THREE.Mesh(shedGeom, shedMat);
-          shed.position.set(0, 1.75, 0);
-          garageGroup.add(shed);
-
-          // Sloped 4-sided roof, matching the bus-shelter/tapri roof style
-          // used elsewhere so it doesn't read as a bare box.
-          const shedRoof = new THREE.Mesh(
-            new THREE.ConeGeometry(4.3, 1.4, 4),
-            new THREE.MeshStandardMaterial({ color: 0x1e3a5f, flatShading: true })
-          );
-          shedRoof.position.set(0, 3.5 + 0.7, 0);
-          shedRoof.rotateY(Math.PI / 4);
-          garageGroup.add(shedRoof);
-
-          // Garage door and window on the road-facing wall (+Z, matching
-          // the lookAt(pt) convention used for this group below).
-          const shedDoor = new THREE.Mesh(
-            new THREE.BoxGeometry(1.6, 2.3, 0.1),
-            new THREE.MeshLambertMaterial({ color: 0x0f172a })
-          );
-          shedDoor.position.set(-1.3, 1.15, 2.41);
-          garageGroup.add(shedDoor);
-
-          const shedWindow = new THREE.Mesh(
-            new THREE.BoxGeometry(1.2, 1.0, 0.08),
-            new THREE.MeshBasicMaterial({ color: 0xbae6fd })
-          );
-          shedWindow.position.set(1.3, 2.1, 2.41);
-          garageGroup.add(shedWindow);
-
-          // Glowing Green Repair Pad on Ground
-          const padGeom = new THREE.RingGeometry(1.6, 3.8, 16);
-          padGeom.rotateX(-Math.PI / 2);
-          const padMat = new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide });
-          const pad = new THREE.Mesh(padGeom, padMat);
-          pad.position.set(0, 0.08, 0);
-          garageGroup.add(pad);
-
-          const useShopModel = () => {
-            const model = RepairShopAsset.clone();
-            if (!model) return;
-            garageGroup.clear();
-            garageGroup.add(model);
-          };
-          if (RepairShopAsset.template) useShopModel();
-          else RepairShopAsset.pending.push(useShopModel);
-
-          garageGroup.position.copy(bayPos);
-          garageGroup.lookAt(pt.x, bayPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
-          this.foliageGroup.add(garageGroup);
-
-          const repairBay = {
-            pos: bayPos.clone(),
-            radius: 7.5,
-            visitedRecently: false
-          };
-          this.repairBays.push(repairBay);
-          this.obstacles.push({ pos: bayPos.clone(), radius: 4.0, type: 'building', mesh: garageGroup, repairBay });
-          this.addFenceGap(pt, normal, baySide, 4.0);
-          garageGroup.updateMatrixWorld(true);
-          this.addPedDestination('shop', pt, garageGroup.localToWorld(new THREE.Vector3(0.6, 0, 2.6)), bayPos.clone());
-        }
+        if (!isOpenRoad && i % 45 === 0 && i > 20) this.spawnRepairShop(pt, normal, 1, 'cycle');
+        // Motor garages: their own spacing, on the other side of the road.
+        if (!isOpenRoad && i % 45 === 22 && i > 20 && !inTunnel) this.spawnRepairShop(pt, normal, -1, 'motor');
 
         // 6. Dense Multi-Tiered Pine & Broadleaf Forests, Rocks, Fences & Lanterns (Left and Right)
         [-1, 1].forEach(side => {
@@ -5710,199 +5568,10 @@
           // Spaced out per side so towers don't visually collide with each
           // other at close draw distance.
           if (!isOpenRoad && i % 7 === (side > 0 ? 0 : 3) && this.prng.next() > 0.15) {
-            const bldgDist = side * this.prng.range(34.0, 78.0);
-            const bldgPos = pt.clone().addScaledVector(normal, bldgDist);
-
-            const width = this.prng.range(7.0, 13.0);
-            const depth = this.prng.range(7.0, 13.0);
-
-            // Skip this spawn if the curve loops back near this world-space
-            // spot elsewhere (see clearsRoad above) — better to drop an
-            // occasional skyscraper than plant one in the roadway.
-            const footprintRadius = Math.max(width, depth) * 0.5;
-            if (!clearsRoad(bldgPos, CONFIG.ROAD_WIDTH * 0.6 + footprintRadius + 4.0)) return;
-
-            bldgPos.y = calcTerrainY(bldgPos, bldgDist);
-
-            // Real Indian streetscapes are mostly low/mid-rise shophouses
-            // and apartment blocks with the occasional tower punching up —
-            // not a uniform wall of skyscrapers. Weight the roll heavily
-            // toward short buildings so towers read as landmarks.
-            const heightRoll = this.prng.next();
-            let height, isGlass;
-            if (heightRoll < 0.55) {
-              height = this.prng.range(8.0, 20.0);
-              isGlass = false;
-            } else if (heightRoll < 0.85) {
-              height = this.prng.range(20.0, 40.0);
-              isGlass = this.prng.next() > 0.5;
-            } else {
-              height = this.prng.range(40.0, 90.0);
-              isGlass = true;
-            }
-            const isLowRise = height < 20.0;
-
-            // Skyscrapers all share one fixed glass tint (shiny/reflective
-            // via the material below); low-rise buildings still draw from
-            // a small cohesive palette for street-level variety.
-            const bodyColor = isGlass ? SKYSCRAPER_GLASS_COLOR : LOWRISE_PALETTE[Math.floor(this.prng.range(0, LOWRISE_PALETTE.length))];
-            const accentColor = isGlass ? SKYSCRAPER_GLASS_COLOR : LOWRISE_PALETTE[Math.floor(this.prng.range(0, LOWRISE_PALETTE.length))];
-
-            const bldgGroup = new THREE.Group();
-
-            const makeFacadeMat = (w, h, color) => {
-              // Windows use an emissiveMap rather than a color map so they
-              // glow at a constant brightness independent of scene lighting —
-              // otherwise the tower reads as a flat dark silhouette at night
-              // since ambient/directional light is too dim to reveal a map.
-              const tex = skyscraperWindowTex.clone();
-              tex.repeat.set(Math.max(1, Math.round(w / 3.2)), Math.max(1, Math.round(h / 4.0)));
-              tex.needsUpdate = true;
-              // Window glow only reads as lit windows once ambient light is
-              // low enough to need it (dusk/night) — left on at a fixed
-              // 0.85 intensity through daylight hours, every building in
-              // the skyline blows out under bloom since a near-white
-              // emissive surface always exceeds the bloom luminance
-              // threshold regardless of how bright the sun already is.
-              // Start dark; Game.applyWindowGlow (tied to time-of-day,
-              // same as vehicle headlights) sets the real intensity.
-              let mat;
-              if (isGlass) {
-                // Shiny reflective glass curtain-wall look: high shininess/
-                // specular highlight, slight transparency, cool blue tint.
-                mat = new THREE.MeshStandardMaterial({
-                  color,
-                  flatShading: true,
-                  emissiveMap: tex,
-                  emissive: 0xffffff,
-                  emissiveIntensity: 0.0,
-                  roughness: 0.15,
-                  metalness: 0.6,
-                  transparent: true,
-                  opacity: 0.92
-                });
-              } else {
-                mat = new THREE.MeshStandardMaterial({
-                  color,
-                  flatShading: true,
-                  emissiveMap: tex,
-                  emissive: 0xffffff,
-                  emissiveIntensity: 0.0
-                });
-              }
-              this.windowMaterials.push(mat);
-              return mat;
-            };
-
-            // Four massing archetypes so the skyline doesn't read as one
-            // repeated box at different sizes — stepped-tier and podium
-            // towers are common in dense Indian commercial districts.
-            const archetype = isLowRise ? 0 : Math.floor(this.prng.range(0, 4));
-
-            if (archetype === 0) {
-              // Plain slab tower
-              const body = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), makeFacadeMat(width, height, bodyColor));
-              body.position.y = height / 2;
-              bldgGroup.add(body);
-            } else if (archetype === 1) {
-              // Stepped-tier tower: wide base, narrower upper block set back
-              const baseH = height * 0.55;
-              const topH = height - baseH;
-              const base = new THREE.Mesh(new THREE.BoxGeometry(width, baseH, depth), makeFacadeMat(width, baseH, bodyColor));
-              base.position.y = baseH / 2;
-              bldgGroup.add(base);
-              const top = new THREE.Mesh(new THREE.BoxGeometry(width * 0.62, topH, depth * 0.62), makeFacadeMat(width * 0.62, topH, accentColor));
-              top.position.y = baseH + topH / 2;
-              bldgGroup.add(top);
-            } else if (archetype === 2) {
-              // Podium + tower: squat wide podium floors, slender tower rising off it
-              const podiumH = Math.min(10.0, height * 0.18);
-              const towerH = height - podiumH;
-              const podium = new THREE.Mesh(new THREE.BoxGeometry(width * 1.35, podiumH, depth * 1.35), makeFacadeMat(width * 1.35, podiumH, accentColor));
-              podium.position.y = podiumH / 2;
-              bldgGroup.add(podium);
-              const tower = new THREE.Mesh(new THREE.BoxGeometry(width * 0.68, towerH, depth * 0.68), makeFacadeMat(width * 0.68, towerH, bodyColor));
-              tower.position.y = podiumH + towerH / 2;
-              bldgGroup.add(tower);
-            } else {
-              // Twin-block tower: two slim offset blocks of differing height
-              const hA = height;
-              const hB = height * this.prng.range(0.55, 0.8);
-              const blockA = new THREE.Mesh(new THREE.BoxGeometry(width * 0.55, hA, depth), makeFacadeMat(width * 0.55, hA, bodyColor));
-              blockA.position.set(-width * 0.24, hA / 2, 0);
-              bldgGroup.add(blockA);
-              const blockB = new THREE.Mesh(new THREE.BoxGeometry(width * 0.55, hB, depth * 0.9), makeFacadeMat(width * 0.55, hB, accentColor));
-              blockB.position.set(width * 0.28, hB / 2, -depth * 0.05);
-              bldgGroup.add(blockB);
-            }
-
-            // Parapet / rooftop cap
-            const capMat = new THREE.MeshStandardMaterial({ color: 0x6b7480, flatShading: true });
-            const cap = new THREE.Mesh(new THREE.BoxGeometry(width * 0.7, 0.9, depth * 0.7), capMat);
-            cap.position.y = height + 0.45;
-            bldgGroup.add(cap);
-
-            // Rooftop water tank (common Indian skyline silhouette), antenna, or bare.
-            // Low-rise buildings get a water tank far more often — it's the
-            // defining rooftop silhouette of Indian residential/shop blocks.
-            const roofProp = this.prng.next();
-            const tankThreshold = isLowRise ? 0.3 : 0.66;
-            if (roofProp > tankThreshold) {
-              const tankMat = new THREE.MeshStandardMaterial({ color: 0x3f6b8a, flatShading: true });
-              const tank = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 1.6, 8), tankMat);
-              tank.position.set(width * 0.25, height + 1.7, depth * 0.2);
-              bldgGroup.add(tank);
-            } else if (roofProp > 0.33) {
-              const antennaMat = new THREE.MeshStandardMaterial({ color: 0x2a2e33, flatShading: true });
-              const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 6.0, 6), antennaMat);
-              antenna.position.set(0, height + 3.4, 0);
-              bldgGroup.add(antenna);
-            }
-
-            // Foundation slab: buildings sit at a single anchor point on
-            // sloped hillside terrain, but the box geometry has a flat
-            // bottom — on a slope that either buries the downhill corner
-            // or leaves a visible gap under the uphill corner. A tall
-            // foundation extending well underground fills that gap from
-            // any slope angle without needing to sample the terrain footprint.
-            const foundationMat = new THREE.MeshStandardMaterial({ color: 0x5f5348, flatShading: true });
-            const foundation = new THREE.Mesh(new THREE.BoxGeometry(width * 0.96, 60.0, depth * 0.96), foundationMat);
-            foundation.position.y = -30.0;
-            bldgGroup.add(foundation);
-
-            bldgGroup.position.copy(bldgPos);
-            bldgGroup.rotation.y = this.prng.range(-0.06, 0.06);
-            this.foliageGroup.add(bldgGroup);
-
-            // Register so later shops/trees (which do check this.obstacles)
-            // don't get placed clipping into the skyscraper's footprint —
-            // skyscrapers previously weren't registered at all.
-            this.obstacles.push({ pos: bldgPos.clone(), radius: footprintRadius + 1.5, type: 'building', mesh: bldgGroup });
-
-            // Registering only protects obstacles placed AFTER this point —
-            // it does nothing for rocks/trees already placed at an EARLIER
-            // sampled point that this skyscraper's own footprint (up to
-            // ~10+ units) can still reach backward into, since bldgDist
-            // ranges widely (34-78) and isn't tied to the same index a
-            // nearby rock used. This is the delivery-house prune pattern
-            // (see the `if (i % 24 === 0)` house block) applied to
-            // skyscrapers too — measured via dev-checks.js
-            // `rocks-clear-of-houses`: every city with a skyscraper
-            // (`type==='building'`) failed this the same way, since only
-            // delivery houses (also `type==='building'`, radius 3.5) were
-            // ever pruned against, never the larger skyscraper footprints.
-            const SKYSCRAPER_CLEARANCE = 2.0;
-            const overlappingNearSkyscraper = this.obstacles.filter(o =>
-              o !== this.obstacles[this.obstacles.length - 1] &&
-              (o.type === 'rock' || o.type === 'tree') &&
-              o.pos.distanceTo(bldgPos) < (o.radius + footprintRadius + 1.5 + SKYSCRAPER_CLEARANCE)
-            );
-            overlappingNearSkyscraper.forEach(o => { if (o.mesh) this.foliageGroup.remove(o.mesh); });
-            if (overlappingNearSkyscraper.length) {
-              this.obstacles = this.obstacles.filter(o => !overlappingNearSkyscraper.includes(o));
-            }
+            const placed = this.spawnCityBuilding(pt, normal, side, clearsRoad);
+            if (!placed) return;
             pendingRocks = pendingRocks.filter(r =>
-              r.pos.distanceTo(bldgPos) >= (r.radius + footprintRadius + 1.5 + SKYSCRAPER_CLEARANCE)
+              r.pos.distanceTo(placed.pos) >= (r.radius + placed.footprintRadius + 1.5 + 2.0)
             );
           }
 
@@ -6066,193 +5735,17 @@
           }
 
           // Indian Highway Milestone Markers (National Highway Standard: Yellow Dome + White Base)
-          // Skipped on Off-World — this is literally "Indian National
-          // Highway standard" signage; obviously not relevant on Mars.
-          if (!isOffWorld && i % 32 === 0 && side === 1 && !inTunnel) {
-            const stoneDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.6);
-            const stonePos = pt.clone().addScaledVector(normal, stoneDist);
-            stonePos.y = calcTerrainY(stonePos, stoneDist);
+          if (!isOffWorld && i % 32 === 0 && side === 1 && !inTunnel) this.spawnMilestone(pt, normal, side);
 
-            const stoneGroup = new THREE.Group();
-            // White stone base pillar
-            const baseStone = new THREE.Mesh(
-              new THREE.CylinderGeometry(0.32, 0.35, 0.8, 12),
-              new THREE.MeshLambertMaterial({ color: 0xf8fafc })
-            );
-            baseStone.position.y = 0.4;
-            stoneGroup.add(baseStone);
-
-            // National Highway Bright Yellow Dome Top
-            const yellowTop = new THREE.Mesh(
-              new THREE.SphereGeometry(0.32, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-              new THREE.MeshLambertMaterial({ color: 0xfacc15 })
-            );
-            yellowTop.position.y = 0.8;
-            stoneGroup.add(yellowTop);
-
-            // Black Highway Code Band
-            const band = new THREE.Mesh(
-              new THREE.CylinderGeometry(0.325, 0.325, 0.12, 12),
-              new THREE.MeshBasicMaterial({ color: 0x0f172a })
-            );
-            band.position.set(0, 0.55, 0);
-            stoneGroup.add(band);
-
-            stoneGroup.position.copy(stonePos);
-            stoneGroup.lookAt(pt.x, stonePos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
-            this.foliageGroup.add(stoneGroup);
-          }
-
-          // Modular Curved Highway Streetlamps (with amber night glow) —
-          // skipped inside a tunnel bore, which supplies its own sodium
-          // lamps and would otherwise have this poking through its wall.
-          // Also skipped entirely on Off-World — no electric grid on an
-          // alien dust trail; matches slowroads.io's Mars reference having
-          // no roadside infrastructure of any kind.
-          if (!isOffWorld && i % 28 === 0 && side === -1 && !inTunnel) {
-            const lampDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.8);
-            const lampPos = pt.clone().addScaledVector(normal, lampDist);
-            lampPos.y = this.surfaceHeightNear(lampPos, pt, lampDist);
-
-            const lampGroup = new THREE.Group();
-            const lampStandIn = new THREE.Group();
-            const poleMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
-            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.10, 5.5, 6), poleMat);
-            post.position.y = 2.75;
-            lampStandIn.add(post);
-
-            // Curved horizontal boom reaching over the road, drooping
-            // slightly toward the tip (real lamp booms aren't dead flat —
-            // a perfectly perpendicular bar crossing a perfectly vertical
-            // pole reads as a plain crucifix silhouette at a distance,
-            // which is exactly what this looked like before). Built along
-            // local +Z to match lookAt()'s actual behavior on this group
-            // (empirically verified: after lampGroup.lookAt(pt), local +Z
-            // — not -Z — ends up pointing at pt).
-            const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.8), poleMat);
-            arm.position.set(0, 5.4, 0.7);
-            arm.rotateX(-0.22);
-            lampStandIn.add(arm);
-
-            // Lantern head: hangs distinctly below the arm's tip (breaks
-            // the straight cross-bar line) and is sized to actually read
-            // as a lamp shape, not a sliver. A saturated amber — not the
-            // pale yellow used before, which blended into autumn/summer
-            // foliage colors and made the whole fixture disappear into
-            // the tree canopy behind it.
-            const lanternHousing = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.62), new THREE.MeshLambertMaterial({ color: 0x1e293b }));
-            lanternHousing.position.set(0, 5.05, 1.55);
-            const lightLens = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.1, 0.5), new THREE.MeshBasicMaterial({ color: 0xffb703 }));
-            lightLens.position.set(0, 4.92, 1.55);
-            lampStandIn.add(lanternHousing);
-            lampStandIn.add(lightLens);
-
-            const useLampModel = () => {
-              const model = StreetFurnitureAsset.clone('StreetLamp');
-              if (!model) return;
-              lampGroup.remove(lampStandIn);
-              lampGroup.add(model);
-              if (StreetFurnitureAsset.lensMat && !this.windowMaterials.includes(StreetFurnitureAsset.lensMat)) {
-                this.windowMaterials.push(StreetFurnitureAsset.lensMat);
-              }
-            };
-            lampGroup.add(lampStandIn);
-            if (StreetFurnitureAsset.template) useLampModel();
-            else StreetFurnitureAsset.pending.push(useLampModel);
-
-            lampGroup.position.copy(lampPos);
-            // Same lookAt-tilt bug as the delivery cabin (see BUGFIX_LOG.md
-            // Recurring pattern list): lampPos and pt differ in Y on sloped
-            // terrain, so an un-flattened lookAt() pitches/rolls the whole
-            // lamp+boom+lantern assembly instead of only yawing it toward
-            // the road. Flatten to the lamp's own height first.
-            lampGroup.lookAt(pt.x, lampPos.y, pt.z);
-            this.foliageGroup.add(lampGroup);
-            this.obstacles.push({ pos: lampPos.clone(), radius: 0.8, type: 'pole' });
-            this.occluderMeshes.push(lampGroup);
-          }
+          // Street lamps (skipped in tunnels, which have their own lighting, and off-world).
+          if (!isOffWorld && i % 28 === 0 && side === -1 && !inTunnel) this.spawnStreetLamp(pt, normal, side);
 
           // Roadside Bus Shelter & Waiting Passengers
           // Skipped on Off-World — a transit shelter with a waiting human
           // passenger makes no sense on an alien dust road with no bus
           // service; matches slowroads.io's Mars reference having zero
           // human-infrastructure props of any kind.
-          if (!isOffWorld && i % 72 === 0 && side === 1) {
-            const shelterDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.2);
-            const shelterPos = pt.clone().addScaledVector(normal, shelterDist);
-
-            // Skip if overlapping another obstacle or if too close to any road section (hairpins)
-            if (!clearsRoad(shelterPos, CONFIG.ROAD_WIDTH * 0.5 + 3.0)) return;
-            if (this.obstacles.some(o => o.pos.distanceTo(shelterPos) < (o.radius + 2.8))) return;
-
-            shelterPos.y = calcTerrainY(shelterPos, shelterDist);
-
-            const shelterGroup = new THREE.Group();
-            // Charcoal steel cantilever canopy
-            const steelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.85 });
-            const sRoof = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.12, 2.6), steelMat);
-            sRoof.position.set(0, 2.6, 0);
-            shelterGroup.add(sRoof);
-
-            // Architectural steel uprights
-            [-2.1, 2.1].forEach(px => {
-              const col = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.6, 8), steelMat);
-              col.position.set(px, 1.3, -1.1);
-              shelterGroup.add(col);
-            });
-
-            // Frosted architectural glass panel
-            const screenMat = new THREE.MeshStandardMaterial({
-              color: 0xa5b4fc,
-              roughness: 0.12,
-              metalness: 0.1,
-              transparent: true,
-              opacity: 0.52
-            });
-            const sScreen = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.3, 0.06), screenMat);
-            sScreen.position.set(0, 1.25, -1.1);
-            shelterGroup.add(sScreen);
-
-            // Slatted teak wood bench
-            const benchMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.65 });
-            const bench = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.1, 0.45), benchMat);
-            bench.position.set(0, 0.5, -0.6);
-            shelterGroup.add(bench);
-            [-1.5, 1.5].forEach(bx => {
-              const bLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6), steelMat);
-              bLeg.position.set(bx, 0.25, -0.6);
-              shelterGroup.add(bLeg);
-            });
-
-            // Waiting Passenger Figure (Low-Poly Human)
-            const humanGroup = new THREE.Group();
-            const skinMat = new THREE.MeshLambertMaterial({ color: 0xd4a373 });
-            const clothMat = new THREE.MeshLambertMaterial({ color: 0xef4444 });
-            const pantsMat = new THREE.MeshLambertMaterial({ color: 0x1e3a8a });
-
-            // Torso
-            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.65, 0.28), clothMat);
-            torso.position.set(0, 0.95, 0);
-            humanGroup.add(torso);
-            // Head
-            const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 0), skinMat);
-            head.position.set(0, 1.45, 0);
-            humanGroup.add(head);
-            // Legs
-            [-0.12, 0.12].forEach(lx => {
-              const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.6, 0.14), pantsMat);
-              leg.position.set(lx, 0.35, 0.15);
-              humanGroup.add(leg);
-            });
-            humanGroup.position.set(0.6, 0, -0.6);
-            shelterGroup.add(humanGroup);
-
-            shelterGroup.position.copy(shelterPos);
-            shelterGroup.lookAt(pt.x, shelterPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
-            this.foliageGroup.add(shelterGroup);
-            this.obstacles.push({ pos: shelterPos.clone(), radius: 2.8, type: 'building', mesh: shelterGroup });
-            this.tryPlaceCrossingNear(pt);
-          }
+          if (!isOffWorld && i % 72 === 0 && side === 1 && !this.spawnBusShelter(pt, normal, side, clearsRoad)) return;
 
           // Roadside Dhaba / Chai Tapri with Customers drinking tea
           if (!isOffWorld && i % 34 === 0 && side === -1) {
@@ -6287,105 +5780,7 @@
           // own low-poly style rather than an imported asset (checked a
           // Unity Asset Store monument pack for this — paid, FBX/Unity
           // format, no fit for a single-file browser Three.js project).
-          if (!isOpenRoad && i % 400 === 0 && i > 50 && side === 1) {
-            const monDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 9.0);
-            const monPos = pt.clone().addScaledVector(normal, monDist);
-
-            if (!clearsRoad(monPos, CONFIG.ROAD_WIDTH * 0.5 + 4.5)) return;
-            if (this.obstacles.some(o => o.pos.distanceTo(monPos) < (o.radius + 4.0))) return;
-
-            monPos.y = calcTerrainY(monPos, monDist);
-
-            const monGroup = new THREE.Group();
-
-            if (this.cityKey === 'mumbai') {
-              // Gateway of India — basalt-yellow triumphal archway with
-              // domed corner turrets, built as a gate frame (pillars +
-              // lintel) so the arch opening reads without needing CSG.
-              const stoneMat = new THREE.MeshLambertMaterial({ color: 0xd4b483 });
-              [-2.6, 2.6].forEach(px => {
-                const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 7.5, 1.4), stoneMat);
-                pillar.position.set(px, 3.75, 0);
-                monGroup.add(pillar);
-                const turretDome = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.6, 8), stoneMat);
-                turretDome.position.set(px, 8.3, 0);
-                monGroup.add(turretDome);
-              });
-              const lintel = new THREE.Mesh(new THREE.BoxGeometry(6.8, 1.6, 1.4), stoneMat);
-              lintel.position.set(0, 7.3, 0);
-              monGroup.add(lintel);
-              const centerDome = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.2, 10), stoneMat);
-              centerDome.position.set(0, 9.2, 0);
-              monGroup.add(centerDome);
-            } else if (this.cityKey === 'delhi') {
-              // India Gate — sandstone triumphal arch with an eternal-flame
-              // accent at the base.
-              const sandMat = new THREE.MeshLambertMaterial({ color: 0xc2703d });
-              [-2.4, 2.4].forEach(px => {
-                const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 8.0, 1.6), sandMat);
-                pillar.position.set(px, 4.0, 0);
-                monGroup.add(pillar);
-              });
-              const arch = new THREE.Mesh(new THREE.BoxGeometry(6.4, 1.8, 1.6), sandMat);
-              arch.position.set(0, 7.9, 0);
-              monGroup.add(arch);
-              const flame = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 6), new THREE.MeshBasicMaterial({ color: 0xf97316 }));
-              flame.position.set(0, 0.6, 1.2);
-              monGroup.add(flame);
-            } else if (this.cityKey === 'kolkata') {
-              // Victoria Memorial — white marble dome on a colonnaded base.
-              const marbleMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
-              const base = new THREE.Mesh(new THREE.BoxGeometry(7.0, 3.2, 5.5), marbleMat);
-              base.position.set(0, 1.6, 0);
-              monGroup.add(base);
-              const dome = new THREE.Mesh(new THREE.SphereGeometry(2.4, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), marbleMat);
-              dome.position.set(0, 3.2, 0);
-              monGroup.add(dome);
-              const finial = new THREE.Mesh(new THREE.ConeGeometry(0.25, 1.0, 6), marbleMat);
-              finial.position.set(0, 5.9, 0);
-              monGroup.add(finial);
-            } else if (this.cityKey === 'pune') {
-              // Mangalpura Fortress — fortress gate: dark teak door studded with
-              // brass bosses, set in a stone wall.
-              const wallMat = new THREE.MeshLambertMaterial({ color: 0x57534e });
-              const wall = new THREE.Mesh(new THREE.BoxGeometry(7.5, 6.0, 1.6), wallMat);
-              wall.position.set(0, 3.0, 0);
-              monGroup.add(wall);
-              const doorMat = new THREE.MeshLambertMaterial({ color: 0x422006 });
-              const door = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.6, 0.3), doorMat);
-              door.position.set(0, 2.3, 0.95);
-              monGroup.add(door);
-              const bossMat = new THREE.MeshLambertMaterial({ color: 0xca8a04 });
-              for (let bx = -1; bx <= 1; bx++) {
-                for (let by = 0; by < 4; by++) {
-                  const boss = new THREE.Mesh(new THREE.DodecahedronGeometry(0.13, 0), bossMat);
-                  boss.position.set(bx * 1.1, 0.8 + by * 1.1, 1.12);
-                  monGroup.add(boss);
-                }
-              }
-            } else {
-              // Vrushabhpur (and default) — Pillared Hall: granite-pink
-              // pillared facade under a white central dome.
-              const graniteMat = new THREE.MeshLambertMaterial({ color: 0xd6a8a8 });
-              const base = new THREE.Mesh(new THREE.BoxGeometry(7.5, 3.0, 4.5), graniteMat);
-              base.position.set(0, 1.5, 0);
-              monGroup.add(base);
-              for (let cx = -2.8; cx <= 2.8; cx += 1.4) {
-                const col = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 3.0, 8), new THREE.MeshLambertMaterial({ color: 0xf1e4e4 }));
-                col.position.set(cx, 1.5, 2.35);
-                monGroup.add(col);
-              }
-              const domeMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
-              const dome = new THREE.Mesh(new THREE.SphereGeometry(1.8, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
-              dome.position.set(0, 3.0, 0);
-              monGroup.add(dome);
-            }
-
-            monGroup.position.copy(monPos);
-            monGroup.lookAt(pt.x, monPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
-            this.foliageGroup.add(monGroup);
-            this.obstacles.push({ pos: monPos.clone(), radius: 4.0, type: 'building', mesh: monGroup });
-          }
+          if (!isOpenRoad && i % 400 === 0 && i > 50 && side === 1 && !this.spawnMonument(pt, normal, side, clearsRoad)) return;
 
           // Firewood Log Stacks along forest verges — wooden logs implies
           // trees/forest, which Off-World doesn't have at all.
@@ -7055,6 +6450,555 @@
       return !!(this.fenceGapSites && this.fenceGapSites.some((g) => g.pos.distanceTo(pos) < g.r + 3.0));
     }
 
+    // ---- Shared street-furniture spawners (initial build AND streamed chunks) ----
+    // Lateral placement: lamps, curve signs and milestones stand on the sidewalk
+    // (clear of the guardrail at getBarrierLateralDistance()); electric poles
+    // stand just behind the guardrail.
+    _furnitureLat(kind) {
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
+      const onSidewalk = CONFIG.SIDEWALK && CONFIG.SIDEWALK.enabled;
+      if (kind === 'pole') return this.getBarrierLateralDistance() + 1.1;
+      if (!onSidewalk) return CONFIG.ROAD_WIDTH * 0.5 + 1.8;
+      if (kind === 'lamp') return roadHalf + 0.45;
+      if (kind === 'sign') return roadHalf + 0.6;
+      return roadHalf + 0.9; // milestone
+    }
+
+    _addWithModel(group, asset, name, onModel) {
+      const use = () => {
+        const model = name ? asset.clone(name) : asset.clone();
+        if (!model) return;
+        group.clear();
+        group.add(model);
+        if (onModel) onModel(model);
+      };
+      if (asset.template) use(); else asset.pending.push(use);
+    }
+
+    spawnCurveSign(pt, normal, tangent, curvature) {
+      if (Math.abs(curvature) <= 0.015) return;
+      const outerSide = curvature > 0 ? 1 : -1;
+      const lat = outerSide * this._furnitureLat('sign');
+      const pos = pt.clone().addScaledVector(normal, lat);
+      pos.y = this.surfaceHeightNear(pos, pt, lat);
+      // Chevrons point into the bend as the approaching rider sees them.
+      const g = this.buildChevronSign(outerSide);
+      g.position.copy(pos);
+      const look = pt.clone().addScaledVector(tangent, -6.0); look.y = pos.y;
+      g.lookAt(look);
+      this.foliageGroup.add(g);
+      this.obstacles.push({ pos: pos.clone(), radius: 0.9, type: 'sign' });
+    }
+
+    spawnUtilityPole(pt, normal) {
+      const lat = this._furnitureLat('pole');
+      const pos = pt.clone().addScaledVector(normal, lat);
+      pos.y = this.groundHeightAt(pt, pos, lat);
+      const g = new THREE.Group();
+      g.position.copy(pos);
+      this._addWithModel(g, StreetFurnitureAsset, 'UtilityPole');
+      g.lookAt(pt.x, pos.y, pt.z); // flatten (Pattern 8): cross-arms parallel to the road
+      this.foliageGroup.add(g);
+      this.obstacles.push({ pos: pos.clone(), radius: 0.9, type: 'pole' });
+      if (this.occluderMeshes) this.occluderMeshes.push(g);
+    }
+
+    spawnStreetLamp(pt, normal, side) {
+      const lat = side * this._furnitureLat('lamp');
+      const pos = pt.clone().addScaledVector(normal, lat);
+      pos.y = this.surfaceHeightNear(pos, pt, lat);
+      const g = new THREE.Group();
+      g.position.copy(pos);
+      this._addWithModel(g, StreetFurnitureAsset, 'StreetLamp', () => {
+        if (StreetFurnitureAsset.lensMat && !this.windowMaterials.includes(StreetFurnitureAsset.lensMat)) {
+          this.windowMaterials.push(StreetFurnitureAsset.lensMat);
+        }
+      });
+      g.lookAt(pt.x, pos.y, pt.z); // arm reaches toward the road (+Z after lookAt)
+      this.foliageGroup.add(g);
+      this.obstacles.push({ pos: pos.clone(), radius: 0.8, type: 'pole' });
+      if (this.occluderMeshes) this.occluderMeshes.push(g);
+    }
+
+    spawnMilestone(pt, normal, side) {
+      if (!this._milestoneKit) {
+        this._milestoneKit = {
+          base: new THREE.CylinderGeometry(0.32, 0.35, 0.8, 12),
+          dome: new THREE.SphereGeometry(0.32, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+          band: new THREE.CylinderGeometry(0.325, 0.325, 0.12, 12),
+          white: new THREE.MeshLambertMaterial({ color: 0xf8fafc }),
+          yellow: new THREE.MeshLambertMaterial({ color: 0xfacc15 }),
+          black: new THREE.MeshBasicMaterial({ color: 0x0f172a })
+        };
+      }
+      const K = this._milestoneKit;
+      const lat = side * this._furnitureLat('milestone');
+      const pos = pt.clone().addScaledVector(normal, lat);
+      pos.y = this.surfaceHeightNear(pos, pt, lat);
+      const g = new THREE.Group();
+      const base = new THREE.Mesh(K.base, K.white); base.position.y = 0.4; g.add(base);
+      const dome = new THREE.Mesh(K.dome, K.yellow); dome.position.y = 0.8; g.add(dome);
+      const band = new THREE.Mesh(K.band, K.black); band.position.y = 0.55; g.add(band);
+      g.position.copy(pos);
+      g.lookAt(pt.x, pos.y, pt.z);
+      this.foliageGroup.add(g);
+    }
+
+    // Roadside repair stop: kind 'cycle' (cycle/puncture repair shop) or
+    // 'motor' (motor garage). Registers the repair zone, a fence gap, and a
+    // pedestrian destination. Returns false if the spot is taken.
+    spawnRepairShop(pt, normal, side, kind = 'cycle', checkClearance = false) {
+      const dist = CONFIG.ROAD_WIDTH * 0.5 + (kind === 'motor' ? 5.4 : 4.8);
+      const pos = pt.clone().addScaledVector(normal, side * dist);
+      if (checkClearance && this.obstacles.some((o) => o.type === 'building' && o.pos.distanceTo(pos) < o.radius + 6.0)) return false;
+      pos.y = this.groundHeightAt(pt, pos, side * dist);
+      const g = new THREE.Group();
+      this._addWithModel(g, kind === 'motor' ? MotorGarageAsset : RepairShopAsset, null);
+      g.position.copy(pos);
+      g.lookAt(pt.x, pos.y, pt.z); // open front faces the road
+      this.foliageGroup.add(g);
+      const repairBay = { pos: pos.clone(), radius: 7.5, visitedRecently: false };
+      this.repairBays.push(repairBay);
+      this.obstacles.push({ pos: pos.clone(), radius: kind === 'motor' ? 4.6 : 4.0, type: 'building', mesh: g, repairBay });
+      this.addFenceGap(pt, normal, side, kind === 'motor' ? 4.8 : 4.0);
+      g.updateMatrixWorld(true);
+      this.addPedDestination('shop', pt, g.localToWorld(new THREE.Vector3(0.6, 0, kind === 'motor' ? 3.0 : 2.6)), pos.clone());
+      return true;
+    }
+
+    _clearOfRoad(pos, minClear) {
+      return !this.roadSpatialGrid || !this.roadSpatialGrid.getNearestRoadPoint(pos.x, pos.z, minClear);
+    }
+
+    spawnGantry(pt, normal, tangent) {
+      if (!this._gantryPoleMat) this._gantryPoleMat = new THREE.MeshStandardMaterial({ color: 0x4a4e52, flatShading: true, roughness: 0.7, metalness: 0.25 });
+      const gantryGroup = new THREE.Group();
+      const gantryHeight = 5.2;
+      const gantrySpan = CONFIG.ROAD_WIDTH + 2.8;
+
+      // Side pillars
+      [-gantrySpan / 2, gantrySpan / 2].forEach(xOff => {
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, gantryHeight, 8), this._gantryPoleMat);
+        pillar.position.set(xOff, gantryHeight / 2, 0);
+        gantryGroup.add(pillar);
+      });
+
+      // Overhead Crossbeam
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(gantrySpan, 0.35, 0.35), this._gantryPoleMat);
+      beam.position.set(0, gantryHeight - 0.2, 0);
+      gantryGroup.add(beam);
+
+      // Speed Limit 75 Sign Board
+      const signBoard = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.1, 0.1), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+      signBoard.position.set(0, gantryHeight + 0.5, 0);
+      const innerRing = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.12, 16), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+      innerRing.rotateX(Math.PI / 2);
+      innerRing.position.set(0, gantryHeight + 0.5, 0.02);
+      gantryGroup.add(signBoard);
+      gantryGroup.add(innerRing);
+
+      // Camera Lens Units with Strobes
+      [-1.4, 1.4].forEach(cx => {
+        const camBox = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 0.5), new THREE.MeshLambertMaterial({ color: 0x111827 }));
+        camBox.position.set(cx, gantryHeight - 0.45, 0.2);
+        const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.1, 8), new THREE.MeshBasicMaterial({ color: 0x00f5d4 }));
+        lens.rotateX(Math.PI / 2);
+        lens.position.set(cx, gantryHeight - 0.45, 0.48);
+        gantryGroup.add(camBox);
+        gantryGroup.add(lens);
+      });
+
+      gantryGroup.position.copy(pt);
+      gantryGroup.lookAt(pt.clone().add(tangent));
+      this.foliageGroup.add(gantryGroup);
+
+      this.speedCameras.push({
+        pos: pt.clone(),
+        speedLimit: 20.8, // 75 km/h in m/s
+        speedLimitKmh: 75,
+        triggeredRecently: false
+      });
+
+      this.obstacles.push({ pos: pt.clone().addScaledVector(normal, -gantrySpan / 2), radius: 0.8, type: 'gantry' });
+      this.obstacles.push({ pos: pt.clone().addScaledVector(normal, gantrySpan / 2), radius: 0.8, type: 'gantry' });
+      return true;
+    }
+
+    spawnBusShelter(pt, normal, side, clearFn = this._clearOfRoad.bind(this)) {
+      const shelterDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.2);
+      const shelterPos = pt.clone().addScaledVector(normal, shelterDist);
+
+      // Skip if overlapping another obstacle or if too close to any road section (hairpins)
+      if (!clearFn(shelterPos, CONFIG.ROAD_WIDTH * 0.5 + 3.0)) return null;
+      if (this.obstacles.some(o => o.pos.distanceTo(shelterPos) < (o.radius + 2.8))) return null;
+
+      shelterPos.y = this.groundHeightAt(pt, shelterPos, shelterDist);
+
+      const shelterGroup = new THREE.Group();
+      // Charcoal steel cantilever canopy
+      const steelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.85 });
+      const sRoof = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.12, 2.6), steelMat);
+      sRoof.position.set(0, 2.6, 0);
+      shelterGroup.add(sRoof);
+
+      // Architectural steel uprights
+      [-2.1, 2.1].forEach(px => {
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.6, 8), steelMat);
+        col.position.set(px, 1.3, -1.1);
+        shelterGroup.add(col);
+      });
+
+      // Frosted architectural glass panel
+      const screenMat = new THREE.MeshStandardMaterial({
+        color: 0xa5b4fc,
+        roughness: 0.12,
+        metalness: 0.1,
+        transparent: true,
+        opacity: 0.52
+      });
+      const sScreen = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.3, 0.06), screenMat);
+      sScreen.position.set(0, 1.25, -1.1);
+      shelterGroup.add(sScreen);
+
+      // Slatted teak wood bench
+      const benchMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.65 });
+      const bench = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.1, 0.45), benchMat);
+      bench.position.set(0, 0.5, -0.6);
+      shelterGroup.add(bench);
+      [-1.5, 1.5].forEach(bx => {
+        const bLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6), steelMat);
+        bLeg.position.set(bx, 0.25, -0.6);
+        shelterGroup.add(bLeg);
+      });
+
+      // Waiting Passenger Figure (Low-Poly Human)
+      const humanGroup = new THREE.Group();
+      const skinMat = new THREE.MeshLambertMaterial({ color: 0xd4a373 });
+      const clothMat = new THREE.MeshLambertMaterial({ color: 0xef4444 });
+      const pantsMat = new THREE.MeshLambertMaterial({ color: 0x1e3a8a });
+
+      // Torso
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.65, 0.28), clothMat);
+      torso.position.set(0, 0.95, 0);
+      humanGroup.add(torso);
+      // Head
+      const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 0), skinMat);
+      head.position.set(0, 1.45, 0);
+      humanGroup.add(head);
+      // Legs
+      [-0.12, 0.12].forEach(lx => {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.6, 0.14), pantsMat);
+        leg.position.set(lx, 0.35, 0.15);
+        humanGroup.add(leg);
+      });
+      humanGroup.position.set(0.6, 0, -0.6);
+      shelterGroup.add(humanGroup);
+
+      shelterGroup.position.copy(shelterPos);
+      shelterGroup.lookAt(pt.x, shelterPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
+      this.foliageGroup.add(shelterGroup);
+      this.obstacles.push({ pos: shelterPos.clone(), radius: 2.8, type: 'building', mesh: shelterGroup });
+      this.tryPlaceCrossingNear(pt);
+      return true;
+    }
+
+    spawnCityBuilding(pt, normal, side, clearFn = this._clearOfRoad.bind(this)) {
+      const kit = this._skylineKit;
+      if (!kit) return null;
+      const bldgDist = side * this.prng.range(34.0, 78.0);
+      const bldgPos = pt.clone().addScaledVector(normal, bldgDist);
+
+      const width = this.prng.range(7.0, 13.0);
+      const depth = this.prng.range(7.0, 13.0);
+
+      // Skip this spawn if the curve loops back near this world-space
+      // spot elsewhere (see clearsRoad above) — better to drop an
+      // occasional skyscraper than plant one in the roadway.
+      const footprintRadius = Math.max(width, depth) * 0.5;
+      if (!clearFn(bldgPos, CONFIG.ROAD_WIDTH * 0.6 + footprintRadius + 4.0)) return null;
+
+      bldgPos.y = this.groundHeightAt(pt, bldgPos, bldgDist);
+
+      // Real Indian streetscapes are mostly low/mid-rise shophouses
+      // and apartment blocks with the occasional tower punching up —
+      // not a uniform wall of skyscrapers. Weight the roll heavily
+      // toward short buildings so towers read as landmarks.
+      const heightRoll = this.prng.next();
+      let height, isGlass;
+      if (heightRoll < 0.55) {
+        height = this.prng.range(8.0, 20.0);
+        isGlass = false;
+      } else if (heightRoll < 0.85) {
+        height = this.prng.range(20.0, 40.0);
+        isGlass = this.prng.next() > 0.5;
+      } else {
+        height = this.prng.range(40.0, 90.0);
+        isGlass = true;
+      }
+      const isLowRise = height < 20.0;
+
+      // Skyscrapers all share one fixed glass tint (shiny/reflective
+      // via the material below); low-rise buildings still draw from
+      // a small cohesive palette for street-level variety.
+      const bodyColor = isGlass ? kit.glass : kit.lowrise[Math.floor(this.prng.range(0, kit.lowrise.length))];
+      const accentColor = isGlass ? kit.glass : kit.lowrise[Math.floor(this.prng.range(0, kit.lowrise.length))];
+
+      const bldgGroup = new THREE.Group();
+
+      const makeFacadeMat = (w, h, color) => {
+        // Windows use an emissiveMap rather than a color map so they
+        // glow at a constant brightness independent of scene lighting —
+        // otherwise the tower reads as a flat dark silhouette at night
+        // since ambient/directional light is too dim to reveal a map.
+        const tex = kit.tex.clone();
+        tex.repeat.set(Math.max(1, Math.round(w / 3.2)), Math.max(1, Math.round(h / 4.0)));
+        tex.needsUpdate = true;
+        // Window glow only reads as lit windows once ambient light is
+        // low enough to need it (dusk/night) — left on at a fixed
+        // 0.85 intensity through daylight hours, every building in
+        // the skyline blows out under bloom since a near-white
+        // emissive surface always exceeds the bloom luminance
+        // threshold regardless of how bright the sun already is.
+        // Start dark; Game.applyWindowGlow (tied to time-of-day,
+        // same as vehicle headlights) sets the real intensity.
+        let mat;
+        if (isGlass) {
+          // Shiny reflective glass curtain-wall look: high shininess/
+          // specular highlight, slight transparency, cool blue tint.
+          mat = new THREE.MeshStandardMaterial({
+            color,
+            flatShading: true,
+            emissiveMap: tex,
+            emissive: 0xffffff,
+            emissiveIntensity: 0.0,
+            roughness: 0.15,
+            metalness: 0.6,
+            transparent: true,
+            opacity: 0.92
+          });
+        } else {
+          mat = new THREE.MeshStandardMaterial({
+            color,
+            flatShading: true,
+            emissiveMap: tex,
+            emissive: 0xffffff,
+            emissiveIntensity: 0.0
+          });
+        }
+        this.windowMaterials.push(mat);
+        return mat;
+      };
+
+      // Four massing archetypes so the skyline doesn't read as one
+      // repeated box at different sizes — stepped-tier and podium
+      // towers are common in dense Indian commercial districts.
+      const archetype = isLowRise ? 0 : Math.floor(this.prng.range(0, 4));
+
+      if (archetype === 0) {
+        // Plain slab tower
+        const body = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), makeFacadeMat(width, height, bodyColor));
+        body.position.y = height / 2;
+        bldgGroup.add(body);
+      } else if (archetype === 1) {
+        // Stepped-tier tower: wide base, narrower upper block set back
+        const baseH = height * 0.55;
+        const topH = height - baseH;
+        const base = new THREE.Mesh(new THREE.BoxGeometry(width, baseH, depth), makeFacadeMat(width, baseH, bodyColor));
+        base.position.y = baseH / 2;
+        bldgGroup.add(base);
+        const top = new THREE.Mesh(new THREE.BoxGeometry(width * 0.62, topH, depth * 0.62), makeFacadeMat(width * 0.62, topH, accentColor));
+        top.position.y = baseH + topH / 2;
+        bldgGroup.add(top);
+      } else if (archetype === 2) {
+        // Podium + tower: squat wide podium floors, slender tower rising off it
+        const podiumH = Math.min(10.0, height * 0.18);
+        const towerH = height - podiumH;
+        const podium = new THREE.Mesh(new THREE.BoxGeometry(width * 1.35, podiumH, depth * 1.35), makeFacadeMat(width * 1.35, podiumH, accentColor));
+        podium.position.y = podiumH / 2;
+        bldgGroup.add(podium);
+        const tower = new THREE.Mesh(new THREE.BoxGeometry(width * 0.68, towerH, depth * 0.68), makeFacadeMat(width * 0.68, towerH, bodyColor));
+        tower.position.y = podiumH + towerH / 2;
+        bldgGroup.add(tower);
+      } else {
+        // Twin-block tower: two slim offset blocks of differing height
+        const hA = height;
+        const hB = height * this.prng.range(0.55, 0.8);
+        const blockA = new THREE.Mesh(new THREE.BoxGeometry(width * 0.55, hA, depth), makeFacadeMat(width * 0.55, hA, bodyColor));
+        blockA.position.set(-width * 0.24, hA / 2, 0);
+        bldgGroup.add(blockA);
+        const blockB = new THREE.Mesh(new THREE.BoxGeometry(width * 0.55, hB, depth * 0.9), makeFacadeMat(width * 0.55, hB, accentColor));
+        blockB.position.set(width * 0.28, hB / 2, -depth * 0.05);
+        bldgGroup.add(blockB);
+      }
+
+      // Parapet / rooftop cap
+      const capMat = new THREE.MeshStandardMaterial({ color: 0x6b7480, flatShading: true });
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(width * 0.7, 0.9, depth * 0.7), capMat);
+      cap.position.y = height + 0.45;
+      bldgGroup.add(cap);
+
+      // Rooftop water tank (common Indian skyline silhouette), antenna, or bare.
+      // Low-rise buildings get a water tank far more often — it's the
+      // defining rooftop silhouette of Indian residential/shop blocks.
+      const roofProp = this.prng.next();
+      const tankThreshold = isLowRise ? 0.3 : 0.66;
+      if (roofProp > tankThreshold) {
+        const tankMat = new THREE.MeshStandardMaterial({ color: 0x3f6b8a, flatShading: true });
+        const tank = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 1.6, 8), tankMat);
+        tank.position.set(width * 0.25, height + 1.7, depth * 0.2);
+        bldgGroup.add(tank);
+      } else if (roofProp > 0.33) {
+        const antennaMat = new THREE.MeshStandardMaterial({ color: 0x2a2e33, flatShading: true });
+        const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 6.0, 6), antennaMat);
+        antenna.position.set(0, height + 3.4, 0);
+        bldgGroup.add(antenna);
+      }
+
+      // Foundation slab: buildings sit at a single anchor point on
+      // sloped hillside terrain, but the box geometry has a flat
+      // bottom — on a slope that either buries the downhill corner
+      // or leaves a visible gap under the uphill corner. A tall
+      // foundation extending well underground fills that gap from
+      // any slope angle without needing to sample the terrain footprint.
+      const foundationMat = new THREE.MeshStandardMaterial({ color: 0x5f5348, flatShading: true });
+      const foundation = new THREE.Mesh(new THREE.BoxGeometry(width * 0.96, 60.0, depth * 0.96), foundationMat);
+      foundation.position.y = -30.0;
+      bldgGroup.add(foundation);
+
+      bldgGroup.position.copy(bldgPos);
+      bldgGroup.rotation.y = this.prng.range(-0.06, 0.06);
+      this.foliageGroup.add(bldgGroup);
+
+      // Register so later shops/trees (which do check this.obstacles)
+      // don't get placed clipping into the skyscraper's footprint —
+      // skyscrapers previously weren't registered at all.
+      this.obstacles.push({ pos: bldgPos.clone(), radius: footprintRadius + 1.5, type: 'building', mesh: bldgGroup });
+
+      // Registering only protects obstacles placed AFTER this point —
+      // it does nothing for rocks/trees already placed at an EARLIER
+      // sampled point that this skyscraper's own footprint (up to
+      // ~10+ units) can still reach backward into, since bldgDist
+      // ranges widely (34-78) and isn't tied to the same index a
+      // nearby rock used. This is the delivery-house prune pattern
+      // (see the `if (i % 24 === 0)` house block) applied to
+      // skyscrapers too — measured via dev-checks.js
+      // `rocks-clear-of-houses`: every city with a skyscraper
+      // (`type==='building'`) failed this the same way, since only
+      // delivery houses (also `type==='building'`, radius 3.5) were
+      // ever pruned against, never the larger skyscraper footprints.
+      const SKYSCRAPER_CLEARANCE = 2.0;
+      const overlappingNearSkyscraper = this.obstacles.filter(o =>
+        o !== this.obstacles[this.obstacles.length - 1] &&
+        (o.type === 'rock' || o.type === 'tree') &&
+        o.pos.distanceTo(bldgPos) < (o.radius + footprintRadius + 1.5 + SKYSCRAPER_CLEARANCE)
+      );
+      overlappingNearSkyscraper.forEach(o => { if (o.mesh) this.foliageGroup.remove(o.mesh); });
+      if (overlappingNearSkyscraper.length) {
+        this.obstacles = this.obstacles.filter(o => !overlappingNearSkyscraper.includes(o));
+      }
+      return { pos: bldgPos, footprintRadius };
+    }
+
+    spawnMonument(pt, normal, side, clearFn = this._clearOfRoad.bind(this)) {
+      const monDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 9.0);
+      const monPos = pt.clone().addScaledVector(normal, monDist);
+
+      if (!clearFn(monPos, CONFIG.ROAD_WIDTH * 0.5 + 4.5)) return null;
+      if (this.obstacles.some(o => o.pos.distanceTo(monPos) < (o.radius + 4.0))) return null;
+
+      monPos.y = this.groundHeightAt(pt, monPos, monDist);
+
+      const monGroup = new THREE.Group();
+
+      if (this.cityKey === 'mumbai') {
+        // Gateway of India — basalt-yellow triumphal archway with
+        // domed corner turrets, built as a gate frame (pillars +
+        // lintel) so the arch opening reads without needing CSG.
+        const stoneMat = new THREE.MeshLambertMaterial({ color: 0xd4b483 });
+        [-2.6, 2.6].forEach(px => {
+          const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 7.5, 1.4), stoneMat);
+          pillar.position.set(px, 3.75, 0);
+          monGroup.add(pillar);
+          const turretDome = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.6, 8), stoneMat);
+          turretDome.position.set(px, 8.3, 0);
+          monGroup.add(turretDome);
+        });
+        const lintel = new THREE.Mesh(new THREE.BoxGeometry(6.8, 1.6, 1.4), stoneMat);
+        lintel.position.set(0, 7.3, 0);
+        monGroup.add(lintel);
+        const centerDome = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.2, 10), stoneMat);
+        centerDome.position.set(0, 9.2, 0);
+        monGroup.add(centerDome);
+      } else if (this.cityKey === 'delhi') {
+        // India Gate — sandstone triumphal arch with an eternal-flame
+        // accent at the base.
+        const sandMat = new THREE.MeshLambertMaterial({ color: 0xc2703d });
+        [-2.4, 2.4].forEach(px => {
+          const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 8.0, 1.6), sandMat);
+          pillar.position.set(px, 4.0, 0);
+          monGroup.add(pillar);
+        });
+        const arch = new THREE.Mesh(new THREE.BoxGeometry(6.4, 1.8, 1.6), sandMat);
+        arch.position.set(0, 7.9, 0);
+        monGroup.add(arch);
+        const flame = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 6), new THREE.MeshBasicMaterial({ color: 0xf97316 }));
+        flame.position.set(0, 0.6, 1.2);
+        monGroup.add(flame);
+      } else if (this.cityKey === 'kolkata') {
+        // Victoria Memorial — white marble dome on a colonnaded base.
+        const marbleMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
+        const base = new THREE.Mesh(new THREE.BoxGeometry(7.0, 3.2, 5.5), marbleMat);
+        base.position.set(0, 1.6, 0);
+        monGroup.add(base);
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(2.4, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), marbleMat);
+        dome.position.set(0, 3.2, 0);
+        monGroup.add(dome);
+        const finial = new THREE.Mesh(new THREE.ConeGeometry(0.25, 1.0, 6), marbleMat);
+        finial.position.set(0, 5.9, 0);
+        monGroup.add(finial);
+      } else if (this.cityKey === 'pune') {
+        // Mangalpura Fortress — fortress gate: dark teak door studded with
+        // brass bosses, set in a stone wall.
+        const wallMat = new THREE.MeshLambertMaterial({ color: 0x57534e });
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(7.5, 6.0, 1.6), wallMat);
+        wall.position.set(0, 3.0, 0);
+        monGroup.add(wall);
+        const doorMat = new THREE.MeshLambertMaterial({ color: 0x422006 });
+        const door = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.6, 0.3), doorMat);
+        door.position.set(0, 2.3, 0.95);
+        monGroup.add(door);
+        const bossMat = new THREE.MeshLambertMaterial({ color: 0xca8a04 });
+        for (let bx = -1; bx <= 1; bx++) {
+          for (let by = 0; by < 4; by++) {
+            const boss = new THREE.Mesh(new THREE.DodecahedronGeometry(0.13, 0), bossMat);
+            boss.position.set(bx * 1.1, 0.8 + by * 1.1, 1.12);
+            monGroup.add(boss);
+          }
+        }
+      } else {
+        // Vrushabhpur (and default) — Pillared Hall: granite-pink
+        // pillared facade under a white central dome.
+        const graniteMat = new THREE.MeshLambertMaterial({ color: 0xd6a8a8 });
+        const base = new THREE.Mesh(new THREE.BoxGeometry(7.5, 3.0, 4.5), graniteMat);
+        base.position.set(0, 1.5, 0);
+        monGroup.add(base);
+        for (let cx = -2.8; cx <= 2.8; cx += 1.4) {
+          const col = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 3.0, 8), new THREE.MeshLambertMaterial({ color: 0xf1e4e4 }));
+          col.position.set(cx, 1.5, 2.35);
+          monGroup.add(col);
+        }
+        const domeMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(1.8, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
+        dome.position.set(0, 3.0, 0);
+        monGroup.add(dome);
+      }
+
+      monGroup.position.copy(monPos);
+      monGroup.lookAt(pt.x, monPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
+      this.foliageGroup.add(monGroup);
+      this.obstacles.push({ pos: monPos.clone(), radius: 4.0, type: 'building', mesh: monGroup });
+      return true;
+    }
     // Curve warning sign: yellow board, black border, three black chevrons
     // pointing `dir` (+1 = board's +X), on a pole with black/white base bands.
     // Geometry + materials are shared across every sign.
@@ -8643,6 +8587,39 @@
           if (i === 0) tangent = new THREE.Vector3().subVectors(points[1], points[0]).normalize();
           else if (i === points.length - 1) tangent = new THREE.Vector3().subVectors(points[points.length - 1], points[points.length - 2]).normalize();
           else tangent = new THREE.Vector3().subVectors(points[i + 1], points[i - 1]).normalize();
+
+          // 0. Street furniture — the same shared spawners the initial build
+          // uses, on matching real-world spacing (streamed chunks used to get
+          // none of these, which is why the road thinned out past ~6 km).
+          try {
+            const stepM = this.curve.getLength() / (points.length - 1);
+            const crossed = (every, offset = 0) => i > startSeg && Math.floor((i * stepM + offset) / every) !== Math.floor(((i - 1) * stepM + offset) / every);
+            const inTunnelHere = this.isInTunnelZone && this.isInTunnelZone(i, 4);
+            if (!inTunnelHere) {
+              if (crossed(100) && i + 3 < points.length && i > 0) {
+                const nt = new THREE.Vector3().subVectors(points[i + 3], points[i - 1]).normalize();
+                this.spawnCurveSign(pt, normal, tangent, tangent.x * nt.z - tangent.z * nt.x);
+              }
+              if (crossed(170)) this.spawnUtilityPole(pt, normal);
+              if (crossed(200, 60)) this.spawnStreetLamp(pt, normal, -1);
+              if (crossed(225, 110)) this.spawnMilestone(pt, normal, 1);
+              if (crossed(480, 40)) this.spawnRepairShop(pt, normal, 1, 'cycle', true);
+              if (crossed(480, 280)) this.spawnRepairShop(pt, normal, -1, 'motor', true);
+              // Remaining initial-only props, same real-world spacing as the
+              // first build (its 800 samples are ~10.5 m apart).
+              const offWorldHere = this.cityKey === 'offworld';
+              const openRoadHere = !!(CONFIG.CITIES[this.cityKey]?.openRoad);
+              if (!openRoadHere && crossed(550, 300)) this.spawnGantry(pt, normal, tangent);
+              if (!offWorldHere && crossed(750, 180)) this.spawnBusShelter(pt, normal, 1);
+              if (!openRoadHere && crossed(4200, 2000)) this.spawnMonument(pt, normal, 1);
+              if (!openRoadHere && rng() > 0.15) {
+                if (crossed(75)) this.spawnCityBuilding(pt, normal, 1);
+                if (crossed(75, 37)) this.spawnCityBuilding(pt, normal, -1);
+              }
+            }
+          } catch (err) {
+            console.error('Streamed street furniture failed:', err);
+          }
 
           // 1. Barriers — 4-style rotation matching createFoliageAndProps
           // (Armco / dry-stone / wood split-rail / Jersey concrete). Was

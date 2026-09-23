@@ -27,6 +27,7 @@ kanban-plugin: board
 
 ## ✅ Done
 
+- [x] B108/B109 far-road density: shared spawners stream lamps, poles, signs, milestones, repair shops, motor garage, bus shelters, gantries, monuments, city buildings #done
 - [x] ~~🔴 **B107: Sidewalk Guardrail Lateral Offset Mismatch & Post Embedment Grounding**~~ ✅ 2026-09-23
 	Centralized barrier lateral offset to `getBarrierLateralDistance()` (5.45 m, flush 10 cm inset from sidewalk outer boundary), removed `+0.05` artificial lift, deepened Armco posts to 1.6 m (-1.05 translation, 50 cm embedment), lowered wall course heights, added dev checks 31 & 32. 37/37 checks green. [[Dev Logs/2026-09-23 - B107 Sidewalk Guardrail and Barrier Grounding Alignment]]
 - [x] ~~🔴 **B106: Android 15 (API 35) DecorView WindowInsetsController Crash Fix**~~ ✅ 2026-09-23
