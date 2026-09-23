@@ -64,6 +64,91 @@
   // --------------------------------------------------------------------------
   // 0. VEHICLE GLTF ASSET LOADER — shared factory for all three vehicle meshes
   // --------------------------------------------------------------------------
+
+  // --------------------------------------------------------------------------
+  // Roadside barrier piece shapes. Shared by the initial fence build and the
+  // streaming path. Rails/courses are UNIT length along X (instances stretch
+  // them per segment), posts are unit pieces placed at segment ends.
+  // --------------------------------------------------------------------------
+  // Post positions along one barrier segment: every <=3.2 m, following the
+  // ground between the segment's two end heights. The far end is left to the
+  // next segment's first post so joints don't get doubled posts.
+  function barrierPostStations(len, offA, offB) {
+    const n = Math.max(1, Math.ceil(len / 3.2));
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      const f = k / n;
+      out.push([-len / 2 + len * f, offA + (offB - offA) * f]);
+    }
+    return out;
+  }
+
+  function buildBarrierGeometries() {
+    const alongX = (shape, halfLen = 0.5) => {
+      // extrude a YZ-plane profile (shape x = depth z, shape y = height) along X
+      const g = new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: false, steps: 1 });
+      g.rotateY(Math.PI / 2);
+      g.translate(-halfLen, 0, 0);
+      g.computeVertexNormals();
+      return g;
+    };
+    // Galvanised W-beam: two ridges, 0.31 m tall, sheet ~8 mm thick.
+    const wOuter = [], wInner = [];
+    const W_H = 0.31, W_D = 0.085, T = 0.008, N = 24;
+    for (let k = 0; k <= N; k++) {
+      const y = -W_H / 2 + W_H * k / N;
+      const z = W_D * 0.5 * (1 - Math.cos((k / N) * Math.PI * 4)) * 0.5;
+      wOuter.push(new THREE.Vector2(z, y));
+      wInner.push(new THREE.Vector2(z - T, y));
+    }
+    const wShape = new THREE.Shape([...wOuter, ...wInner.reverse()]);
+    const armcoRail = alongX(wShape);
+    // I-section steel post, 1.1 m tall, centred on its origin.
+    const iShape = new THREE.Shape([
+      [-0.05, -0.05], [0.05, -0.05], [0.05, -0.04], [0.008, -0.04], [0.008, 0.04], [0.05, 0.04],
+      [0.05, 0.05], [-0.05, 0.05], [-0.05, 0.04], [-0.008, 0.04], [-0.008, -0.04], [-0.05, -0.04]
+    ].map(([x, y]) => new THREE.Vector2(x, y)));
+    const armcoPost = new THREE.ExtrudeGeometry(iShape, { depth: 1.1, bevelEnabled: false });
+    armcoPost.rotateX(-Math.PI / 2);
+    armcoPost.translate(0, -0.55, 0);
+    armcoPost.computeVertexNormals();
+    // Amber reflector: small wedge.
+    const armcoRefl = new THREE.CylinderGeometry(0.035, 0.045, 0.1, 4);
+    armcoRefl.rotateY(Math.PI / 4);
+    // Concrete course: tapered with chamfered top edges; two stacked courses
+    // (the lower at full depth, the upper scaled 0.75) read as a Jersey barrier.
+    const jShape = new THREE.Shape([
+      [-0.13, -0.18], [0.13, -0.18], [0.12, 0.10], [0.095, 0.16], [0.07, 0.18],
+      [-0.07, 0.18], [-0.095, 0.16], [-0.12, 0.10]
+    ].map(([x, y]) => new THREE.Vector2(x, y)));
+    const concrete = alongX(jShape);
+    // Dry-stone course: subdivided box with a position-hashed lump so shared
+    // vertices move together and the stretched course reads as irregular stones.
+    const stone = new THREE.BoxGeometry(1, 0.22, 0.32, 14, 2, 2).toNonIndexed();
+    const sp = stone.attributes.position;
+    const h = (x, y, z) => { const v = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return v - Math.floor(v); };
+    for (let k = 0; k < sp.count; k++) {
+      const x = sp.getX(k), y = sp.getY(k), z = sp.getZ(k);
+      const r = h(Math.round(x * 100), Math.round(y * 100), Math.round(z * 100));
+      if (Math.abs(y) > 0.1) sp.setY(k, y + (r - 0.5) * 0.05);
+      if (Math.abs(z) > 0.15) sp.setZ(k, z + (r - 0.5) * 0.06);
+    }
+    stone.computeVertexNormals();
+    // Courses are stretched ~6-11x along X per instance: tile the UVs so the
+    // rock texture reads as stones rather than smeared streaks.
+    const suv = stone.attributes.uv;
+    for (let k = 0; k < suv.count; k++) suv.setX(k, suv.getX(k) * 9.0);
+    // Wood post: turned round post with a chamfered cap.
+    const woodPost = new THREE.LatheGeometry([
+      [0.0, -0.6], [0.075, -0.6], [0.08, -0.3], [0.08, 0.5], [0.07, 0.56], [0.03, 0.62], [0.0, 0.63]
+    ].map(([x, y]) => new THREE.Vector2(x, y)), 10);
+    // Split rail: slightly flattened round rail along X.
+    const woodRail = new THREE.CylinderGeometry(0.05, 0.05, 1, 8, 1);
+    woodRail.rotateZ(Math.PI / 2);
+    woodRail.scale(1, 1.0, 0.8);
+    return { armcoRail, armcoPost, armcoRefl, concrete, stone, woodPost, woodRail };
+  }
+
   function makeVehicleAsset(glbPath, applyMaterials, label, postLoad) {
     const asset = {
       template: null,
@@ -138,6 +223,136 @@
 
   // 0g. DELIVERY CYCLE — Blender-exported GLB with corrected Y-up orientation.
   const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?t=' + Date.now(), () => {}, 'DeliveryCycleAsset');
+
+  // 0g2. CHAI TAPRI — static roadside tea-stall prop. Origin at ground centre,
+  // counter facing +Z (the road, once buildViewpointOrChai's lookAt runs).
+  // Stalls built before it loads show the old box stand-in, swapped via `pending`.
+  const ChaiTapriAsset = {
+    template: null,
+    pending: [],
+    load() {
+      if (typeof THREE.GLTFLoader === 'undefined') return;
+      new THREE.GLTFLoader().load('assets/models/chai-tapri.glb?v=tapri2', (gltf) => {
+        gltf.scene.traverse((child) => {
+          if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
+        });
+        this.template = gltf.scene;
+        this.pending.forEach((fn) => {
+          try { fn(); } catch (err) { console.error('ChaiTapriAsset: swap failed', err); }
+        });
+        this.pending.length = 0;
+      }, undefined, (err) => {
+        console.warn('ChaiTapriAsset: failed to load chai-tapri.glb, keeping box stand-in', err);
+      });
+    },
+    clone() { return this.template ? this.template.clone(true) : null; }
+  };
+  ChaiTapriAsset.load();
+
+  // 0g3. DELIVERY HOUSES — three variants in one GLB (cottage, two-storey,
+  // pink gable). Each house node carries a `DropSpot_*` empty marking where the
+  // delivery ring goes; fronts face +Z (the road after the house group's lookAt).
+  const HousesAsset = {
+    template: null,
+    pending: [],
+    windowMat: null,
+    VARIANTS: ['House_Cottage', 'House_TwoStorey', 'House_PinkGable'],
+    load() {
+      if (typeof THREE.GLTFLoader === 'undefined') return;
+      new THREE.GLTFLoader().load('assets/models/houses.glb?v=houses2', (gltf) => {
+        gltf.scene.traverse((child) => {
+          if (!child.isMesh) return;
+          child.castShadow = true;
+          child.receiveShadow = true;
+          if (child.material && child.material.name === 'House_Window') {
+            child.material.emissive = new THREE.Color(0xffb24a);
+            child.material.emissiveIntensity = 0.0;
+            this.windowMat = child.material;
+          }
+        });
+        this.template = gltf.scene;
+        this.pending.forEach((fn) => {
+          try { fn(); } catch (err) { console.error('HousesAsset: swap failed', err); }
+        });
+        this.pending.length = 0;
+      }, undefined, (err) => {
+        console.warn('HousesAsset: failed to load houses.glb, keeping built-in villas', err);
+      });
+    },
+    clone(name) {
+      const src = this.template && this.template.getObjectByName(name);
+      if (!src) return null;
+      const c = src.clone(true);
+      c.position.set(0, 0, 0);
+      c.rotation.set(0, 0, 0);
+      c.scale.set(1, 1, 1);
+      return c;
+    }
+  };
+  HousesAsset.load();
+
+  // 0g4. CYCLE REPAIR SHOP — replaces the box repair garage. Open front faces +Z
+  // (the road after the garage group's lookAt); green service mat sits in front.
+  const RepairShopAsset = {
+    template: null,
+    pending: [],
+    load() {
+      if (typeof THREE.GLTFLoader === 'undefined') return;
+      new THREE.GLTFLoader().load('assets/models/cycle-repair-shop.glb?v=shop1', (gltf) => {
+        gltf.scene.traverse((child) => {
+          if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
+        });
+        this.template = gltf.scene;
+        this.pending.forEach((fn) => {
+          try { fn(); } catch (err) { console.error('RepairShopAsset: swap failed', err); }
+        });
+        this.pending.length = 0;
+      }, undefined, (err) => {
+        console.warn('RepairShopAsset: failed to load cycle-repair-shop.glb, keeping box garage', err);
+      });
+    },
+    clone() { return this.template ? this.template.clone(true) : null; }
+  };
+  RepairShopAsset.load();
+
+  // 0g5. STREET FURNITURE — `StreetLamp` (arm reaches toward +Z, the road after
+  // the lamp group's lookAt) and `UtilityPole` (cross-arms along X, i.e. parallel
+  // to the road). Origins at the base.
+  const StreetFurnitureAsset = {
+    template: null,
+    pending: [],
+    lensMat: null,
+    load() {
+      if (typeof THREE.GLTFLoader === 'undefined') return;
+      new THREE.GLTFLoader().load('assets/models/street-furniture.glb?v=street1', (gltf) => {
+        gltf.scene.traverse((child) => {
+          if (!child.isMesh) return;
+          child.castShadow = true;
+          if (child.material && child.material.name === 'Lamp_Lens') {
+            child.material.emissive = new THREE.Color(0xffb24a);
+            child.material.emissiveIntensity = 0.0;
+            this.lensMat = child.material;
+          }
+        });
+        this.template = gltf.scene;
+        this.pending.forEach((fn) => {
+          try { fn(); } catch (err) { console.error('StreetFurnitureAsset: swap failed', err); }
+        });
+        this.pending.length = 0;
+      }, undefined, (err) => {
+        console.warn('StreetFurnitureAsset: failed to load street-furniture.glb, keeping box poles', err);
+      });
+    },
+    clone(name) {
+      const src = this.template && this.template.getObjectByName(name);
+      if (!src) return null;
+      const c = src.clone(true);
+      c.position.set(0, 0, 0);
+      c.rotation.set(0, 0, 0);
+      return c;
+    }
+  };
+  StreetFurnitureAsset.load();
 
   // 0h. COURIER — rigged, animated character (Mixamo base, retextured) shared by
   // the on-foot player walker and crosser NPCs, so both use one consistent model
@@ -1454,6 +1669,15 @@
       }
     ],
 
+    // One roadside barrier type for the whole route (continuous, no rotating
+    // styles): 0 = galvanised W-beam guardrail, 1 = dry-stone wall,
+    // 2 = wooden split-rail, 3 = concrete (Jersey) barrier.
+    BARRIER_STYLE: 0,
+
+    // Raised footpath on both sides between the road edge and the guardrail.
+    // The kerb is also the vehicles' lateral limit (see getLateralClamp).
+    SIDEWALK: { enabled: true, width: 1.7, kerb: 0.12 },
+
     VEHICLES: {
       swift: { id: 'swift', name: 'Raftaar GT Hatch', maxSpeed: 44.0, accel: 18.0, drag: 0.80, brake: 30.0 },
       chotahathi: { id: 'chotahathi', name: 'Gaja 500 Mini Truck', maxSpeed: 30.0, accel: 12.0, drag: 0.85, brake: 26.0 },
@@ -2166,8 +2390,17 @@
       if (absDist <= roadHalf) {
         return pt.y - 0.18;
       } else if (absDist <= SHOULDER_TRANSITION) {
-        const t = (absDist - roadHalf) / (SHOULDER_TRANSITION - roadHalf);
-        return pt.y - 0.18 - t * 0.32;
+        // Flattened verge: a level shelf at the road-edge height (following the
+        // road's banking, so it never rises above the low inner edge of a bend)
+        // out past the sidewalk, then a smooth ease down to the same pt.y - 0.5
+        // the embankment branch below starts from (continuous at 9 m). Was a
+        // straight 0.3 m drop under the slab edge plus a further slope, which
+        // read as a steep rolled-off "bank" along every road edge.
+        const bank = this._bankingNear(pt);
+        const edgeY = pt.y + 0.12 + Math.sign(latDist) * roadHalf * Math.sin(bank) - 0.03;
+        const shelfEnd = roadHalf + (CONFIG.SIDEWALK ? CONFIG.SIDEWALK.width : 1.7) + 0.3;
+        if (absDist <= shelfEnd) return edgeY;
+        return THREE.MathUtils.lerp(edgeY, pt.y - 0.5, THREE.MathUtils.smoothstep(absDist, shelfEnd, SHOULDER_TRANSITION));
       } else if (absDist <= EMBANKMENT_BLEND) {
         const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
         const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
@@ -2188,6 +2421,134 @@
       }
     }
 
+    // Highest the terrain may sit near a road sample: that segment's banked
+    // edge height (lateral offset clamped to the road edge), minus a margin.
+    // Was a flat nearest.y - 0.22 that ignored banking, which crushed the
+    // flattened verge shelf on the high (outer) side of every bend.
+    roadClearanceLimit(worldPos, near) {
+      const pts = this.roadSpacedPoints, b = this.roadBankingAngles;
+      if (!pts || pts.length < 3 || near.index == null) return near.y - 0.22;
+      const i = Math.min(near.index, pts.length - 2);
+      const tx = pts[i + 1].x - pts[i].x, tz = pts[i + 1].z - pts[i].z;
+      const tl = Math.hypot(tx, tz) || 1;
+      const lat = (worldPos.x - near.point.x) * (-tz / tl) + (worldPos.z - near.point.z) * (tx / tl);
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
+      const bank = (b && b[near.index] !== undefined) ? b[near.index] : 0;
+      return near.y + 0.12 + THREE.MathUtils.clamp(lat, -roadHalf, roadHalf) * Math.sin(bank) - 0.05;
+    }
+
+    // Banking angle at the road sample nearest `pt` (0 until the road exists).
+    _bankingNear(pt) {
+      const b = this.roadBankingAngles;
+      if (!b || !this.roadSpatialGrid || !this.roadSpatialGrid.points || !this.roadSpatialGrid.points.length) return 0;
+      const near = this.roadSpatialGrid.getNearestRoadPoint(pt.x, pt.z, 12.0);
+      if (!near) return 0;
+      const v = b[near.index];
+      return (v === undefined) ? (b[near.index - 1] || 0) : v;
+    }
+
+    _inTunnelAtU(u, pad = 1) {
+      if (!this.roadSpacedPoints || !this.isInTunnelZone) return false;
+      return this.isInTunnelZone(Math.round(u * (this.roadSpacedPoints.length - 1)), pad);
+    }
+
+    // Raised footpath with a painted kerb along both road edges, for the road
+    // between arc-length fractions u0..u1. Skips tunnel bores. Returns a Group.
+    buildSidewalkRange(u0, u1) {
+      const group = new THREE.Group();
+      group.name = 'Sidewalks';
+      try {
+        if (!CONFIG.SIDEWALK || !CONFIG.SIDEWALK.enabled || !this.curve) return group;
+        const W = CONFIG.SIDEWALK.width, KERB = CONFIG.SIDEWALK.kerb;
+        const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
+        const len = this.curve.getLength();
+        const STEP = 1.5;
+        const n = Math.max(2, Math.ceil(((u1 - u0) * len) / STEP));
+        const bankAtU = (u) => {
+          const b = this.roadBankingAngles; if (!b || !b.length) return 0;
+          const f = THREE.MathUtils.clamp(u, 0, 1) * (b.length - 1), i = Math.floor(f);
+          return THREE.MathUtils.lerp(b[i] || 0, b[Math.min(i + 1, b.length - 1)] || 0, f - i);
+        };
+        const paver = new THREE.Color(0xbdb7ab), paver2 = new THREE.Color(0xb1ab9f);
+        const kerbW = new THREE.Color(0xf2f2ee), kerbB = new THREE.Color(0x1a1c20), kerbSide = new THREE.Color(0x9a958b);
+        const up = new THREE.Vector3(0, 1, 0);
+        [-1, 1].forEach((side) => {
+          const pos = [], col = [];
+          let prev = null;
+          const quad = (a, b, c, d, color) => {
+            // reversed order: faces must point up / away from the road for lighting and raycasts
+            [a, c, b, a, d, c].forEach((v) => { pos.push(v.x, v.y, v.z); col.push(color.r, color.g, color.b); });
+          };
+          for (let k = 0; k <= n; k++) {
+            const u = u0 + (u1 - u0) * (k / n);
+            if (this._inTunnelAtU(u, 2)) { prev = null; continue; }
+            const pt = this.curve.getPointAt(THREE.MathUtils.clamp(u, 0, 1));
+            const tg = this.curve.getTangentAt(THREE.MathUtils.clamp(u, 0, 1)).setY(0).normalize();
+            const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
+            const edgeY = pt.y + 0.12 + side * roadHalf * Math.sin(bankAtU(u));
+            const pIn = pt.clone().addScaledVector(nrm, side * roadHalf);
+            const pOut = pt.clone().addScaledVector(nrm, side * (roadHalf + W));
+            const groundOut = this.groundHeightAt(pt, pOut, side * (roadHalf + W));
+            const cur = {
+              inBot: new THREE.Vector3(pIn.x, edgeY - 0.02, pIn.z),
+              inTop: new THREE.Vector3(pIn.x, edgeY + KERB, pIn.z),
+              outTop: new THREE.Vector3(pOut.x, edgeY + KERB, pOut.z),
+              outBot: new THREE.Vector3(pOut.x, Math.min(groundOut, edgeY) - 0.05, pOut.z)
+            };
+            if (prev) {
+              // winding so faces point away from the road centre / upward
+              const f = side > 0;
+              const kerbCol = (k % 2) ? kerbW : kerbB;
+              if (f) {
+                quad(prev.inBot, cur.inBot, cur.inTop, prev.inTop, kerbCol);
+                quad(prev.inTop, cur.inTop, cur.outTop, prev.outTop, (k % 4 < 2) ? paver : paver2);
+                quad(prev.outTop, cur.outTop, cur.outBot, prev.outBot, kerbSide);
+              } else {
+                quad(prev.inBot, prev.inTop, cur.inTop, cur.inBot, kerbCol);
+                quad(prev.inTop, prev.outTop, cur.outTop, cur.inTop, (k % 4 < 2) ? paver : paver2);
+                quad(prev.outTop, prev.outBot, cur.outBot, cur.outTop, kerbSide);
+              }
+            }
+            prev = cur;
+          }
+          if (!pos.length) return;
+          const geom = new THREE.BufferGeometry();
+          geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+          geom.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+          geom.computeVertexNormals();
+          const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide }));
+          mesh.receiveShadow = true;
+          mesh.frustumCulled = false;
+          group.add(mesh);
+        });
+      } catch (err) {
+        console.error('buildSidewalkRange failed:', err);
+      }
+      return group;
+    }
+
+    // Rendered surface height (road slab + banking on the carriageway, verge /
+    // terrain beyond it) at an arbitrary world position, using the nearest road
+    // segment rather than a caller-supplied spline point. For anything that
+    // walks or stands: groundHeightAt() alone is the ground UNDER the road slab
+    // and ignores banking, which sank crossers up to ~0.5 m into the asphalt.
+    surfaceHeightNear(pos, fallbackPt, fallbackLat) {
+      const pts = this.roadSpacedPoints;
+      const near = (this.roadSpatialGrid && pts && pts.length > 2)
+        ? this.roadSpatialGrid.getNearestRoadPoint(pos.x, pos.z, 40.0)
+        : null;
+      if (!near) return this.groundHeightAt(fallbackPt, pos, fallbackLat);
+      const i = Math.min(near.index, pts.length - 2);
+      const tx = pts[i + 1].x - pts[i].x, tz = pts[i + 1].z - pts[i].z;
+      const tl = Math.hypot(tx, tz) || 1;
+      // normal = tangent x up, matching VehicleController.projectToRoad
+      const nx = -tz / tl, nz = tx / tl;
+      const lat = (pos.x - near.point.x) * nx + (pos.z - near.point.z) * nz;
+      const roadPt = this._surfaceScratchPt || (this._surfaceScratchPt = new THREE.Vector3());
+      roadPt.set(near.point.x, near.point.y, near.point.z);
+      return this.getRoadSurfaceHeight(roadPt, pos, lat, near.index / (pts.length - 1));
+    }
+
     // Exact Road Surface Height (includes road slab +0.12 and true 3D banking)
     getRoadSurfaceHeight(pt, worldPos, latDist, u = 0) {
       const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
@@ -2205,21 +2566,24 @@
       if (absDist <= roadHalf) {
         return pt.y + 0.12 + latDist * Math.sin(bankingAngle);
       } else {
-        const SHOULDER_TRANSITION = 9.0;
-        const EMBANKMENT_BLEND = 45.0;
-        if (absDist <= SHOULDER_TRANSITION) {
-          const t = (absDist - roadHalf) / (SHOULDER_TRANSITION - roadHalf);
-          const baseShoulderY = pt.y - 0.18 - t * 0.32;
-          const bankedYOffset = latDist * Math.sin(bankingAngle) * (1 - t);
-          return baseShoulderY + bankedYOffset;
-        } else if (absDist <= EMBANKMENT_BLEND) {
-          const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
-          const blendFactor = THREE.MathUtils.smoothstep(absDist, SHOULDER_TRANSITION, EMBANKMENT_BLEND);
-          const shoulderDrop = pt.y - 0.5;
-          return THREE.MathUtils.lerp(shoulderDrop, rawH, blendFactor);
-        } else {
-          return this.getRawTerrainHeight(worldPos.x, worldPos.z) - 0.3;
+        // Off the carriageway, match what's RENDERED: the road mesh's verge skirt
+        // slopes linearly from the (banked) road edge down to the unbanked
+        // terrain over ~1.6 m, and past that the terrain is exactly
+        // groundHeightAt. The previous shoulder formula added banking the
+        // rendered terrain doesn't have (Rule #1 removed it from the terrain),
+        // floating things by up to ~0.35 m on the outside of bends and sinking
+        // them on the inside; measured against raycasts on a 5.7-degree bend.
+        const groundY = this.groundHeightAt(pt, worldPos, latDist);
+        const past = absDist - roadHalf;
+        if (CONFIG.SIDEWALK && CONFIG.SIDEWALK.enabled && past <= CONFIG.SIDEWALK.width && !this._inTunnelAtU(u, 2)) {
+          return pt.y + 0.12 + Math.sign(latDist) * roadHalf * Math.sin(bankingAngle) + CONFIG.SIDEWALK.kerb;
         }
+        const SKIRT = 1.6;
+        if (past < SKIRT) {
+          const edgeY = pt.y + 0.12 + Math.sign(latDist) * roadHalf * Math.sin(bankingAngle);
+          return THREE.MathUtils.lerp(edgeY, groundY, past / SKIRT);
+        }
+        return groundY;
       }
     }
 
@@ -3198,7 +3562,7 @@
       const lateralSlices = [
         -150.0, -105.0, -75.0, -55.0,
         -45.0, -41.0, -37.0, -33.0, -29.0, -25.0, -21.0, -17.0, -13.0, -9.0,
-        -vergeLat, -roadHalf, roadHalf, vergeLat,
+        -7.6, -6.5, -vergeLat, -roadHalf, roadHalf, vergeLat, 6.5, 7.6,
         9.0, 13.0, 17.0, 21.0, 25.0, 29.0, 33.0, 37.0, 41.0, 45.0,
         55.0, 75.0, 105.0, 150.0
       ];
@@ -3265,7 +3629,10 @@
           } else if (absDist <= 9.0) {
             // 2. Road Shoulder Verge: gentle downward slope matching groundHeightAt()
             const t = (absDist - roadHalf) / (9.0 - roadHalf);
-            finalY = pt.y - 0.22 - t * 0.32;
+            // Shared formula (Pattern 1): this used to be its own copy, which is
+            // why flattening groundHeightAt didn't change the rendered verge.
+            // 0.04 below it, matching the 0.22 vs 0.18 under-slab offset above.
+            finalY = this.groundHeightAt(pt, worldPos, latDist) - 0.04;
 
             // Natural organic shoulder blending into biome landscape:
             // Starts at shoulderSoilColor at road edge (t=0), feathering outward into season grass/sand
@@ -3312,8 +3679,9 @@
             const clearRadius = vergeLat + 0.6;
             const nearestRoad = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(worldPos.x, worldPos.z, clearRadius + 1.0) : null;
             if (nearestRoad && nearestRoad.dist < clearRadius) {
-              if (finalY > nearestRoad.y - 0.22 && finalY < nearestRoad.y + 4.5) {
-                finalY = nearestRoad.y - 0.22;
+              const clearLimit = this.roadClearanceLimit(worldPos, nearestRoad);
+              if (finalY > clearLimit && finalY < nearestRoad.y + 4.5) {
+                finalY = clearLimit;
               }
             } else {
               const clearSq = clearRadius * clearRadius;
@@ -4089,18 +4457,33 @@
       const kioskGroup = new THREE.Group();
 
       if (isChaiTapri) {
-        const tRoof = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.12, 3.2), new THREE.MeshLambertMaterial({ color: 0xb45309 }));
-        tRoof.position.set(0, 2.5, 0);
-        tRoof.rotateX(0.08);
-        kioskGroup.add(tRoof);
+        const stallModel = ChaiTapriAsset.clone();
+        if (stallModel) {
+          kioskGroup.add(stallModel);
+        } else {
+          // Box stand-in until chai-tapri.glb arrives, then swapped in place.
+          const standIn = new THREE.Group();
+          const tRoof = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.12, 3.2), new THREE.MeshLambertMaterial({ color: 0xb45309 }));
+          tRoof.position.set(0, 2.5, 0);
+          tRoof.rotateX(0.08);
+          standIn.add(tRoof);
 
-        const counter = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.0, 1.2), new THREE.MeshLambertMaterial({ color: 0x451a03 }));
-        counter.position.set(0, 0.5, 0.4);
-        kioskGroup.add(counter);
+          const counter = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.0, 1.2), new THREE.MeshLambertMaterial({ color: 0x451a03 }));
+          counter.position.set(0, 0.5, 0.4);
+          standIn.add(counter);
 
-        const kettle = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.45, 8), new THREE.MeshLambertMaterial({ color: 0xf59e0b }));
-        kettle.position.set(-0.9, 1.2, 0.4);
-        kioskGroup.add(kettle);
+          const kettle = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.45, 8), new THREE.MeshLambertMaterial({ color: 0xf59e0b }));
+          kettle.position.set(-0.9, 1.2, 0.4);
+          standIn.add(kettle);
+          kioskGroup.add(standIn);
+
+          ChaiTapriAsset.pending.push(() => {
+            const model = ChaiTapriAsset.clone();
+            if (!model) return;
+            kioskGroup.remove(standIn);
+            kioskGroup.add(model);
+          });
+        }
 
         // Patron: the same rigged courier used for roadside pedestrians,
         // standing on the Idle clip with a cutting-chai glass. Was a
@@ -4197,7 +4580,15 @@
 
       const parent = targetParentGroup || this.foliageGroup;
       parent.add(kioskGroup);
-      this.obstacles.push({ pos: kioskPos.clone(), radius: 2.8, type: 'building' });
+      this.obstacles.push({ pos: kioskPos.clone(), radius: 2.8, type: 'building', mesh: kioskGroup });
+      this.addFenceGap(pt, normal, side, 3.5);
+      if (isChaiTapri) {
+        // Where a passing pedestrian stands to buy chai: in front of the
+        // counter, left of the resident patron at local (0.7, 0, 1.4).
+        kioskGroup.updateMatrixWorld(true);
+        this.addPedDestination('stall', pt, kioskGroup.localToWorld(new THREE.Vector3(-0.5, 0, 1.45)), kioskPos.clone());
+      }
+      this.tryPlaceCrossingNear(pt);
 
       return { kioskGroup, kioskPos };
     }
@@ -4448,6 +4839,34 @@
         houseGroup.add(ring);
       }
 
+      // Modeled house: replaces the built-in villa/bungalow above (kept as the
+      // stand-in until houses.glb loads). Variant is derived from u rather than
+      // this.prng so choosing it doesn't shift the rest of world generation.
+      const houseVariant = HousesAsset.VARIANTS[Math.floor(Math.abs(u || 0) * 100003) % HousesAsset.VARIANTS.length];
+      let targetEntry = null;
+      const useHouseModel = () => {
+        try {
+          const model = HousesAsset.clone(houseVariant);
+          if (!model) return;
+          houseGroup.children.slice().forEach((ch) => { if (ch !== ring) houseGroup.remove(ch); });
+          houseGroup.add(model);
+          let spot = null;
+          model.traverse((o) => { if (!spot && /^DropSpot/.test(o.name || '')) spot = o; });
+          if (spot) ring.position.set(spot.position.x, spot.position.y + 0.02, spot.position.z);
+          if (HousesAsset.windowMat && this.windowMaterials && !this.windowMaterials.includes(HousesAsset.windowMat)) {
+            this.windowMaterials.push(HousesAsset.windowMat);
+          }
+          if (targetEntry) {
+            houseGroup.updateMatrixWorld(true);
+            ring.getWorldPosition(targetEntry.pos);
+          }
+        } catch (err) {
+          console.error('Delivery house model swap failed:', err);
+        }
+      };
+      if (HousesAsset.template) useHouseModel();
+      else HousesAsset.pending.push(useHouseModel);
+
       this.obstacles.push({ pos: housePos.clone(), radius: 4.8, type: 'building' });
       houseGroup.position.copy(housePos);
 
@@ -4462,7 +4881,7 @@
       parent.add(driveMesh);
       parent.add(houseGroup);
 
-      const targetEntry = {
+      targetEntry = {
         order: order,
         pos: ringWorldPos,
         ring: ring,
@@ -4471,6 +4890,9 @@
         tossRadius: tossRadius
       };
       this.deliveryTargets.push(targetEntry);
+      this.addFenceGap(pt, normal, houseSide, 4.5);
+      this.addPedDestination('house', pt, targetEntry.pos, housePos.clone());
+      this.tryPlaceCrossingNear(pt);
 
       return { houseGroup, driveMesh, housePos, targetEntry };
     }
@@ -4487,6 +4909,10 @@
       // mixer references too or updatePatrons keeps skinning orphans.
       this.patrons = [];
       this.trafficSignals = [];
+      this.crossingSites = [];
+      this.fenceGapSites = [];
+      this.pedDestinations = [];
+      this.crossingInfo = [];
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
       const cityCfg = CONFIG.CITIES[this.cityKey] || CONFIG.CITIES.offworld;
@@ -4873,9 +5299,8 @@
         // 1b. Signalled zebra crossing. Rarer than the strolling clusters, and
         // never inside a tunnel bore or on an open-road stretch with no reason
         // for anyone to be crossing.
-        if (!isOpenRoad && !inTunnel && i % 112 === 0 && i > 0) {
-          this.buildZebraCrossing(pt, scene);
-        }
+        // (Zebra crossings are placed by tryPlaceCrossingNear at tea stalls,
+        // bus shelters and delivery houses, not at fixed intervals.)
 
         // 2. Roadside Chevron Turn Warning Signs (Yellow/Black <<< >>> on metal poles)
         // Skipped on Off-World — DOT-style highway signage doesn't belong
@@ -4890,28 +5315,9 @@
             const signPos = pt.clone().addScaledVector(normal, signDist);
             signPos.y = calcTerrainY(signPos, signDist);
 
-            const signGroup = new THREE.Group();
-            // Metal post
-            const postGeom = new THREE.CylinderGeometry(0.06, 0.06, 1.8, 6);
-            const postMat = new THREE.MeshLambertMaterial({ color: 0x8a929a });
-            const post = new THREE.Mesh(postGeom, postMat);
-            post.position.y = 0.9;
-            signGroup.add(post);
-
-            // Yellow/Black Chevron Box
-            const boardGeom = new THREE.BoxGeometry(1.2, 0.9, 0.08);
-            const boardMat = new THREE.MeshLambertMaterial({ color: 0xfca311 });
-            const board = new THREE.Mesh(boardGeom, boardMat);
-            board.position.y = 1.6;
-
-            // Black inner chevron symbol
-            const chevGeom = new THREE.BoxGeometry(0.8, 0.6, 0.1);
-            const chevMat = new THREE.MeshBasicMaterial({ color: 0x111318 });
-            const chev = new THREE.Mesh(chevGeom, chevMat);
-            chev.position.set(0, 1.6, 0.01);
-
-            signGroup.add(board);
-            signGroup.add(chev);
+            // Chevrons point into the bend as the approaching rider sees them
+            // (verified in game: a left-hand bend shows <<< on the outer side).
+            const signGroup = this.buildChevronSign(outerSide);
             signGroup.position.copy(signPos);
             signGroup.lookAt(pt.clone().addScaledVector(tangent, -6.0));
             this.foliageGroup.add(signGroup);
@@ -4921,20 +5327,29 @@
 
         // 3. Roadside Electric Utility Poles
         if (!isOpenRoad && i % 24 === 0) {
-          const latDist = CONFIG.ROAD_WIDTH * 0.5 + 2.2;
+          const latDist = CONFIG.ROAD_WIDTH * 0.5 + 2.9; // just behind the fence line (2.2), not on it
           const polePos = pt.clone().addScaledVector(normal, latDist);
           polePos.y = calcTerrainY(polePos, latDist);
           // Per-instance material clone (not the shared `poleMat`) so the
           // camera occlusion fade can dim this one pole without dimming
           // every utility pole in the world at once.
           const poleInstMat = poleMat.clone();
-          const pole = new THREE.Mesh(poleGeom, poleInstMat);
+          const pole = new THREE.Group();
           pole.position.copy(polePos);
-          pole.position.y += 3.2;
-
+          const standIn = new THREE.Mesh(poleGeom, poleInstMat);
+          standIn.position.y = 3.2;
           const crossbar = new THREE.Mesh(crossbarGeom, poleInstMat);
           crossbar.position.set(0, 2.6, 0);
-          pole.add(crossbar);
+          standIn.add(crossbar);
+          const usePoleModel = () => {
+            const model = StreetFurnitureAsset.clone('UtilityPole');
+            if (!model) return;
+            pole.remove(standIn);
+            pole.add(model);
+          };
+          if (StreetFurnitureAsset.template) usePoleModel();
+          else { pole.add(standIn); StreetFurnitureAsset.pending.push(usePoleModel); }
+          pole.lookAt(pt.x, polePos.y, pt.z); // flatten (Pattern 8): cross-arms end up parallel to the road
           this.foliageGroup.add(pole);
           this.obstacles.push({ pos: polePos.clone(), radius: 0.9, type: 'pole' });
           this.occluderMeshes.push(pole);
@@ -5042,15 +5457,29 @@
           pad.position.set(0, 0.08, 0);
           garageGroup.add(pad);
 
+          const useShopModel = () => {
+            const model = RepairShopAsset.clone();
+            if (!model) return;
+            garageGroup.clear();
+            garageGroup.add(model);
+          };
+          if (RepairShopAsset.template) useShopModel();
+          else RepairShopAsset.pending.push(useShopModel);
+
           garageGroup.position.copy(bayPos);
           garageGroup.lookAt(pt.x, bayPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
           this.foliageGroup.add(garageGroup);
 
-          this.repairBays.push({
+          const repairBay = {
             pos: bayPos.clone(),
             radius: 7.5,
             visitedRecently: false
-          });
+          };
+          this.repairBays.push(repairBay);
+          this.obstacles.push({ pos: bayPos.clone(), radius: 4.0, type: 'building', mesh: garageGroup, repairBay });
+          this.addFenceGap(pt, normal, baySide, 4.0);
+          garageGroup.updateMatrixWorld(true);
+          this.addPedDestination('shop', pt, garageGroup.localToWorld(new THREE.Vector3(0.6, 0, 2.6)), bayPos.clone());
         }
 
         // 6. Dense Multi-Tiered Pine & Broadleaf Forests, Rocks, Fences & Lanterns (Left and Right)
@@ -5436,7 +5865,7 @@
             // Register so later shops/trees (which do check this.obstacles)
             // don't get placed clipping into the skyscraper's footprint —
             // skyscrapers previously weren't registered at all.
-            this.obstacles.push({ pos: bldgPos.clone(), radius: footprintRadius + 1.5, type: 'building' });
+            this.obstacles.push({ pos: bldgPos.clone(), radius: footprintRadius + 1.5, type: 'building', mesh: bldgGroup });
 
             // Registering only protects obstacles placed AFTER this point —
             // it does nothing for rocks/trees already placed at an EARLIER
@@ -5481,7 +5910,9 @@
             const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
             const FENCE_GAP_RADIUS = 18.0; // meters either side of a house's checkpoint
             const houseInTunnel = this.isInTunnelZone && this.isInTunnelZone(nearestHouseCheckpoint, 35);
-            const blockedByHouse = !isOpenRoad && !houseInTunnel && (side === houseCheckpointSide) && (distToHouse < FENCE_GAP_RADIUS);
+            // Gaps are cut in the deferred pass from this.fenceGapSites (tea
+            // stalls, houses, repair shops, zebra crossings), not guessed here.
+            const blockedByHouse = false;
 
             if (!blockedByHouse) {
               // createRoadMesh's paved shoulder verge extends to
@@ -5498,7 +5929,7 @@
               // planted in.
               const fenceDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 2.2);
               const fencePos = pt.clone().addScaledVector(normal, fenceDist);
-              const railLen = FENCE_STEP * avgSegStep + 0.6; // slight overlap so segments tile without gaps
+              const railLen = FENCE_STEP * avgSegStep * 1.08 + 0.6; // overlap so straight rails still meet on curves
 
               // Sample true ground height at BOTH ends of this short (~6m)
               // segment, not just its center — with a fence group spawned
@@ -5565,12 +5996,12 @@
               const groupMatrix = _fenceDummy.matrix;
 
               // Barrier Styles: 0: Galvanized Steel W-Beam Armco Guardrail, 1: Dry-stone wall, 2: Wood split-rail, 3: Concrete Jersey barrier
-              const barrierStyle = Math.floor(i / 30) % 4;
+              const barrierStyle = CONFIG.BARRIER_STYLE;
               const matrices = { posts: [], rails: [], stoneRows: [], concreteRows: [], armcoRails: [], armcoPosts: [], armcoReflectors: [] };
 
               if (barrierStyle === 0) {
                 // Galvanized Steel W-Beam Armco Highway Guardrail with Reflectors (Slow Roads Highway reference)
-                [[-railLen / 2, offsetA], [railLen / 2, offsetB]].forEach(([px, offset]) => {
+                barrierPostStations(railLen, offsetA, offsetB).forEach(([px, offset]) => {
                   const postLocal = new THREE.Matrix4().makeTranslation(px, offset + 0.55, 0);
                   matrices.armcoPosts.push(groupMatrix.clone().multiply(postLocal));
 
@@ -5608,7 +6039,7 @@
                 });
               } else {
                 // Wood split-rail fence
-                [[-railLen / 2, offsetA], [railLen / 2, offsetB]].forEach(([px, offset]) => {
+                barrierPostStations(railLen, offsetA, offsetB).forEach(([px, offset]) => {
                   const local = new THREE.Matrix4().makeTranslation(px, offset + 0.6, 0);
                   matrices.posts.push(groupMatrix.clone().multiply(local));
                 });
@@ -5703,10 +6134,11 @@
             lampPos.y = calcTerrainY(lampPos, lampDist);
 
             const lampGroup = new THREE.Group();
+            const lampStandIn = new THREE.Group();
             const poleMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
             const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.10, 5.5, 6), poleMat);
             post.position.y = 2.75;
-            lampGroup.add(post);
+            lampStandIn.add(post);
 
             // Curved horizontal boom reaching over the road, drooping
             // slightly toward the tip (real lamp booms aren't dead flat —
@@ -5719,7 +6151,7 @@
             const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.8), poleMat);
             arm.position.set(0, 5.4, 0.7);
             arm.rotateX(-0.22);
-            lampGroup.add(arm);
+            lampStandIn.add(arm);
 
             // Lantern head: hangs distinctly below the arm's tip (breaks
             // the straight cross-bar line) and is sized to actually read
@@ -5731,8 +6163,21 @@
             lanternHousing.position.set(0, 5.05, 1.55);
             const lightLens = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.1, 0.5), new THREE.MeshBasicMaterial({ color: 0xffb703 }));
             lightLens.position.set(0, 4.92, 1.55);
-            lampGroup.add(lanternHousing);
-            lampGroup.add(lightLens);
+            lampStandIn.add(lanternHousing);
+            lampStandIn.add(lightLens);
+
+            const useLampModel = () => {
+              const model = StreetFurnitureAsset.clone('StreetLamp');
+              if (!model) return;
+              lampGroup.remove(lampStandIn);
+              lampGroup.add(model);
+              if (StreetFurnitureAsset.lensMat && !this.windowMaterials.includes(StreetFurnitureAsset.lensMat)) {
+                this.windowMaterials.push(StreetFurnitureAsset.lensMat);
+              }
+            };
+            lampGroup.add(lampStandIn);
+            if (StreetFurnitureAsset.template) useLampModel();
+            else StreetFurnitureAsset.pending.push(useLampModel);
 
             lampGroup.position.copy(lampPos);
             // Same lookAt-tilt bug as the delivery cabin (see BUGFIX_LOG.md
@@ -5824,7 +6269,8 @@
             shelterGroup.position.copy(shelterPos);
             shelterGroup.lookAt(pt.x, shelterPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
             this.foliageGroup.add(shelterGroup);
-            this.obstacles.push({ pos: shelterPos.clone(), radius: 2.8, type: 'building' });
+            this.obstacles.push({ pos: shelterPos.clone(), radius: 2.8, type: 'building', mesh: shelterGroup });
+            this.tryPlaceCrossingNear(pt);
           }
 
           // Roadside Dhaba / Chai Tapri with Customers drinking tea
@@ -5957,7 +6403,7 @@
             monGroup.position.copy(monPos);
             monGroup.lookAt(pt.x, monPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
             this.foliageGroup.add(monGroup);
-            this.obstacles.push({ pos: monPos.clone(), radius: 4.0, type: 'building' });
+            this.obstacles.push({ pos: monPos.clone(), radius: 4.0, type: 'building', mesh: monGroup });
           }
 
           // Firewood Log Stacks along forest verges — wooden logs implies
@@ -6072,7 +6518,8 @@
             const HOUSE_CLEARANCE = 5.8;
             const overlappingObstacles = this.obstacles.filter(o => o.pos.distanceTo(housePos) < (o.radius + HOUSE_CLEARANCE));
             overlappingObstacles.forEach(o => {
-              if (o.mesh) this.foliageGroup.remove(o.mesh);
+              if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
+              if (o.repairBay) this.repairBays = this.repairBays.filter(b => b !== o.repairBay);
             });
             this.obstacles = this.obstacles.filter(o => o.pos.distanceTo(housePos) >= (o.radius + HOUSE_CLEARANCE));
             pendingRocks = pendingRocks.filter(r => r.pos.distanceTo(housePos) >= (r.radius + HOUSE_CLEARANCE));
@@ -6213,8 +6660,11 @@
         const acceptedArmcoPosts = [];
         const acceptedArmcoReflectors = [];
         pendingFences.forEach(({ matrices, pos, radius }) => {
-          const overlaps = this.obstacles.some(o => o.pos.distanceTo(pos) < (o.radius + radius));
-          if (overlaps) return;
+          if (this.isFenceGap(pos)) return;
+          // Never run the fence through a building; poles, lamps, rocks and
+          // trees no longer punch holes in it.
+          const hitsBuilding = this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(pos) < (o.radius + Math.min(radius, 2.5)));
+          if (hitsBuilding) return;
           acceptedPosts.push(...matrices.posts);
           acceptedRails.push(...matrices.rails);
           acceptedStoneRows.push(...matrices.stoneRows);
@@ -6236,52 +6686,58 @@
 
         const fWoodTex = RealTextureFactory.woodColor();
         const fWoodNormal = RealTextureFactory.woodNormal();
+        const BG = buildBarrierGeometries();
         buildFenceBatch(
           acceptedPosts,
-          new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6),
+          BG.woodPost,
           new THREE.MeshStandardMaterial({ color: 0x8a7a68, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
           false
         );
         buildFenceBatch(
           acceptedRails,
-          new THREE.BoxGeometry(1, 0.08, 0.08),
+          BG.woodRail,
           new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
           false
         );
         // Master Prompt section 3's dry-stone-wall barrier variant — same real rock
         // texture, now one InstancedMesh for all rows/segments combined
+        // Courses are stretched ~6-11x along X per instance; repeat the rock
+        // texture along X so it reads as stones instead of smeared streaks.
+        // (buildBarrierGeometries tiles the stone course UVs 9x along X; the
+        // shared rock textures only need to repeat rather than clamp.)
         const stoneTex = RealTextureFactory.rockColor();
         const stoneNormal = RealTextureFactory.rockNormal();
+        [stoneTex, stoneNormal].forEach((t) => { if (t) t.wrapS = THREE.RepeatWrapping; });
         buildFenceBatch(
           acceptedStoneRows,
-          new THREE.BoxGeometry(1, 0.22, 0.32),
+          BG.stone,
           new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
           true
         );
         // Modern Highway Concrete Barrier (Jersey barrier variant)
         buildFenceBatch(
           acceptedConcreteRows,
-          new THREE.BoxGeometry(1, 0.35, 0.26),
-          new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.88, metalness: 0.05 }),
+          BG.concrete,
+          new THREE.MeshStandardMaterial({ color: 0xc9c5bc, roughness: 0.9, metalness: 0.02 }),
           true
         );
         // Galvanized Steel W-Beam Armco Guardrails (Slow Roads Highway reference)
         buildFenceBatch(
           acceptedArmcoRails,
-          new THREE.BoxGeometry(1, 0.30, 0.08),
-          new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.32 }),
+          BG.armcoRail,
+          new THREE.MeshStandardMaterial({ color: 0xaab4be, metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide }),
           true
         );
         buildFenceBatch(
           acceptedArmcoPosts,
-          new THREE.BoxGeometry(0.10, 1.1, 0.10),
+          BG.armcoPost,
           new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.80, roughness: 0.40 }),
           false
         );
         buildFenceBatch(
           acceptedArmcoReflectors,
-          new THREE.BoxGeometry(0.04, 0.09, 0.03),
-          new THREE.MeshBasicMaterial({ color: 0xffffff }),
+          BG.armcoRefl,
+          new THREE.MeshBasicMaterial({ color: 0xffb300 }),
           false
         );
 
@@ -6290,20 +6746,20 @@
         // dry-stone / wood split-rail / Jersey concrete) instead of the
         // Armco-only strip that used to replace them past ~6km.
         this._barrierAssets = {
-          postGeom: new THREE.CylinderGeometry(0.08, 0.08, 1.2, 6),
+          postGeom: BG.woodPost,
           postMat: new THREE.MeshStandardMaterial({ color: 0x8a7a68, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
-          railGeom: new THREE.BoxGeometry(1, 0.08, 0.08),
+          railGeom: BG.woodRail,
           railMat: new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
-          stoneGeom: new THREE.BoxGeometry(1, 0.22, 0.32),
+          stoneGeom: BG.stone,
           stoneMat: new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
-          concreteGeom: new THREE.BoxGeometry(1, 0.35, 0.26),
-          concreteMat: new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.88, metalness: 0.05 }),
-          armcoRailGeom: new THREE.BoxGeometry(1, 0.30, 0.08),
-          armcoRailMat: new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.32 }),
-          armcoPostGeom: new THREE.BoxGeometry(0.10, 1.1, 0.10),
+          concreteGeom: BG.concrete,
+          concreteMat: new THREE.MeshStandardMaterial({ color: 0xc9c5bc, roughness: 0.9, metalness: 0.02 }),
+          armcoRailGeom: BG.armcoRail,
+          armcoRailMat: new THREE.MeshStandardMaterial({ color: 0xaab4be, metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide }),
+          armcoPostGeom: BG.armcoPost,
           armcoPostMat: new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.80, roughness: 0.40 }),
-          armcoReflGeom: new THREE.BoxGeometry(0.04, 0.09, 0.03),
-          armcoReflMat: new THREE.MeshBasicMaterial({ color: 0xffffff })
+          armcoReflGeom: BG.armcoRefl,
+          armcoReflMat: new THREE.MeshBasicMaterial({ color: 0xffb300 })
         };
       }
 
@@ -6419,7 +6875,11 @@
       const FENCE_LATERAL_DIST = CONFIG.ROAD_WIDTH * 0.5 + 2.2; // 5.9m
       const CAR_HALF_WIDTH = 1.05; // accounts for 1.9m chassis width + side mirrors
       const BARRIER_MARGIN = 0.15; // clearance buffer so car panels/mirrors glance along fence without penetrating posts
-      const baseClamp = FENCE_LATERAL_DIST - CAR_HALF_WIDTH - BARRIER_MARGIN; // 4.70m from centerline
+      // With sidewalks the kerb is the edge of the drivable road (vehicles stay
+      // off the footpath, where pedestrians walk); otherwise the fence line.
+      const baseClamp = (CONFIG.SIDEWALK && CONFIG.SIDEWALK.enabled)
+        ? CONFIG.ROAD_WIDTH * 0.52 - CAR_HALF_WIDTH - 0.1   // 2.70m (bicycles get +0.65 in the vehicle)
+        : FENCE_LATERAL_DIST - CAR_HALF_WIDTH - BARRIER_MARGIN; // 4.70m from centerline
 
       // Smooth hermite taper at delivery house openings — eliminates abrupt 3.3m teleport/collision step
       const isOpenRoad = !!(CONFIG.CITIES[this.cityKey]?.openRoad);
@@ -6528,7 +6988,11 @@
         if (!mesh) break;
 
         const side = this.prng.next() > 0.5 ? 1 : -1;
-        const lat = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.0 + this.prng.range(0, 2.2));
+        // On the sidewalk when there is one (road edge +0.35..1.35 m, clear of the
+        // kerb and the guardrail at +2.2), otherwise behind the guardrail.
+        const lat = (CONFIG.SIDEWALK && CONFIG.SIDEWALK.enabled)
+          ? side * (CONFIG.ROAD_WIDTH * 0.52 + 0.35 + this.prng.range(0, 1.0))
+          : side * (CONFIG.ROAD_WIDTH * 0.5 + 2.9 + this.prng.range(0, 1.6));
         const range = this.prng.range(14.0, 30.0);
         const jitter = this.prng.range(-18.0, 18.0);
         const dir = this.prng.next() > 0.5 ? 1 : -1;
@@ -6544,6 +7008,16 @@
         mesh.lookAt(endPos.x, mesh.position.y, endPos.z);
         this.foliageGroup.add(mesh);
 
+        // Follow the road's curve at a constant lateral offset (arc-length
+        // metres, stable across streaming) instead of a straight chord, which
+        // on bends drifted off the sidewalk onto the verge or toward the road.
+        let along = null;
+        const near = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(pt.x, pt.z, 6.0) : null;
+        if (near && this.curve && this.roadSpacedPoints && this.roadSpacedPoints.length > 1) {
+          const sMid = (near.index / (this.roadSpacedPoints.length - 1)) * this.curve.getLength() + jitter;
+          along = { sA: sMid - range * dir, sB: sMid + range * dir, lat };
+        }
+
         this.crossers.push({
           mesh,
           kind: 'pedestrian',
@@ -6558,7 +7032,8 @@
           hitRadius: mesh.userData.hitRadius,
           struck: false,
           legPhase: this.prng.next() * Math.PI * 2,
-          pathLen: startPos.distanceTo(endPos)
+          pathLen: along ? Math.abs(along.sB - along.sA) : startPos.distanceTo(endPos),
+          along
         });
         spawned++;
       }
@@ -6573,6 +7048,99 @@
     // different, denser sampling, and the streaming builder uses a third. The
     // spatial grid maps a position back to the right frame index for all of
     // them.
+    // Fence gaps: only in front of tea stalls, delivery houses, repair shops and
+    // at zebra crossings. `side` is the road side (+1/-1) of the opening, or 0
+    // for both sides. Streamed fence pieces already emitted in the gap are removed.
+    addFenceGap(pt, normal, side, halfLen) {
+      this.fenceGapSites = this.fenceGapSites || [];
+      const fenceLat = CONFIG.ROAD_WIDTH * 0.5 + 2.2;
+      const sides = side === 0 ? [-1, 1] : [side];
+      sides.forEach((sd) => {
+        const c = pt.clone().addScaledVector(normal, sd * fenceLat);
+        this.fenceGapSites.push({ pos: c, r: halfLen });
+        if (this._streamFenceMeshes) {
+          this._streamFenceMeshes = this._streamFenceMeshes.filter((f) => {
+            if (f.pos.distanceTo(c) < halfLen + 3.0) {
+              f.meshes.forEach((m) => { if (m.parent) m.parent.remove(m); });
+              return false;
+            }
+            return true;
+          });
+        }
+      });
+    }
+
+    isFenceGap(pos) {
+      return !!(this.fenceGapSites && this.fenceGapSites.some((g) => g.pos.distanceTo(pos) < g.r + 3.0));
+    }
+
+    // Curve warning sign: yellow board, black border, three black chevrons
+    // pointing `dir` (+1 = board's +X), on a pole with black/white base bands.
+    // Geometry + materials are shared across every sign.
+    buildChevronSign(dir) {
+      if (!this._chevronKit) {
+        const chev = new THREE.Shape([[-0.09, -0.24], [0.02, -0.24], [0.16, 0.0], [0.02, 0.24], [-0.09, 0.24], [0.05, 0.0]]
+          .map(([x, y]) => new THREE.Vector2(x, y)));
+        const chevGeom = new THREE.ExtrudeGeometry(chev, { depth: 0.015, bevelEnabled: false });
+        this._chevronKit = {
+          post: new THREE.CylinderGeometry(0.045, 0.05, 2.2, 10),
+          band: new THREE.CylinderGeometry(0.052, 0.052, 0.2, 10),
+          board: new THREE.BoxGeometry(1.2, 0.72, 0.04),
+          border: new THREE.BoxGeometry(1.26, 0.78, 0.03),
+          chev: chevGeom,
+          steel: new THREE.MeshStandardMaterial({ color: 0x9aa3ad, metalness: 0.7, roughness: 0.35 }),
+          yellow: new THREE.MeshStandardMaterial({ color: 0xf5c518, roughness: 0.5 }),
+          black: new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 0.6 }),
+          white: new THREE.MeshStandardMaterial({ color: 0xf2f2ee, roughness: 0.6 })
+        };
+      }
+      const K = this._chevronKit;
+      const g = new THREE.Group();
+      const post = new THREE.Mesh(K.post, K.steel); post.position.y = 1.1; g.add(post);
+      for (let k = 0; k < 4; k++) {
+        const b = new THREE.Mesh(K.band, k % 2 ? K.white : K.black); b.position.y = 0.1 + k * 0.2; g.add(b);
+      }
+      const border = new THREE.Mesh(K.border, K.black); border.position.set(0, 1.85, 0.03); g.add(border);
+      const board = new THREE.Mesh(K.board, K.yellow); board.position.set(0, 1.85, 0.045); g.add(board);
+      [-0.3, 0.0, 0.3].forEach((x) => {
+        const c = new THREE.Mesh(K.chev, K.black);
+        c.position.set(x, 1.85, 0.066);
+        if (dir < 0) c.rotation.y = Math.PI;
+        if (dir < 0) c.position.z = 0.081;
+        g.add(c);
+      });
+      g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      return g;
+    }
+
+    // A crossing only where people have a reason to cross (next to a tea stall,
+    // bus shelter or delivery house), on a straight, unbanked stretch, clear of
+    // tunnels and at least MIN_SPACING from the previous one.
+    tryPlaceCrossingNear(roadPt) {
+      try {
+        if (!this.roadSpatialGrid || !this.roadSpacedPoints || !this.roadBankingAngles) return null;
+        const MIN_SPACING = 220.0;
+        this.crossingSites = this.crossingSites || [];
+        if (this.crossingSites.some((p) => p.distanceTo(roadPt) < MIN_SPACING)) return null;
+        const near = this.roadSpatialGrid.getNearestRoadPoint(roadPt.x, roadPt.z, 14.0);
+        if (!near || near.index == null) return null;
+        const i = near.index, pts = this.roadSpacedPoints, b = this.roadBankingAngles;
+        const span = Math.max(2, Math.round(15.0 / Math.max(0.5, pts[1] ? pts[0].distanceTo(pts[1]) : 5)));
+        for (let k = i - span; k <= i + span; k++) {
+          if (k < 1 || k >= pts.length - 1) return null;
+          if (Math.abs(b[k] || 0) > 0.05) return null;
+        }
+        const meshIdx = Math.round((i / (pts.length - 1)) * CONFIG.ROAD_MESH_SEGMENTS);
+        if (this.isInTunnelZone && this.isInTunnelZone(meshIdx, 6)) return null;
+        const crossing = this.buildZebraCrossing(roadPt, null);
+        if (crossing !== null) this.crossingSites.push(roadPt.clone());
+        return crossing;
+      } catch (err) {
+        console.error('tryPlaceCrossingNear failed:', err);
+        return null;
+      }
+    }
+
     buildZebraCrossing(worldPt, scene) {
       if (!this.roadSpatialGrid || !this.roadSpacedPoints || !this.roadNormals) return null;
       const near = this.roadSpatialGrid.getNearestRoadPoint(worldPt.x, worldPt.z, 14.0);
@@ -6631,6 +7199,7 @@
       zebra.renderOrder = 1;
       zebra.position.copy(pt);
       (this.foliageGroup || scene).add(zebra);
+      this.addFenceGap(pt, normal, 0, 4.0);
 
       // Signal post on the verge.
       const side = this.prng.next() > 0.5 ? 1 : -1;
@@ -6675,6 +7244,8 @@
       };
       this.trafficSignals = this.trafficSignals || [];
       this.trafficSignals.push(signal);
+      this.crossingInfo = this.crossingInfo || [];
+      this.crossingInfo.push({ s: (i / (pts.length - 1)) * this.curve.getLength(), signal, pt: pt.clone() });
       this._applySignalPhase(signal);
 
       // Two pedestrians who actually use the crossing. They hold at the kerb
@@ -6741,6 +7312,169 @@
       }
     }
 
+    // Walking vs standing clip for a rigged pedestrian (no-op if already set).
+    _setWalkAnim(c, walking) {
+      if (c._animWalking === walking) return;
+      c._animWalking = walking;
+      const a = (c.mesh.userData && c.mesh.userData.actions) || {};
+      if (a.Walking && a.Idle) {
+        if (walking) { a.Idle.fadeOut(0.25); a.Walking.paused = false; a.Walking.reset().fadeIn(0.25).play(); }
+        else { a.Walking.fadeOut(0.25); a.Idle.reset().fadeIn(0.25).play(); }
+      } else if (a.Walking) {
+        a.Walking.paused = !walking;
+      }
+    }
+
+    // Which side of the road (+1/-1, tangent x up convention) `pos` is on,
+    // relative to the road point nearest `roadPt`.
+    _sideOf(roadPt, pos) {
+      const pts = this.roadSpacedPoints;
+      const near = (this.roadSpatialGrid && pts && pts.length > 2) ? this.roadSpatialGrid.getNearestRoadPoint(roadPt.x, roadPt.z, 8.0) : null;
+      if (!near) return 0;
+      const i = Math.min(near.index, pts.length - 2);
+      const tx = pts[i + 1].x - pts[i].x, tz = pts[i + 1].z - pts[i].z, tl = Math.hypot(tx, tz) || 1;
+      return Math.sign((pos.x - near.point.x) * (-tz / tl) + (pos.z - near.point.z) * (tx / tl));
+    }
+
+    // Somewhere a roadside pedestrian can walk to: kind 'stall' | 'house' | 'shop'.
+    // `pos` may be a live Vector3 (a delivery house's ring target moves if its
+    // model swaps in after load).
+    addPedDestination(kind, roadPt, pos, facePos) {
+      const s = this._arcS(roadPt);
+      const side = this._sideOf(roadPt, pos);
+      if (s === null || !side) return;
+      this.pedDestinations = this.pedDestinations || [];
+      this.pedDestinations.push({ kind, s, side, pos, facePos: facePos || null });
+    }
+
+    // Arc-length (metres) of the road point nearest `pos`.
+    _arcS(pos) {
+      const pts = this.roadSpacedPoints;
+      const near = (this.roadSpatialGrid && pts && pts.length > 1) ? this.roadSpatialGrid.getNearestRoadPoint(pos.x, pos.z, 20.0) : null;
+      return near ? (near.index / (pts.length - 1)) * this.curve.getLength() : null;
+    }
+
+    _alongPoint(s, lat, out) {
+      const u = THREE.MathUtils.clamp(s / this.curve.getLength(), 0, 1);
+      const p = this.curve.getPointAt(u);
+      const tg = this.curve.getTangentAt(u);
+      const tl = Math.hypot(tg.x, tg.z) || 1;
+      out.set(p.x + (-tg.z / tl) * lat, p.y, p.z + (tg.x / tl) * lat);
+      return { tx: tg.x / tl, tz: tg.z / tl };
+    }
+
+    // Roadside pedestrian brain. At the end of each stretch of sidewalk they
+    // pick: keep walking, turn back, pause and look around, visit a nearby tea
+    // stall (walk up to the counter, stand a while, come back), or use a nearby
+    // zebra crossing (wait for the STOP phase, cross, carry on the other side).
+    _stepWanderer(c, dt) {
+      const W = c.wander || (c.wander = { mode: 'walk' });
+      const A = c.along;
+      const tmp = this._wanderTmp || (this._wanderTmp = new THREE.Vector3());
+      const face = (dx, dz) => { if (dx || dz) c.mesh.rotation.set(0, Math.atan2(dx, dz), 0); };
+      const startFree = (to, mode, next) => {
+        W.from = c.mesh.position.clone(); W.to = to.clone(); W.t = 0;
+        W.dist = Math.max(0.1, Math.hypot(to.x - W.from.x, to.z - W.from.z));
+        W.mode = mode; W.next = next;
+      };
+      const walkTo = (sTarget, then) => {
+        const sCur = THREE.MathUtils.lerp(A.sA, A.sB, THREE.MathUtils.clamp(c.progress, 0, 1));
+        A.sA = sCur; A.sB = sTarget; c.progress = 0;
+        c.pathLen = Math.max(0.5, Math.abs(A.sB - A.sA));
+        W.mode = 'walk'; W.then = then;
+      };
+      const chooseNext = () => {
+        const sCur = A.sB;
+        const dir = Math.sign(A.sB - A.sA) || 1;
+        const side = Math.sign(A.lat) || 1;
+        // Nearby places on this side of the road (within 60 m along it), not the one just visited.
+        const dests = (this.pedDestinations || []).filter((d) => d.side === side && Math.abs(d.s - sCur) < 60 && d !== W.lastDest);
+        const crossing = (this.crossingInfo || []).find((ci) => Math.abs(ci.s - sCur) < 60 && ci !== W.lastCrossing);
+        const r = Math.random();
+        if (dests.length && r < 0.45) {
+          W.dest = dests[Math.floor(Math.random() * dests.length)];
+          walkTo(W.dest.s, 'dest'); return;
+        }
+        if (crossing && r < 0.6) { W.crossing = crossing; walkTo(crossing.s, 'cross'); return; }
+        if (r < 0.68) { W.mode = 'idle'; W.timer = 1.5 + Math.random() * 3; W.then = null; return; }
+        const turn = r < 0.76;
+        const d = turn ? -dir : dir;
+        walkTo(sCur + d * (15 + Math.random() * 25), null);
+      };
+      const arriveWalk = () => {
+        const then = W.then; W.then = null;
+        if (then === 'dest' && W.dest) {
+          W.returnPos = c.mesh.position.clone();
+          startFree(W.dest.pos, 'toStall', null);
+        } else if (then === 'cross' && W.crossing) {
+          W.mode = 'waitSignal';
+        } else {
+          chooseNext();
+        }
+      };
+
+      switch (W.mode) {
+        case 'walk': {
+          this._setWalkAnim(c, true);
+          c.progress += (c.speed * dt) / (c.pathLen || 1);
+          if (c.progress >= 1) { c.progress = 1; arriveWalk(); }
+          const s = THREE.MathUtils.lerp(A.sA, A.sB, THREE.MathUtils.clamp(c.progress, 0, 1));
+          const t = this._alongPoint(s, A.lat, tmp);
+          c.mesh.position.x = tmp.x; c.mesh.position.z = tmp.z;
+          const f = Math.sign(A.sB - A.sA) || 1;
+          if (W.mode === 'walk') face(f * t.tx, f * t.tz);
+          break;
+        }
+        case 'idle':
+        case 'atStall': {
+          this._setWalkAnim(c, false);
+          W.timer -= dt;
+          if (W.timer <= 0) {
+            if (W.mode === 'atStall') { W.lastDest = W.dest; W.inside = false; startFree(W.returnPos, 'fromStall', null); }
+            else chooseNext();
+          }
+          break;
+        }
+        case 'waitSignal': {
+          this._setWalkAnim(c, false);
+          const sig = W.crossing && W.crossing.signal;
+          if (!sig || sig.phase === 2) {
+            const sHere = A.sB;
+            this._alongPoint(sHere, -A.lat, tmp);
+            startFree(tmp, 'crossing', null);
+          }
+          break;
+        }
+        case 'toStall':
+        case 'fromStall':
+        case 'crossing': {
+          this._setWalkAnim(c, true);
+          W.t += (c.speed * dt) / W.dist;
+          const k = Math.min(1, W.t);
+          c.mesh.position.x = THREE.MathUtils.lerp(W.from.x, W.to.x, k);
+          c.mesh.position.z = THREE.MathUtils.lerp(W.from.z, W.to.z, k);
+          face(W.to.x - W.from.x, W.to.z - W.from.z);
+          if (k >= 1) {
+            if (W.mode === 'toStall') {
+              W.mode = 'atStall';
+              const k = W.dest.kind;
+              // Houses: go inside for a while (hidden), then come back out.
+              W.inside = (k === 'house');
+              W.timer = k === 'house' ? 15 + Math.random() * 30 : (k === 'shop' ? 5 + Math.random() * 8 : 6 + Math.random() * 10);
+              if (W.dest.facePos) face(W.dest.facePos.x - c.mesh.position.x, W.dest.facePos.z - c.mesh.position.z);
+            } else if (W.mode === 'crossing') {
+              A.lat = -A.lat; A.sA = A.sB; W.lastCrossing = W.crossing; chooseNext();
+            } else {
+              chooseNext();
+            }
+          }
+          break;
+        }
+        default:
+          W.mode = 'walk';
+      }
+    }
+
     updateCrossers(dt) {
       // Crossers beyond 130m are sub-2px tall and fully occluded by fog.
       // Skip expensive per-limb trig math and matrix updates beyond that
@@ -6764,12 +7498,16 @@
         // than one who finishes the crossing. Holds the walk cycle and the
         // progress only; position and culling below still run, or a waiting
         // pedestrian would never become visible again once culled.
+        let curLat = c.latStart;
+        if (c.along && this.curve) {
+          this._stepWanderer(c, dt);
+        } else {
         let hold = false;
         if (c.signal) {
           const midCrossing = c.progress > 0.02 && c.progress < 0.98;
           hold = (c.signal.phase !== 2 && !midCrossing);
-          const walk = c.mesh.userData.actions && c.mesh.userData.actions['Walking'];
-          if (walk) walk.paused = hold;
+          // Stand (Idle clip) while waiting instead of freezing mid-stride.
+          this._setWalkAnim(c, !hold);
         }
 
         if (!hold) {
@@ -6785,6 +7523,7 @@
           const tmpLat = c.latStart;
           c.latStart = c.latEnd;
           c.latEnd = tmpLat;
+          if (c.along) { const t2 = c.along.sA; c.along.sA = c.along.sB; c.along.sB = t2; }
           // flatten: an un-flattened lookAt on sloped terrain pitches/rolls the
           // whole figure (see the lookAt-tilt pattern used throughout).
           c.mesh.lookAt(c.end.x, c.mesh.position.y, c.end.z);
@@ -6795,9 +7534,10 @@
         // lateral offset via the shared ground formula rather than lerped
         // between the two endpoint heights, which cut through the road
         // surface whenever the true profile between them isn't flat.
-        const curLat = THREE.MathUtils.lerp(c.latStart, c.latEnd, c.progress);
+        curLat = THREE.MathUtils.lerp(c.latStart, c.latEnd, c.progress);
         c.mesh.position.x = THREE.MathUtils.lerp(c.start.x, c.end.x, c.progress);
         c.mesh.position.z = THREE.MathUtils.lerp(c.start.z, c.end.z, c.progress);
+        }
 
         // Distance cull: skip expensive limb-swing math for far-away crossers.
         const distSq = vehiclePos.distanceToSquared(c.mesh.position);
@@ -6805,7 +7545,7 @@
           c.mesh.visible = false;
           continue;
         }
-        c.mesh.visible = true;
+        c.mesh.visible = !(c.wander && c.wander.inside);
 
         // Ground height must come from the road point nearest to where the
         // walker IS, not c.pt (its spawn point): roadside walkers patrol up to
@@ -6813,15 +7553,12 @@
         // metres off there, so they floated or sank.
         let footY;
         try {
-          const near = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(c.mesh.position.x, c.mesh.position.z, 40.0) : null;
-          footY = near
-            ? this.groundHeightAt(near.point, c.mesh.position, near.dist)
-            : this.groundHeightAt(c.pt, c.mesh.position, curLat);
+          footY = this.surfaceHeightNear(c.mesh.position, c.pt, curLat);
         } catch (err) {
           console.error('Crosser ground height failed:', err);
           footY = this.groundHeightAt(c.pt, c.mesh.position, curLat);
         }
-        c.mesh.position.y = footY + 0.15;
+        c.mesh.position.y = footY + 0.02;
 
         if (c.mesh.userData.mixer) {
           // Animation LOD: skinning a 67-bone rig is the expensive half, and
@@ -7048,6 +7785,7 @@
 
       // Generate forward extension meshes for road, lane markings, terrain, and roadside props
       yield* this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, roadTerrainKey, prevEndPos);
+      scene.add(this.buildSidewalkRange(Math.max(0, oldLength / newLength), 1));
       yield* this.sweepTerrainBelowRoad();
       yield* this.sweepFloorBelowRoad();
     }
@@ -7174,7 +7912,7 @@
           const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
           const nr = this.roadSpatialGrid.getNearestRoadPoint(x, z, clearRadiusPlus);
           if (!nr || nr.dist > clearRadius) continue;
-          const ceiling = nr.y - 0.22;
+          const ceiling = this.roadClearanceLimit({ x, y, z }, nr);
           // Height-aware: only clamp if within road-level corridor (< nr.y + 4.5m)
           // Prevents upper mountain bluffs, slopes, and upper road switchback tiers from being crushed 20m down to lower road height.
           if (y > ceiling && y < nr.y + 4.5) {
@@ -7598,7 +8336,7 @@
       const lateralSlices = [
         -150.0, -105.0, -75.0, -55.0,
         -45.0, -41.0, -37.0, -33.0, -29.0, -25.0, -21.0, -17.0, -13.0, -9.0,
-        -vergeLat, -roadHalf, roadHalf, vergeLat,
+        -7.6, -6.5, -vergeLat, -roadHalf, roadHalf, vergeLat, 6.5, 7.6,
         9.0, 13.0, 17.0, 21.0, 25.0, 29.0, 33.0, 37.0, 41.0, 45.0,
         55.0, 75.0, 105.0, 150.0
       ];
@@ -7631,7 +8369,10 @@
             tColors.push(shoulderSoil.r, shoulderSoil.g, shoulderSoil.b);
           } else if (absDist <= 9.0) {
             const t = (absDist - roadHalf) / (9.0 - roadHalf);
-            finalY = pt.y - 0.22 - t * 0.32;
+            // Shared formula (Pattern 1): this used to be its own copy, which is
+            // why flattening groundHeightAt didn't change the rendered verge.
+            // 0.04 below it, matching the 0.22 vs 0.18 under-slab offset above.
+            finalY = this.groundHeightAt(pt, worldPos, latDist) - 0.04;
             const blendT = THREE.MathUtils.smoothstep(t, 0.05, 0.95);
             const bladeNoise = 0.96 + this.simplex.noise2D(worldPos.x * 0.08, worldPos.z * 0.08) * 0.06;
             tColors.push(
@@ -7668,8 +8409,9 @@
             const clearRadius = vergeLat + 0.6;
             const nearestRoad = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(worldPos.x, worldPos.z, clearRadius + 1.0) : null;
             if (nearestRoad && nearestRoad.dist < clearRadius) {
-              if (finalY > nearestRoad.y - 0.22 && finalY < nearestRoad.y + 4.5) {
-                finalY = nearestRoad.y - 0.22;
+              const clearLimit = this.roadClearanceLimit(worldPos, nearestRoad);
+              if (finalY > clearLimit && finalY < nearestRoad.y + 4.5) {
+                finalY = clearLimit;
               }
             } else {
               const clearSq = clearRadius * clearRadius;
@@ -7933,7 +8675,7 @@
             const BA = this._barrierAssets;
             const nextPtBar = points[Math.min(points.length - 1, i + 1)];
             const avgSegStepBar = this.curve.getLength() / (points.length - 1);
-            const railLenBar = avgSegStepBar + 0.6;
+            const railLenBar = avgSegStepBar * 1.08 + 0.6;
             const _fdummy = new THREE.Object3D();
             [-1, 1].forEach(side => {
               const fenceDistBar = side * (CONFIG.ROAD_WIDTH * 0.5 + 2.2);
@@ -7947,22 +8689,29 @@
               const offsetB = yB - fencePosBar.y;
               const tiltAngle = Math.atan2(yB - yA, railLenBar);
 
+              if (this.isFenceGap(fencePosBar)) return;
+              if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(fencePosBar) < o.radius + 2.5)) return;
+              const segMeshes = [];
+              this._streamFenceMeshes = this._streamFenceMeshes || [];
+              this._streamFenceMeshes.push({ pos: fencePosBar.clone(), meshes: segMeshes });
+
               _fdummy.position.copy(fencePosBar);
               _fdummy.up.set(0, 1, 0);
               _fdummy.lookAt(fencePosBar.clone().add(normal));
               _fdummy.updateMatrix();
               const groupMatrix = _fdummy.matrix;
 
-              const barrierStyle = Math.floor(i / 30) % 4;
+              const barrierStyle = CONFIG.BARRIER_STYLE;
               const emit = (geom, mat, localM) => {
                 const m = new THREE.Mesh(geom, mat);
                 m.applyMatrix4(groupMatrix.clone().multiply(localM));
                 scene.add(m);
+                segMeshes.push(m);
               };
 
               if (barrierStyle === 0) {
                 // Armco W-Beam
-                [[-railLenBar / 2, offsetA], [railLenBar / 2, offsetB]].forEach(([px, offset]) => {
+                barrierPostStations(railLenBar, offsetA, offsetB).forEach(([px, offset]) => {
                   emit(BA.armcoPostGeom, BA.armcoPostMat, new THREE.Matrix4().makeTranslation(px, offset + 0.55, 0));
                   emit(BA.armcoReflGeom, BA.armcoReflMat, new THREE.Matrix4().makeTranslation(px, offset + 0.78, 0.08));
                 });
@@ -7993,7 +8742,7 @@
                 });
               } else {
                 // Wood split-rail (2 posts + 2 rails)
-                [[-railLenBar / 2, offsetA], [railLenBar / 2, offsetB]].forEach(([px, offset]) => {
+                barrierPostStations(railLenBar, offsetA, offsetB).forEach(([px, offset]) => {
                   emit(BA.postGeom, BA.postMat, new THREE.Matrix4().makeTranslation(px, offset + 0.6, 0));
                 });
                 [0.45, 0.85].forEach(ry => {
@@ -8084,10 +8833,7 @@
           // 3e. Signalled zebra crossing — streamed chunks get these too, or
           // crossings would stop existing past the initial spline exactly the
           // way pedestrians did.
-          if (i % 224 === 0) {
-            this.buildZebraCrossing(pt, scene);
-            yield;
-          }
+          // (crossings: see tryPlaceCrossingNear, called where stalls/houses are built)
 
           // 4. District Biome Rocks (scatter 12–40m off road, adaptive district rock color)
           if (i % 8 === 0) {
@@ -9132,7 +9878,9 @@
 
       // Slow Roads Barrier Interaction: Smooth Elastic Glancing & Inward Deflection
       const side = proj.latDist >= 0 ? 1 : -1;
-      const clampDist = world.getLateralClamp ? world.getLateralClamp(proj.u, side) : 9.0;
+      // getLateralClamp reserves a car's 1.05 m half-width; a bicycle is ~0.4 m,
+      // so it gets the difference back instead of hitting an invisible wall.
+      const clampDist = (world.getLateralClamp ? world.getLateralClamp(proj.u, side) : 9.0) + (isBicycle ? 0.65 : 0.0);
       let vehiclePos = proposedPos;
       let latDist = proj.latDist;
 
@@ -9140,7 +9888,18 @@
       const headingVsRoad = Math.abs(Math.atan2(Math.sin(this.heading - roadFwdHeading), Math.cos(this.heading - roadFwdHeading)));
       const isTurningAcrossRoad = headingVsRoad > Math.PI * 0.4;
 
-      if (Math.abs(latDist) > clampDist && !isTurningAcrossRoad && (proj.distFromRoad || 0) < 28) {
+      const overshoot = Math.abs(latDist) - clampDist;
+      if (overshoot > 0.35 && !isTurningAcrossRoad && (proj.distFromRoad || 0) < 28) {
+        // Far outside the limit — the limit narrowed under us (end of a fence
+        // gap at a delivery house). Ease back in instead of teleporting.
+        const toProposed = proposedPos.clone().sub(proj.pt);
+        const fwdComponent = toProposed.dot(proj.tangent);
+        latDist = side * (Math.abs(latDist) - overshoot * (1.0 - Math.exp(-6.0 * dt)));
+        vehiclePos = proj.pt.clone().addScaledVector(proj.tangent, fwdComponent).addScaledVector(proj.normal, latDist);
+        const reproj = this.projectToRoad(vehiclePos, world.curve, proj.u, world.roadSpacedPoints);
+        Object.assign(proj, reproj);
+        this.splineProgress = proj.u;
+      } else if (overshoot > 0 && !isTurningAcrossRoad && (proj.distFromRoad || 0) < 28) {
         const toProposed = proposedPos.clone().sub(proj.pt);
         const fwdComponent = toProposed.dot(proj.tangent);
         latDist = clampDist * side;
@@ -9157,15 +9916,22 @@
         headingDiffBck = Math.atan2(Math.sin(headingDiffBck), Math.cos(headingDiffBck));
         const headingDiff = Math.abs(headingDiffFwd) <= Math.abs(headingDiffBck) ? headingDiffFwd : headingDiffBck;
 
-        const alignRate = 1.0 - Math.exp(-12.0 * dt);
-        this.heading += headingDiff * alignRate;
-        this.velocityHeading = this.heading;
+        // Glance along the barrier: ease parallel rather than snapping (was a
+        // 12/s align plus an instant velocityHeading reset, read as a jolt).
+        const alignRate = 1.0 - Math.exp(-2.5 * dt);
+        const barrierYaw = headingDiff * alignRate;
+        this.heading += barrierYaw;
+        // Being pushed off the barrier isn't a steered turn — keep it out of the lean.
+        this._barrierYawThisStep = (this._barrierYawThisStep || 0) + barrierYaw;
+        let velDiff = this.heading - this.velocityHeading;
+        velDiff = Math.atan2(Math.sin(velDiff), Math.cos(velDiff));
+        this.velocityHeading += velDiff * (1.0 - Math.exp(-8.0 * dt));
 
         if (this.steerAngle * side > 0) {
-          this.steerAngle *= Math.exp(-10.0 * dt);
+          this.steerAngle *= Math.exp(-6.0 * dt);
         }
 
-        this.speed *= Math.max(0.7, 1.0 - 0.15 * dt);
+        this.speed *= Math.max(0.8, 1.0 - 0.08 * dt);
         if (Math.abs(this.speed) > 4) sound.playBarrierScrape();
       }
       this.lateralOffset = latDist;
@@ -9239,7 +10005,8 @@
         // tan(lean) = v * yawRate / g.
         try {
           const prevHeading = (this._leanPrevHeading === undefined) ? this.heading : this._leanPrevHeading;
-          const dHeading = Math.atan2(Math.sin(this.heading - prevHeading), Math.cos(this.heading - prevHeading));
+          const dHeading = Math.atan2(Math.sin(this.heading - prevHeading), Math.cos(this.heading - prevHeading)) - (this._barrierYawThisStep || 0);
+          this._barrierYawThisStep = 0;
           this._leanPrevHeading = this.heading;
           const rawYawRate = dt > 0 ? THREE.MathUtils.clamp(dHeading / dt, -3.0, 3.0) : 0;
           this._leanYawRate = THREE.MathUtils.lerp(this._leanYawRate || 0, rawYawRate, 1.0 - Math.exp(-12.0 * dt));
@@ -9949,6 +10716,9 @@
       this.world._game = this;
       this.scene.add(this.world.createSkyDome(season, this.selectedTimeOfDay));
       this.scene.add(this.world.createRoadMesh(this.selectedRoadTerrain));
+      if (this._sidewalks) this.scene.remove(this._sidewalks);
+      this._sidewalks = this.world.buildSidewalkRange(0, 1);
+      this.scene.add(this._sidewalks);
       this.scene.add(this.world.createLaneMarkingMeshes(this.selectedRoadTerrain));
 
       setProgress(45, 'Sculpting mountain valley terrain & road verges...');
@@ -10294,6 +11064,9 @@
       this.world._game = this; // back-reference for distance culling in updateCrossers
       this.scene.add(this.world.createSkyDome(season, this.selectedTimeOfDay));
       this.scene.add(this.world.createRoadMesh(this.selectedRoadTerrain));
+      if (this._sidewalks) this.scene.remove(this._sidewalks);
+      this._sidewalks = this.world.buildSidewalkRange(0, 1);
+      this.scene.add(this._sidewalks);
       this.scene.add(this.world.createLaneMarkingMeshes(this.selectedRoadTerrain));
       this.scene.add(this.world.createWorldFloor(season));
       this.scene.add(this.world.createTerrainMesh(season));
