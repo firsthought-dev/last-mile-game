@@ -9586,7 +9586,10 @@
     static STYLES = ['classic', 'enhanced', 'cinematic'];
     static DEFAULT_STYLE = 'cinematic'; // matches the original always-on bloom+FXAA look
     // Absolute fog density override per style (cinematic uses live curFogDens)
-    static FOG_DENSITY = { classic: 0.026, enhanced: 0.017 };
+    // FogExp2 hits 90% opacity at sqrt(ln 10) / density metres. Classic was
+    // 0.026 (~58 m): at dusk the posterized fog colour swallowed the road
+    // ahead. 0.009 keeps a retro haze with ~170 m of readable road.
+    static FOG_DENSITY = { classic: 0.009, enhanced: 0.017 };
 
     constructor(game) {
       this.game = game;
@@ -9619,8 +9622,12 @@
             // Nearest-neighbour pixelation
             vec2 blocks = floor(vUv * resolution / pixelSize) * pixelSize / resolution;
             vec4 texel = texture2D(tDiffuse, blocks);
-            // Posterize: posterizeSteps levels per channel
-            vec3 col = floor(texel.rgb * posterizeSteps + 0.5) / posterizeSteps;
+            // Posterize in gamma space, not linear: linear bands put the first
+            // step at 12.5% brightness, so dark asphalt and most of a night scene
+            // rounded to pure black. Gamma bands spend more levels on the darks.
+            vec3 g = pow(max(texel.rgb, 0.0), vec3(1.0 / 2.2));
+            g = floor(g * posterizeSteps + 0.5) / posterizeSteps;
+            vec3 col = pow(g, vec3(2.2));
             gl_FragColor = vec4(col, texel.a);
           }
         `

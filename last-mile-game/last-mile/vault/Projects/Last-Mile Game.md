@@ -35,6 +35,7 @@ Core subsystems in the game:
 - [[Architecture/PRNG|PRNG]] - Deterministic seed-based noise and spline distribution
 
 ## Key Milestones & Recent Releases
+- **Merged to main (2026-09-23)**: [PR #3](https://github.com/firsthought-dev/last-mile-game/pull/3), merge commit `1d8634f` — all `roadside-npcs` work through B99 is now on `main`.
 - **B95 (2026-09-23)**: Verification pass over B88–B94 (all scratch scripts re-run); fixed dead B88 cycle speed escalation (`cycle.maxSpeed` capped at base 22 km/h → 38 km/h ceiling), 35/35 checks green.
 - **B94 (2026-09-23)**: Web Portal Ad SDK Integration (`ads.js`) with GameDistribution, CrazyGames, and Poki adapters, Rewarded 2x Shift Earnings bonus, ₹500 Dispatch Hub Sponsor Cash, and One-Click Distribution Packager (`package_web_portal.sh`), 35/35 checks green.
 - **B93 (2026-09-23)**: Mobile HUD Mystery Buttons Overhaul ([🤖 AUTO] and [⚙️ TOOLS] drawer), Radar-Steering Collision Fix (dynamic drag indicator, 0px overlap), and Delivery Bicycle `PEDAL` Telemetry Polish, 35/35 checks green.
@@ -59,6 +60,7 @@ Core subsystems in the game:
 - [[Projects/AI Game Generation Tool & Multiplatform Distribution|AI Game Generation Tool & Multiplatform Distribution Hub]]
 
 ## Links
+- Live build (GitHub Pages): https://firsthought-dev.github.io/last-mile-game/ (deployed by `.github/workflows/static.yml`, which publishes only runtime files from `last-mile/` since PR #4)
 - Android Studio Project: `last-mile/android/`
 - Sync Script: `last-mile/sync_android_assets.sh`
 - This vault's knowledge graph: `atlas.canvas` (vault root)
