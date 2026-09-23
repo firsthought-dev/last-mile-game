@@ -1,0 +1,37 @@
+{
+	"nodes": [
+		{"id": "hub", "type": "file", "file": "Projects/Last-Mile Game.md", "x": 0, "y": 0, "width": 340, "height": 100, "color": "1"},
+		{"id": "board", "type": "file", "file": "Boards/Engineering.md", "x": -480, "y": -180, "width": 260, "height": 80, "color": "3"},
+		{"id": "home", "type": "file", "file": "Home.md", "x": -480, "y": -60, "width": 240, "height": 70, "color": "3"},
+		{"id": "blueprint", "type": "file", "file": "Knowledge/Anul Agarwal AI Game Dev & Multiplatform Publishing Blueprint.md", "x": -520, "y": 120, "width": 320, "height": 90, "color": "6"},
+		{"id": "toolhub", "type": "file", "file": "Projects/AI Game Generation Tool & Multiplatform Distribution.md", "x": -520, "y": 250, "width": 320, "height": 90, "color": "6"},
+		{"id": "engine", "type": "file", "file": "Architecture/ShiplypEngine.md", "x": 520, "y": -340, "width": 280, "height": 80, "color": "5"},
+		{"id": "procworld", "type": "file", "file": "Architecture/ProceduralWorld.md", "x": 520, "y": -220, "width": 280, "height": 80, "color": "5"},
+		{"id": "career", "type": "file", "file": "Architecture/SaveAndCareerSystem.md", "x": 520, "y": -100, "width": 280, "height": 80, "color": "4"},
+		{"id": "onboarding", "type": "file", "file": "Architecture/OnboardingAndDeliveryFlow.md", "x": 520, "y": 20, "width": 280, "height": 80, "color": "4"},
+		{"id": "vehicle", "type": "file", "file": "Architecture/VehicleController.md", "x": 880, "y": -340, "width": 280, "height": 80, "color": "5"},
+		{"id": "touch", "type": "file", "file": "Architecture/MobileTouchAndErgonomics.md", "x": 880, "y": -220, "width": 280, "height": 80, "color": "4"},
+		{"id": "android", "type": "file", "file": "Architecture/AndroidStudioBridge.md", "x": 880, "y": -100, "width": 280, "height": 80, "color": "2"},
+		{"id": "sound", "type": "file", "file": "Architecture/SoundEngine.md", "x": 520, "y": 140, "width": 260, "height": 70, "color": "5"},
+		{"id": "visualstyle", "type": "file", "file": "Architecture/VisualStyleManager.md", "x": 880, "y": 20, "width": 260, "height": 70, "color": "5"},
+		{"id": "roadgrid", "type": "file", "file": "Architecture/RoadSpatialGrid.md", "x": 880, "y": 140, "width": 260, "height": 70, "color": "5"},
+		{"id": "rain", "type": "file", "file": "Architecture/RainSystem.md", "x": 880, "y": 250, "width": 260, "height": 70, "color": "5"}
+	],
+	"edges": [
+		{"id": "e_hub_engine", "fromNode": "hub", "toNode": "engine", "fromSide": "top", "toSide": "left"},
+		{"id": "e_hub_procworld", "fromNode": "hub", "toNode": "procworld", "fromSide": "right", "toSide": "left"},
+		{"id": "e_hub_career", "fromNode": "hub", "toNode": "career", "fromSide": "right", "toSide": "left"},
+		{"id": "e_hub_onboarding", "fromNode": "hub", "toNode": "onboarding", "fromSide": "right", "toSide": "left"},
+		{"id": "e_hub_sound", "fromNode": "hub", "toNode": "sound", "fromSide": "bottom", "toSide": "left"},
+		{"id": "e_hub_board", "fromNode": "hub", "toNode": "board", "fromSide": "top", "toSide": "right"},
+		{"id": "e_hub_home", "fromNode": "hub", "toNode": "home", "fromSide": "left", "toSide": "right"},
+		{"id": "e_hub_blueprint", "fromNode": "hub", "toNode": "blueprint", "fromSide": "left", "toSide": "right"},
+		{"id": "e_blueprint_toolhub", "fromNode": "blueprint", "toNode": "toolhub", "fromSide": "bottom", "toSide": "top"},
+		{"id": "e_engine_vehicle", "fromNode": "engine", "toNode": "vehicle", "fromSide": "right", "toSide": "left"},
+		{"id": "e_vehicle_touch", "fromNode": "vehicle", "toNode": "touch", "fromSide": "bottom", "toSide": "top"},
+		{"id": "e_procworld_roadgrid", "fromNode": "procworld", "toNode": "roadgrid", "fromSide": "right", "toSide": "left"},
+		{"id": "e_career_onboarding", "fromNode": "career", "toNode": "onboarding", "fromSide": "bottom", "toSide": "top"},
+		{"id": "e_touch_android", "fromNode": "touch", "toNode": "android", "fromSide": "bottom", "toSide": "top"},
+		{"id": "e_procworld_rain", "fromNode": "procworld", "toNode": "rain", "fromSide": "bottom", "toSide": "left"}
+	]
+}

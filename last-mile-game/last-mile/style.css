@@ -1,0 +1,4285 @@
+/* ==========================================================================
+   SHIPLYP: LAST MILE — DISTINCTIVE INDIAN COURIER 3D DESIGN SYSTEM
+   ========================================================================== */
+
+:root {
+  --font-primary: 'Barlow', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Bebas Neue', 'Russo One', sans-serif;
+  --font-title: 'Bungee', 'Russo One', sans-serif;
+  --font-arcade: 'Bebas Neue', sans-serif;
+  --font-stamp: 'Russo One', sans-serif;
+  --font-telemetry: 'Chakra Petch', monospace;
+  --font-mono: 'Chakra Petch', monospace;
+  
+  --bg-dark: #07090f;
+
+  /* Comic Ink & Pop Border / Shadow System */
+  --border-comic: 3px solid #000000;
+  --border-comic-sm: 2px solid #000000;
+  --shadow-comic: 4px 4px 0px #000000;
+  --shadow-comic-lg: 6px 6px 0px #000000;
+  --shadow-comic-sm: 2.5px 2.5px 0px #000000;
+  --shadow-comic-hover: 6px 6px 0px #000000;
+  --shadow-comic-active: 1px 1px 0px #000000;
+
+  /* Comic Pop Palette */
+  --comic-yellow: #ffe600;
+  --comic-cyan: #00f0ff;
+  --comic-pink: #ff006e;
+  --comic-green: #22e565;
+  --comic-orange: #ff7700;
+  --comic-card-bg: #0e131d;
+  --comic-card-bg-light: #151c2a;
+
+  /* High contrast solid comic panels */
+  --glass-dock: rgba(12, 16, 25, 0.96);
+  --glass-panel: rgba(14, 19, 29, 0.98);
+  --glass-capsule: rgba(14, 19, 29, 0.96);
+  
+  /* Border system */
+  --glass-border: #000000;
+  --glass-border-top: #ffe600;
+  --glass-border-hover: #00f0ff;
+
+  /* Shadow system */
+  --shadow-panel: 4px 4px 0px #000000;
+  --shadow-pill: 3px 3px 0px #000000;
+  --shadow-dock: 0 -4px 0px #000000;
+  
+  --text-pure: #ffffff;
+  --text-muted: rgba(255, 255, 255, 0.82);
+  --text-faint: rgba(255, 255, 255, 0.50);
+  
+  /* Brand palette */
+  --brand-orange: #ff7700;
+  --brand-saffron: #ffe600;
+  --brand-teal: #00f0ff;
+  --brand-red: #ff006e;
+  --brand-glow-orange: rgba(255, 230, 0, 0.5);
+  --brand-glow-teal: rgba(0, 240, 255, 0.45);
+  --brand-glow-red: rgba(255, 0, 110, 0.5);
+}
+
+ /* ==========================================================================
+   1. CINEMATIC ANIMATED INTRO / LANDING SCREEN (CHHOTA HAATHI EXPRESS)
+   ========================================================================== */
+.intro-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #0b0f19;
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.intro-screen.dismissed {
+  opacity: 0;
+  transform: scale(1.06);
+  pointer-events: none;
+}
+
+/* Background Layer with Ken-Burns Animated Parallax */
+.intro-bg-layer {
+  position: absolute;
+  top: -5%;
+  left: -5%;
+  width: 110%;
+  height: 110%;
+  background: url('assets/chhota_haathi_cover.jpg') center center / cover no-repeat;
+  animation: kenBurns 16s ease-in-out infinite alternate;
+  filter: brightness(0.95) saturate(1.1);
+  transform-origin: center center;
+}
+
+@keyframes kenBurns {
+  0% { transform: scale(1.0) translate(0, 0); }
+  50% { transform: scale(1.08) translate(-1.5%, 1.2%); }
+  100% { transform: scale(1.14) translate(1.5%, -1.2%); }
+}
+
+.intro-vignette {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 50% 50%, rgba(11, 15, 25, 0.15) 0%, rgba(11, 15, 25, 0.82) 85%, rgba(11, 15, 25, 0.96) 100%);
+  pointer-events: none;
+}
+
+.intro-content-container {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 900px;
+  padding: 40px;
+  animation: introContentFadeIn 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes introContentFadeIn {
+  from { opacity: 0; transform: translateY(24px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.intro-logo-banner {
+  margin-bottom: 34px;
+}
+
+.intro-tagline-pill {
+  display: inline-block;
+  background: var(--comic-yellow);
+  border: var(--border-comic-sm);
+  color: #000000;
+  font-family: var(--font-telemetry);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  padding: 6px 18px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-comic);
+  transform: rotate(-1.5deg);
+}
+
+.intro-main-title {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-display);
+  font-weight: 900;
+  line-height: 0.95;
+  text-transform: uppercase;
+  letter-spacing: -1px;
+  margin: 0;
+  text-shadow: 4px 4px 0px #000000, 0 10px 30px rgba(0, 0, 0, 0.9);
+}
+
+.intro-main-title .title-top {
+  font-size: clamp(2.6rem, 6vw, 4.4rem);
+  background: linear-gradient(180deg, #ffffff 0%, #fff275 60%, var(--comic-yellow) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 2px #000000;
+  filter: drop-shadow(4px 4px 0px #000000);
+}
+
+.intro-main-title .title-bottom {
+  font-size: clamp(3.4rem, 8vw, 5.8rem);
+  background: linear-gradient(180deg, var(--comic-yellow) 0%, var(--comic-orange) 60%, var(--comic-pink) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 2px #000000;
+  filter: drop-shadow(5px 5px 0px #000000);
+  animation: titlePulse 3s ease-in-out infinite alternate;
+}
+
+@keyframes titlePulse {
+  0% { transform: scale(1); filter: drop-shadow(5px 5px 0px #000000); }
+  100% { transform: scale(1.02); filter: drop-shadow(7px 7px 0px #000000); }
+}
+
+.intro-sub-text {
+  font-family: var(--font-primary);
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  font-weight: 700;
+  color: #f8f9fa;
+  margin-top: 14px;
+  text-shadow: 2px 2px 0px #000000, 0 2px 8px rgba(0, 0, 0, 0.8);
+  letter-spacing: 0.5px;
+}
+
+/* Footer Loader & Start Button */
+.intro-footer-box {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.intro-loader-wrap {
+  width: 100%;
+  background: var(--comic-card-bg);
+  border: var(--border-comic-sm);
+  border-radius: 12px;
+  padding: 10px 18px;
+  box-shadow: var(--shadow-comic);
+}
+
+.intro-loader-bar {
+  width: 100%;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1.5px solid #000000;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.intro-loader-fill {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--comic-yellow) 0%, var(--comic-cyan) 100%);
+  box-shadow: 0 0 12px var(--comic-yellow);
+  animation: loadProgress 2.2s ease-out forwards;
+}
+
+@keyframes loadProgress {
+  0% { width: 0%; }
+  60% { width: 85%; }
+  100% { width: 100%; }
+}
+
+.intro-loader-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  font-family: var(--font-telemetry);
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 1px;
+}
+
+.btn-intro-dispatch {
+  background: linear-gradient(135deg, var(--comic-yellow) 0%, var(--comic-pink) 100%);
+  border: var(--border-comic);
+  color: #000000;
+  padding: 16px 38px;
+  border-radius: 14px;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow-comic);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  pointer-events: auto;
+}
+
+.btn-intro-dispatch:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px #000000;
+  color: #000000;
+}
+
+.btn-intro-dispatch:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0px #000000;
+}
+
+.glow-pulse {
+  animation: glowPulse 2s infinite alternate;
+}
+
+@keyframes glowPulse {
+  0% { box-shadow: 0 0 15px rgba(255, 159, 28, 0.4); }
+  100% { box-shadow: 0 0 35px rgba(231, 29, 54, 0.85); }
+}
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-dark);
+  font-family: var(--font-primary);
+  color: var(--text-pure);
+  -webkit-font-smoothing: antialiased;
+}
+
+#game-app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Fullscreen 3D WebGL Canvas */
+#webgl-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+#webgl-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+/* ==========================================================================
+   SHIPLYP COURIER HUD OVERLAY
+   ========================================================================== */
+/* HUD Overlay Container - Permanently Visible on Screen */
+.hud-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.hud-hidden {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.dock-hidden {
+  opacity: 1 !important;
+  transform: translateX(-50%) translateY(0) !important;
+  pointer-events: auto !important;
+}
+
+/* ==========================================================================
+   SLOWROADS.IO MINIMALIST HUD ARCHITECTURE
+   ========================================================================== */
+
+/* --- Top-Left: Minimal Slowroads Objective Line --- */
+.slowroads-obj-box {
+  /* Static + margin instead of absolute top/left: .wanted-meter-box
+     stacks directly below this in normal document flow (see its own
+     comment) — that only works if this box is also in flow, since an
+     absolutely-positioned element doesn't push static siblings down by
+     its height at all. */
+  position: static;
+  margin: 24px 0 0 28px;
+  width: fit-content;
+  /* This box and .slowroads-top-bar (opposite corner) never had any width
+     limit — each sized purely to its own content (a delivery name/cargo
+     description of arbitrary length on this side, a radio track title +
+     6 buttons on the other). Their natural widths regularly summed to
+     well over 1000px, so on anything narrower than a very wide desktop
+     window they simply overlapped mid-screen. Capped here + truncated
+     internally instead of letting content dictate box width. */
+  max-width: min(320px, 46vw);
+  background: var(--comic-card-bg);
+  border: var(--border-comic);
+  border-left: 4px solid var(--comic-cyan);
+  border-radius: 10px;
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: auto;
+  z-index: 60;
+  box-shadow: var(--shadow-comic);
+}
+
+.slowroads-obj-tag {
+  font-family: var(--font-telemetry);
+  font-size: 0.62rem;
+  letter-spacing: 2px;
+  font-weight: 800;
+  color: var(--comic-cyan);
+}
+
+.slowroads-obj-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slowroads-obj-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-telemetry);
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.75);
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.slowroads-obj-meta #order-cargo-desc {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.meta-sep {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* --- Wanted Meter: builds from hitting pedestrians/animals --- */
+.wanted-meter-box {
+  /* Was position:absolute + a hardcoded margin-top:78px guessing the
+     dispatch card's height — broke (overlapped the card) any time the
+     card grew taller than that guess, e.g. when a missed-delivery banner
+     or a longer order name wrapped it to more lines. Static + normal
+     flow stacks it directly under the card's real rendered height,
+     whatever that is, on every device — not just the mobile breakpoint
+     this same fix used to be limited to. */
+  position: static;
+  margin: 6px 0 0 28px;
+  width: fit-content;
+  background: var(--comic-card-bg);
+  border: var(--border-comic);
+  border-left: 4px solid var(--comic-pink);
+  border-radius: 10px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 60;
+  box-shadow: var(--shadow-comic);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.wanted-meter-box.wanted-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.wanted-meter-label {
+  font-family: var(--font-telemetry);
+  font-size: 0.64rem;
+  letter-spacing: 2px;
+  font-weight: 800;
+  color: var(--comic-pink);
+}
+
+.wanted-meter-stars {
+  display: flex;
+  gap: 3px;
+}
+
+.wanted-star {
+  font-size: 1.15rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.25);
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.wanted-star.lit {
+  color: var(--comic-pink);
+  text-shadow: 2px 2px 0px #000000, 0 0 10px var(--comic-pink);
+}
+
+.wanted-meter-box.wanted-pulse {
+  animation: wantedPulse 0.4s ease;
+}
+
+@keyframes wantedPulse {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(0) scale(1.08); }
+}
+
+.meta-dist {
+  color: var(--comic-yellow);
+  font-weight: 800;
+}
+
+.meta-timer {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+/* ==========================================================================
+   SLOWROADS MINIMALIST DELIVERY MISSION CAPSULE (Top-Left)
+   ========================================================================== */
+.slowroads-delivery-capsule {
+  position: absolute;
+  top: 24px;
+  left: 28px;
+  background: var(--comic-card-bg);
+  border: var(--border-comic);
+  border-radius: 12px;
+  padding: 10px 16px;
+  min-width: 250px;
+  max-width: min(380px, 45vw);
+  box-shadow: var(--shadow-comic);
+  z-index: 60;
+  pointer-events: auto;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.slowroads-delivery-capsule.delivery-approaching {
+  border-color: #000000;
+  box-shadow: var(--shadow-comic), 0 0 20px var(--comic-yellow);
+  animation: capsuleApproachPulse 1.2s infinite alternate ease-in-out;
+}
+
+@keyframes capsuleApproachPulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.03) translateY(-2px); }
+}
+
+.delivery-capsule-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.delivery-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--comic-yellow);
+  border: var(--border-comic-sm);
+  border-radius: 6px;
+  padding: 3px 8px;
+  box-shadow: 2px 2px 0px #000000;
+}
+
+.delivery-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #000000;
+  animation: deliveryDotBlink 1.8s infinite ease-in-out;
+}
+
+@keyframes deliveryDotBlink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.85); }
+}
+
+.delivery-tag {
+  font-family: var(--font-telemetry);
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  font-weight: 800;
+  color: #000000;
+}
+
+.delivery-order-seq {
+  font-family: var(--font-telemetry);
+  font-size: 0.64rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.delivery-sep {
+  font-family: var(--font-telemetry);
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.delivery-payout {
+  font-family: var(--font-telemetry);
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--comic-green);
+  letter-spacing: 0.5px;
+  text-shadow: 1px 1px 0px #000000;
+}
+
+.delivery-capsule-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.delivery-dest-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.delivery-dest-name {
+  font-family: var(--font-primary);
+  font-size: 0.86rem;
+  font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.delivery-dist-badge {
+  font-family: var(--font-telemetry);
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--comic-cyan);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.delivery-dist-badge.dist-near {
+  color: var(--comic-yellow);
+  text-shadow: 2px 2px 0px #000000;
+}
+
+.delivery-cargo-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.delivery-cargo-desc {
+  font-family: var(--font-primary);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.delivery-side-badge {
+  font-family: var(--font-telemetry);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #000000;
+  background: var(--comic-yellow);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1.5px solid #000000;
+  white-space: nowrap;
+  box-shadow: 1.5px 1.5px 0px #000000;
+}
+
+/* --- Contextual Drop Action Prompt --- */
+.drop-action-prompt {
+  position: absolute;
+  bottom: 168px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--comic-yellow);
+  border: var(--border-comic);
+  border-radius: 12px;
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow-comic);
+  z-index: 60;
+  pointer-events: none;
+  animation: comicActionPromptBounce 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes comicActionPromptBounce {
+  0% { opacity: 0; transform: translate(-50%, 16px) scale(0.9); }
+  60% { opacity: 1; transform: translate(-50%, -4px) scale(1.05); }
+  100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+.action-key-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: #000000;
+  letter-spacing: 0.8px;
+}
+
+.action-key-pill .key-cap {
+  font-family: var(--font-telemetry);
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: #000000;
+  color: var(--comic-yellow);
+  border: 1.5px solid #000000;
+  border-radius: 6px;
+  padding: 2px 7px;
+  letter-spacing: 1px;
+}
+
+.action-sep {
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+/* --- Floating Score/Celebration Popup Container & Banner --- */
+.score-popup-container {
+  position: absolute;
+  top: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.score-popup-banner {
+  background: var(--comic-card-bg);
+  border: var(--border-comic);
+  border-radius: 14px;
+  padding: 12px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  box-shadow: var(--shadow-comic-lg);
+  animation: toastBannerSlideDown 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes toastBannerSlideDown {
+  from { opacity: 0; transform: translateY(-16px) scale(0.92); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.score-popup-banner .popup-title {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--comic-yellow);
+  letter-spacing: 1px;
+  text-shadow: 2px 2px 0px #000000;
+}
+
+.score-popup-banner .popup-sub {
+  font-family: var(--font-telemetry);
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: var(--comic-cyan);
+  letter-spacing: 1px;
+}
+
+/* --- Top-Right: Slowroads Minimal Audio Bar & System Controls --- */
+.slowroads-top-bar {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  /* See .slowroads-obj-box for why this cap exists — this side and the
+     dispatch card were each unbounded and routinely summed past 1000px
+     combined. Wraps to a second row (radio pill, then system buttons)
+     instead of overlapping once it can't fit on one line. */
+  max-width: min(460px, 50vw);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  pointer-events: auto;
+  z-index: 60;
+}
+
+.slowroads-radio-pill {
+  background: var(--comic-card-bg);
+  border: var(--border-comic-sm);
+  border-radius: 8px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  box-shadow: var(--shadow-comic-sm);
+}
+
+.radio-label {
+  font-family: var(--font-telemetry);
+  font-size: 0.62rem;
+  letter-spacing: 2px;
+  font-weight: 800;
+  color: var(--comic-yellow);
+}
+
+.radio-sep {
+  color: rgba(255, 255, 255, 0.35);
+  font-family: var(--font-telemetry);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.radio-channel-btn {
+  background: var(--comic-yellow);
+  border: 1.5px solid #000000;
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-family: var(--font-telemetry);
+  font-size: 0.58rem;
+  letter-spacing: 1.5px;
+  font-weight: 800;
+  color: #000000;
+  cursor: pointer;
+  box-shadow: 1.5px 1.5px 0px #000000;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  white-space: nowrap;
+}
+
+.radio-channel-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 2.5px 2.5px 0px #000000;
+  background: #ffffff;
+  color: #000000;
+}
+
+.radio-channel-btn.channel-flash {
+  animation: channelFlash 0.4s ease-out;
+}
+
+@keyframes channelFlash {
+  0% { background: var(--comic-pink); color: #fff; transform: scale(1.08); }
+  100% { background: var(--comic-yellow); color: #000; transform: scale(1); }
+}
+
+.slowroads-track-text {
+  font-family: var(--font-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #ffffff;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slowroads-radio-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+}
+
+.slowroads-text-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1.5px solid #000000;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-family: var(--font-telemetry);
+  font-size: 0.58rem;
+  letter-spacing: 1.5px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  box-shadow: 1.5px 1.5px 0px #000000;
+  transition: all 0.1s ease;
+}
+
+.slowroads-text-btn:hover {
+  background: var(--comic-yellow);
+  color: #000000;
+  transform: translate(-1px, -1px);
+  box-shadow: 2.5px 2.5px 0px #000000;
+}
+
+.slowroads-sys-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.slowroads-icon-btn {
+  background: var(--comic-card-bg);
+  border: var(--border-comic-sm);
+  border-radius: 8px;
+  padding: 6px 11px;
+  font-family: var(--font-telemetry);
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  box-shadow: var(--shadow-comic-sm);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.slowroads-icon-btn:hover {
+  background: var(--comic-yellow);
+  color: #000000;
+  transform: translate(-1px, -1px);
+  box-shadow: 3.5px 3.5px 0px #000000;
+}
+
+.slowroads-icon-btn.muted,
+.slowroads-icon-btn.off {
+  color: rgba(255, 255, 255, 0.5);
+  border-color: #000000;
+  background: rgba(239, 35, 60, 0.3);
+}
+
+/* Full-label status pills ("AUDIO: ON", "CAM: CHASE", "60 FPS") */
+.slowroads-status-pill {
+  background: var(--comic-card-bg);
+  border: var(--border-comic-sm);
+  border-radius: 8px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-telemetry);
+  font-size: 0.64rem;
+  letter-spacing: 1.5px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.95);
+  box-shadow: var(--shadow-comic-sm);
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  white-space: nowrap;
+}
+
+button.slowroads-status-pill {
+  cursor: pointer;
+}
+
+div.slowroads-status-pill {
+  cursor: default;
+}
+
+.slowroads-status-pill:hover {
+  background: var(--comic-yellow);
+  color: #000000;
+  transform: translate(-1px, -1px);
+  box-shadow: 3.5px 3.5px 0px #000000;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00d4bf;
+  box-shadow: 0 0 6px rgba(0, 212, 191, 0.8);
+  flex-shrink: 0;
+}
+
+.status-dot.dot-off {
+  background: rgba(255, 255, 255, 0.3);
+  box-shadow: none;
+}
+
+/* --- Floating Toss Directive Reticle (< 35m from Doorstep) --- */
+.slowroads-toss-banner {
+  position: absolute;
+  top: 68%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(8, 12, 18, 0.88);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 212, 191, 0.4);
+  padding: 6px 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(0, 212, 191, 0.20);
+  z-index: 55;
+}
+
+.toss-key-tag {
+  background: var(--brand-teal);
+  color: #000000;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 900;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 1px;
+}
+
+.toss-msg {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 1.5px;
+}
+
+/* --- Bottom-Left: Minimalist Radar Minimap --- */
+.slowroads-radar-box {
+  position: absolute;
+  /* Was 28px — the dock bar (.slowroads-dock) is bottom-anchored and
+     horizontally centered independently of this box, with no shared
+     awareness of each other. On any viewport narrow enough for the
+     centered dock to reach this corner (which is most non-desktop-wide
+     windows, portrait phones especially), the dock's 20-70px band sat
+     entirely inside this box's vertical span, rendering through/over it.
+     Raised enough to clear the dock's height + margin unconditionally
+     rather than only in a mobile-specific media query. */
+  bottom: 86px;
+  left: 28px;
+  background: var(--comic-card-bg);
+  border: var(--border-comic);
+  border-radius: 12px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: auto;
+  z-index: 55;
+  box-shadow: var(--shadow-comic);
+}
+
+.radar-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.radar-tag {
+  font-family: var(--font-telemetry);
+  font-size: 0.62rem;
+  letter-spacing: 2px;
+  font-weight: 800;
+  color: var(--comic-cyan);
+}
+
+.radar-dist {
+  font-family: var(--font-telemetry);
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--comic-yellow);
+}
+
+.radar-canvas-housing {
+  border-radius: 8px;
+  border: 2px solid #000000;
+  overflow: hidden;
+}
+
+#gps-minimap-canvas {
+  border-radius: 8px;
+  background: rgba(5, 8, 12, 0.95);
+  display: block;
+}
+
+/* --- Bottom-Right: Slowroads Clean Telemetry Readout --- */
+/* ==========================================================================
+   EVENT NOTIFICATION PANEL (Collisions, Fines, Deliveries)
+   ========================================================================== */
+.notification-panel {
+  position: fixed;
+  bottom: 180px;
+  right: 28px;
+  max-width: 280px;
+  max-height: 240px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 6px;
+  pointer-events: auto;
+  z-index: 54;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.notification-panel::-webkit-scrollbar {
+  display: none;
+}
+
+.notification-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.notification-item {
+  background: rgba(10, 14, 22, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  animation: slideInRight 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  opacity: 0;
+}
+
+.notification-item.warning {
+  border-color: rgba(255, 184, 51, 0.4);
+  color: #ffb833;
+}
+
+.notification-item.danger {
+  border-color: rgba(255, 45, 78, 0.4);
+  color: #ff2d4e;
+}
+
+.notification-item.success {
+  border-color: rgba(0, 212, 191, 0.4);
+  color: #00d4bf;
+}
+
+.notification-item.neutral {
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+.notification-item.removing {
+  animation: fadeOutRight 0.25s ease forwards;
+}
+
+.slowroads-telemetry-box {
+  position: absolute;
+  /* Same dock-clearance reasoning as .slowroads-radar-box above — this
+     box's content is short enough that it usually cleared the dock by
+     luck, but nothing guaranteed it as button labels changed. Matched to
+     the same clearance for consistency. */
+  bottom: 86px;
+  right: 28px;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: auto;
+  z-index: 55;
+}
+
+.telemetry-controls-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.slowroads-pill-btn {
+  background: var(--comic-card-bg);
+  border: var(--border-comic-sm);
+  border-radius: 8px;
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffffff;
+  font-family: var(--font-telemetry);
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  font-weight: 800;
+  box-shadow: var(--shadow-comic-sm);
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.slowroads-pill-btn:hover {
+  background: var(--comic-yellow);
+  color: #000000;
+  transform: translate(-1px, -1px);
+  box-shadow: 3.5px 3.5px 0px #000000;
+}
+
+.slowroads-pill-btn.autodrive-active {
+  background: var(--comic-cyan);
+  border-color: #000000;
+  color: #000000;
+}
+
+.slowroads-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.autodrive-active .slowroads-dot {
+  background: #000000;
+  box-shadow: none;
+}
+
+.telemetry-digits-box {
+  background: var(--comic-card-bg);
+  border: var(--border-comic);
+  border-radius: 12px;
+  padding: 10px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  box-shadow: var(--shadow-comic);
+}
+
+.telemetry-speed-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.telemetry-numeral {
+  font-family: var(--font-telemetry);
+  font-size: 2.6rem;
+  font-weight: 800;
+  font-style: italic;
+  font-variant-numeric: tabular-nums;
+  color: var(--comic-yellow);
+  line-height: 1;
+  letter-spacing: -0.5px;
+  text-shadow: 2px 2px 0px #000000;
+}
+
+.telemetry-unit {
+  font-family: var(--font-telemetry);
+  font-size: 0.72rem;
+  letter-spacing: 1.5px;
+  color: var(--comic-cyan);
+  font-weight: 800;
+  font-style: italic;
+}
+
+.telemetry-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.telemetry-gear {
+  font-family: var(--font-telemetry);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--comic-cyan);
+}
+
+.telemetry-trip {
+  font-family: var(--font-telemetry);
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.65);
+  font-weight: 700;
+}
+
+.telemetry-delivery-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.telemetry-rupee {
+  font-family: var(--font-telemetry);
+  font-size: 0.70rem;
+  font-weight: 800;
+  color: var(--comic-green);
+}
+
+.telemetry-earnings {
+  font-family: var(--font-telemetry);
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--comic-green);
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.telemetry-streak {
+  font-family: var(--font-telemetry);
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--comic-yellow);
+  letter-spacing: 0.5px;
+  background: rgba(255, 230, 0, 0.15);
+  border: 1px solid var(--comic-yellow);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   SHIPLYP DISPATCH DOCK
+   ========================================================================== */
+.slowroads-dock {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
+  /* Was 680px, tuned for 4 icon buttons (TOD/CAM/AUDIO/CONFIG) — the added
+     STATUS button pushed content past that cap, and since .dock-icon has
+     no fixed width, the flex row silently shrank the last button's box
+     below its own text width, clipping "CONFIG" to "CONF" instead of
+     wrapping or overflowing visibly. Also capped by viewport width so it
+     doesn't overflow the other way on narrower windows. */
+  max-width: min(920px, 94vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 60;
+  pointer-events: auto;
+  transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slowroads-dock.dock-hidden,
+body.touch-controls-active .slowroads-dock {
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+  pointer-events: none;
+  display: none !important;
+}
+
+.dock-bar-glass {
+  width: 100%;
+  height: 52px;
+  background: var(--comic-card-bg);
+  border: var(--border-comic);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 0 28px;
+  box-shadow: var(--shadow-comic);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Comic top-edge accent */
+.dock-bar-glass::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--comic-yellow), var(--comic-cyan), var(--comic-pink));
+}
+
+.dock-nav-items {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+
+.dock-tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-telemetry);
+  font-size: 0.74rem;
+  letter-spacing: 1.8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 6px 4px;
+  transition: color 0.15s ease, transform 0.15s ease;
+  position: relative;
+}
+
+.dock-tab-btn:hover {
+  color: var(--comic-yellow);
+}
+
+.dock-tab-btn.active-dock-tab {
+  color: var(--comic-yellow);
+  font-weight: 900;
+}
+
+.dock-tab-btn.active-dock-tab::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--comic-yellow);
+  border-radius: 2px;
+  box-shadow: 1px 1px 0px #000000;
+}
+
+.dock-icons-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dock-icon {
+  background: var(--comic-card-bg);
+  border: var(--border-comic-sm);
+  border-radius: 6px;
+  padding: 5px 14px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-telemetry);
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: 2px 2px 0px #000000;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.dock-icon:hover {
+  background: var(--comic-yellow);
+  color: #000000;
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px #000000;
+}
+
+/* Dock Popup Panels */
+.dock-panel-container {
+  width: 100%;
+  margin-bottom: 12px;
+  background: var(--comic-card-bg);
+  border: var(--border-comic);
+  border-radius: 16px;
+  padding: 18px 26px;
+  box-shadow: var(--shadow-comic-lg);
+  animation: dockSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: visible;
+}
+
+.dock-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dock-panel-container::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 30px; right: 30px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), rgba(255,184,51,0.12), rgba(255,255,255,0.22), transparent);
+}
+
+@keyframes dockSlideUp {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.dock-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  align-items: flex-end;
+}
+
+.dock-panel-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dock-panel-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.dock-stepper-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top-color: rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 7px 12px;
+  transition: border-color 0.2s ease;
+}
+
+.dock-stepper-box:focus-within {
+  border-color: rgba(255, 184, 51, 0.3);
+}
+
+.dock-stepper-val {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 1px;
+  text-align: center;
+  flex: 1;
+}
+
+.stepper-arrow {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  transition: color 0.15s ease;
+}
+
+.stepper-arrow:hover {
+  color: #fff;
+}
+
+.dock-sq-btn {
+  min-width: 80px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top-color: rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 0.70rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.2s ease;
+}
+
+.dock-sq-btn:hover {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.dock-sq-btn.active-sq-btn {
+  background: rgba(255, 184, 51, 0.12);
+  border-color: rgba(255, 184, 51, 0.35);
+  color: var(--brand-saffron);
+  box-shadow: 0 0 16px rgba(255, 184, 51, 0.12);
+}
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dock-sq-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.dock-sq-btn.active-sq {
+  background: #2b3945;
+  border-color: var(--brand-saffron);
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(252, 163, 17, 0.3);
+}
+
+.dock-sq-btn.veh-dock-locked {
+  opacity: 0.55;
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #94a3b8;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+
+.dock-sq-btn.veh-dock-locked:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: #ef4444;
+}
+
+.dock-text-btn {
+  width: auto;
+  min-width: 65px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 0 10px;
+}
+
+.btn-generate-dock {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  height: 38px;
+}
+
+.btn-generate-dock:hover {
+  background: var(--brand-saffron);
+  color: #000;
+}
+
+/* ==========================================================================
+   SHIPLYP DISPATCH HUB / 100% ORIGINAL INTRO DASHBOARD
+   ========================================================================== */
+#modal-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: auto;
+  z-index: 100;
+  /* The dispatch hub card (.shiplyp-hub-card) has no margin:auto or
+     self-centering of its own — it relied on this container centering it,
+     which this container never actually did (default block layout), so
+     it rendered flush at the top-left instead. Other modals (recovery
+     card, settings) work around this with their own full-viewport
+     .modal-backdrop flex wrapper; centering it here too is harmless for
+     those (a 100vw/100vh flex child just centers itself same as before)
+     and fixes the one that had no wrapper at all. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#modal-container:empty {
+  display: none;
+  pointer-events: none;
+}
+
+/* Master Prompt "calmer intro screen" pass: the saturated Mumbai-skyline
+   photo + heavy dark vignette + neon saffron/red/teal glows read as busy
+   and game-arcade-like next to slowroads' actual minimal menu treatment.
+   Replaced with a soft, desaturated gradient sky (no photo asset), a
+   lighter glass card, and a single muted accent color used sparingly
+   instead of three competing saturated ones — calmer without going flat:
+   still has depth (the gradient + soft card blur + gentle hover motion),
+   just nothing shouting for attention. */
+.modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: auto;
+  background: linear-gradient(180deg, #cfd8e3 0%, #dbe2df 45%, #eef0ea 100%);
+}
+
+/* Tried making the intro backdrop translucent so the live orbiting-camera
+   showcase scene (see animate()'s menu-state branch) shows through behind
+   the menu. Reverted — the orbit camera has no framing/bounds check, so
+   it regularly swings past the edge of the generated terrain strip and
+   shows a giant flat wall / world-end artifact, which read as broken
+   rather than atmospheric. Would need a dedicated, bounded showcase
+   camera (fixed loop over a curated section of road) before trying this
+   again, not the same orbit used as a placeholder for the empty menu
+   state. */
+
+/* REMOVED: an feTurbulence dither overlay was tried here to fix reported
+   gradient banding, but it rendered as coarse, prominent grain across the
+   whole intro screen instead of an imperceptible dither (confirmed by
+   direct user report after adding it) — worse than the original banding.
+   Reverted. If banding needs fixing again, a per-pixel PNG noise texture
+   at very low opacity (not an SVG feTurbulence filter) would be safer,
+   since feTurbulence's cell size doesn't scale predictably across
+   viewports/browsers. */
+/* This gradient's stops are close, desaturated pastels — exactly the case
+   that bands hardest on wide viewports (reported directly: visible
+   stepped "layers" on the sides at a wide window, not present at a
+   narrower one). Browsers don't dither CSS gradients on their own; a
+   flat pastel span quantizes to visible 1-2px steps once it's wide
+   enough. Standard fix is a barely-there noise dither — NOT the same
+   thing as visible grain, the two look opposite once tuned right: too
+   little and the bands stay, too much and it reads as texture. 1.5%
+   opacity, feTurbulence baseFrequency 0.9 (fine grain, not blotchy) is
+   tuned to disappear as noise while still breaking up the banding. */
+.modal-backdrop::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /* Faint horizon glow instead of a hard dark vignette — a soft light
+     source low in the frame, like an overcast slowroads sky, not a
+     spotlight-on-a-poster treatment. */
+  background: radial-gradient(ellipse at 50% 82%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 60%);
+  pointer-events: none;
+}
+
+.shiplyp-hub-card {
+  /* Reference (slowroads.io) has no card at all on its intro screen — no
+     glass panel, border, blur, or shadow, just text and a pill button
+     floating directly on the flat gradient. Removing the backdrop-filter
+     didn't fully clear the reported grain because the panel's own edge
+     (border + box-shadow + border-radius compositing) was still creating
+     a visible seam against the gradient. Matching reference directly:
+     content sits straight on the gradient, no card chrome at all. */
+  position: relative;
+  z-index: 10;
+  width: 740px;
+  max-width: 92vw;
+  padding: 34px 38px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: hubEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes hubEnter {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.hub-brand-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+
+.hub-brand-icon {
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, #ff9f1c 0%, #fca311 100%);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  box-shadow: 0 8px 24px rgba(252, 163, 17, 0.4);
+}
+
+.hub-brand-title {
+  font-family: var(--font-title, 'Bungee', cursive);
+  font-size: 2.7rem;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #11141c;
+  text-shadow: 3px 3px 0px #ffe600, 5px 5px 0px #000000;
+  line-height: 1;
+}
+
+.hub-brand-title span {
+  color: var(--comic-pink);
+  font-weight: 900;
+  text-shadow: 3px 3px 0px #ffe600, 5px 5px 0px #000000;
+}
+
+.hub-tagline {
+  font-family: var(--font-display, 'Bebas Neue', sans-serif);
+  font-size: 1.15rem;
+  letter-spacing: 3px;
+  color: #1e293b;
+  text-transform: uppercase;
+  font-weight: 900;
+  margin-bottom: 20px;
+}
+
+/* ---------------------------------------------------------------------------
+   CAREER STRIP (dispatch hub) — Styled as an arcade Courier Dispatch License
+   --------------------------------------------------------------------------- */
+.hub-career-strip {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  margin-bottom: 22px;
+  background: #ffffff;
+  border: var(--border-comic);
+  border-radius: 14px;
+  box-shadow: var(--shadow-comic);
+  text-align: left;
+}
+
+.career-top-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.career-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.career-rank-name {
+  font-family: var(--font-display, 'Bebas Neue', sans-serif);
+  font-size: 1.65rem;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: #0f172a;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.career-rank-next {
+  font-family: var(--font-telemetry);
+  font-size: 0.70rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #0284c7;
+  font-weight: 800;
+}
+
+.career-bank {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.career-bank-label {
+  font-family: var(--font-display, 'Bebas Neue', sans-serif);
+  font-size: 0.92rem;
+  letter-spacing: 2px;
+  color: #64748b;
+  font-weight: 900;
+}
+
+.career-bank-value {
+  font-family: var(--font-telemetry);
+  font-size: 1.7rem;
+  font-weight: 900;
+  font-style: italic;
+  color: #059669;
+  text-shadow: 1px 1px 0px #000000;
+  /* Tabular figures so the balance doesn't jitter horizontally as it grows
+     across a session — it sits right-aligned against the rank block. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.career-rank-track {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border: 2px solid #000000;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.career-rank-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--comic-cyan) 0%, var(--comic-green) 100%);
+  border-radius: 4px;
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.career-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-family: var(--font-telemetry);
+  font-size: 0.68rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #1e293b;
+  font-weight: 800;
+}
+
+.career-stats-row span {
+  background: #f8fafc;
+  border: 1.5px solid #000000;
+  border-radius: 6px;
+  padding: 3px 8px;
+  box-shadow: 1.5px 1.5px 0px #000000;
+}
+
+.career-stats-row b {
+  color: #000000;
+  font-weight: 900;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.career-daily-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-telemetry);
+  font-size: 0.68rem;
+  letter-spacing: 0.8px;
+  color: #b45309;
+  font-weight: 800;
+}
+
+.career-daily-row .ui-icon {
+  flex: 0 0 auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-rank-fill { transition: none; }
+}
+
+/* City Hub Grid Cards */
+.hub-city-selector {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.hub-section-label {
+  font-family: var(--font-display, 'Bebas Neue', sans-serif);
+  font-size: 1.25rem;
+  letter-spacing: 2.5px;
+  color: #0f172a;
+  text-transform: uppercase;
+  font-weight: 900;
+  text-align: center;
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.hub-city-pills {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
+  gap: 10px;
+}
+
+.city-pill-btn {
+  background: rgba(28, 36, 48, 0.03);
+  border: 1px solid rgba(28, 36, 48, 0.08);
+  border-radius: 12px;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.city-pill-btn:hover {
+  background: rgba(28, 36, 48, 0.06);
+  border-color: rgba(28, 36, 48, 0.16);
+  transform: translateY(-1px);
+}
+
+.city-pill-btn.active-city {
+  background: rgba(79, 125, 120, 0.12);
+  border-color: #4f7d78;
+  box-shadow: none;
+}
+
+.city-pill-icon {
+  font-size: 1.2rem;
+}
+
+.city-pill-name {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #2a333d;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Vehicle Fleet Grid */
+.hub-vehicle-selector {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.hub-vehicle-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.hub-vehicle-grid .vehicle-card-btn {
+  flex: 1 1 200px;
+  max-width: 260px;
+}
+
+.vehicle-card-btn {
+  background: #ffffff;
+  border: 2.5px solid #000000;
+  border-radius: 12px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  box-shadow: 3.5px 3.5px 0px #000000;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.vehicle-card-btn:hover {
+  background: #fdfdfd;
+  transform: translate(-1px, -1px);
+  box-shadow: 4.5px 4.5px 0px #000000;
+}
+
+.vehicle-card-btn.active-veh {
+  background: var(--comic-yellow);
+  border-color: #000000;
+  box-shadow: 4.5px 4.5px 0px #000000;
+}
+
+.vehicle-card-btn.active-veh .vehicle-card-title {
+  color: #000000;
+  font-weight: 900;
+}
+
+.vehicle-card-icon {
+  font-size: 1.5rem;
+}
+
+.vehicle-card-title {
+  font-family: var(--font-display, 'Bebas Neue', sans-serif);
+  font-size: 1.35rem;
+  letter-spacing: 1.5px;
+  font-weight: 900;
+  color: #0f172a;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1.1;
+}
+
+.vehicle-card-stat {
+  font-family: var(--font-telemetry);
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Vehicle thumbnail canvas inside each card */
+.veh-thumb-canvas {
+  width: 100%;
+  height: 72px;
+  display: block;
+  border-radius: 6px 6px 0 0;
+  background: rgba(10, 14, 22, 0.6);
+  margin: -12px -10px 8px;
+  width: calc(100% + 20px);
+}
+
+/* Locked vehicle card state */
+.vehicle-card-btn.veh-locked {
+  background: #fffbeb;
+  border: 2.5px dashed #000000;
+  opacity: 1;
+  cursor: pointer;
+}
+.vehicle-card-btn.veh-locked .vehicle-card-title {
+  color: #1e293b;
+}
+.vehicle-card-btn.veh-locked .vehicle-card-stat {
+  color: #64748b;
+}
+.veh-lock-cost {
+  font-family: var(--font-telemetry);
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #d97706;
+  text-shadow: 1px 1px 0px #000000;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  margin-top: 4px;
+}
+.veh-lock-cta {
+  font-family: var(--font-telemetry);
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #b91c1c;
+  background: #fee2e2;
+  border: 1.5px solid #000000;
+  border-radius: 6px;
+  padding: 2px 8px;
+  box-shadow: 1.5px 1.5px 0px #000000;
+  margin-top: 2px;
+}
+
+/* Delivery result banner with tachometer arcs */
+.score-popup-delivery {
+  min-width: 220px;
+  padding: 14px 18px !important;
+}
+
+/* Difficulty Selector Grid */
+.hub-difficulty-selector {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.hub-difficulty-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.hub-difficulty-grid .diff-card-btn {
+  flex: 1 1 150px;
+  max-width: 220px;
+}
+
+.diff-card-btn {
+  background: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 12px;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  box-shadow: 3px 3px 0px #000000;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.diff-card-btn:hover {
+  background: #fdfdfd;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px #000000;
+}
+
+.diff-card-btn.active-diff,
+.diff-card-btn.active-diff.easy,
+.diff-card-btn.active-diff.medium {
+  background: var(--comic-yellow);
+  border-color: #000000;
+  box-shadow: 3px 3px 0px #000000;
+}
+
+.diff-card-btn.active-diff .diff-card-title {
+  color: #000000;
+  font-weight: 800;
+}
+
+.diff-card-title {
+  font-family: var(--font-display, 'Bebas Neue', sans-serif);
+  font-size: 1.15rem;
+  letter-spacing: 1.5px;
+  font-weight: 900;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Visual style picker */
+.hub-style-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.hub-style-grid .style-card-btn {
+  flex: 1 1 150px;
+  max-width: 220px;
+}
+
+.style-card-btn {
+  background: #ffffff;
+  border: 2.5px solid #000000;
+  border-radius: 12px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  box-shadow: 3.5px 3.5px 0px #000000;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.style-card-btn:hover {
+  background: #fdfdfd;
+  transform: translate(-1px, -1px);
+  box-shadow: 4.5px 4.5px 0px #000000;
+}
+
+.style-card-btn.active-diff {
+  background: var(--comic-yellow);
+  border-color: #000000;
+  box-shadow: 4.5px 4.5px 0px #000000;
+}
+
+.style-card-btn.active-diff .style-card-title {
+  color: #000000;
+  font-weight: 900;
+}
+
+.style-card-preview {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1.5px solid #000000;
+  background: #1a1f26;
+}
+
+.style-card-title {
+  font-family: var(--font-display, 'Bebas Neue', sans-serif);
+  font-size: 1.15rem;
+  letter-spacing: 1.5px;
+  font-weight: 900;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin-top: 2px;
+}
+
+.diff-card-stat {
+  font-family: var(--font-telemetry);
+  font-size: 0.68rem;
+  color: #475569;
+  font-weight: 800;
+}
+
+/* Dispatch CTA Button */
+.btn-launch-dispatch {
+  width: 100%;
+  background: linear-gradient(135deg, var(--comic-yellow) 0%, var(--comic-pink) 100%);
+  border: var(--border-comic);
+  border-radius: 14px;
+  padding: 16px 24px;
+  color: #000000;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  box-shadow: var(--shadow-comic);
+}
+
+.btn-launch-dispatch:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px #000000;
+  color: #000000;
+}
+
+.btn-launch-dispatch:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #000000;
+}
+  box-shadow: 0 10px 28px rgba(28, 36, 48, 0.28);
+}
+
+.btn-launch-dispatch:active {
+  transform: translateY(1px);
+}
+
+.hub-footer-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 20px;
+  width: 100%;
+}
+
+.hub-link-btn {
+  background: none;
+  border: none;
+  color: #8b959e;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: color 0.2s ease, transform 0.1s ease;
+}
+
+.hub-link-btn:hover {
+  color: #2a333d;
+}
+
+#btn-hub-sponsor {
+  background: rgba(34, 229, 101, 0.1);
+  border: 2px solid #000;
+  border-radius: 8px;
+  padding: 5px 12px;
+  color: #22e565;
+  font-family: var(--font-telemetry, 'Chakra Petch', monospace);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  box-shadow: 2px 2px 0px #000;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+#btn-hub-sponsor:hover {
+  background: rgba(34, 229, 101, 0.22);
+  color: #1ed75a;
+  transform: translateY(-1px);
+}
+
+#btn-hub-sponsor:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px #000;
+}
+
+/* ==========================================================================
+   SETTINGS MODAL
+   ========================================================================== */
+.settings-modal {
+  width: 860px;
+  max-width: 94vw;
+  max-height: 86vh;
+  background: var(--glass-panel);
+  backdrop-filter: blur(36px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+  animation: fadeIn 0.2s ease;
+}
+
+.settings-header-tabs {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 36px;
+  padding: 18px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tab-link {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-family: var(--font-primary);
+  font-size: 0.82rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 10px;
+  position: relative;
+  transition: color 0.2s ease;
+}
+
+.tab-link:hover {
+  color: #ffffff;
+}
+
+.tab-link.active-tab {
+  color: var(--brand-saffron);
+}
+
+.tab-link.active-tab::after {
+  content: '';
+  position: absolute;
+  bottom: -19px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--brand-saffron);
+}
+
+.settings-body {
+  padding: 24px 36px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.settings-section-title {
+  background: rgba(255, 255, 255, 0.06);
+  color: #adb5bd;
+  font-family: var(--font-mono);
+  font-size: 0.70rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 4px;
+  margin: 18px 0 14px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.settings-section-title:first-child {
+  margin-top: 0;
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.settings-label {
+  font-size: 0.86rem;
+  color: #e9ecef;
+}
+
+.settings-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 200px;
+  justify-content: flex-end;
+}
+
+.settings-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 130px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  outline: none;
+}
+
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--brand-saffron);
+  cursor: pointer;
+}
+
+.slider-val {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  min-width: 28px;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.settings-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.btn-settings-close {
+  background: #2b333e;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 8px 24px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-settings-close:hover {
+  background: #3c4856;
+}
+
+/* ==========================================================================
+   RESPONSIVE LAYOUT FOR NARROW & MOBILE VIEWPORTS
+   ========================================================================== */
+@media (max-width: 900px) {
+  .shiplyp-top-left {
+    top: 10px;
+    left: 10px;
+    max-width: 48vw;
+  }
+  
+  .active-order-card {
+    min-width: auto;
+    width: 100%;
+    padding: 10px 12px;
+  }
+
+  .order-card-header {
+    font-size: 0.60rem;
+  }
+
+  .order-customer-name {
+    font-size: 0.78rem;
+  }
+
+  .order-cargo-info {
+    font-size: 0.68rem;
+  }
+
+  .shiplyp-top-right {
+    top: 10px;
+    right: 10px;
+    max-width: 48vw;
+    gap: 4px;
+  }
+
+  .cassette-radio-card {
+    padding: 4px 8px;
+    gap: 6px;
+  }
+
+  .radio-title {
+    max-width: 110px;
+    font-size: 0.65rem;
+  }
+
+  .health-pill, .climate-pill, .earnings-pill, .streak-pill, .rating-pill {
+    padding: 4px 8px;
+    font-size: 0.62rem;
+  }
+
+  .slowroads-dock {
+    bottom: 12px;
+  }
+
+  .dock-bar-glass {
+    padding: 4px 10px;
+    gap: 8px;
+  }
+
+  .dock-tab-btn {
+    font-size: 0.65rem;
+    padding: 5px 10px;
+  }
+}
+
+/* ==========================================================================
+   ROADSIDE RECOVERY & RESUME MODAL
+   ========================================================================== */
+.recovery-card {
+  position: relative;
+  z-index: 10;
+  width: 580px;
+  max-width: 92vw;
+  background: rgba(14, 20, 32, 0.88);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid rgba(255, 159, 28, 0.35);
+  border-radius: 22px;
+  padding: 32px 36px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: hubEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.recovery-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 159, 28, 0.15);
+  border: 1px solid rgba(255, 159, 28, 0.4);
+  color: #ff9f1c;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  margin-bottom: 14px;
+}
+
+.recovery-badge.failed {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+.recovery-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 12px 0;
+  line-height: 1.25;
+}
+
+.recovery-resumes-pill {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 8px 18px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #2ec4b6;
+  margin-bottom: 16px;
+}
+
+.recovery-resumes-pill.exhausted {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.recovery-desc {
+  font-size: 0.88rem;
+  color: #cbd5e1;
+  line-height: 1.55;
+  margin-bottom: 24px;
+}
+
+.btn-resume-drive {
+  background: linear-gradient(135deg, #ff9f1c 0%, #fca311 100%);
+  color: #0b0f19;
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  padding: 14px 28px;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(255, 159, 28, 0.35);
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.btn-resume-drive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(255, 159, 28, 0.5);
+}
+
+/* ==========================================================================
+   RESPONSIVE DESIGN: Mobile, Tablet, Desktop Breakpoints
+   ========================================================================== */
+
+/* In-game HUD (dispatch card / radio+controls bar / wanted meter): below
+   this width, capping each box's max-width in vw isn't enough on its own
+   — a long delivery name or a missed-order banner can still make the
+   dispatch card grow to 2-3 lines tall, and since it and the top-bar are
+   two independently bottom-of-nowhere-anchored absolute boxes (each only
+   constrained horizontally), nothing stops the now-taller card from
+   running into the top-bar vertically. Stack them in normal document flow
+   instead of two independent absolute corner boxes — DOM order in
+   index.html is dispatch card, then wanted meter, then radio/controls
+   bar, so switching all three to position:static stacks them in exactly
+   that (sensible) top-to-bottom order without touching the HTML. */
+@media (max-width: 700px) {
+  .slowroads-obj-box,
+  .wanted-meter-box,
+  .slowroads-top-bar {
+    position: static;
+    max-width: none;
+    width: calc(100% - 24px);
+    margin: 8px auto 0 auto;
+    box-sizing: border-box;
+  }
+
+  .slowroads-top-bar {
+    justify-content: flex-start;
+  }
+
+  .wanted-meter-box {
+    /* Was a hardcoded margin-top assuming a fixed dispatch-card height —
+       meaningless once these are stacked in normal flow instead of both
+       being absolutely positioned from the same top-left origin. */
+    margin-top: 8px;
+    transform: none; /* the show/hide transform no longer makes sense stacked; opacity alone still handles visibility */
+  }
+
+  .wanted-meter-box.wanted-active {
+    transform: none;
+  }
+
+  /* Same unshared-corner problem as the top boxes, just bottom-left
+     (.slowroads-radar-box) vs bottom-right (.slowroads-telemetry-box) —
+     neither had a width limit, so on narrow viewports they collided in
+     the middle, on top of each other and the car. */
+  .slowroads-radar-box {
+    max-width: 46vw;
+  }
+
+  .slowroads-telemetry-box {
+    max-width: 50vw;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  /* Dock bar: at this width the nav tabs + 5 icon buttons don't fit on
+     one line even at the min(860px, 94vw) cap, and .dock-bar-glass's
+     overflow:hidden was silently deleting the icon row instead of
+     wrapping or scrolling it into view. Wrap onto a second row instead —
+     still all reachable, just two rows instead of a hidden one. */
+  .dock-bar-glass {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 50px;
+    padding: 8px 16px;
+    row-gap: 6px;
+  }
+
+  .dock-nav-items {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+}
+
+/* True phone widths: the fixes above stop HUD elements from overlapping,
+   but stacking every box at its normal desktop size still eats most of a
+   phone screen's height, leaving almost nothing of the actual game
+   viewport visible. Compact every HUD element's own footprint here rather
+   than just their positioning. */
+@media (max-width: 480px) {
+  .slowroads-obj-box {
+    padding: 6px 10px;
+    gap: 1px;
+  }
+
+  .slowroads-obj-title {
+    font-size: 0.82rem;
+  }
+
+  .slowroads-obj-tag {
+    font-size: 0.5rem;
+  }
+
+  .slowroads-obj-meta {
+    font-size: 0.58rem;
+    gap: 5px;
+  }
+
+  /* Radio track title + PREV/NEXT aren't needed to play — collapsing them
+     to just PLAY turns a 2-line control cluster into a single compact
+     row, matching the height of one HUD row instead of two. */
+  .slowroads-radio-btns #btn-radio-prev,
+  .slowroads-radio-btns #btn-radio-next {
+    display: none;
+  }
+
+  .slowroads-track-text {
+    max-width: 84px;
+  }
+
+  .slowroads-radio-pill {
+    padding: 4px 8px;
+  }
+
+  .slowroads-sys-btns .slowroads-icon-btn {
+    padding: 4px 8px;
+    font-size: 0.55rem;
+  }
+
+  /* Radar: shrink the canvas itself, not just its housing, so the box's
+     real footprint shrinks instead of leaving dead padding. */
+  #gps-minimap-canvas {
+    width: 76px;
+    height: 76px;
+  }
+
+  .slowroads-radar-box {
+    padding: 6px 8px;
+    max-width: 40vw;
+  }
+
+  .radar-tag, .radar-dist {
+    font-size: 0.48rem;
+  }
+
+  .slowroads-telemetry-box {
+    max-width: 46vw;
+    gap: 6px;
+  }
+
+  .slowroads-pill-btn {
+    padding: 4px 8px;
+    font-size: 0.55rem;
+  }
+
+  .telemetry-speed-row .telemetry-numeral {
+    font-size: 1.4rem;
+  }
+
+  /* Dock: wrapping to 2 rows (the >700px fix) still costs real vertical
+     space on a phone. Scroll horizontally in a single row instead — every
+     control stays reachable with a swipe, at roughly half the height. */
+  .dock-bar-glass {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start;
+    height: 44px;
+    padding: 0 14px;
+  }
+
+  .dock-nav-items {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+  }
+
+  .dock-icons-right {
+    flex-shrink: 0;
+    margin-left: 12px;
+  }
+
+  .dock-tab-btn {
+    white-space: nowrap;
+  }
+}
+
+/* Mobile: < 640px */
+@media (max-width: 640px) {
+  /* Modal and dialog sizing */
+  .modal-content, .dispatch-hub {
+    max-width: 95vw;
+    margin: 20px auto;
+    padding: 16px;
+  }
+
+  /* Button grids: stack to 2 columns on mobile */
+  .hub-vehicle-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .hub-difficulty-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .hub-city-pills {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Reduce button sizes on mobile */
+  .vehicle-card-btn, .city-pill-btn, .diff-card-btn {
+    padding: 8px 6px;
+  }
+
+  .vehicle-card-title, .city-pill-name, .diff-card-title {
+    font-family: var(--font-display, 'Bebas Neue', sans-serif);
+    font-size: 1.05rem;
+    letter-spacing: 0.8px;
+  }
+
+  .vehicle-card-stat {
+    font-size: 0.65rem;
+    font-weight: 700;
+  }
+
+  /* Road surface buttons: horizontal scroll on mobile */
+  .dock-sq-btn {
+    min-width: 70px;
+    font-size: 0.65rem;
+    padding: 6px 8px;
+  }
+
+  /* Section labels */
+  .hub-section-label {
+    font-size: 0.75rem;
+  }
+
+  /* Dock panel buttons */
+  .dock-tab-btn {
+    font-size: 0.65rem;
+    padding: 8px 10px;
+  }
+
+  /* Modal label text */
+  .dock-panel-label {
+    font-size: 0.70rem;
+    letter-spacing: 0.5px;
+  }
+}
+
+/* Tablet: 641px - 1024px */
+@media (min-width: 641px) and (max-width: 1024px) {
+  /* Modal sizing */
+  .modal-content, .dispatch-hub {
+    max-width: 90vw;
+    max-height: 85vh;
+  }
+
+  /* Button grids: 3 columns on tablet */
+  .hub-vehicle-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .hub-difficulty-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  /* Button sizing for tablet */
+  .vehicle-card-btn, .city-pill-btn, .diff-card-btn {
+    padding: 10px 8px;
+  }
+
+  .vehicle-card-title, .city-pill-name {
+    font-size: 0.68rem;
+  }
+
+  .dock-sq-btn {
+    min-width: 75px;
+    font-size: 0.68rem;
+  }
+
+  .dock-tab-btn {
+    font-size: 0.70rem;
+    padding: 10px 12px;
+  }
+}
+
+/* Desktop: > 1024px */
+@media (min-width: 1025px) {
+  /* Default desktop layout (already optimized above) */
+  .hub-vehicle-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .hub-difficulty-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Ultra-wide: > 1400px (optional tweaks for very wide screens) */
+@media (min-width: 1400px) {
+  .dispatch-hub {
+    max-width: 1200px;
+  }
+
+  .hub-vehicle-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .dock-sq-btn {
+    min-width: 90px;
+    font-size: 0.75rem;
+  }
+}
+
+/* ==========================================================================
+   DELIVERY STATUS PANEL — toggleable, non-blocking, matches HUD glass system
+   ========================================================================== */
+.delivery-status-panel {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  width: 320px;
+  max-height: min(72vh, 620px);
+  background: var(--glass-panel);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  border-right: 2px solid var(--brand-teal);
+  border-radius: 12px;
+  box-shadow: var(--shadow-panel);
+  z-index: 90;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(16px) scale(0.98);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.delivery-status-panel.open {
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateX(0) scale(1);
+}
+
+.status-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.status-panel-title {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 2.5px;
+  font-weight: 800;
+  color: var(--brand-teal);
+}
+
+.status-panel-close {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.status-panel-close:hover {
+  background: rgba(255, 45, 78, 0.2);
+  border-color: var(--brand-red);
+  color: #fff;
+}
+
+.status-panel-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.status-panel-section.status-panel-history {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  border-bottom: none;
+}
+
+.status-section-tag {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  letter-spacing: 2px;
+  font-weight: 800;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+.status-current-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.status-current-name {
+  font-family: var(--font-primary);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.status-current-cargo {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text-muted);
+}
+
+.status-upcoming-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.status-upcoming-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
+.status-upcoming-idx {
+  color: var(--brand-saffron);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.status-upcoming-name {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-upcoming-reward {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.status-panel-totals {
+  display: flex;
+  gap: 8px;
+}
+
+.status-total-pill {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+
+.status-total-pill span {
+  font-size: 0.9rem;
+  font-family: var(--font-primary);
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.status-total-pill.delivered span { color: var(--brand-teal); }
+.status-total-pill.missed span { color: var(--brand-red); }
+.status-total-pill.earnings span { color: var(--brand-saffron); }
+
+.status-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-history-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+}
+
+.status-history-row.missed {
+  background: rgba(255, 45, 78, 0.08);
+}
+
+.status-history-icon {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+}
+
+.status-history-name {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-history-amount {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.status-history-amount.delivered { color: var(--brand-teal); }
+.status-history-amount.missed { color: var(--brand-red); }
+
+.status-history-empty {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text-faint);
+  text-align: center;
+  padding: 12px 0;
+}
+
+.status-panel-history::-webkit-scrollbar {
+  width: 5px;
+}
+
+.status-panel-history::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+@media (max-width: 640px) {
+  .delivery-status-panel {
+    width: calc(100vw - 24px);
+    right: 12px;
+    top: 12px;
+  }
+}
+
+/* ==========================================================================
+   TOUCH CONTROLS — on-screen steer, pedals, express drop, and quick utilities.
+   Shown when touch/coarse pointer is detected. Ergonomically placed for mobile thumbs.
+   ========================================================================== */
+.touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  display: none;
+}
+
+body.touch-controls-active .touch-controls {
+  display: block;
+}
+
+body.touch-controls-active .slowroads-toss-banner,
+body.touch-controls-active .drop-action-prompt,
+body.touch-controls-active #drop-action-prompt {
+  display: none !important;
+}
+
+.touch-btn {
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--comic-card-bg);
+  border: var(--border-comic);
+  border-radius: 14px;
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-weight: 800;
+  box-shadow: 3px 3px 0px #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.08s ease, transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.touch-btn:active,
+.touch-btn.touch-pressed {
+  background: var(--comic-yellow);
+  border-color: #000000;
+  color: #000000;
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #000000;
+}
+
+/* Drag-to-Steer Zone (cycle only): full left-half swipe area.
+   Hidden by default; shown when vehicle is a cycle via body class. */
+.touch-drag-steer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 50%;
+  height: 40%;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  display: none;
+}
+body.vehicle-cycle .touch-drag-steer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+body.vehicle-cycle .touch-steer-cluster {
+  display: none !important;
+}
+.drag-steer-indicator {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  opacity: 0; /* Hidden when idle so it never overlaps radar or road */
+  transform: translate(-50%, -50%) scale(0.9);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.touch-drag-steer.dragging .drag-steer-indicator,
+.touch-drag-steer:active .drag-steer-indicator {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  border-color: var(--brand-saffron, #ff9933);
+  background: rgba(255, 184, 51, 0.2);
+  box-shadow: 0 0 16px rgba(255, 184, 51, 0.5);
+}
+
+/* Left: Steering Cluster (Left Thumb — car/truck only) */
+.touch-steer-cluster {
+  position: absolute;
+  left: 16px;
+  bottom: 22px;
+  display: flex;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.touch-steer-btn {
+  width: 66px;
+  height: 66px;
+  font-size: 1.65rem;
+  border-radius: 14px;
+}
+
+/* Top-Right: Quick Action Utilities (Autopilot & Tools Menu) */
+.touch-utility-cluster {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+  z-index: 9500;
+}
+
+.touch-util-btn {
+  padding: 5px 9px;
+  height: 30px;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+  border-radius: 8px;
+  background: var(--comic-card-bg);
+  border: var(--border-comic-sm);
+  color: #ffffff;
+  box-shadow: 2px 2px 0px #000000;
+  font-family: var(--font-telemetry);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.util-icon {
+  font-size: 0.76rem;
+  line-height: 1;
+}
+
+.util-text {
+  line-height: 1;
+}
+
+.touch-btn-auto,
+.touch-btn-tools {
+  padding: 4px 8px;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.94);
+  border: var(--border-comic-sm);
+  box-shadow: 2px 2px 0px #000000;
+  color: #ffffff;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-btn-auto .util-text-always,
+.touch-btn-tools .util-text-always {
+  font-family: var(--font-stamp, 'Russo One', sans-serif);
+  font-size: 0.62rem;
+  letter-spacing: 0.8px;
+  line-height: 1;
+  font-weight: 900;
+  color: #e2e8f0;
+  display: inline-block;
+}
+
+.touch-btn-auto.autodrive-active {
+  background: #00f0ff !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.75), 2px 2px 0px #000000 !important;
+  transform: translate(-1px, -1px);
+}
+
+.touch-btn-auto.autodrive-active .util-text-always {
+  color: #000000 !important;
+}
+
+.touch-btn-tools[aria-expanded="true"] {
+  background: var(--comic-yellow, #ffe600);
+  color: #000000;
+  border-color: #000000;
+  box-shadow: 0 0 10px rgba(255, 230, 0, 0.6), 2px 2px 0px #000000;
+}
+.touch-btn-tools[aria-expanded="true"] .util-text-always {
+  color: #000000;
+}
+
+/* Collapsible Quick Tools Drawer Popover */
+.touch-tools-drawer {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  width: 175px;
+  background: rgba(15, 23, 42, 0.96);
+  border: var(--border-comic-sm);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 3px 3px 0px #000000;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  z-index: 2000;
+  animation: popToolsDrawer 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popToolsDrawer {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.tools-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 4px 5px 4px;
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.15);
+  margin-bottom: 2px;
+}
+
+.tools-drawer-title {
+  font-family: var(--font-stamp, 'Russo One', sans-serif);
+  font-size: 0.65rem;
+  letter-spacing: 0.8px;
+  color: var(--comic-yellow, #ffe600);
+}
+
+.tools-drawer-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 0.82rem;
+  font-weight: 900;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.tools-drawer-close:active {
+  color: #ffffff;
+}
+
+.tools-drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-family: var(--font-telemetry, monospace);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tools-drawer-item:active {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: var(--comic-yellow, #ffe600);
+  color: var(--comic-yellow, #ffe600);
+  transform: translateX(2px);
+}
+
+.drawer-item-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.drawer-item-label {
+  flex: 1;
+  white-space: nowrap;
+}
+
+/* Right: Pedals & Action Drop Cluster (Right Thumb) */
+.touch-pedal-cluster {
+  position: absolute;
+  right: 16px;
+  bottom: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.touch-pedal-pair {
+  display: flex;
+  gap: 10px;
+}
+
+.touch-pedal-btn {
+  width: 66px;
+  height: 66px;
+  font-size: 1.65rem;
+  border-radius: 14px;
+}
+
+.touch-pedal-gas {
+  color: var(--comic-green);
+  border-color: #000000;
+  background: var(--comic-card-bg);
+}
+
+.touch-pedal-brake {
+  color: var(--comic-pink);
+  border-color: #000000;
+  background: var(--comic-card-bg);
+}
+
+/* Express Parcel Drop Button (Glows amber when approaching customer plinth) */
+.touch-action-drop {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--comic-yellow) 0%, var(--comic-orange) 100%);
+  border: 3px solid #000000;
+  box-shadow: 3px 3px 0px #000000, 0 0 24px rgba(255, 230, 0, 0.7);
+  color: #000000;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
+  animation: pulseDropGlow 1.4s infinite ease-in-out;
+}
+
+@keyframes pulseDropGlow {
+  0%, 100% { transform: scale(1); box-shadow: 3px 3px 0px #000000, 0 0 20px rgba(255, 230, 0, 0.6); }
+  50% { transform: scale(1.08); box-shadow: 3px 3px 0px #000000, 0 0 32px rgba(255, 230, 0, 0.9); }
+}
+
+/* ==========================================================================
+   PORTRAIT & MOBILE RESPONSIVE LAYOUT (<= 768px or orientation: portrait)
+   ========================================================================== */
+@media (max-width: 768px), (max-aspect-ratio: 1/1) {
+  /* Dispatch Hub Modal: 100% viewport fit, zero clipping */
+  .modal-backdrop {
+    padding: 10px;
+    align-items: center;
+    justify-content: center;
+  }
+  .shiplyp-hub-card {
+    width: 100%;
+    max-width: 440px;
+    max-height: 96vh;
+    padding: 14px 16px;
+    gap: 8px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .hub-brand-header {
+    gap: 8px;
+    margin-bottom: 2px;
+  }
+  .hub-brand-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 1.1rem;
+    border-radius: 8px;
+  }
+  .hub-brand-title {
+    font-family: var(--font-title, 'Bungee', sans-serif);
+    font-size: 1.85rem;
+    letter-spacing: 0.5px;
+  }
+  .hub-tagline {
+    font-family: var(--font-display, 'Bebas Neue', sans-serif);
+    font-size: 0.85rem;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+  .hub-career-strip {
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    gap: 8px;
+    border-radius: 10px;
+  }
+  .career-rank-name {
+    font-size: 1.25rem;
+    letter-spacing: 1px;
+  }
+  .career-rank-next {
+    font-size: 0.65rem;
+  }
+  .career-bank-label {
+    font-size: 0.72rem;
+    letter-spacing: 1.5px;
+  }
+  .career-bank-value {
+    font-size: 1.35rem;
+  }
+  .career-stats-row {
+    gap: 4px 6px;
+    font-size: 0.60rem;
+  }
+  .career-stats-row span {
+    padding: 2px 6px;
+  }
+  .career-stats-row b {
+    font-size: 0.66rem;
+  }
+  .hub-section-label {
+    font-family: var(--font-display, 'Bebas Neue', sans-serif);
+    font-size: 1.05rem;
+    letter-spacing: 1.5px;
+    margin-bottom: 3px;
+  }
+  .hub-vehicle-selector {
+    margin-bottom: 8px;
+    gap: 4px;
+    width: 100%;
+  }
+  .hub-vehicle-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+  .hub-vehicle-grid .vehicle-card-btn {
+    flex: none;
+    max-width: none;
+    padding: 8px 6px;
+    gap: 2px;
+    border-radius: 10px;
+  }
+  .vehicle-card-title {
+    font-family: var(--font-display, 'Bebas Neue', sans-serif);
+    font-size: 1.05rem;
+    letter-spacing: 0.8px;
+  }
+  .vehicle-card-stat {
+    font-size: 0.62rem;
+    font-weight: 700;
+  }
+
+  .hub-difficulty-selector {
+    margin-bottom: 8px;
+    gap: 4px;
+    width: 100%;
+  }
+  .hub-style-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    width: 100%;
+  }
+  .hub-style-grid .style-card-btn {
+    flex: none;
+    max-width: none;
+    padding: 4px 4px 6px;
+    border-radius: 8px;
+  }
+  .style-card-title {
+    font-family: var(--font-display, 'Bebas Neue', sans-serif);
+    font-size: 0.88rem;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+  .diff-card-stat {
+    font-size: 0.56rem;
+  }
+  .btn-launch-dispatch {
+    padding: 11px 18px;
+    font-family: var(--font-display, 'Bebas Neue', sans-serif);
+    font-size: 1.55rem;
+    letter-spacing: 2px;
+    border-radius: 12px;
+    box-shadow: 4px 4px 0 #000;
+    margin-top: 4px;
+  }
+
+  /* In-Game Top-Left Delivery Capsule: Streamlined compact pill (Fits comfortably on left) */
+  .slowroads-delivery-capsule {
+    top: 10px;
+    left: 10px;
+    min-width: 0 !important;
+    max-width: 116px !important;
+    width: fit-content;
+    padding: 4px 6px;
+    border-radius: 10px;
+    background: var(--comic-card-bg);
+    border: var(--border-comic-sm);
+    box-shadow: var(--shadow-comic-sm);
+  }
+  .delivery-capsule-header {
+    gap: 4px;
+    margin-bottom: 2px;
+  }
+  .delivery-badge {
+    padding: 1px 4px;
+    gap: 3px;
+  }
+  .delivery-tag {
+    display: none; /* Hide 'EXPRESS DROP' text to keep pill ultra compact on phone */
+  }
+  .delivery-order-seq {
+    font-size: 0.54rem;
+  }
+  .delivery-sep {
+    font-size: 0.54rem;
+  }
+  .delivery-payout {
+    font-size: 0.58rem;
+  }
+  .delivery-cargo-row {
+    display: none;
+  }
+  .delivery-dest-name {
+    max-width: 74px;
+    font-size: 0.62rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .delivery-dist-badge {
+    font-size: 0.58rem;
+  }
+
+  /* Top-Right: Action utility pills (Autopilot & Tools Menu) */
+  .touch-utility-cluster {
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 4px;
+    z-index: 9500;
+  }
+  .touch-btn-auto,
+  .touch-btn-tools {
+    height: 26px;
+    padding: 0 7px;
+    gap: 3px;
+    border-radius: 7px;
+  }
+  .touch-btn-auto .util-icon,
+  .touch-btn-tools .util-icon {
+    font-size: 0.70rem;
+  }
+  .touch-btn-auto .util-text-always,
+  .touch-btn-tools .util-text-always {
+    display: inline-block;
+    font-size: 0.56rem;
+    letter-spacing: 0.3px;
+  }
+
+  /* Top-Right: Telemetry Instruments Heads-Up Glass Box (Docked below utility pills) */
+  .slowroads-telemetry-box {
+    top: 38px;
+    right: 10px;
+    bottom: auto !important;
+    left: auto !important;
+    padding: 4px 7px;
+    min-width: 0 !important;
+    width: fit-content;
+    background: var(--comic-card-bg);
+    border: var(--border-comic-sm);
+    border-radius: 8px;
+    box-shadow: var(--shadow-comic-sm);
+    z-index: 55;
+  }
+  /* Hide the desktop pill only when the touch cluster's own AUTO button is
+     actually showing. Gating on viewport alone left a dead zone: a narrow or
+     portrait NON-touch window matched this query but never got
+     `touch-controls-active` (set from `pointer: coarse`), so neither
+     autopilot control rendered at all. */
+  body.touch-controls-active .telemetry-controls-col {
+    display: none;
+  }
+  .telemetry-digits-box {
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+  .telemetry-numeral {
+    font-size: 1.15rem;
+  }
+  .telemetry-unit {
+    font-size: 0.50rem;
+  }
+  .telemetry-trip,
+  .telemetry-earnings {
+    font-size: 0.58rem;
+  }
+
+  /* Hide desktop top-bar buttons when mobile touch is active to prevent clutter */
+  .slowroads-top-bar {
+    display: none !important;
+  }
+
+  /* Bottom-Left Radar: Docked safely above the steering touch zone */
+  .slowroads-radar-box {
+    bottom: 124px;
+    left: 12px;
+    padding: 4px 6px;
+    background: var(--comic-card-bg);
+    border: var(--border-comic-sm);
+    border-radius: 10px;
+    box-shadow: var(--shadow-comic-sm);
+    z-index: 55;
+  }
+  #gps-radar-canvas {
+    width: 60px !important;
+    height: 60px !important;
+  }
+
+  /* Touch controls scaling */
+  .touch-drag-steer {
+    height: 112px;
+    width: 48%;
+  }
+  .touch-steer-cluster {
+    bottom: 16px;
+    left: 12px;
+    gap: 8px;
+  }
+  .touch-steer-btn {
+    width: 60px;
+    height: 60px;
+    font-size: 1.45rem;
+    border-radius: 16px;
+  }
+
+  .touch-pedal-cluster {
+    bottom: 16px;
+    right: 12px;
+    gap: 8px;
+    align-items: center;
+  }
+  .touch-pedal-pair {
+    gap: 8px;
+  }
+  .touch-pedal-btn {
+    width: 60px;
+    height: 60px;
+    font-size: 1.45rem;
+    border-radius: 16px;
+  }
+  .touch-action-drop {
+    width: 64px;
+    height: 64px;
+    font-size: 0.76rem;
+    margin-bottom: 6px;
+  }
+}
+
+/* ── Very Narrow Mobile Screens (<= 380px, e.g. Galaxy A55 360px) ───────── */
+@media (max-width: 380px) {
+  .slowroads-delivery-capsule {
+    top: 8px;
+    left: 8px;
+    max-width: 98px !important;
+    padding: 3px 5px;
+  }
+  .delivery-dest-name {
+    max-width: 60px;
+    font-size: 0.58rem;
+  }
+  .touch-utility-cluster {
+    top: 8px;
+    right: 8px;
+    gap: 3px;
+  }
+  .touch-btn-auto,
+  .touch-btn-tools {
+    height: 24px;
+    padding: 0 6px;
+    gap: 2.5px;
+    border-radius: 6px;
+  }
+  .touch-btn-auto .util-icon,
+  .touch-btn-tools .util-icon {
+    font-size: 0.64rem;
+  }
+  .touch-btn-auto .util-text-always,
+  .touch-btn-tools .util-text-always {
+    display: inline-block;
+    font-size: 0.50rem;
+    letter-spacing: 0.2px;
+  }
+  .slowroads-telemetry-box {
+    top: 36px;
+    right: 8px;
+    padding: 3px 6px;
+  }
+  .telemetry-numeral {
+    font-size: 1.20rem;
+  }
+  .slowroads-radar-box {
+    bottom: 118px;
+    left: 8px;
+  }
+  #gps-radar-canvas {
+    width: 56px !important;
+    height: 56px !important;
+  }
+  .touch-drag-steer {
+    height: 106px;
+    width: 48%;
+  }
+  .touch-steer-cluster {
+    bottom: 12px;
+    left: 8px;
+    gap: 6px;
+  }
+  .touch-pedal-cluster {
+    bottom: 12px;
+    right: 8px;
+    gap: 6px;
+  }
+  .touch-steer-btn,
+  .touch-pedal-btn {
+    width: 54px;
+    height: 54px;
+    font-size: 1.3rem;
+    border-radius: 14px;
+  }
+  .touch-action-drop {
+    width: 58px;
+    height: 58px;
+    font-size: 0.70rem;
+  }
+}
+
+/* ── Landscape Mobile Touch (<= 1024px and aspect-ratio > 1/1) ─────────── */
+@media (min-aspect-ratio: 1/1) and (max-width: 1024px) {
+  body.touch-controls-active .slowroads-top-bar {
+    display: none !important;
+  }
+  .slowroads-delivery-capsule {
+    top: 12px;
+    left: 12px;
+    max-width: 280px;
+  }
+  .touch-utility-cluster {
+    top: 12px;
+    right: 12px;
+    display: flex;
+    gap: 6px;
+    z-index: 65;
+  }
+  .touch-util-btn {
+    padding: 4px 8px;
+    height: 26px;
+    font-size: 0.54rem;
+  }
+  .touch-util-btn .util-text {
+    display: inline;
+  }
+  .slowroads-telemetry-box {
+    bottom: 18px;
+    right: 170px;
+    padding: 6px 12px;
+    background: var(--comic-card-bg);
+    border: var(--border-comic-sm);
+    box-shadow: var(--shadow-comic-sm);
+  }
+  /* Hide the desktop pill only when the touch cluster's own AUTO button is
+     actually showing. Gating on viewport alone left a dead zone: a narrow or
+     portrait NON-touch window matched this query but never got
+     `touch-controls-active` (set from `pointer: coarse`), so neither
+     autopilot control rendered at all. */
+  body.touch-controls-active .telemetry-controls-col {
+    display: none;
+  }
+  .slowroads-radar-box {
+    bottom: 18px;
+    left: 170px;
+    padding: 4px 8px;
+    background: var(--comic-card-bg);
+    border: var(--border-comic-sm);
+    box-shadow: var(--shadow-comic-sm);
+  }
+  #gps-radar-canvas {
+    width: 60px !important;
+    height: 60px !important;
+  }
+}
+
+/* ============================================================
+   GAME LOADER — Glassmorphic full-screen loading overlay
+   Shown during initial world build + shader warmup.
+   Faded out by JS (_bootWithLoader) before startDrive().
+   ============================================================ */
+#game-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 50% 60%, #0d1b2e 0%, #060d18 70%);
+  transition: opacity 0.65s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.loader-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 48px 56px;
+  background: var(--comic-card-bg);
+  border: var(--border-comic);
+  border-radius: 16px;
+  box-shadow: var(--shadow-comic-lg);
+  max-width: 540px;
+  width: calc(100% - 48px);
+}
+
+.loader-wordmark {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(2.4rem, 8vw, 3.8rem);
+  letter-spacing: 0.12em;
+  color: var(--comic-yellow);
+  text-shadow: 4px 4px 0px #000000;
+}
+
+.loader-tagline {
+  font-family: var(--font-telemetry);
+  font-size: clamp(0.6rem, 1.8vw, 0.74rem);
+  letter-spacing: 0.12em;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: center;
+}
+
+.loader-bar-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1.5px solid #000000;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.loader-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--comic-yellow) 0%, var(--comic-cyan) 100%);
+  border-radius: 4px;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 12px var(--comic-yellow);
+}
+
+.loader-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.loader-pct {
+  font-family: var(--font-telemetry);
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--comic-cyan);
+  min-width: 36px;
+}
+
+.loader-status {
+  font-family: var(--font-telemetry);
+  font-size: 0.70rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.04em;
+  flex: 1;
+}
+
+
+/* ─── Step 2: First-run onboarding ─── */
+
+.hub-onboarding-banner {
+  background: rgba(79, 125, 120, 0.08);
+  border: 1px solid rgba(79, 125, 120, 0.28);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.onboarding-banner-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2b5e58;
+}
+
+.onboarding-banner-body {
+  font-size: 0.8rem;
+  color: #2c3846;
+  line-height: 1.45;
+}
+
+/* In-game floating hint strip */
+.onboarding-hint {
+  position: fixed;
+  bottom: 92px;
+  left: 50%;
+  transform: translateX(-50%) translateY(12px);
+  background: var(--comic-card-bg);
+  border: var(--border-comic-sm);
+  border-radius: 12px;
+  box-shadow: var(--shadow-comic);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  z-index: 45;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+  font-family: var(--font-primary);
+}
+
+.onboarding-hint.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.onboarding-hint-icon {
+  font-size: 0.72rem;
+  color: var(--comic-green);
+}
+
+.onboarding-hint-text {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.04em;
+  font-family: var(--font-display);
+}
+
+.onboarding-hint-sub {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.85);
+  border-left: 2px solid #000;
+  padding-left: 10px;
+  margin-left: 2px;
+  font-family: var(--font-primary);
+}
+
+.onboarding-hint kbd {
+  display: inline-block;
+  background: var(--comic-yellow);
+  color: #000000;
+  border: 1.5px solid #000000;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-family: var(--font-telemetry);
+  font-weight: 800;
+  font-size: 0.75rem;
+  box-shadow: 1.5px 1.5px 0px #000000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-hint { transition: opacity 0.15s ease; }
+}
+
+@media (max-width: 768px), (max-aspect-ratio: 1/1) {
+  .onboarding-hint {
+    top: 125px;
+    bottom: auto;
+    padding: 6px 12px;
+    gap: 6px;
+  }
+  .onboarding-hint-text {
+    font-size: 0.74rem;
+  }
+  .onboarding-hint-sub {
+    font-size: 0.66rem;
+    padding-left: 6px;
+  }
+}
+
+@media (max-width: 380px) {
+  .onboarding-hint {
+    top: 120px;
+    bottom: auto;
+    padding: 4px 8px;
+    gap: 4px;
+    max-width: 320px;
+  }
+  .onboarding-hint-text {
+    font-size: 0.68rem;
+  }
+  .onboarding-hint-sub {
+    display: none; /* Keep hint ultra compact on narrowest phones */
+  }
+}
+
+@media (min-aspect-ratio: 1/1) and (max-width: 1024px) {
+  .onboarding-hint {
+    top: 115px;
+    bottom: auto;
+    padding: 5px 12px;
+  }
+}

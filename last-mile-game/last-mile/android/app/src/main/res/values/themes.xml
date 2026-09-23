@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.ShiplypLastMile.Fullscreen" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="android:windowBackground">@color/brand_dark</item>
+        <item name="android:statusBarColor">@color/brand_dark</item>
+        <item name="android:navigationBarColor">@color/brand_dark</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+</resources>

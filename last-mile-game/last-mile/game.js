@@ -117,12 +117,20 @@
     else if (child.name.startsWith('wheel')) child.material = wheelMat;
   }, 'ChotaHathiAsset');
 
+  // Cache key for .glb models, which (unlike game.js/style.css) get no
+  // automatic busting. This used to be `Date.now()`, which is not a cache key
+  // at all — it made every launch a cache MISS and re-downloaded 14MB of
+  // models each time, most painfully on the Android WebView's cold start.
+  // Bump this by hand whenever a file under assets/models/ changes; that
+  // invalidates the old copy exactly when it should and never otherwise.
+  const ASSET_VERSION = '4';
+
   // 0f. MUSCLE COUPE — user-supplied model; headlights already face +Z, no
   // rotation needed. Brand references stripped per user instruction; see CREDITS.
   // Paint swapped from the model's stock fire-engine red ("Default Metallic
   // Paint") to a muted dusty-blue slate — the red read as too loud against
   // the game's soft, desaturated visual styles.
-  const MuscleCoupeAsset = makeVehicleAsset('assets/models/muscle-coupe.glb?t=' + Date.now(), (child) => {
+  const MuscleCoupeAsset = makeVehicleAsset('assets/models/muscle-coupe.glb?v=' + ASSET_VERSION, (child) => {
     if (child.material && child.material.name && child.material.name.startsWith('Default Metallic Paint')) {
       child.material = new THREE.MeshStandardMaterial({ color: 0x5c7285, metalness: 0.55, roughness: 0.35 });
     }
@@ -145,7 +153,13 @@
     load() {
       if (this.template || this.loading || typeof THREE.GLTFLoader === 'undefined') return;
       this.loading = true;
-      new THREE.GLTFLoader().load('assets/models/courier.glb?t=' + Date.now(), (gltf) => {
+      // courier-crowd.glb, not courier.glb: the original is a 35k-tri, 7-mesh
+      // hero model, and every pedestrian pays 7 draw calls for it. The crowd
+      // build is decimated to 5.7k tris and merged down to 5 meshes (Eyes
+      // folded into Body — it already shared Bodymat — and Eyelashes dropped),
+      // keeping all 67 bones, all five clips, and the Body/Top/Bottom/Hair
+      // materials the per-NPC tinting recolours.
+      new THREE.GLTFLoader().load('assets/models/courier-crowd.glb?v=' + ASSET_VERSION, (gltf) => {
         gltf.scene.traverse((child) => {
           if (!child.isMesh) return;
           child.castShadow = true;
@@ -723,11 +737,6 @@
       setTimeout(() => this.playTone(55, 'sine', 0.2, 0.25), 40);
     }
 
-    playCash() {
-      if (this.suspended || this.sfxMuted) return;
-      this.playTone(987, 'sine', 0.12, 0.22);
-      setTimeout(() => this.playTone(1318, 'sine', 0.2, 0.18), 90);
-    }
 
     playCombo() {
       if (this.suspended || this.sfxMuted) return;
@@ -736,12 +745,14 @@
       setTimeout(() => this.playTone(1174, 'sine', 0.2, 0.20), 160);
     }
 
-    playSpeedCam() {
+    playDeliverySuccess() {
       if (this.suspended || this.sfxMuted) return;
-      this.playTone(1600, 'sine', 0.08, 0.30);
-      setTimeout(() => this.playTone(450, 'sine', 0.25, 0.30), 80);
-      setTimeout(() => this.playTone(350, 'sine', 0.35, 0.25), 280);
+      this.playTone(523, 'sine', 0.12, 0.22);
+      setTimeout(() => this.playTone(659, 'sine', 0.12, 0.22), 90);
+      setTimeout(() => this.playTone(784, 'sine', 0.15, 0.25), 180);
+      setTimeout(() => this.playTone(1046, 'sine', 0.25, 0.28), 270);
     }
+
 
     playCrash() {
       if (this.suspended || this.sfxMuted) return;
@@ -765,6 +776,52 @@
       this._lastScrapeTime = now;
       this.playTone(180, 'triangle', 0.12, 0.18);
       setTimeout(() => this.playTone(120, 'sine', 0.15, 0.15), 40);
+    }
+
+    playHorn(vehicleType = 'musclecoupe') {
+      if (this.suspended || this.sfxMuted) return;
+      const ctx = this.ensure();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      if (this._lastHornTime && now - this._lastHornTime < 0.28) return;
+      this._lastHornTime = now;
+
+      if (vehicleType === 'cycle' || vehicleType === 'scooter') {
+        // Bicycle Bell: classic high-pitch twin-chime "ting-ting"
+        const ringBell = (t, freq) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(0.35, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+          osc.connect(gain);
+          gain.connect(this.masterFilter || ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.2);
+        };
+        ringBell(now, 1760);        // A6
+        ringBell(now + 0.08, 2093);  // C7
+        ringBell(now + 0.18, 1760);  // A6
+      } else {
+        // Automotive Dual-Tone Electric Horn: 392Hz (G4) + 494Hz (B4)
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc1.type = 'sawtooth';
+        osc2.type = 'triangle';
+        osc1.frequency.setValueAtTime(392, now);
+        osc2.frequency.setValueAtTime(494, now);
+        gain.gain.setValueAtTime(0.26, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(this.masterFilter || ctx.destination);
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 0.35);
+        osc2.stop(now + 0.35);
+      }
     }
 
     // Procedural Driving Ambience (Engine load pitch & wind noise filter)
@@ -1020,6 +1077,23 @@
   }
 
   const sound = new SoundEngine();
+
+  // --------------------------------------------------------------------------
+  // CAREER PROFILE (save.js)
+  // Persistent wallet, lifetime stats, courier rank, daily streak and stars.
+  // Held as a module-level singleton next to `sound` for the same reason: it
+  // is one shared service, not per-engine state, and the engine can be torn
+  // down and rebuilt without touching it.
+  //
+  // Deliberately tolerant of being absent. save.js is a separate file loaded
+  // before this one; if it ever fails to load, every call site below is
+  // guarded so the game still runs — it just stops remembering anything.
+  // --------------------------------------------------------------------------
+  const Career = (typeof window !== 'undefined' && window.ShiplypSave) ? window.ShiplypSave : null;
+  if (!Career && typeof console !== 'undefined') {
+    console.warn('[Shiplyp] save.js not loaded — career progress will not persist this session.');
+  }
+  const Ads = (typeof window !== 'undefined' && window.ShiplypAds) ? window.ShiplypAds : null;
   window.sound = sound;
   window.RADIO_PLAYLISTS = RADIO_PLAYLISTS;
   window.noteToFreq = noteToFreq;
@@ -1384,11 +1458,12 @@
       swift: { id: 'swift', name: 'Raftaar GT Hatch', maxSpeed: 44.0, accel: 18.0, drag: 0.80, brake: 30.0 },
       chotahathi: { id: 'chotahathi', name: 'Gaja 500 Mini Truck', maxSpeed: 30.0, accel: 12.0, drag: 0.85, brake: 26.0 },
       musclecoupe: { id: 'musclecoupe', name: 'Muscle Coupe', maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0 },
-      cycle: { id: 'cycle', name: 'Delivery Cycle', maxSpeed: 22.0, accel: 8.0, drag: 0.90, brake: 18.0 }
+      // maxSpeed = end of the ride-time ramp (52 km/h); baseSpeed = start of it (32 km/h). Both m/s.
+      cycle: { id: 'cycle', name: 'Delivery Cycle', maxSpeed: 14.44, baseSpeed: 8.89, rampSeconds: 120, accel: 6.5, drag: 0.55, brake: 14.0 }
     },
 
     DIFFICULTY_TIERS: {
-      easy: { id: 'easy', name: 'Relaxed Shift', timeLimit: 55.0, minHouseDist: 4.5, maxHouseDist: 7.0, tossRadius: 7.5, payoutMult: 1.0 },
+      easy: { id: 'easy', name: 'Relaxed Shift', timeLimit: 55.0, minHouseDist: 5.2, maxHouseDist: 8.0, tossRadius: 7.5, payoutMult: 1.0 },
       medium: { id: 'medium', name: 'City Standard', timeLimit: 36.0, minHouseDist: 7.0, maxHouseDist: 14.0, tossRadius: 5.2, payoutMult: 1.5 },
       hard: { id: 'hard', name: 'Rush Hour Express', timeLimit: 22.0, minHouseDist: 10.0, maxHouseDist: 25.0, tossRadius: 3.6, payoutMult: 2.5 }
     },
@@ -1858,13 +1933,36 @@
           if (!cell) continue;
           for (let k = 0; k < cell.length; k++) {
             const idx = cell[k];
-            const pt = this.points[idx];
-            const dx = x - pt.x;
-            const dz = z - pt.z;
-            const dSq = dx * dx + dz * dz;
-            if (dSq < minSq) {
-              minSq = dSq;
-              nearest = { point: pt, dist: Math.sqrt(dSq), distSq: dSq, y: pt.y, index: idx };
+            const p1 = this.points[idx];
+
+            // 1. Point distance check
+            const dx1 = x - p1.x;
+            const dz1 = z - p1.z;
+            const dSq1 = dx1 * dx1 + dz1 * dz1;
+            if (dSq1 < minSq) {
+              minSq = dSq1;
+              nearest = { point: p1, dist: Math.sqrt(dSq1), distSq: dSq1, y: p1.y, index: idx };
+            }
+
+            // 2. Continuous line-segment projection to adjacent road point (eliminates discretization gaps)
+            if (idx + 1 < this.points.length) {
+              const p2 = this.points[idx + 1];
+              const vx = p2.x - p1.x;
+              const vz = p2.z - p1.z;
+              const segLenSq = vx * vx + vz * vz;
+              if (segLenSq > 0.001) {
+                const t = Math.max(0, Math.min(1, ((x - p1.x) * vx + (z - p1.z) * vz) / segLenSq));
+                const projX = p1.x + t * vx;
+                const projZ = p1.z + t * vz;
+                const projY = p1.y + t * (p2.y - p1.y);
+                const pdx = x - projX;
+                const pdz = z - projZ;
+                const pDistSq = pdx * pdx + pdz * pdz;
+                if (pDistSq < minSq) {
+                  minSq = pDistSq;
+                  nearest = { point: { x: projX, y: projY, z: projZ }, dist: Math.sqrt(pDistSq), distSq: pDistSq, y: projY, index: idx };
+                }
+              }
             }
           }
         }
@@ -1893,8 +1991,9 @@
       this.windowMaterials = [];
       this.trafficVehicles = [];
       this.deliveryTargets = [];
-      this.potholes = [];
       this.crossers = [];
+      this.patrons = [];
+      this.trafficSignals = [];
       // Thin roadside props (poles, lampposts) the camera can end up
       // staring straight through when the on-foot courier walks up close
       // to one — tracked separately from `obstacles` (which only stores a
@@ -2822,6 +2921,19 @@
       geom.setIndex(indices);
       geom.computeVertexNormals();
 
+      // Cache the last row of road cross-section vertices so streaming extension meshes
+      // can snap their row 0 to them vertex-for-vertex, eliminating cracks in the road.
+      const cols = offsets.length;
+      const lastRowBase = tubularSegments * cols * 3;
+      this._lastRoadEdgeVerts = [];
+      for (let j = 0; j < cols; j++) {
+        this._lastRoadEdgeVerts.push({
+          x: positions[lastRowBase + j * 3],
+          y: positions[lastRowBase + j * 3 + 1],
+          z: positions[lastRowBase + j * 3 + 2]
+        });
+      }
+
       // Real photo asphalt (ambientcg Asphalt033) replacing the procedural
       // canvas-noise texture — SLOWROADS_PARITY_LOG.md item 6. Lane paint is
       // no longer part of this vertexColors buffer — see
@@ -3084,9 +3196,11 @@
       // embankment-mesh-matches-formula): worst gap dropped from 4.27u
       // (2 slices out here) to <0.1u at this density.
       const lateralSlices = [
+        -150.0, -105.0, -75.0, -55.0,
         -45.0, -41.0, -37.0, -33.0, -29.0, -25.0, -21.0, -17.0, -13.0, -9.0,
         -vergeLat, -roadHalf, roadHalf, vergeLat,
-        9.0, 13.0, 17.0, 21.0, 25.0, 29.0, 33.0, 37.0, 41.0, 45.0
+        9.0, 13.0, 17.0, 21.0, 25.0, 29.0, 33.0, 37.0, 41.0, 45.0,
+        55.0, 75.0, 105.0, 150.0
       ];
       const sliceCount = lateralSlices.length;
 
@@ -3193,19 +3307,23 @@
 
           // Road clearance guard: if this vertex lies within the drivable road corridor of ANY road segment,
           // it must never breach above that road segment's surface (prevents terrain from slicing across hairpins/switchbacks).
-          // Full clearance covers the paved road ribbon plus shoulder verge (vergeLat + 0.6m).
+          // Height-aware: only clamp if within road level corridor (< +4.5m) so upper mountain bluffs and upper switchback tiers are never crushed.
           if (absDist > roadHalf) {
             const clearRadius = vergeLat + 0.6;
             const nearestRoad = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(worldPos.x, worldPos.z, clearRadius + 1.0) : null;
             if (nearestRoad && nearestRoad.dist < clearRadius) {
-              finalY = Math.min(finalY, nearestRoad.y - 0.22);
+              if (finalY > nearestRoad.y - 0.22 && finalY < nearestRoad.y + 4.5) {
+                finalY = nearestRoad.y - 0.22;
+              }
             } else {
               const clearSq = clearRadius * clearRadius;
               for (let s = 0; s < points.length; s += 8) {
                 const dx = worldPos.x - points[s].x;
                 const dz = worldPos.z - points[s].z;
                 if (dx * dx + dz * dz < clearSq) {
-                  finalY = Math.min(finalY, points[s].y - 0.22);
+                  if (finalY > points[s].y - 0.22 && finalY < points[s].y + 4.5) {
+                    finalY = points[s].y - 0.22;
+                  }
                   break;
                 }
               }
@@ -3984,18 +4102,38 @@
         kettle.position.set(-0.9, 1.2, 0.4);
         kioskGroup.add(kettle);
 
+        // Patron: the same rigged courier used for roadside pedestrians,
+        // standing on the Idle clip with a cutting-chai glass. Was a
+        // BoxGeometry torso and a Dodecahedron head, which read as a crate
+        // with a rock on it at the distance you actually pass a tapri.
+        //
+        // The model loads async, so a stall built before it arrives gets the
+        // glass and an empty spot; CourierAsset.pendingControllers re-runs this
+        // once the template lands, matching how every other rig here is built.
         const patron = new THREE.Group();
-        const pSkin = new THREE.MeshLambertMaterial({ color: 0xd4a373 });
-        const pShirt = new THREE.MeshLambertMaterial({ color: 0x10b981 });
-        const pTorso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.7, 0.28), pShirt);
-        pTorso.position.set(0, 1.1, 0);
-        const pHead = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 0), pSkin);
-        pHead.position.set(0, 1.62, 0);
         const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.09, 6), new THREE.MeshLambertMaterial({ color: 0xc2410c }));
         cup.position.set(0.28, 1.15, 0.22);
-        patron.add(pTorso);
-        patron.add(pHead);
         patron.add(cup);
+
+        const addPatronRig = () => {
+          const rig = this.buildPedestrian();
+          if (!rig) return;
+          // Idle, not Walking — buildPedestrian starts the walk cycle for
+          // strollers, so stop it before the standing clip is faded in.
+          const actions = rig.userData.actions || {};
+          if (actions['Walking']) actions['Walking'].stop();
+          if (actions['Idle']) actions['Idle'].play();
+          rig.rotation.y = Math.PI; // face the counter
+          // Not a crosser — updateCrossers never sees it, so it must not be
+          // skipped by the foliage visibility pass the way strollers are.
+          rig.userData.isCrosser = false;
+          patron.add(rig);
+          this.patrons = this.patrons || [];
+          this.patrons.push({ mixer: rig.userData.mixer, obj: rig });
+        };
+        if (CourierAsset.template) addPatronRig();
+        else CourierAsset.pendingControllers.push(addPatronRig);
+
         patron.position.set(0.7, 0, 1.4);
         kioskGroup.add(patron);
       } else {
@@ -4341,11 +4479,14 @@
       this.foliageGroup.clear();
       this.deliveryTargets = [];
       this.trafficVehicles = [];
-      this.potholes = [];
       this.speedCameras = [];
       this.repairBays = [];
       this.obstacles = [];
       this.crossers = [];
+      // Rebuilding foliage removes the patron rigs with it — drop the stale
+      // mixer references too or updatePatrons keeps skinning orphans.
+      this.patrons = [];
+      this.trafficSignals = [];
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
       const cityCfg = CONFIG.CITIES[this.cityKey] || CONFIG.CITIES.offworld;
@@ -4433,6 +4574,7 @@
           }
           root.userData.hitRadius = 1.1;
           root.userData.walkSpeed = this.prng.range(1.0, 1.8);
+          root.userData.isCrosser = true;
           return root;
         }
         const group = new THREE.Group();
@@ -4725,45 +4867,14 @@
         // instruction — this is now a much denser roll than the original
         // sparse solo-walker spacing.
         if (!isOpenRoad && i % 16 === 0 && this.prng.next() > 0.2 && !inTunnel) {
-          const clusterSize = Math.floor(this.prng.range(2, 5));
-          const walkSide = this.prng.next() > 0.5 ? 1 : -1;
-          for (let c = 0; c < clusterSize; c++) {
-            const walkLat = walkSide * (CONFIG.ROAD_WIDTH * 0.5 + 3.5 + this.prng.range(0, 4.0));
-            const walkRange = this.prng.range(10.0, 22.0);
-            const tangentJitter = this.prng.range(-6.0, 6.0);
+          this.spawnPedestrianCluster(pt, normal, tangent);
+        }
 
-            const walkMesh = buildCrosserMesh('pedestrian');
-            const startPos = pt.clone().addScaledVector(tangent, tangentJitter - walkRange).addScaledVector(normal, walkLat);
-            const endPos = pt.clone().addScaledVector(tangent, tangentJitter + walkRange).addScaledVector(normal, walkLat);
-            startPos.y = this.groundHeightAt(pt, startPos, walkLat) + 0.15;
-            endPos.y = this.groundHeightAt(pt, endPos, walkLat) + 0.15;
-
-            const initialProgress = this.prng.next();
-            walkMesh.position.lerpVectors(startPos, endPos, initialProgress);
-            walkMesh.position.y = this.groundHeightAt(pt, walkMesh.position, walkLat) + 0.15;
-            walkMesh.lookAt(endPos.x, walkMesh.position.y, endPos.z);
-            this.foliageGroup.add(walkMesh);
-
-            this.crossers.push({
-              mesh: walkMesh,
-              kind: 'pedestrian',
-              start: startPos,
-              end: endPos,
-              pt: pt.clone(),
-              normal: normal.clone(),
-              latStart: walkLat,
-              latEnd: walkLat,
-              progress: initialProgress,
-              speed: walkMesh.userData.walkSpeed * 0.75, // ambling shoulder pace, slower than a road-crossing dash
-              hitRadius: walkMesh.userData.hitRadius,
-              struck: false,
-              legPhase: this.prng.next() * Math.PI * 2,
-              // Endpoints never move (the patrol flip just swaps them), so the
-              // path length is constant — cache it instead of paying a sqrt
-              // per crosser per frame in updateCrossers.
-              pathLen: startPos.distanceTo(endPos)
-            });
-          }
+        // 1b. Signalled zebra crossing. Rarer than the strolling clusters, and
+        // never inside a tunnel bore or on an open-road stretch with no reason
+        // for anyone to be crossing.
+        if (!isOpenRoad && !inTunnel && i % 112 === 0 && i > 0) {
+          this.buildZebraCrossing(pt, scene);
         }
 
         // 2. Roadside Chevron Turn Warning Signs (Yellow/Black <<< >>> on metal poles)
@@ -6320,6 +6431,316 @@
       return baseClamp;
     }
 
+    // Appearance presets for rigged pedestrians.
+    //
+    // Built ONCE and shared: every NPC assigned a given variant points at the
+    // same five materials. The previous code cloned all five per instance, so
+    // 114 pedestrians meant 570 material objects and 570 uniform sets with no
+    // sort batching. Cloning from the template preserves each material's type,
+    // defines and maps, so Three.js reuses the compiled shader program and the
+    // mobile WebView never takes a recompile stall mid-drive.
+    //
+    // Bodymat also covers the eyes (they share its atlas region), which is why
+    // skin tints stay close to white — they multiply the diffuse map rather
+    // than replacing it, so fabric weave, hair strands and face detail survive.
+    _pedestrianVariants() {
+      if (this._pedVariants) return this._pedVariants;
+      const tpl = CourierAsset.template;
+      if (!tpl) return null;
+
+      // Match on the base name: a re-export can hand back `Bodymat.002` when
+      // duplicate datablocks existed, and an exact-name check would then miss
+      // every slot and silently ship one uniform crowd.
+      const slot = (n) => String(n || '').replace(/\.\d{3}$/, '');
+      const src = {};
+      tpl.traverse((c) => {
+        if (c.isMesh && c.material && c.material.name && !src[slot(c.material.name)]) src[slot(c.material.name)] = c.material;
+      });
+      if (!Object.keys(src).length) return null;
+
+      const SKIN   = [0xfff0e0, 0xf0d1ab, 0xd9a273, 0xc68a62, 0xa9714b, 0x8d5524];
+      const TOP    = [0xd97706, 0x2563eb, 0x059669, 0xc2410c, 0xca8a04, 0xe7e5e4, 0x0f766e, 0x9f1239,
+                      0x7c3aed, 0x0891b2, 0xb91c1c, 0x4338ca, 0x166534, 0xfbbf24, 0x64748b, 0xf472b6];
+      const BOTTOM = [0x334155, 0x1e293b, 0x3f3f46, 0x6b7280, 0x854d0e, 0x475569, 0x1e3a5f, 0x44403c];
+      const HAIR   = [0x121011, 0x1c1512, 0x3b2417, 0x5c3a21, 0x6b7280, 0xd6d3d1];
+      const SHOES  = [0x2a2421, 0x1c1917, 0x44403c, 0x7c2d12, 0x1e293b, 0x78350f];
+
+      const pick = (arr, seed) => arr[Math.abs(seed) % arr.length];
+      const variants = [];
+      for (let i = 0; i < 24; i++) {
+        const set = {};
+        const s1 = i * 7 + 3, s2 = i * 13 + 5, s3 = i * 11 + 7, s4 = i * 17 + 1, s5 = i * 19 + 9;
+        for (const name in src) {
+          const m = src[name].clone();
+          if (name === 'Bodymat') m.color.set(pick(SKIN, s1));
+          else if (name === 'Topmat') m.color.set(pick(TOP, s2));
+          else if (name === 'Bottommat') m.color.set(pick(BOTTOM, s3));
+          else if (name === 'Hairmat') m.color.set(pick(HAIR, s4));
+          else if (name === 'Shoesmat') m.color.set(pick(SHOES, s5));
+          set[name] = m;
+        }
+        variants.push(set);
+      }
+      this._pedVariants = variants;
+      return variants;
+    }
+
+    // Rigged pedestrian, or null when courier-crowd.glb hasn't loaded yet.
+    // A method rather than a closure local so the streaming builder can reach
+    // it too — roadside pedestrians used to stop existing past the initial
+    // spline entirely.
+    buildPedestrian() {
+      const rig = CourierAsset.clone();
+      if (!rig) return null;
+      const root = rig.root;
+      root.userData.mixer = rig.mixer;
+      root.userData.actions = rig.actions;
+
+      const variants = this._pedestrianVariants();
+      if (variants && variants.length) {
+        const v = variants[Math.floor(this.prng.range(0, variants.length))];
+        const slot = (n) => String(n || '').replace(/\.\d{3}$/, '');
+        root.traverse((c) => {
+          if (c.isMesh && c.material && v[slot(c.material.name)]) c.material = v[slot(c.material.name)];
+        });
+      }
+
+      root.scale.setScalar(this.prng.range(0.92, 1.08));
+      const walk = rig.actions['Walking'];
+      if (walk) {
+        walk.setEffectiveTimeScale(this.prng.range(0.85, 1.2));
+        walk.play();
+      }
+      root.userData.hitRadius = 1.1;
+      root.userData.walkSpeed = this.prng.range(1.0, 1.8);
+      root.userData.isCrosser = true;
+      return root;
+    }
+
+    // One cluster of pedestrians strolling the verge at a road sample.
+    // Shared by the initial build and the streaming builder.
+    spawnPedestrianCluster(pt, normal, tangent, count) {
+      if (!this.foliageGroup) return 0;
+      const clusterSize = count || Math.floor(this.prng.range(1, 4));
+      let spawned = 0;
+      for (let c = 0; c < clusterSize; c++) {
+        const mesh = this.buildPedestrian();
+        if (!mesh) break;
+
+        const side = this.prng.next() > 0.5 ? 1 : -1;
+        const lat = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.0 + this.prng.range(0, 2.2));
+        const range = this.prng.range(14.0, 30.0);
+        const jitter = this.prng.range(-18.0, 18.0);
+        const dir = this.prng.next() > 0.5 ? 1 : -1;
+
+        const startPos = pt.clone().addScaledVector(tangent, jitter - range * dir).addScaledVector(normal, lat);
+        const endPos = pt.clone().addScaledVector(tangent, jitter + range * dir).addScaledVector(normal, lat);
+        startPos.y = this.groundHeightAt(pt, startPos, lat) + 0.15;
+        endPos.y = this.groundHeightAt(pt, endPos, lat) + 0.15;
+
+        const progress = this.prng.next();
+        mesh.position.lerpVectors(startPos, endPos, progress);
+        mesh.position.y = this.groundHeightAt(pt, mesh.position, lat) + 0.15;
+        mesh.lookAt(endPos.x, mesh.position.y, endPos.z);
+        this.foliageGroup.add(mesh);
+
+        this.crossers.push({
+          mesh,
+          kind: 'pedestrian',
+          start: startPos,
+          end: endPos,
+          pt: pt.clone(),
+          normal: normal.clone(),
+          latStart: lat,
+          latEnd: lat,
+          progress,
+          speed: mesh.userData.walkSpeed * 0.75,
+          hitRadius: mesh.userData.hitRadius,
+          struck: false,
+          legPhase: this.prng.next() * Math.PI * 2,
+          pathLen: startPos.distanceTo(endPos)
+        });
+        spawned++;
+      }
+      return spawned;
+    }
+
+    // Zebra crossing + signal post at a road position.
+    //
+    // Placed from a WORLD point rather than a loop index on purpose: the
+    // initial build walks getSpacedPoints(800) while the road frames
+    // (roadNormals / roadBankedUp / roadSpacedPoints) are indexed by a
+    // different, denser sampling, and the streaming builder uses a third. The
+    // spatial grid maps a position back to the right frame index for all of
+    // them.
+    buildZebraCrossing(worldPt, scene) {
+      if (!this.roadSpatialGrid || !this.roadSpacedPoints || !this.roadNormals) return null;
+      const near = this.roadSpatialGrid.getNearestRoadPoint(worldPt.x, worldPt.z, 14.0);
+      if (!near || near.index == null) return null;
+      const i = near.index;
+      const pts = this.roadSpacedPoints;
+      if (i < 1 || i >= pts.length - 1) return null;
+
+      const pt = pts[i];
+      const normal = this.roadNormals[i];
+      const binormal = this.roadBinormals[i];
+      const bankedUp = this.roadBankedUp[i];
+      if (!normal || !binormal || !bankedUp) return null;
+      const bankingAngle = this.roadBankingAngles[i] || 0;
+      const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle))
+        .addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
+      const tangent = new THREE.Vector3().subVectors(pts[i + 1], pts[i - 1]).normalize();
+
+      // Same 0.12 slab lift + paint clearance the lane markings use; anything
+      // less z-fights with the asphalt.
+      const LIFT = 0.12 + 0.02;
+      const DEPTH = 4.0;
+      const STRIPE_W = 0.55;
+      const PERIOD = 1.0;
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.5;
+
+      const positions = [];
+      const indices = [];
+      let v = 0;
+      for (let lat = -roadHalf + 0.35; lat <= roadHalf - STRIPE_W - 0.3; lat += PERIOD) {
+        for (const [dLat, dDepth] of [[0, -1], [STRIPE_W, -1], [STRIPE_W, 1], [0, 1]]) {
+          // Built LOCAL to pt, with the mesh positioned there below. World-space
+          // verts on an object still sitting at the origin make
+          // updateFoliageVisibility measure distance from (0,0,0), which culled
+          // every crossing the instant it was added.
+          const p = new THREE.Vector3()
+            .addScaledVector(bankedNormal, lat + dLat)
+            .addScaledVector(tangent, dDepth * DEPTH * 0.5)
+            .addScaledVector(bankedUp, LIFT);
+          positions.push(p.x, p.y, p.z);
+        }
+        indices.push(v, v + 1, v + 2, v, v + 2, v + 3);
+        v += 4;
+      }
+      if (!positions.length) return null;
+
+      // One merged geometry per crossing — a mesh per stripe would be seven
+      // extra draw calls for a few square metres of paint.
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geom.setIndex(indices);
+      geom.computeVertexNormals();
+      const zebra = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({
+        color: 0xb8bdc4, side: THREE.DoubleSide, depthWrite: false
+      }));
+      zebra.renderOrder = 1;
+      zebra.position.copy(pt);
+      (this.foliageGroup || scene).add(zebra);
+
+      // Signal post on the verge.
+      const side = this.prng.next() > 0.5 ? 1 : -1;
+      const postLat = side * (roadHalf + 1.4);
+      const postPos = pt.clone().addScaledVector(normal, postLat);
+      postPos.y = this.groundHeightAt(pt, postPos, postLat);
+
+      const post = new THREE.Group();
+      const poleMat = new THREE.MeshStandardMaterial({ color: 0x3f4550, roughness: 0.7, metalness: 0.3 });
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 3.1, 8), poleMat);
+      pole.position.y = 1.55;
+      post.add(pole);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.8, 0.24),
+        new THREE.MeshStandardMaterial({ color: 0x23272e, roughness: 0.8 }));
+      head.position.y = 3.15;
+      post.add(head);
+
+      // Unlit base colours stay dark so an off lamp never crosses the 0.94
+      // bloom threshold; the lit one is driven by emissive, same as the
+      // vehicle headlight/taillight lenses.
+      const lampGeom = new THREE.SphereGeometry(0.075, 8, 6);
+      const lamps = [];
+      [['red', 0xff3b30, 0.30], ['amber', 0xffb300, 0.0], ['green', 0x27d17c, -0.30]].forEach(([name, hex, dy]) => {
+        const mat = new THREE.MeshStandardMaterial({ color: 0x14161a, emissive: hex, emissiveIntensity: 0.0, roughness: 0.4 });
+        const lamp = new THREE.Mesh(lampGeom, mat);
+        lamp.position.set(0, 3.15 + dy, 0.13);
+        post.add(lamp);
+        lamps.push({ name, mat, hex });
+      });
+
+      post.position.copy(postPos);
+      post.lookAt(pt.x, postPos.y, pt.z);
+      (this.foliageGroup || scene).add(post);
+      this.obstacles.push({ pos: postPos.clone(), radius: 0.7, type: 'pole' });
+      if (this.occluderMeshes) this.occluderMeshes.push(post);
+
+      const signal = {
+        lamps,
+        phase: Math.floor(this.prng.range(0, 3)), // staggered so a route isn't in lockstep
+        t: this.prng.range(0, 4),
+        durations: [11.0, 2.5, 8.0] // GO, AMBER, STOP(+walk)
+      };
+      this.trafficSignals = this.trafficSignals || [];
+      this.trafficSignals.push(signal);
+      this._applySignalPhase(signal);
+
+      // Two pedestrians who actually use the crossing. They hold at the kerb
+      // and only step off on the STOP phase — see updateCrossers' gate.
+      for (let k = 0; k < 2; k++) {
+        const mesh = this.buildPedestrian();
+        if (!mesh) break;
+        const latA = (roadHalf + 1.6) * (k === 0 ? 1 : -1);
+        const latB = -latA;
+        const depthOff = this.prng.range(-1.2, 1.2);
+        const startPos = pt.clone().addScaledVector(normal, latA).addScaledVector(tangent, depthOff);
+        const endPos = pt.clone().addScaledVector(normal, latB).addScaledVector(tangent, depthOff);
+        startPos.y = this.groundHeightAt(pt, startPos, latA) + 0.15;
+        endPos.y = this.groundHeightAt(pt, endPos, latB) + 0.15;
+        mesh.position.copy(startPos);
+        mesh.lookAt(endPos.x, mesh.position.y, endPos.z);
+        (this.foliageGroup || scene).add(mesh);
+        this.crossers.push({
+          mesh, kind: 'pedestrian', start: startPos, end: endPos,
+          pt: pt.clone(), normal: normal.clone(),
+          latStart: latA, latEnd: latB, progress: 0,
+          speed: mesh.userData.walkSpeed * 1.15,
+          hitRadius: mesh.userData.hitRadius, struck: false,
+          legPhase: this.prng.next() * Math.PI * 2,
+          pathLen: startPos.distanceTo(endPos),
+          signal
+        });
+      }
+      return signal;
+    }
+
+    _applySignalPhase(s) {
+      const lit = s.phase === 0 ? 'green' : (s.phase === 1 ? 'amber' : 'red');
+      for (const l of s.lamps) l.mat.emissiveIntensity = (l.name === lit) ? 2.0 : 0.0;
+    }
+
+    updateTrafficSignals(dt) {
+      if (!this.trafficSignals) return;
+      for (let i = 0; i < this.trafficSignals.length; i++) {
+        const s = this.trafficSignals[i];
+        s.t += dt;
+        if (s.t >= s.durations[s.phase]) {
+          s.t = 0;
+          s.phase = (s.phase + 1) % 3;
+          this._applySignalPhase(s);
+        }
+      }
+    }
+
+    // Tea-stall patrons stand still, so they aren't crossers and updateCrossers
+    // never sees them — but their Idle clip still needs stepping. Same distance
+    // cull as the strollers so a route's worth of stalls isn't skinning rigs
+    // kilometres behind the car.
+    updatePatrons(dt, vehiclePos) {
+      if (!this.patrons || !this.patrons.length) return;
+      const CULL_SQ = 130 * 130;
+      const tmp = new THREE.Vector3();
+      for (let i = 0; i < this.patrons.length; i++) {
+        const p = this.patrons[i];
+        p.obj.getWorldPosition(tmp);
+        const near = tmp.distanceToSquared(vehiclePos) < CULL_SQ;
+        p.obj.visible = near;
+        if (near) p.mixer.update(dt);
+      }
+    }
+
     updateCrossers(dt) {
       // Crossers beyond 130m are sub-2px tall and fully occluded by fog.
       // Skip expensive per-limb trig math and matrix updates beyond that
@@ -6337,7 +6758,23 @@
         const c = this.crossers[i];
         if (c.struck) continue; // frozen at impact position until cleanup below
 
-        c.progress += (c.speed * dt) / (c.pathLen || (c.pathLen = c.start.distanceTo(c.end)));
+        // Signalled crossers wait at the kerb unless their light says STOP
+        // (phase 2). One already off the kerb keeps going regardless — a
+        // pedestrian stranded mid-carriageway when the light changes is worse
+        // than one who finishes the crossing. Holds the walk cycle and the
+        // progress only; position and culling below still run, or a waiting
+        // pedestrian would never become visible again once culled.
+        let hold = false;
+        if (c.signal) {
+          const midCrossing = c.progress > 0.02 && c.progress < 0.98;
+          hold = (c.signal.phase !== 2 && !midCrossing);
+          const walk = c.mesh.userData.actions && c.mesh.userData.actions['Walking'];
+          if (walk) walk.paused = hold;
+        }
+
+        if (!hold) {
+          c.progress += (c.speed * dt) / (c.pathLen || (c.pathLen = c.start.distanceTo(c.end)));
+        }
         if (c.progress >= 1.0) {
           // Reached the far side — walk back the other way so the same
           // crosser keeps patrolling instead of despawning mid-street.
@@ -6361,7 +6798,6 @@
         const curLat = THREE.MathUtils.lerp(c.latStart, c.latEnd, c.progress);
         c.mesh.position.x = THREE.MathUtils.lerp(c.start.x, c.end.x, c.progress);
         c.mesh.position.z = THREE.MathUtils.lerp(c.start.z, c.end.z, c.progress);
-        c.mesh.position.y = this.groundHeightAt(c.pt, c.mesh.position, curLat) + 0.15;
 
         // Distance cull: skip expensive limb-swing math for far-away crossers.
         const distSq = vehiclePos.distanceToSquared(c.mesh.position);
@@ -6371,8 +6807,37 @@
         }
         c.mesh.visible = true;
 
+        // Ground height must come from the road point nearest to where the
+        // walker IS, not c.pt (its spawn point): roadside walkers patrol up to
+        // ~50m along the road, and on a grade the spawn point's height is
+        // metres off there, so they floated or sank.
+        let footY;
+        try {
+          const near = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(c.mesh.position.x, c.mesh.position.z, 40.0) : null;
+          footY = near
+            ? this.groundHeightAt(near.point, c.mesh.position, near.dist)
+            : this.groundHeightAt(c.pt, c.mesh.position, curLat);
+        } catch (err) {
+          console.error('Crosser ground height failed:', err);
+          footY = this.groundHeightAt(c.pt, c.mesh.position, curLat);
+        }
+        c.mesh.position.y = footY + 0.15;
+
         if (c.mesh.userData.mixer) {
-          c.mesh.userData.mixer.update(dt);
+          // Animation LOD: skinning a 67-bone rig is the expensive half, and
+          // past ~40m nobody can read a gait cycle. Step distant rigs every
+          // third frame with the accumulated dt so they still move, at a third
+          // of the cost — this is the cheapest headroom available on mobile.
+          if (distSq < 1600) {
+            c.mesh.userData.mixer.update(dt);
+          } else {
+            c._lodAccum = (c._lodAccum || 0) + dt;
+            c._lodTick = ((c._lodTick || 0) + 1) % 3;
+            if (c._lodTick === 0) {
+              c.mesh.userData.mixer.update(c._lodAccum);
+              c._lodAccum = 0;
+            }
+          }
         } else {
           c.legPhase += dt * 9.0;
           const swing = Math.sin(c.legPhase) * 0.35;
@@ -6409,6 +6874,13 @@
       const children = this.foliageGroup.children;
       for (let i = 0; i < children.length; i++) {
         const child = children[i];
+
+        // Crossers own their own visibility (updateCrossers culls them at
+        // 130m). This pass runs AFTER it and forces visible=true on anything
+        // inside 350m, so without this skip it resurrects every crosser in the
+        // 130-350m band each 10th frame — drawn with a frozen pose, because
+        // the cull path in updateCrossers skips their mixer update.
+        if (child.userData && child.userData.isCrosser) continue;
 
         // Never cull instanced meshes, multi-instance billboard tree groups,
         // driveways, or delivery checkpoints — their vertices/instances span
@@ -6703,7 +7175,9 @@
           const nr = this.roadSpatialGrid.getNearestRoadPoint(x, z, clearRadiusPlus);
           if (!nr || nr.dist > clearRadius) continue;
           const ceiling = nr.y - 0.22;
-          if (y > ceiling) {
+          // Height-aware: only clamp if within road-level corridor (< nr.y + 4.5m)
+          // Prevents upper mountain bluffs, slopes, and upper road switchback tiers from being crushed 20m down to lower road height.
+          if (y > ceiling && y < nr.y + 4.5) {
             p.setY(i, ceiling);
             clamped++;
             clampedThisMesh++;
@@ -6742,6 +7216,12 @@
       this._lastSweepClamped = clamped;
       this._lastSweepMeshes = swept;
 
+      // The floor mesh is NOT swept here — sweepFloorBelowRoad runs straight
+      // after this pass in _streamBuildSequence and owns it. Keep it there:
+      // the floor needs createFloorMesh's own 40/45/75/95 envelope, and a
+      // second copy of "how high may the floor sit here" is exactly the drift
+      // this file keeps getting bitten by.
+
       // Seam-normal blend across every adjacent mesh boundary.
       //
       // Each mesh recomputed its normals independently after any position
@@ -6754,7 +7234,7 @@
       // the initial→first-extension seam near 6km). Blending the two
       // normals into a single averaged value and stamping it onto BOTH
       // vertices makes the seam light identically on both sides.
-      const sliceCount = 24;
+      const sliceCount = (this._lastTerrainEdgeVerts && this._lastTerrainEdgeVerts.length) || 32;
       for (let mi = 0; mi + 1 < this.terrainMeshes.length; mi++) {
         const mPrev = this.terrainMeshes[mi];
         const mNext = this.terrainMeshes[mi + 1];
@@ -7018,6 +7498,28 @@
         yield;
       }
 
+      // Snap row 0 of road extension mesh to previous chunk's last road row vertex-for-vertex
+      if (this._lastRoadEdgeVerts && this._lastRoadEdgeVerts.length === offsets.length) {
+        for (let j = 0; j < offsets.length; j++) {
+          const base = j * 3;
+          const cached = this._lastRoadEdgeVerts[j];
+          rPositions[base] = cached.x;
+          rPositions[base + 1] = cached.y;
+          rPositions[base + 2] = cached.z;
+        }
+      }
+
+      // Re-cache last row of road vertices for the next extension chunk
+      const roadLastRowBase = (endSeg - startSeg) * offsets.length * 3;
+      this._lastRoadEdgeVerts = [];
+      for (let j = 0; j < offsets.length; j++) {
+        this._lastRoadEdgeVerts.push({
+          x: rPositions[roadLastRowBase + j * 3],
+          y: rPositions[roadLastRowBase + j * 3 + 1],
+          z: rPositions[roadLastRowBase + j * 3 + 2]
+        });
+      }
+
       roadGeom.setAttribute('position', new THREE.Float32BufferAttribute(rPositions, 3));
       roadGeom.setAttribute('color', new THREE.Float32BufferAttribute(rColors, 3));
       roadGeom.setAttribute('normal', new THREE.Float32BufferAttribute(rNormals, 3));
@@ -7035,19 +7537,12 @@
         const colors = [];
         const normalsOut = [];
         const indices = [];
-        let vertCount = 0;
         const stripeHalfW = 0.06;
         const dashPeriod = 3;
         const paintLift = 0.02;
 
         for (let i = startSeg; i <= endSeg; i++) {
-          if (dashed && (Math.floor(i / dashPeriod) % 2 === 1)) {
-            continue;
-          }
-          if (dashed && (i < endSeg) && (Math.floor((i + 1) / dashPeriod) % 2 === 1)) {
-            continue;
-          }
-
+          const rowIdx = i - startSeg;
           const pt = points[i];
           const bankingAngle = this.roadBankingAngles[i] || 0;
           const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
@@ -7055,22 +7550,24 @@
           const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
           const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
 
+          const dashOn = !dashed || (Math.floor(i / dashPeriod) % 2 === 0);
+          const rowColor = dashOn ? color : null;
+
           const pLeft = pt.clone().addScaledVector(bankedNormal, lateralOffset - stripeHalfW).addScaledVector(bankedUp, 0.12 + paintLift);
           const pRight = pt.clone().addScaledVector(bankedNormal, lateralOffset + stripeHalfW).addScaledVector(bankedUp, 0.12 + paintLift);
 
           positions.push(pLeft.x, pLeft.y, pLeft.z, pRight.x, pRight.y, pRight.z);
           normalsOut.push(bankedUp.x, bankedUp.y, bankedUp.z, bankedUp.x, bankedUp.y, bankedUp.z);
-          colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
+          const c = rowColor || color;
+          colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
 
-          if (vertCount >= 2 && (!dashed || (Math.floor((i - 1) / dashPeriod) % 2 === 0))) {
-            const v0 = vertCount - 2;
-            const v1 = vertCount - 1;
-            const v2 = vertCount;
-            const v3 = vertCount + 1;
-            indices.push(v0, v1, v2);
-            indices.push(v1, v3, v2);
+          if (dashed && !dashOn) continue;
+          if (rowIdx > 0 && (!dashed || (Math.floor((i - 1) / dashPeriod) % 2 === 0))) {
+            const row1 = (rowIdx - 1) * 2;
+            const row2 = rowIdx * 2;
+            indices.push(row1, row1 + 1, row2);
+            indices.push(row1 + 1, row2 + 1, row2);
           }
-          vertCount += 2;
         }
 
         if (positions.length > 0) {
@@ -7095,13 +7592,15 @@
         buildExtensionMarking(0.0, centerLineColor, true);
       }
 
-      // 2. Terrain ribbon extension mesh (matching createTerrainMesh ±45m embankment)
-      // Dense 4m-spaced embankment slices 9–45m match createTerrainMesh exactly,
-      // keeping formula/mesh agreement without dangerous 320m wild quads that sliced across hairpin curves.
+      // 2. Terrain ribbon extension mesh (matching createTerrainMesh ±150m landscape skirt)
+      // Dense 4m-spaced embankment slices 9–45m match createTerrainMesh exactly, with outer
+      // skirt slices out to 150m ensuring continuous rolling mountain background past 6km.
       const lateralSlices = [
+        -150.0, -105.0, -75.0, -55.0,
         -45.0, -41.0, -37.0, -33.0, -29.0, -25.0, -21.0, -17.0, -13.0, -9.0,
         -vergeLat, -roadHalf, roadHalf, vergeLat,
-        9.0, 13.0, 17.0, 21.0, 25.0, 29.0, 33.0, 37.0, 41.0, 45.0
+        9.0, 13.0, 17.0, 21.0, 25.0, 29.0, 33.0, 37.0, 41.0, 45.0,
+        55.0, 75.0, 105.0, 150.0
       ];
       const sliceCount = lateralSlices.length;
       const tGeom = new THREE.BufferGeometry();
@@ -7144,10 +7643,9 @@
             const rawH = this.getRawTerrainHeight(worldPos.x, worldPos.z);
             const blendFactor = THREE.MathUtils.smoothstep(absDist, 9.0, 45.0);
             // createTerrainMesh lifts the embankment ABOVE the tunnel roof so
-            // the bore stays open; this path had no tunnel branch at all, so
-            // any tunnel past the initial build got sealed shut by terrain.
-            const inTunnel = this.isInTunnelZone && this.isInTunnelZone(i);
-            if (inTunnel) {
+            // cutting geometry never plunges down into the bore.
+            const inTunnelExt = this.isInTunnelZone && this.isInTunnelZone(i);
+            if (inTunnelExt) {
               const mountainOverhead = Math.max(rawH, pt.y + 14.0);
               finalY = THREE.MathUtils.lerp(pt.y - 0.5, mountainOverhead, blendFactor);
               tColors.push(cliffCol.r * 0.9, cliffCol.g * 0.9, cliffCol.b * 0.9);
@@ -7165,19 +7663,23 @@
 
           // Road clearance guard: if this vertex lies within the drivable road corridor of ANY road segment,
           // clamp finalY below that road surface to eliminate terrain poking through the asphalt.
-          // Full clearance covers the paved road ribbon plus shoulder verge (vergeLat + 0.6m).
+          // Height-aware: only clamp if within road level corridor (< +4.5m) so upper mountain bluffs and upper switchback tiers are never crushed.
           if (absDist > roadHalf) {
             const clearRadius = vergeLat + 0.6;
             const nearestRoad = this.roadSpatialGrid ? this.roadSpatialGrid.getNearestRoadPoint(worldPos.x, worldPos.z, clearRadius + 1.0) : null;
             if (nearestRoad && nearestRoad.dist < clearRadius) {
-              finalY = Math.min(finalY, nearestRoad.y - 0.22);
+              if (finalY > nearestRoad.y - 0.22 && finalY < nearestRoad.y + 4.5) {
+                finalY = nearestRoad.y - 0.22;
+              }
             } else {
               const clearSq = clearRadius * clearRadius;
               for (let s = 0; s < points.length; s += 8) {
                 const dx = worldPos.x - points[s].x;
                 const dz = worldPos.z - points[s].z;
                 if (dx * dx + dz * dz < clearSq) {
-                  finalY = Math.min(finalY, points[s].y - 0.22);
+                  if (finalY > points[s].y - 0.22 && finalY < points[s].y + 4.5) {
+                    finalY = points[s].y - 0.22;
+                  }
                   break;
                 }
               }
@@ -7567,6 +8069,26 @@
             }
           }
 
+          // 3d. Roadside pedestrians.
+          //
+          // Streamed chunks used to spawn none at all, so every pedestrian in
+          // the game lived on the initial ~8.4km spline and the world emptied
+          // of people the moment streaming took over. Same cadence and cluster
+          // shape as the initial build; yields because this is a generator and
+          // a rig clone per pedestrian would otherwise hitch the stream.
+          if (i % 16 === 0 && this.prng.next() > 0.2) {
+            this.spawnPedestrianCluster(pt, normal, tangent);
+            yield;
+          }
+
+          // 3e. Signalled zebra crossing — streamed chunks get these too, or
+          // crossings would stop existing past the initial spline exactly the
+          // way pedestrians did.
+          if (i % 224 === 0) {
+            this.buildZebraCrossing(pt, scene);
+            yield;
+          }
+
           // 4. District Biome Rocks (scatter 12–40m off road, adaptive district rock color)
           if (i % 8 === 0) {
             [-1, 1].forEach(side => {
@@ -7721,7 +8243,7 @@
   // 6. ENHANCED INDIAN SPORTS/DELIVERY VEHICLES
   // --------------------------------------------------------------------------
   class VehicleController {
-    constructor(scene, vehicleType = 'car') {
+    constructor(scene, vehicleType = 'cycle') {
       this.scene = scene;
       this.vehicleType = vehicleType;
       this.mesh = new THREE.Group();
@@ -7763,9 +8285,13 @@
       this.distanceTraveled = 0;
       this.isAutodrive = false; // Default: 100% MANUAL DRIVING
       this.splineProgress = 0.008;
+      this.cycleRideTime = 0;
+      this.cycleSteerSpeedPenalty = 0;
+      this.smoothSteerInput = 0;
 
       this.applyVehicleConfig();
       this.buildModel();
+      document.body.classList.toggle('vehicle-cycle', vehicleType === 'cycle' || vehicleType === 'scooter');
     }
 
     applyVehicleConfig() {
@@ -7781,6 +8307,7 @@
         this.vehicleType = type;
         this.applyVehicleConfig();
         this.buildModel();
+        document.body.classList.toggle('vehicle-cycle', type === 'cycle' || type === 'scooter');
       }
     }
 
@@ -7795,19 +8322,6 @@
       });
     }
 
-    getCamOffsets() {
-      // Pulled back + raised (slowroads-style) so roadside props recede instead of
-      // smearing past the periphery, which destroyed the sense of forward motion.
-      if (this.vehicleType === 'chotahathi') {
-        return { dist: -12.5, height: 6.2, lookAhead: 15.0, lookHeight: 1.0 };
-      } else if (this.vehicleType === 'scooter') {
-        return { dist: -10.5, height: 5.0, lookAhead: 12.5, lookHeight: 0.85 };
-      } else if (this.vehicleType === 'cycle') {
-        return { dist: -10.0, height: 4.8, lookAhead: 12.5, lookHeight: 0.85 };
-      } else {
-        return { dist: -11.5, height: 5.4, lookAhead: 13.0, lookHeight: 0.9 };
-      }
-    }
 
     buildModel() {
       this.mesh.clear();
@@ -8115,63 +8629,20 @@
 
       } else if (this.vehicleType === 'cycle' && DeliveryCycleAsset.template) {
         const cycleModel = DeliveryCycleAsset.clone();
-        // Authored nose-toward--Y in Blender, so the Y-up GLB export already lands the
-        // nose on +Z road-forward. No rotation correction needed.
-        cycleModel.scale.setScalar(1.0);
+        // Blender -Y forward exports to glTF +Z forward, so no rotation correction is needed.
         this.mesh.add(cycleModel);
+        const isWheelNode = (o) => !!o && /^Wheel_(Front|Rear)/.test(o.name || '');
         cycleModel.traverse(child => {
           if (child.isMesh) {
             child.castShadow = true;
             child.receiveShadow = true;
-            // Hide the static placeholder cargo box in the trolley so our dynamic depleting stack takes its place!
-            if (child.name && (child.name.includes('cargo_trolley') || child.name.includes('Canvas') || child.name.includes('Leather'))) {
-              if (child.name === 'cargo_trolley005_3' || child.name === 'cargo_trolley005_4') {
-                child.visible = false;
-              }
-            }
           }
+          // A multi-material wheel loads as a group plus one mesh per material, and all
+          // share the name prefix; spin only the outermost node or the wheel turns twice.
+          if (isWheelNode(child) && !isWheelNode(child.parent)) this.wheels.push(child);
         });
-
-        // Dynamic Depleting Parcel Stack on the Cargo Trolley:
-        // Positions correspond to the wooden trolley bed (X: +-0.18, Y: 0.58-0.95, Z: -1.24 in Three.js road coordinates)
+        // The rear box is a closed thermal box, so there is no open parcel stack to deplete.
         this.trolleyParcels = [];
-        const parcelGroup = new THREE.Group();
-        const parcelDefs = [
-          // Bottom layer (4 sturdy parcels)
-          { size: [0.26, 0.18, 0.28], pos: [-0.14, 0.52, -1.10], col: 0xd97706, tape: 0x1e293b },
-          { size: [0.24, 0.19, 0.28], pos: [0.14, 0.52, -1.10],  col: 0xb45309, tape: 0xf59e0b },
-          { size: [0.25, 0.17, 0.26], pos: [-0.13, 0.52, -1.38], col: 0xc2410c, tape: 0x1e293b },
-          { size: [0.24, 0.18, 0.27], pos: [0.13, 0.52, -1.38],  col: 0xca8a04, tape: 0x475569 },
-          // Middle layer (3 parcels)
-          { size: [0.28, 0.16, 0.26], pos: [-0.08, 0.69, -1.14], col: 0x0284c7, tape: 0xffffff }, // Express Blue
-          { size: [0.26, 0.16, 0.26], pos: [0.10, 0.69, -1.32],  col: 0x16a34a, tape: 0xd97706 }, // Organic Green
-          { size: [0.22, 0.15, 0.24], pos: [-0.10, 0.69, -1.36], col: 0xd97706, tape: 0x1e293b },
-          // Top tier parcels (deplete first as courier delivers!)
-          { size: [0.22, 0.14, 0.22], pos: [0.00, 0.84, -1.22],  col: 0xe11d48, tape: 0xffffff }, // Fragile Red
-          { size: [0.18, 0.13, 0.20], pos: [-0.09, 0.83, -1.18], col: 0xf59e0b, tape: 0x1e293b }
-        ];
-
-        parcelDefs.forEach((p, idx) => {
-          const pMesh = new THREE.Group();
-          const box = new THREE.Mesh(
-            new THREE.BoxGeometry(...p.size),
-            new THREE.MeshStandardMaterial({ color: p.col, roughness: 0.75, metalness: 0.05 })
-          );
-          box.castShadow = true;
-          box.receiveShadow = true;
-          pMesh.add(box);
-
-          // Realistic cross packaging strap / tape
-          const tapeGeom = new THREE.BoxGeometry(p.size[0] * 1.02, p.size[1] * 1.02, p.size[2] * 0.18);
-          const tapeMesh = new THREE.Mesh(tapeGeom, new THREE.MeshBasicMaterial({ color: p.tape }));
-          pMesh.add(tapeMesh);
-
-          pMesh.position.set(...p.pos);
-          parcelGroup.add(pMesh);
-          this.trolleyParcels.push(pMesh);
-        });
-
-        this.mesh.add(parcelGroup);
       } else if (this.vehicleType === 'cycle') {
         if (DeliveryCycleAsset.pendingControllers.indexOf(this) === -1) {
           DeliveryCycleAsset.pendingControllers.push(this);
@@ -8401,17 +8872,19 @@
 
       let climateGrip = terrainGrip;
       if (isRain) {
-        if (this.vehicleType === 'cycle') climateGrip *= 0.48;
+        if (this.vehicleType === 'cycle') climateGrip *= 0.62;
         else climateGrip *= 0.68;
       }
 
-      const windDrag = isWind ? (this.vehicleType === 'cycle' ? 2.8 : 1.4) : 0.0;
+      const windDrag = isWind ? (this.vehicleType === 'cycle' ? 1.8 : 1.4) : 0.0;
+
+      // 1. Throttle / Acceleration, Service Brakes & Emergency Handbrake
+      const isBicycle = (this.vehicleType === 'cycle' || this.vehicleType === 'scooter');
 
       // Health degradation penalty on top speed & engine performance
       const healthFactor = (this.health >= 50) ? 1.0 : Math.max(0.25, 0.4 + 0.6 * (this.health / 50));
-      const effectiveMaxSpeed = (this.health <= 0) ? 0.0 : Math.max(8.0, (this.maxSpeed - windDrag * 3.5) * healthFactor);
-
-      // 1. Throttle / Acceleration, Service Brakes & Emergency Handbrake
+      const speedFloor = isBicycle ? 3.0 : 8.0;
+      const effectiveMaxSpeed = (this.health <= 0) ? 0.0 : Math.max(speedFloor, (this.maxSpeed - windDrag * (isBicycle ? 0.8 : 3.5)) * healthFactor);
       const isDrifting = !!keys.space;
       const driftGripMult = isDrifting ? 0.40 : 1.0; // 60% friction reduction during power-slide drift
 
@@ -8462,7 +8935,14 @@
 
         // Curve-adaptive speed limit: slow down automatically when entering sharp turns
         const cornerSpeedFactor = THREE.MathUtils.clamp(1.0 - (turnDeflection / Math.PI) * 1.5, 0.35, 1.0);
-        const autoTargetSpeed = effectiveMaxSpeed * 0.72 * cornerSpeedFactor;
+        let autoMaxSpeed = effectiveMaxSpeed;
+        if (isBicycle) {
+          this.cycleRideTime += dt;
+          const cycleCfg = CONFIG.VEHICLES.cycle;
+          const escalation = Math.min(this.cycleRideTime / cycleCfg.rampSeconds, 1.0);
+          autoMaxSpeed = Math.min(effectiveMaxSpeed, cycleCfg.baseSpeed + (cycleCfg.maxSpeed - cycleCfg.baseSpeed) * escalation);
+        }
+        const autoTargetSpeed = autoMaxSpeed * (isBicycle ? 0.90 : 0.72) * cornerSpeedFactor;
 
         if (this.speed < autoTargetSpeed) {
           this.speed += this.accel * dt;
@@ -8516,131 +8996,160 @@
             // Reversing — pressing forward throttle acts as brake to bring vehicle to a full stop
             this.speed += (this.brake || 30.0) * dt * 2.4;
             if (this.speed >= -0.08) this.speed = 0;
+          } else if (this.vehicleType === 'cycle') {
+            try {
+              this.cycleRideTime += dt;
+              const cycleCfg = CONFIG.VEHICLES.cycle;
+              const escalation = Math.min(this.cycleRideTime / cycleCfg.rampSeconds, 1.0);
+              const targetBaseSpeed = cycleCfg.baseSpeed + (cycleCfg.maxSpeed - cycleCfg.baseSpeed) * escalation;
+
+              // cycleSteerSpeedPenalty is updated in the steering block below (once per step).
+              const cycleMax = Math.min(effectiveMaxSpeed, targetBaseSpeed * (1.0 - (this.cycleSteerSpeedPenalty || 0)));
+              const cadenceRatio = Math.max(0.2, 1.0 - Math.pow(Math.min(1.0, this.speed / Math.max(0.1, cycleMax)), 1.5));
+              const cyclePush = this.accel * cadenceRatio * climateGrip;
+              this.speed = Math.min(cycleMax, this.speed + cyclePush * dt);
+              if (this.speed > cycleMax) {
+                this.speed = Math.max(cycleMax, this.speed - (this.drag * 1.5 + 0.5) * dt);
+              }
+            } catch (err) {
+              console.error('Error in cycle speed calculation:', err);
+            }
           } else {
-            this.speed += (effectiveMaxSpeed - this.speed) * (1 - Math.exp(-0.42 * dt));
+            // Multi-gear progressive torque for cars: punchy 1st/2nd gear low-end torque, tapering at high gear
+            const speedRatio = THREE.MathUtils.clamp(this.speed / effectiveMaxSpeed, 0, 1);
+            const gearTorqueMult = THREE.MathUtils.lerp(1.5, 0.65, Math.pow(speedRatio, 0.7));
+            const carPush = this.accel * gearTorqueMult * climateGrip;
+            this.speed = Math.min(effectiveMaxSpeed, this.speed + carPush * dt);
           }
         } else {
           // Natural coasting / drag; clear hold mode so fresh press can reverse
           this._downBrakingFromForward = false;
-          this.speed *= Math.exp(-this.drag * 0.85 * dt);
+          const rollingDrag = (this.vehicleType === 'cycle') ? this.drag * 0.30 : this.drag * 0.85;
+          this.speed *= Math.exp(-rollingDrag * dt);
           if (Math.abs(this.speed) < 0.08) this.speed = 0;
         }
 
-        // 2. FREE STEERING — turns the car's actual heading, not a lateral
-        // lane-offset. Turn rate scales with speed (can't spin in place at
-        // a dead stop, but still gets enough at a crawl for tight parking
-        // maneuvers) and flips direction in reverse, matching how a real
-        // car's steering behaves backing up.
-        const baseTurnRate = 1.55; // rad/s at full effect
-        const turnRateLimit = baseTurnRate * (isDrifting ? 1.4 : 1.0) * climateGrip;
-        // Speed-sensitive turn rate: ramps up from a dead stop only (can't
-        // spin in place, but gets enough at a crawl for tight maneuvers),
-        // then holds flat to top speed. A high-speed falloff was tried here
-        // (real cars need a smaller wheel angle to hold the same yaw rate
-        // at 130 km/h than at 30 km/h) but reverted — this game's road
-        // curves were generated assuming this flat-rate turn response, and
-        // nerfing it at speed meant the car could no longer physically
-        // complete curves it used to handle fine, running off-road on
-        // ordinary bends. Confirmed directly: a sustained turn that stayed
-        // on-road before ran the car into the terrain at the same speed
-        // and input after adding the falloff. The genuine slip/momentum
-        // feel now comes from `velocityHeading` diverging from `heading`
-        // below, not from also throttling the turn rate itself.
-        const speedScale = THREE.MathUtils.clamp(Math.abs(this.speed) / 6.0, 0.22, 1.0);
-        const reverseFlip = this.speed < -0.05 ? -1 : 1;
-        const turnRate = turnRateLimit * speedScale * reverseFlip;
+        // 2. FREE STEERING — completely separate physics for cycle vs car.
+        if (isBicycle) {
+          // ============================================================
+          // BICYCLE STEERING — smooth progressive analog handlebar model.
+          // Fluid path-following with progressive steering inertia.
+          // ============================================================
 
-        const steerResponse = isDrifting ? 0.24 : 0.18;
-        const steerLimit = (isDrifting ? 0.65 : 0.42) * climateGrip;
-        if (keys.left || keys.a) {
-          this.heading += turnRate * dt;
-          this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, steerLimit, steerResponse);
-        } else if (keys.right || keys.d) {
-          this.heading -= turnRate * dt;
-          this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, -steerLimit, steerResponse);
+          // Analog input: keys.steerInput is −1 to +1 from touch drag zone;
+          // keyboard left/right feed as ±1.0 digital fallback.
+          let rawSteer = keys.steerInput || 0;
+          if (!rawSteer) {
+            if (keys.left || keys.a) rawSteer = 1.0;
+            else if (keys.right || keys.d) rawSteer = -1.0;
+          }
+
+          // Smooth steering input filter to eliminate sudden snap/jerks on keyboard and touch
+          const steerFilterRate = rawSteer !== 0 ? 8.5 : 12.0;
+          this.smoothSteerInput = THREE.MathUtils.lerp(this.smoothSteerInput || 0, rawSteer, 1.0 - Math.exp(-steerFilterRate * dt));
+
+          // Steer penalty tracking while coasting as well
+          const steerIntensity = Math.min(1.0, Math.abs(rawSteer));
+          if (steerIntensity > 0.05) {
+            const targetPenalty = steerIntensity * 0.15;
+            this.cycleSteerSpeedPenalty = THREE.MathUtils.lerp(this.cycleSteerSpeedPenalty || 0, targetPenalty, 0.20);
+          } else {
+            this.cycleSteerSpeedPenalty = Math.max(0, (this.cycleSteerSpeedPenalty || 0) - (dt / 0.5) * 0.15);
+          }
+
+          // Bicycle turn rate: nimble and progressive, perfectly balanced for road curves
+          const cycleBaseTurn = 1.65;
+          const absSpd = Math.abs(this.speed);
+          const lowSpeedRamp = THREE.MathUtils.clamp(absSpd / 2.0, 0.30, 1.0);
+          const highSpeedTaper = THREE.MathUtils.clamp(1.0 - (absSpd - 10.0) / 18.0, 0.50, 1.0);
+          const reverseFlip = this.speed < -0.05 ? -1 : 1;
+          const cycleTurnRate = cycleBaseTurn * lowSpeedRamp * highSpeedTaper * reverseFlip * climateGrip;
+
+          // Apply heading change with smooth progressive steering
+          this.heading += this.smoothSteerInput * cycleTurnRate * dt;
+
+          // Steer angle (cosmetic handlebar + lean): smooth natural response
+          const cycleSteerLimit = 0.50 * climateGrip;
+          const targetSteer = this.smoothSteerInput * cycleSteerLimit;
+          const steerLerpRate = 1.0 - Math.exp(-12.0 * dt);
+          this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, targetSteer, steerLerpRate);
+
         } else {
-          this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, 0, 0.14);
+          // ============================================================
+          // CAR / TRUCK STEERING — heavier, grip-limited, drift-capable.
+          // ============================================================
+          const carBaseTurnRate = 1.55;
+          const carTurnRateLimit = carBaseTurnRate * (isDrifting ? 1.4 : 1.0) * climateGrip;
+          const carSpeedScale = THREE.MathUtils.clamp(Math.abs(this.speed) / 6.0, 0.25, 1.0);
+          const carReverseFlip = this.speed < -0.05 ? -1 : 1;
+          const carTurnRate = carTurnRateLimit * carSpeedScale * carReverseFlip;
+
+          const carSteerResponse = isDrifting ? 0.24 : 0.18;
+          const carSteerLimit = (isDrifting ? 0.65 : 0.42) * climateGrip;
+          if (keys.left || keys.a) {
+            this.heading += carTurnRate * dt;
+            this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, carSteerLimit, carSteerResponse);
+          } else if (keys.right || keys.d) {
+            this.heading -= carTurnRate * dt;
+            this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, -carSteerLimit, carSteerResponse);
+          } else {
+            this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, 0, 0.14);
+          }
         }
       }
 
-      // 2b. Reconverge velocityHeading (actual travel direction) toward
-      // heading (where the body/wheels point) at a grip-scaled rate. This
-      // is what actually lets the two diverge in the first place: under
-      // full grip the convergence is fast enough to be indistinguishable
-      // from the old always-equal behavior, but low terrainGrip/climateGrip
-      // (rain, gravel, mud, sand) or holding the drift key slows it down,
-      // so a hard steering input at speed genuinely swings the nose before
-      // the travel direction catches up — a real slide, not just a wheel
-      // animation. Autodrive gets a fast fixed rate regardless of surface
-      // grip so the autopilot's own pure-pursuit path-following (which
-      // already targets `heading` directly) doesn't visibly wobble.
-      // 2b. Pacejka-Style Progressive Tire Slip Friction & Drift Model
+      // 2b. Tire Slip Friction — separate models for bicycle vs car.
       let headingDelta = this.heading - this.velocityHeading;
       headingDelta = Math.atan2(Math.sin(headingDelta), Math.cos(headingDelta));
       this.driftAngle = headingDelta;
 
-      // Pacejka Magic Formula curve approximation for progressive tire grip:
-      // F_lat = D * sin(C * atan(B * slipAngle))
-      const B = 4.0, C = 1.35, D = 1.0;
-      const slipTireForce = D * Math.sin(C * Math.atan(B * Math.abs(headingDelta)));
-      const lateralEfficiency = THREE.MathUtils.clamp(1.0 - Math.abs(headingDelta) * 0.45, 0.25, 1.0);
+      if (isBicycle) {
+        // Bicycle: tighter grip, less slide than a car, but with enough
+        // lag for satisfying momentum carry-through on direction changes.
+        // At low speed, nearly instant tracking; at high speed, slight drift.
+        const speedRatio = THREE.MathUtils.clamp(Math.abs(this.speed) / 20.0, 0, 1);
+        const cycleConverge = this.isAutodrive ? 14.0 : THREE.MathUtils.lerp(18.0, 8.0, speedRatio) * climateGrip;
+        this.velocityHeading += headingDelta * (1 - Math.exp(-cycleConverge * dt));
+      } else {
+        // Car: Pacejka-style progressive tire slip with drift capability
+        const B = 4.0, C = 1.35, D = 1.0;
+        const slipTireForce = D * Math.sin(C * Math.atan(B * Math.abs(headingDelta)));
+        const lateralEfficiency = THREE.MathUtils.clamp(1.0 - Math.abs(headingDelta) * 0.45, 0.25, 1.0);
+        const carConvergeRate = this.isAutodrive
+          ? 14.0
+          : (8.8 * climateGrip * driftGripMult * lateralEfficiency);
+        this.velocityHeading += headingDelta * (1 - Math.exp(-carConvergeRate * dt));
+      }
 
-      const convergeRate = this.isAutodrive
-        ? 14.0
-        : (8.8 * climateGrip * driftGripMult * lateralEfficiency);
-      this.velocityHeading += headingDelta * (1 - Math.exp(-convergeRate * dt));
-
-      // 3. Move freely along the car's actual direction of travel (not
-      // necessarily the same as `heading`, its visual orientation — see
-      // above). Position + orientation are true, independent state — not
-      // derived from a spline parameter — so the car can actually turn,
-      // reverse, and maneuver off the road instead of only drifting
-      // sideways within a lane.
+      // 3. Move freely along the car's actual direction of travel
       const moveDist = this.speed * dt;
       this.distanceTraveled += Math.abs(moveDist) * 0.001;
       const forward = new THREE.Vector3(Math.sin(this.velocityHeading), 0, Math.cos(this.velocityHeading));
       const proposedPos = this.mesh.position.clone().addScaledVector(forward, moveDist);
 
-      // Everything below (ground height, banking, the fence lateral clamp)
-      // is inherently road-relative, so project the free position onto the
-      // nearest point on the road curve — same technique the on-foot
-      // walker's height uses, reusing World.groundHeightAt rather than a
-      // second hand-rolled formula (see BUGFIX_LOG.md Recurring Pattern 1).
       const proj = this.projectToRoad(proposedPos, world.curve, this.splineProgress, world.roadSpacedPoints);
       this.splineProgress = proj.u;
 
-      // Slow Roads Barrier Interaction: Smooth Elastic Glancing & Inward Deflection.
-      // Rather than a rigid clamp that deadlocks forward momentum or creates harsh jitter,
-      // barrier contact deflects the vehicle heading smoothly along the road tangent
-      // with a slight inward glancing vector and soft friction, matching Slow Roads parity.
+      // Slow Roads Barrier Interaction: Smooth Elastic Glancing & Inward Deflection
       const side = proj.latDist >= 0 ? 1 : -1;
       const clampDist = world.getLateralClamp ? world.getLateralClamp(proj.u, side) : 9.0;
       let vehiclePos = proposedPos;
       let latDist = proj.latDist;
 
-      // When the car is turning sharply across the road (U-turn / three-point turn), skip the
-      // lateral position clamp entirely so the car can swing past the fence line and complete
-      // the arc. The threshold is ~72° from the road direction (forward or backward).
       const roadFwdHeading = Math.atan2(proj.tangent.x, proj.tangent.z);
       const headingVsRoad = Math.abs(Math.atan2(Math.sin(this.heading - roadFwdHeading), Math.cos(this.heading - roadFwdHeading)));
-      const isTurningAcrossRoad = headingVsRoad > Math.PI * 0.4; // >72° from road axis
+      const isTurningAcrossRoad = headingVsRoad > Math.PI * 0.4;
 
       if (Math.abs(latDist) > clampDist && !isTurningAcrossRoad && (proj.distFromRoad || 0) < 28) {
         const toProposed = proposedPos.clone().sub(proj.pt);
         const fwdComponent = toProposed.dot(proj.tangent);
-        // Continuous clamp strictly to barrier boundary: NO 12cm sawtooth bounce!
         latDist = clampDist * side;
         vehiclePos = proj.pt.clone().addScaledVector(proj.tangent, fwdComponent).addScaledVector(proj.normal, latDist);
 
-        // Re-project so pt/tangent/normal reflect the actual resting position
         const reproj = this.projectToRoad(vehiclePos, world.curve, proj.u, world.roadSpacedPoints);
         Object.assign(proj, reproj);
         this.splineProgress = proj.u;
 
-        // Slow Roads Barrier Glancing: align heading with the nearest road tangent direction.
-        // We check both the forward and backward tangent so a U-turning car (heading ~180° from
-        // road forward) gets aligned backward along the road instead of being snapped back to
-        // the forward direction, which would kill the U-turn.
         const tangentHeading = Math.atan2(proj.tangent.x, proj.tangent.z);
         let headingDiffFwd = tangentHeading - this.heading;
         headingDiffFwd = Math.atan2(Math.sin(headingDiffFwd), Math.cos(headingDiffFwd));
@@ -8648,43 +9157,34 @@
         headingDiffBck = Math.atan2(Math.sin(headingDiffBck), Math.cos(headingDiffBck));
         const headingDiff = Math.abs(headingDiffFwd) <= Math.abs(headingDiffBck) ? headingDiffFwd : headingDiffBck;
 
-        // Smoothly guide heading to align with road tangent without overshooting/oscillating inward
         const alignRate = 1.0 - Math.exp(-12.0 * dt);
         this.heading += headingDiff * alignRate;
         this.velocityHeading = this.heading;
 
-        // Counter-steer decay only against input pushing directly into the barrier
         if (this.steerAngle * side > 0) {
           this.steerAngle *= Math.exp(-10.0 * dt);
         }
 
-        // Soft glancing friction along the wall (preserves forward momentum)
         this.speed *= Math.max(0.7, 1.0 - 0.15 * dt);
-
         if (Math.abs(this.speed) > 4) sound.playBarrierScrape();
       }
-      this.lateralOffset = latDist; // kept for the stuck-detection check in Game.animate() and any other reader
+      this.lateralOffset = latDist;
 
       const tangent = proj.tangent;
       const roadRight = proj.normal;
 
-      // 4-Wheel Contact Ground Plane Evaluation (Slow Roads Exact Parity)
-      const halfWheelbase = 1.45;
-      const halfTrack = 0.82;
+      // 4-Wheel Contact Ground Plane Evaluation
+      const halfWheelbase = isBicycle ? 0.95 : 1.45;
+      const halfTrack = isBicycle ? 0.25 : 0.82;
       const carHeading = this.heading;
-      // Car travel forward vector (along heading):
       const carFwd = new THREE.Vector3(Math.sin(carHeading), 0, Math.cos(carHeading));
-      // Car right vector (perpendicular to travel heading):
       const carRight = new THREE.Vector3(Math.cos(carHeading), 0, -Math.sin(carHeading));
 
-      // 4 wheel contact sample positions in 3D world space:
-      // Front axle (+halfWheelbase in travel direction), Rear axle (-halfWheelbase)
-      // Left side (-halfTrack in right direction), Right side (+halfTrack)
       const wheelOffsets = [
-        { fwd: halfWheelbase, right: -halfTrack }, // Front-Left
-        { fwd: halfWheelbase, right: halfTrack },  // Front-Right
-        { fwd: -halfWheelbase, right: -halfTrack }, // Rear-Left
-        { fwd: -halfWheelbase, right: halfTrack }  // Rear-Right
+        { fwd: halfWheelbase, right: -halfTrack },
+        { fwd: halfWheelbase, right: halfTrack },
+        { fwd: -halfWheelbase, right: -halfTrack },
+        { fwd: -halfWheelbase, right: halfTrack }
       ];
 
       const wheelWorldPos = wheelOffsets.map(o => {
@@ -8707,24 +9207,19 @@
       const avgRightY = (yFR + yRR) * 0.5;
       const trueGroundCenterY = (yFL + yFR + yRL + yRR) * 0.25;
 
-      // True road grade pitch along car's actual travel orientation (front vs rear):
       const trueRoadPitch = Math.atan2(avgFrontY - avgRearY, halfWheelbase * 2.0);
-      // True road cross-slope roll across car's track width (right vs left):
       const trueRoadRoll = Math.atan2(avgRightY - avgLeftY, halfTrack * 2.0);
 
-      // Controlled throttle dive/squat:
+      // Controlled throttle dive/squat
       let throttlePitch = 0;
       if (keys.w || keys.up) {
-        throttlePitch = 0.015; // realistic rear squat on acceleration
+        throttlePitch = isBicycle ? 0.008 : 0.016;
       } else if (keys.s || keys.down) {
-        throttlePitch = -0.022; // realistic front dive on braking
+        throttlePitch = isBicycle ? -0.012 : -0.024;
       }
 
-      // In parent space, the GLTF model is mounted with rotation.y = Math.PI,
-      // which inverts local Z (front is +Z in parent) and local X (right is -X in parent).
       const targetPitch = -trueRoadPitch - throttlePitch;
 
-      // Subtle terrain surface harmonic micro-rumble (filtered smoothly through suspension)
       let terrainPitchJitter = 0;
       let terrainRollJitter = 0;
       if (roadTerrainKey === 'gravel' && Math.abs(this.speed) > 2.0) {
@@ -8732,31 +9227,53 @@
         terrainPitchJitter = Math.sin(Date.now() * 0.015) * 0.0012 * speedScale;
         terrainRollJitter = Math.cos(Date.now() * 0.018) * 0.0010 * speedScale;
       } else if (roadTerrainKey === 'mud' && Math.abs(this.speed) > 2.0) {
-        terrainRollJitter = Math.sin(Date.now() * 0.006) * 0.0022; // gentle mud sway
+        terrainRollJitter = Math.sin(Date.now() * 0.006) * 0.0022;
       }
 
-      // Authentic automotive centrifugal suspension body roll (rolls OUTWARD away from the turn)
-      // When steering RIGHT (steerAngle < 0), centrifugal force pushes chassis LEFT (rolls outward)
-      const centrifugalBodyRoll = this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.08;
-      const targetRoll = trueRoadRoll + centrifugalBodyRoll + terrainRollJitter;
+      // Bicycle inward lean vs car centrifugal body roll — separated.
+      let dynamicRoll = 0;
+      if (isBicycle) {
+        // A cyclist leans relative to GRAVITY, not the road surface, so road
+        // banking only bleeds through slightly. The lean itself is the balance
+        // angle for the ACTUAL turn (player steer or a road bend on autopilot):
+        // tan(lean) = v * yawRate / g.
+        try {
+          const prevHeading = (this._leanPrevHeading === undefined) ? this.heading : this._leanPrevHeading;
+          const dHeading = Math.atan2(Math.sin(this.heading - prevHeading), Math.cos(this.heading - prevHeading));
+          this._leanPrevHeading = this.heading;
+          const rawYawRate = dt > 0 ? THREE.MathUtils.clamp(dHeading / dt, -3.0, 3.0) : 0;
+          this._leanYawRate = THREE.MathUtils.lerp(this._leanYawRate || 0, rawYawRate, 1.0 - Math.exp(-12.0 * dt));
+          const MAX_LEAN = 0.56; // 32 deg
+          const balanceLean = Math.atan((this.speed * this._leanYawRate) / 9.81);
+          const inwardLean = -THREE.MathUtils.clamp(balanceLean, -MAX_LEAN, MAX_LEAN);
+          dynamicRoll = trueRoadRoll * 0.12 + inwardLean + terrainRollJitter;
+        } catch (err) {
+          console.error('Cycle lean calculation failed:', err);
+          dynamicRoll = trueRoadRoll * 0.12 + terrainRollJitter;
+        }
+      } else {
+        const centrifugalBodyRoll = this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.12;
+        dynamicRoll = trueRoadRoll + centrifugalBodyRoll + terrainRollJitter;
+      }
+
+      const targetRoll = dynamicRoll;
       const targetPitchWithJitter = targetPitch + terrainPitchJitter;
 
       // 2nd-Order Spring-Mass-Damper Suspension Filter
       const subDt = Math.min(dt, 0.05);
-      const omegaPitch = 16.0;
-      const zetaPitch = 0.90;
+      const omegaPitch = isBicycle ? 13.0 : 16.0;
+      const zetaPitch = isBicycle ? 1.05 : 0.90;
       const pitchAccel = (omegaPitch * omegaPitch) * (targetPitchWithJitter - this.currentPitch) - 2.0 * zetaPitch * omegaPitch * this.pitchVelocity;
       this.pitchVelocity += pitchAccel * subDt;
       this.currentPitch += this.pitchVelocity * subDt;
 
-      const omegaRoll = 16.0;
-      const zetaRoll = 0.90;
+      const omegaRoll = isBicycle ? 14.0 : 16.0;
+      const zetaRoll = isBicycle ? 1.05 : 0.88;
       const rollAccel = (omegaRoll * omegaRoll) * (targetRoll - this.currentRoll) - 2.0 * zetaRoll * omegaRoll * this.rollVelocity;
       this.rollVelocity += rollAccel * subDt;
       this.currentRoll += this.rollVelocity * subDt;
 
-      // Exact tire contact height (tire bottom rests squarely on road surface with 0.02m contact cushion)
-      vehiclePos.y = trueGroundCenterY + 0.02;
+      vehiclePos.y = trueGroundCenterY + (isBicycle ? 0.04 : 0.02);
       this.mesh.position.copy(vehiclePos);
 
       // Set chassis orientation: heading yaw + true 4-wheel pitch & roll
@@ -8764,16 +9281,46 @@
       this.mesh.rotateX(this.currentPitch);
       this.mesh.rotateZ(this.currentRoll);
 
-      // 4-Wheel Visual Dynamics:
-      // Turn front steering knuckles/wheels in yaw with Ackerman steering angle
-      if (this.frontWheels && this.frontWheels.length > 0) {
+      if (isBicycle) {
+        // ============================================================
+        // BICYCLE VISUAL DYNAMICS — purely rotational, never touches
+        // position.y (that's owned by the ground-height system).
+        // ============================================================
+        const absSpeed = Math.abs(this.speed);
+        const isPedaling = (keys.up || keys.w) && absSpeed > 0.5;
+        const time = performance.now() * 0.001;
+
+        // Realistic human pedaling cadence: ~65-85 RPM (1.1 - 1.45 Hz)
+        const pedalFreq = isPedaling ? THREE.MathUtils.lerp(1.1, 1.45, Math.min(absSpeed / 14.44, 1.0)) : 0;
+
+        // 1. Pedaling pitch rock: subtle organic forward-back nod during pedal strokes
+        if (isPedaling) {
+          const pitchAmp = THREE.MathUtils.lerp(0.004, 0.002, Math.min(absSpeed / 10.0, 1.0));
+          this.mesh.rotateX(Math.sin(time * pedalFreq * Math.PI * 2) * pitchAmp);
+        }
+
+        // 2. Pedaling lateral rock: gentle rhythmic side-to-side sway
+        if (isPedaling) {
+          const rockAmp = THREE.MathUtils.lerp(0.005, 0.0025, Math.min(absSpeed / 10.0, 1.0));
+          this.mesh.rotateZ(Math.sin(time * pedalFreq * 0.5 * Math.PI * 2) * rockAmp);
+        }
+
+        // 3. Handlebar counter-steer: subtle yaw when steering
+        if (Math.abs(this.steerAngle) > 0.01) {
+          this.mesh.rotateY(-this.steerAngle * 0.04);
+        }
+      }
+
+      // 4-Wheel Visual Dynamics (cars):
+      if (!isBicycle && this.frontWheels && this.frontWheels.length > 0) {
         this.frontWheels.forEach(w => {
           w.rotation.y = this.steerAngle * 0.85;
         });
       }
-      // Spin all 4 wheels along pitch axis with forward ground speed
+      // Spin all wheels along pitch axis with forward ground speed
       if (this.wheels && this.wheels.length > 0) {
-        this.wheels.forEach(w => w.rotateX((this.speed * dt) / 0.38));
+        const wheelRadius = isBicycle ? 0.365 : 0.38;
+        this.wheels.forEach(w => w.rotateX((this.speed * dt) / wheelRadius));
       }
 
       const carPos = this.mesh.position;
@@ -8820,8 +9367,11 @@
       this.mesh.position.y = pt.y + 0.02;
       this.heading = Math.atan2(tangent.x, tangent.z);
       this.velocityHeading = this.heading;
+      this._leanPrevHeading = this.heading;
+      this._leanYawRate = 0;
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
       this.speed = preserveSpeed ? prevSpeed : 0;
+      if (!preserveSpeed) this.cycleRideTime = 0;
       this.steerAngle = 0;
       this.currentPitch = 0;
       this.currentRoll = 0;
@@ -8850,6 +9400,8 @@
       this.mesh.position.y = pt.y + 0.02;
       this.heading = Math.atan2(tangent.x, tangent.z);
       this.velocityHeading = this.heading;
+      this._leanPrevHeading = this.heading;
+      this._leanYawRate = 0;
       this.mesh.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.heading);
       this.speed = 0;
       this.steerAngle = 0;
@@ -8975,9 +9527,6 @@
       return new THREE.CanvasTexture(c);
     }
 
-    setActive(active) {
-      this.points.visible = !!active;
-    }
 
     // `center` is the point the volume rides around (the vehicle position)
     // — passed unconditionally every frame regardless of vehicle speed, so
@@ -9262,7 +9811,9 @@
       this.selectedWeather = 'clear';
       this.weather = 'clear'; // 'clear', 'blizzard', 'rain' — see SLOWROADS_PARITY_LOG.md item 4
       this.selectedSeed = '5927cd04';
-      this.selectedVehicle = 'musclecoupe';
+      this.selectedVehicle = (typeof Career !== 'undefined' && Career && typeof Career.selectedVehicle === 'function')
+        ? Career.selectedVehicle()
+        : 'cycle';
       this.selectedDifficulty = 'medium';
       this.activeDockPanel = null;
       this.activeCameraMode = 'chase';
@@ -9293,13 +9844,8 @@
       this.wantedDecayTimer = 0;
       this.isJailed = false;
 
-      // Get-out-and-walk delivery (car/truck only — two-wheelers always
-      // toss from the saddle, see toggleOnFoot). WALK_TIME_BONUS
-      // compensates for the extra time walking costs vs. a drive-by toss;
-      // granted once per order (walkBonusOrderIndex) so re-toggling E
-      // can't be farmed for free time.
-      this.onFoot = false;
-      this.walkerMesh = null;
+      // Vestige of the removed get-out-and-walk delivery mode: the bonus
+      // fields below are still read by the toss path.
       this.walkerParkedVehiclePos = null;
       this.walkBonusOrderIndex = -1;
       this.WALK_TIME_BONUS = 22.0;
@@ -9307,9 +9853,27 @@
       this.parcels = []; // 3D In-flight projectiles
       this.particles = []; // 3D Procedural Particle FX System
 
-      this.keys = { up: false, down: false, left: false, right: false, w: false, s: false, a: false, d: false, space: false };
+      this.keys = { up: false, down: false, left: false, right: false, w: false, s: false, a: false, d: false, space: false, steerInput: 0 };
+      this._touchSteerActive = false;
+      this._touchSteerStartX = 0;
+      this._touchSteerPointerId = -1;
       this.inactivityTimer = 0;
       this.inputFrozen = false;
+      this._adPaused = false;
+      this._shiftDoubleClaimed = false;
+      this._sponsorAdCooldown = 0;
+
+      if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+        ShiplypAds.init(
+          { debug: false },
+          {
+            onPauseGame: () => { this._adPaused = true; },
+            onResumeGame: () => { this._adPaused = false; },
+            onMuteAudio: () => { sound.mute(); },
+            onResumeAudio: () => { sound.unmute(); }
+          }
+        );
+      }
 
       this.initThree();
       this.initEvents();
@@ -9322,6 +9886,18 @@
       // The full-screen loader overlay is only needed once that starts.
       const loaderEl = document.getElementById('game-loader');
       if (loaderEl) loaderEl.style.display = 'none';
+
+      // Daily check-in runs once per session, before the hub is rendered so
+      // the strip below already reflects today's streak and bonus. It is
+      // idempotent within a calendar day — reopening the hub does not pay twice.
+      this._dailyCheckIn = Career ? Career.checkIn() : null;
+
+      // First-run onboarding: active when the player has zero career deliveries.
+      // Cleared permanently after their first successful drop.
+      const careerStats = Career ? Career.career() : null;
+      this._onboardingActive = careerStats ? (careerStats.deliveries === 0 && careerStats.shifts === 0) : false;
+      this._firstOpenTime = this._onboardingActive ? Date.now() : null;
+
       this.renderDispatchHub();
     }
 
@@ -9381,12 +9957,15 @@
       await frame();
 
       // --- Stage 4: Foliage, props, villas, rocks (heaviest stage) ---
+      // First-run: force easy so the first house spawns close and the timer is generous.
+      if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
 
       setProgress(82, 'Seeding subtropical forests & Sahyadri rockfaces...');
       await frame();
 
       // --- Stage 5: Vehicle, weather, order card ---
+      this.reconcileSelectedVehicle();
       if (!this.vehicle) {
         this.vehicle = new VehicleController(this.scene, this.selectedVehicle);
       } else {
@@ -9436,11 +10015,11 @@
       this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 850);
 
       try {
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false });
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true, failIfMajorPerformanceCaveat: false });
       } catch (e) {
         console.warn('High-performance WebGL initialization failed, falling back to standard WebGL:', e);
         try {
-          this.renderer = new THREE.WebGLRenderer({ antialias: false, failIfMajorPerformanceCaveat: false });
+          this.renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true, failIfMajorPerformanceCaveat: false });
         } catch (e2) {
           console.warn('Standard WebGL initialization failed, using headless fallback renderer:', e2);
           const c = document.createElement('canvas');
@@ -9713,8 +10292,10 @@
       this.scene.add(this.world.createTerrainMesh(season));
       this.scene.add(this.world.createTunnelMeshes());
       this.world.createMountainArches(this.scene, season);
+      if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
 
+      this.reconcileSelectedVehicle();
       if (!this.vehicle) {
         this.vehicle = new VehicleController(this.scene, this.selectedVehicle);
       } else {
@@ -9760,13 +10341,17 @@
 
     renderStatusPanel() {}
 
-    updateOrderTimer(dt) {
-      // Penalty timer disabled for peaceful open-world driving
-    }
 
     initEvents() {
-      window.addEventListener('resize', () => {
-        this.camera.aspect = window.innerWidth / window.innerHeight;
+      const handleResize = () => {
+        const aspect = window.innerWidth / window.innerHeight;
+        this.camera.aspect = aspect;
+        // Dynamic FOV for portrait phones: widen vertical FOV so the car and road remain spacious
+        if (aspect < 1.0) {
+          this.camera.fov = THREE.MathUtils.clamp(58 / aspect, 58, 75);
+        } else {
+          this.camera.fov = 58;
+        }
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         if (this.composer) this.composer.setSize(window.innerWidth, window.innerHeight);
@@ -9776,7 +10361,11 @@
           this.fxaaPass.material.uniforms['resolution'].value.set(1 / (window.innerWidth * pr), 1 / (window.innerHeight * pr));
         }
         if (this.visualStyle) this.visualStyle.resize(window.innerWidth, window.innerHeight);
-      });
+      };
+
+      window.addEventListener('resize', handleResize);
+      window.addEventListener('orientationchange', () => setTimeout(handleResize, 150));
+      handleResize();
 
       const onKey = (e, val) => {
         if (this.inputFrozen) return;
@@ -9801,9 +10390,12 @@
         if (k === 'm' || code === 'KeyM') this.toggleRadioMute();
         if (k === 'n' || code === 'KeyN') this.toggleSfxMute();
         if (k === 'l' || code === 'KeyL') this.cycleRadioChannel();
-        if (k === 'p' || code === 'KeyP') this.toggleWeather();
-        if (k === 'e' || code === 'KeyE') this.toggleOnFoot();
-        if (k === 'h' || k === '?' || code === 'KeyH') this.openSettingsModal('controls');
+        if (k === 'p' || code === 'KeyP') this.openPostcardMode();
+        if (k === 'h' || code === 'KeyH') {
+          sound.playHorn(this.selectedVehicle);
+          if (navigator.vibrate) navigator.vibrate(35);
+        }
+        if (k === '?' || k === 'o' || code === 'KeyO') this.openSettingsModal('controls');
         if (k === 'escape' || code === 'Escape') {
           if (this.modalContainer && this.modalContainer.querySelector('.settings-modal')) {
             this.modalContainer.innerHTML = '';
@@ -9816,8 +10408,7 @@
           document.getElementById('btn-start-dispatch')?.click();
         }
         if ((k === ' ' || code === 'Space') && this.gameState === 'playing' && !e.repeat) {
-          if (this.onFoot) this.tryWalkDelivery();
-          else this.tossParcel3D();
+          this.tossParcel3D();
         }
       });
 
@@ -9826,17 +10417,11 @@
       window.addEventListener('mousedown', e => {
         this.resetInactivity();
         if (this.gameState === 'playing' && e.target && e.target.tagName === 'CANVAS') {
-          if (this.onFoot) this.tryWalkDelivery();
-          else this.tossParcel3D();
+          this.tossParcel3D();
         }
       });
 
       // Game HUD buttons must never take keyboard focus on mouse click.
-      // tabindex="-1" only removes them from TAB order — clicking still focuses them,
-      // and a focused button fires a synthetic click on every Space/Enter press,
-      // which triggers autopilot-off and other unintended game actions.
-      // preventDefault on mousedown blocks focus acquisition while leaving the
-      // click event intact so all button handlers continue to work normally.
       document.querySelectorAll('#in-game-hud button, #slowroads-dock button').forEach(btn => {
         btn.addEventListener('mousedown', e => e.preventDefault());
       });
@@ -9844,13 +10429,6 @@
       this.initTouchControls();
     }
 
-    // On-screen steer/throttle/action buttons for touch devices — the game
-    // had keyboard-only input, making it unplayable on phones/tablets.
-    // Every button just flips the exact same this.keys.* flags the
-    // keyboard handlers use (or fires the same toss/walk-delivery call
-    // SPACE does), so steering, acceleration and delivery logic stay
-    // single-sourced; touch is purely a second way to set those flags, not
-    // a parallel control path.
     applyTouchControlVisibility() {
       const isTouch = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
       document.body.classList.toggle('touch-controls-active', isTouch);
@@ -9858,9 +10436,6 @@
 
     initTouchControls() {
       this.applyTouchControlVisibility();
-      // A Bluetooth mouse/keyboard can be paired with a touch tablet mid-
-      // session (or vice versa on a convertible laptop) — re-check instead
-      // of only detecting once at load.
       window.matchMedia('(pointer: coarse)').addEventListener?.('change', () => this.applyTouchControlVisibility());
 
       const bindHoldButton = (id, onDown, onUp) => {
@@ -9870,6 +10445,7 @@
           e.preventDefault();
           this.resetInactivity();
           btn.classList.add('touch-pressed');
+          if (navigator.vibrate) navigator.vibrate(10);
           onDown();
         };
         const end = e => {
@@ -9883,362 +10459,138 @@
         btn.addEventListener('pointerleave', end);
       };
 
+      const bindTapButton = (id, onClick) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.addEventListener('pointerdown', e => {
+          e.preventDefault();
+          this.resetInactivity();
+          btn.classList.add('touch-pressed');
+          if (navigator.vibrate) navigator.vibrate(15);
+          onClick();
+          setTimeout(() => btn.classList.remove('touch-pressed'), 120);
+        });
+      };
+
+      // Steering & Pedals (button mode — used for cars; cycle uses drag zone)
       bindHoldButton('touch-steer-left', () => { this.keys.left = this.keys.a = true; }, () => { this.keys.left = this.keys.a = false; });
       bindHoldButton('touch-steer-right', () => { this.keys.right = this.keys.d = true; }, () => { this.keys.right = this.keys.d = false; });
       bindHoldButton('touch-pedal-gas', () => { this.keys.up = this.keys.w = true; }, () => { this.keys.up = this.keys.w = false; });
       bindHoldButton('touch-pedal-brake', () => { this.keys.down = this.keys.s = true; }, () => { this.keys.down = this.keys.s = false; });
+
+      // Drag-to-steer zone (cycle-only): horizontal finger drag across the
+      // left half of the screen controls analog steering intensity.
+      const dragZone = document.getElementById('touch-drag-steer');
+      const dragIndicator = dragZone?.querySelector('.drag-steer-indicator');
+      if (dragZone) {
+        const DRAG_SENSITIVITY = 120; // pixels for full-lock (±1.0)
+        dragZone.addEventListener('pointerdown', (e) => {
+          if (this._touchSteerActive) return;
+          e.preventDefault();
+          this.resetInactivity();
+          dragZone.setPointerCapture(e.pointerId);
+          this._touchSteerActive = true;
+          this._touchSteerStartX = e.clientX;
+          this._touchSteerPointerId = e.pointerId;
+          this.keys.steerInput = 0;
+          dragZone.classList.add('dragging');
+          if (dragIndicator) {
+            const rect = dragZone.getBoundingClientRect();
+            dragIndicator.style.left = `${e.clientX - rect.left}px`;
+            dragIndicator.style.top = `${e.clientY - rect.top}px`;
+          }
+          if (navigator.vibrate) navigator.vibrate(8);
+        });
+        dragZone.addEventListener('pointermove', (e) => {
+          if (!this._touchSteerActive || e.pointerId !== this._touchSteerPointerId) return;
+          e.preventDefault();
+          const dx = e.clientX - this._touchSteerStartX;
+          this.keys.steerInput = THREE.MathUtils.clamp(dx / DRAG_SENSITIVITY, -1, 1);
+          if (dragIndicator) {
+            const rect = dragZone.getBoundingClientRect();
+            dragIndicator.style.left = `${e.clientX - rect.left}px`;
+            dragIndicator.style.top = `${e.clientY - rect.top}px`;
+          }
+        });
+        const endDrag = (e) => {
+          if (!this._touchSteerActive || e.pointerId !== this._touchSteerPointerId) return;
+          this._touchSteerActive = false;
+          this._touchSteerPointerId = -1;
+          this.keys.steerInput = 0;
+          dragZone.classList.remove('dragging');
+        };
+        dragZone.addEventListener('pointerup', endDrag);
+        dragZone.addEventListener('pointercancel', endDrag);
+      }
+
+      // Action & Utility buttons
+      const toolsDrawer = document.getElementById('touch-tools-drawer');
+      const toolsBtn = document.getElementById('touch-btn-tools');
+      const closeTools = () => {
+        if (toolsDrawer) toolsDrawer.style.display = 'none';
+        if (toolsBtn) toolsBtn.setAttribute('aria-expanded', 'false');
+      };
+      const toggleTools = () => {
+        if (!toolsDrawer) return;
+        const isOpen = toolsDrawer.style.display === 'flex';
+        toolsDrawer.style.display = isOpen ? 'none' : 'flex';
+        if (toolsBtn) toolsBtn.setAttribute('aria-expanded', String(!isOpen));
+      };
+
+      bindTapButton('touch-btn-tools', toggleTools);
+      bindTapButton('touch-tools-close', closeTools);
+
+      bindTapButton('touch-btn-drop', () => {
+        if (navigator.vibrate) navigator.vibrate([25, 40, 25]);
+        this.tossParcel3D();
+      });
+      bindTapButton('touch-btn-horn', () => {
+        closeTools();
+        sound.playHorn(this.selectedVehicle);
+        if (navigator.vibrate) navigator.vibrate(35);
+      });
+      bindTapButton('touch-btn-photo', () => {
+        closeTools();
+        this.openPostcardMode();
+      });
+      bindTapButton('touch-btn-recenter', () => {
+        closeTools();
+        this.returnToRoad();
+      });
+      bindTapButton('touch-btn-cam', () => {
+        closeTools();
+        this.toggleCameraMode();
+      });
+      bindTapButton('touch-btn-autopilot', () => this.toggleAutodrive());
+
+      // Close tools drawer on tap outside
+      document.addEventListener('pointerdown', (e) => {
+        if (!toolsDrawer || toolsDrawer.style.display !== 'flex') return;
+        if (!toolsDrawer.contains(e.target) && !toolsBtn?.contains(e.target)) {
+          closeTools();
+        }
+      });
     }
 
     // On-foot courier avatar. Uses the shared rigged CourierAsset (real
     // Walking/Running animation clips) so the player and crosser NPCs share one
     // consistent character; falls back to the procedural mesh below if the
     // asset hasn't loaded yet or failed to load.
-    createWalkerMesh() {
-      const rig = CourierAsset.clone();
-      if (rig) {
-        rig.root.userData.mixer = rig.mixer;
-        rig.root.userData.actions = rig.actions;
-        rig.root.userData.currentAction = null;
-        // Start in Idle rather than the raw T-pose bind pose — a clip must
-        // always be playing on this rig, never "no clip".
-        if (rig.actions['Idle']) {
-          rig.actions['Idle'].play();
-          rig.root.userData.currentAction = 'Idle';
-        }
-        return rig.root;
-      }
-      return this.createWalkerMeshProcedural();
-    }
 
     // High-quality stylized courier avatar for on-foot delivery, featuring
     // delivery uniform, cap, thermal backpack, sneakers, and articulated limbs.
     // Fallback used only if CourierAsset failed to load.
-    createWalkerMeshProcedural() {
-      const group = new THREE.Group();
-      
-      const skinMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.6 });
-      const uniformMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.5 }); // High-vis Crimson Delivery Uniform
-      const darkUniformMat = new THREE.MeshStandardMaterial({ color: 0x9f1239, roughness: 0.5 });
-      const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 }); // Slate cargo pants
-      const shoeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 }); // Black athletic sneakers
-      const soleMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.3 }); // White sneaker sole
-      const reflexMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.2, metalness: 0.4 }); // High-vis reflective stripe
-      const packMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.65 }); // Thermal delivery backpack
-      const capMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.5 }); // Dark courier cap
-      const visorMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.4 });
-
-      // 1. Head & Courier Cap
-      const headGroup = new THREE.Group();
-      const headMesh = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16, 1), skinMat);
-      headMesh.position.y = 0;
-      headGroup.add(headMesh);
-
-      // Neck
-      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.12, 8), skinMat);
-      neck.position.y = -0.12;
-      headGroup.add(neck);
-
-      // Courier Cap Crown & Forward Visor (+Z)
-      const capCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.175, 0.10, 10), capMat);
-      capCrown.position.y = 0.08;
-      headGroup.add(capCrown);
-
-      const capVisor = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.03, 0.16), visorMat);
-      capVisor.position.set(0, 0.04, 0.16);
-      capVisor.rotateX(0.12);
-      headGroup.add(capVisor);
-
-      headGroup.position.y = 1.54;
-      group.add(headGroup);
-
-      // 2. Torso with Delivery Jacket & High-Vis Bands
-      const torsoGroup = new THREE.Group();
-      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.60, 0.26), uniformMat);
-      torso.position.y = 1.04;
-      torsoGroup.add(torso);
-
-      // Chest reflective stripe
-      const chestBand = new THREE.Mesh(new THREE.BoxGeometry(0.43, 0.08, 0.27), reflexMat);
-      chestBand.position.y = 1.10;
-      torsoGroup.add(chestBand);
-
-      // Waist belt
-      const belt = new THREE.Mesh(new THREE.BoxGeometry(0.425, 0.07, 0.265), darkUniformMat);
-      belt.position.y = 0.76;
-      torsoGroup.add(belt);
-
-      // 3. Courier Thermal Backpack on back (-Z)
-      const pack = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.44, 0.20), packMat);
-      pack.position.set(0, 1.08, -0.22);
-      torsoGroup.add(pack);
-
-      // Glowing delivery logo beacon on pack
-      const beacon = new THREE.Mesh(
-        new THREE.BoxGeometry(0.14, 0.14, 0.02),
-        new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 1.5 })
-      );
-      beacon.position.set(0, 1.12, -0.325);
-      torsoGroup.add(beacon);
-
-      // Shoulder harness straps
-      [-0.12, 0.12].forEach(sx => {
-        const strap = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.48, 0.28), darkUniformMat);
-        strap.position.set(sx, 1.10, 0);
-        torsoGroup.add(strap);
-      });
-      group.add(torsoGroup);
-
-      // 4. Articulated Arms (Left & Right with Shoulder Pivots)
-      const buildArm = (isLeft) => {
-        const armGroup = new THREE.Group();
-        const sideMult = isLeft ? -1 : 1;
-        
-        // Shoulder / Upper sleeve
-        const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.32, 0.13), uniformMat);
-        sleeve.position.set(0, -0.16, 0);
-        armGroup.add(sleeve);
-
-        // Forearm / Skin
-        const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.26, 0.11), skinMat);
-        forearm.position.set(0, -0.42, 0.04);
-        armGroup.add(forearm);
-
-        // Hand
-        const hand = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.10, 0.10), skinMat);
-        hand.position.set(0, -0.58, 0.06);
-        armGroup.add(hand);
-
-        if (!isLeft) {
-          // Right hand holds digital delivery handheld scanner
-          const scanner = new THREE.Mesh(
-            new THREE.BoxGeometry(0.11, 0.18, 0.04),
-            new THREE.MeshStandardMaterial({ color: 0x0284c7, emissive: 0x38bdf8, emissiveIntensity: 0.6 })
-          );
-          scanner.position.set(0, -0.58, 0.12);
-          scanner.rotateX(0.4);
-          armGroup.add(scanner);
-        }
-
-        armGroup.position.set(sideMult * 0.27, 1.28, 0);
-        return armGroup;
-      };
-
-      const armL = buildArm(true);
-      const armR = buildArm(false);
-      group.add(armL);
-      group.add(armR);
-
-      // 5. Articulated Legs (with Hip Pivots, Cargo Pants & Sneakers)
-      const buildLeg = (isLeft) => {
-        const legGroup = new THREE.Group();
-        const sideMult = isLeft ? -1 : 1;
-
-        // Thigh & Shin
-        const legMesh = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.54, 0.16), pantsMat);
-        legMesh.position.set(0, -0.27, 0);
-        legGroup.add(legMesh);
-
-        // Sneaker Upper
-        const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.24), shoeMat);
-        shoe.position.set(0, -0.58, 0.04);
-        legGroup.add(shoe);
-
-        // White Sneaker Sole
-        const sole = new THREE.Mesh(new THREE.BoxGeometry(0.155, 0.04, 0.25), soleMat);
-        sole.position.set(0, -0.63, 0.04);
-        legGroup.add(sole);
-
-        legGroup.position.set(sideMult * 0.12, 0.72, 0);
-        return legGroup;
-      };
-
-      const legL = buildLeg(true);
-      const legR = buildLeg(false);
-      group.add(legL);
-      group.add(legR);
-
-      group.userData.legs = [legL, legR];
-      group.userData.arms = [armL, armR];
-      group.userData.legPhase = 0;
-      return group;
-    }
 
     // Toggle between driving and walking a car/truck delivery up to the
     // door. Two-wheelers never get out — per the queued design decision,
     // they always toss from the saddle (aimed-throw risk mechanic covers
     // them instead; that's a separate follow-up feature).
-    toggleOnFoot() {
-      if (!this.vehicle || !this.world || this.gameState !== 'playing') return;
-      const isTwoWheeler = this.selectedVehicle === 'cycle' || this.selectedVehicle === 'scooter' || this.vehicle?.vehicleType === 'cycle' || this.vehicle?.vehicleType === 'scooter';
-      if (isTwoWheeler) {
-        this.addNotification(`${UI.icon('scooter')} Two-wheelers stay mounted — toss from the saddle instead`, 'neutral', 2500);
-        return;
-      }
-
-      if (this.onFoot) {
-        // Return to vehicle — warp back rather than requiring the player
-        // to walk all the way back, which wouldn't add anything fun, just
-        // travel time.
-        this.onFoot = false;
-        if (this.walkerMesh) {
-          this.scene.remove(this.walkerMesh);
-          this.walkerMesh = null;
-        }
-        if (this.walkerParkedVehiclePos) {
-          this.vehicle.mesh.position.copy(this.walkerParkedVehiclePos);
-        }
-        this.vehicle.speed = 0;
-        this.addNotification(`${UI.icon('car')} BACK IN VEHICLE`, 'neutral', 2000);
-        return;
-      }
-
-      if (Math.abs(this.vehicle.speed) > 1.5) {
-        this.addNotification(`${UI.icon('alertTriangle')} STOP THE VEHICLE FIRST`, 'warning', 2200);
-        return;
-      }
-
-      this.onFoot = true;
-      this.vehicle.speed = 0;
-      this.walkerParkedVehiclePos = this.vehicle.mesh.position.clone();
-      this.walkerMesh = this.createWalkerMesh();
-      this.walkerMesh.quaternion.copy(this.vehicle.mesh.quaternion);
-
-      // Spawning the walker mesh at the car's own origin planted its feet
-      // at car-body height (the walker's local origin is ground-level, the
-      // car's is roughly seat height), so the torso/head clipped straight
-      // through the roof. Step out to the driver's side instead, like
-      // exiting through the door, and snap to actual ground height the
-      // same way updateWalking() does every frame.
-      const doorSide = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion);
-      const exitPos = this.vehicle.mesh.position.clone().addScaledVector(doorSide, 1.7);
-      this._walkerU = THREE.MathUtils.clamp(this.vehicle.splineProgress, 0, 1);
-      if (this.world && this.world.curve) {
-        const pt = this.world.curve.getPointAt(this._walkerU);
-        const tangent = this.world.curve.getTangentAt(this._walkerU).normalize();
-        const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
-        const latDist = exitPos.clone().sub(pt).dot(normal);
-        exitPos.y = this.world.groundHeightAt(pt, exitPos, latDist) + 0.30;
-      }
-      this.walkerMesh.position.copy(exitPos);
-      this.scene.add(this.walkerMesh);
-
-      // One-time timer bonus per order — walking to the door and back
-      // costs real time a drive-by toss doesn't, so the clock needs to
-      // absorb that instead of just punishing the choice to walk.
-      if (this.walkBonusOrderIndex !== this.activeOrderIndex) {
-        this.walkBonusOrderIndex = this.activeOrderIndex;
-        this.orderTimer += this.WALK_TIME_BONUS;
-        this.maxOrderTimer += this.WALK_TIME_BONUS;
-        this.addNotification(`${UI.icon('car')} ON FOOT — +${this.WALK_TIME_BONUS}s DELIVERY WINDOW`, 'success', 3000);
-      } else {
-        this.addNotification(`${UI.icon('car')} ON FOOT`, 'neutral', 1800);
-      }
-    }
-
-    updateWalking(dt) {
-      if (!this.walkerMesh || !this.world || !this.world.curve) return;
-
-      const turnSpeed = 2.6;
-      if (this.keys.a || this.keys.left) this.walkerMesh.rotation.y += turnSpeed * dt;
-      if (this.keys.d || this.keys.right) this.walkerMesh.rotation.y -= turnSpeed * dt;
-
-      let moveDir = 0;
-      if (this.keys.w || this.keys.up) moveDir = 1;
-      else if (this.keys.s || this.keys.down) moveDir = -0.6;
-
-      const walkSpeed = 4.5;
-      if (moveDir !== 0) {
-        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.walkerMesh.quaternion);
-        const newPos = this.walkerMesh.position.clone().addScaledVector(forward, moveDir * walkSpeed * dt);
-
-        // Find the nearest spline point to the walker's current XZ — local
-        // search around the last known walker u. Step size used to be a
-        // fixed 0.001 u, which on this road's curve (~8360m total length)
-        // is ~8.4m per step — far coarser than the ~0.075m the walker
-        // actually moves per frame at walkSpeed. bestU was frozen for
-        // ~110 frames, then snapped a full 8.4m chunk of curve at once,
-        // producing a periodic position/height pop (visible as a camera
-        // snap, and on sloped ground as legs suddenly poking through the
-        // road). Derive the step from the walker's actual per-frame travel
-        // distance instead, converted to u via the curve's real length, so
-        // bestU tracks continuously.
-        if (!this._curveULen) this._curveULen = this.world.curve.getLength();
-        const distThisFrame = Math.abs(moveDir) * walkSpeed * dt;
-        const uStep = Math.max(distThisFrame / this._curveULen, 1e-6);
-        const searchBase = this._walkerU ?? this.vehicle.splineProgress;
-        let bestU = searchBase, bestD2 = Infinity;
-        for (let step = -20; step <= 20; step++) {
-          const testU = THREE.MathUtils.clamp(searchBase + step * uStep, 0, 1);
-          const tp = this.world.curve.getPointAt(testU);
-          const d2 = (tp.x - newPos.x) ** 2 + (tp.z - newPos.z) ** 2;
-          if (d2 < bestD2) { bestD2 = d2; bestU = testU; }
-        }
-        this._walkerU = bestU;
-        const pt = this.world.curve.getPointAt(bestU);
-        const tangent = this.world.curve.getTangentAt(bestU).normalize();
-        const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
-        const latDist = newPos.clone().sub(pt).dot(normal);
-        // +0.30 bridges groundHeightAt's road offset (pt.y-0.18) up to the
-        // actual road mesh surface (pt.y+0.12), keeping walker soles above road.
-        newPos.y = this.world.groundHeightAt(pt, newPos, latDist) + 0.30;
-
-        this.walkerMesh.position.copy(newPos);
-
-        const legs = this.walkerMesh.userData.legs;
-        const arms = this.walkerMesh.userData.arms;
-        if (legs || arms) {
-          this.walkerMesh.userData.legPhase += dt * 10.0;
-          const swing = Math.sin(this.walkerMesh.userData.legPhase) * 0.4;
-          if (legs) {
-            legs[0].rotation.x = swing;
-            legs[1].rotation.x = -swing;
-          }
-          if (arms) {
-            arms[0].rotation.x = -swing * 0.8;
-            arms[1].rotation.x = swing * 0.8;
-          }
-        }
-      }
-
-      this.playWalkerClip(moveDir !== 0 ? 'Walking' : 'Idle');
-      if (this.walkerMesh.userData.mixer) this.walkerMesh.userData.mixer.update(dt);
-    }
-
     // Crossfades the walker's rigged CourierAsset instance to the named clip.
     // No-op for the procedural fallback mesh (which has no .actions).
-    playWalkerClip(clipName) {
-      const actions = this.walkerMesh && this.walkerMesh.userData.actions;
-      if (!actions) return;
-      if (this.walkerMesh.userData.currentAction === clipName) return;
-      const prev = this.walkerMesh.userData.currentAction ? actions[this.walkerMesh.userData.currentAction] : null;
-      const next = clipName ? actions[clipName] : null;
-      if (prev) prev.fadeOut(0.25);
-      if (next) {
-        next.reset().fadeIn(0.25).play();
-      }
-      this.walkerMesh.userData.currentAction = clipName;
-    }
 
     // On-foot equivalent of tossParcel3D's hit-test: walking within the
     // difficulty's tossRadius of the current target's porch ring completes
     // the delivery directly (SPACE), instead of needing a physics toss.
-    tryWalkDelivery() {
-      if (!this.onFoot || !this.walkerMesh || !this.world) return;
-      let nearestTarget = null;
-      let minD = 50.0;
-      this.world.deliveryTargets.forEach(t => {
-        if (t.delivered) return;
-        const d = this.walkerMesh.position.distanceTo(t.pos);
-        if (d < minD) { minD = d; nearestTarget = t; }
-      });
-      if (!nearestTarget) return;
-      const hitRadius = Math.max(nearestTarget.tossRadius || 5.0, 6.5);
-      if (minD < hitRadius) {
-        this.fulfillDelivery(nearestTarget);
-      } else {
-        this.addNotification(`${UI.icon('car')} Get closer to the door to deliver (${Math.round(minD)}m away)`, 'warning', 2000);
-      }
-    }
 
     tossParcel3D() {
       if (!this.vehicle || !this.world) return;
@@ -10358,18 +10710,48 @@
       this.deliveriesMade++;
       this.streakCount++;
 
+      // Capture the clock BEFORE it is reset for the next order. Both the
+      // star rating and the "express speed" banner describe how much time
+      // was left when the parcel landed, and reading them after the reset
+      // below made every delivery look like a full-time-remaining one.
+      const timeLeftRatio = this.maxOrderTimer > 0 ? (this.orderTimer / this.maxOrderTimer) : 0;
+
       const diffCfg = CONFIG.DIFFICULTY_TIERS[this.selectedDifficulty];
       const timeBonus = Math.max(0, Math.round(this.orderTimer * 1.8));
       const earnedBonus = Math.round((target.order.reward + timeBonus) * diffCfg.payoutMult * (1 + this.streakCount * 0.2));
       this.earnings += earnedBonus;
 
+      // Bank it into the career wallet the instant it is earned, not at the
+      // end of the shift: on Android the WebView process can be killed while
+      // backgrounded, and a player who loses an hour of deliveries to that
+      // does not come back. `this.earnings` remains the per-shift HUD counter.
+      const stars = timeLeftRatio > 0.55 ? 3 : (timeLeftRatio > 0.25 ? 2 : 1);
+      let careerResult = null;
+      if (Career) {
+        careerResult = Career.recordDelivery({
+          orderId: target.order?.id,
+          payout: earnedBonus,
+          stars,
+          streak: this.streakCount
+        });
+      }
+
       this.orderTimer = this.maxOrderTimer; // Reset clock for next order
 
       sound.playCombo();
-      const bonusMsg = (this.orderTimer > this.maxOrderTimer * 0.5 ? `${UI.icon('bolt')} EXPRESS SPEED BONUS!` : `${UI.icon('target')} ON-TIME BULLSEYE!`);
+      if (stars >= 3 && typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+        ShiplypAds.happyTime();
+      }
       this.spawnConfetti(target.pos, 36);
-      this.showScoreBanner(`${bonusMsg} +₹${earnedBonus}`, `${UI.icon('flame')} ${this.streakCount}x STREAK • +${timeBonus} TIME BONUS`);
+      this._showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak: this.streakCount, orderId: target.order?.id, orderName: target.order?.name || 'Delivery', base: target.order?.reward || 0, diffMult: diffCfg.payoutMult });
       this.addNotification(`${UI.icon('check')} DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
+
+      // Rank-up is the only career event loud enough to interrupt a shift.
+      // Everything else about the profile is read back at the hub.
+      if (careerResult && careerResult.promoted) {
+        sound.playRepair();
+        this.addNotification(`${UI.icon('flame')} PROMOTED — ${careerResult.promoted.name.toUpperCase()}`, 'success', 6000);
+      }
 
       this.deliveryHistory.unshift({
         name: target.order?.name || 'Delivery',
@@ -10385,6 +10767,21 @@
       this.updateActiveOrderCard();
       this.updateHUDStats();
       this.refreshStatusPanel();
+
+      // First-run: clear onboarding after the first successful delivery.
+      if (this._onboardingActive && this.deliveriesMade === 1) {
+        this._onboardingActive = false;
+        this._dismissOnboardingHint();
+        if (this._firstOpenTime) {
+          const ms = Date.now() - this._firstOpenTime;
+          console.info('[Shiplyp] first_open_to_first_delivery_ms', ms);
+        }
+      }
+
+      // Shift Milestone: trigger shift celebration modal every 5 drops
+      if (this.deliveriesMade > 0 && this.deliveriesMade % 5 === 0) {
+        setTimeout(() => this.showShiftSummary(), 1400);
+      }
     }
 
     spawnParcelTrail(pos) {
@@ -10482,26 +10879,6 @@
       }
     }
 
-    spawnPotholeSplash(pos, count = 14) {
-      if (!this.scene) return;
-      const geom = new THREE.BoxGeometry(0.12, 0.12, 0.12);
-      for (let i = 0; i < count; i++) {
-        const mat = new THREE.MeshBasicMaterial({ color: (Math.random() > 0.5 ? 0x2b1e16 : 0x1a1a1a) });
-        const mesh = new THREE.Mesh(geom, mat);
-        mesh.position.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 1.2, 0.2, (Math.random() - 0.5) * 1.2));
-        this.scene.add(mesh);
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 2.0 + Math.random() * 5.0;
-        this.particles.push({
-          mesh: mesh,
-          vel: new THREE.Vector3(Math.cos(angle) * speed, 4.0 + Math.random() * 6.0, Math.sin(angle) * speed),
-          rotVel: new THREE.Vector3(Math.random() * 8, Math.random() * 8, Math.random() * 8),
-          life: 0.8 + Math.random() * 0.4,
-          maxLife: 1.2,
-          gravity: 16.0
-        });
-      }
-    }
 
     updateParticles(dt) {
       for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -10670,6 +11047,370 @@
       }
 
       this.weatherMesh.geometry.attributes.position.needsUpdate = true;
+    }
+
+    // ── Vehicle canvas illustration helper ────────────────────────────────
+    _drawVehicleThumb(canvas, vehId) {
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+      const sx = W / 220, sy = H / 80;
+      const x = v => v * sx, y = v => v * sy;
+      const isLocked = canvas.closest && canvas.closest('.veh-locked');
+      ctx.save();
+      ctx.globalAlpha = isLocked ? 0.3 : 0.92;
+      const lw = Math.max(1.2, 1.5 * Math.min(sx, sy));
+      ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+      if (vehId === 'cycle') {
+        ctx.strokeStyle = '#00d4bf';
+        const rwx=x(42),rwy=y(57),rwr=x(17),fwx=x(166),fwy=y(57),fwr=x(17);
+        ctx.beginPath();ctx.arc(rwx,rwy,rwr,0,Math.PI*2);ctx.stroke();
+        ctx.beginPath();ctx.arc(fwx,fwy,fwr,0,Math.PI*2);ctx.stroke();
+        ctx.lineWidth=lw*0.35;ctx.globalAlpha=(isLocked?0.1:0.28);
+        for(const[cx,cy]of[[42,57],[166,57]]){for(let i=0;i<6;i++){const a=i*Math.PI/3;ctx.beginPath();ctx.moveTo(x(cx),y(cy));ctx.lineTo(x(cx)+x(15)*Math.cos(a),y(cy)+x(15)*Math.sin(a));ctx.stroke();}}
+        ctx.lineWidth=lw;ctx.globalAlpha=(isLocked?0.3:0.92);
+        const bbx=x(104),bby=y(56),scx=x(78),scy=y(24),htx=x(152),hty=y(30);
+        for(const[ax,ay,bx2,by2]of[[rwx,rwy,bbx,bby],[rwx,rwy,scx,scy],[bbx,bby,scx,scy],[scx,scy,htx,hty],[bbx,bby,htx,hty],[htx,hty,fwx,fwy]]){ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx2,by2);ctx.stroke();}
+        ctx.beginPath();ctx.moveTo(htx,hty);ctx.lineTo(x(155),y(22));ctx.stroke();
+        ctx.beginPath();ctx.moveTo(x(148),y(22));ctx.lineTo(x(162),y(22));ctx.stroke();
+        ctx.beginPath();ctx.moveTo(x(68),y(22));ctx.lineTo(x(88),y(22));ctx.stroke();
+        ctx.beginPath();ctx.moveTo(scx,scy);ctx.lineTo(x(22),y(36));ctx.stroke();
+        ctx.beginPath();ctx.moveTo(rwx,rwy-rwr);ctx.lineTo(x(22),y(36));ctx.stroke();
+        ctx.strokeRect(x(14),y(18),x(50),y(20));
+        ctx.beginPath();ctx.moveTo(x(14),y(18)+y(20)*0.28);ctx.lineTo(x(14)+x(50),y(18)+y(20)*0.28);ctx.stroke();
+        ctx.beginPath();ctx.arc(bbx,bby,x(4),0,Math.PI*2);ctx.stroke();
+      } else {
+        // musclecoupe
+        ctx.strokeStyle = '#ff9f1c';
+        const rwy2=y(60),rwx2=x(44),rwr2=x(16),fwx2=x(168);
+        ctx.beginPath();ctx.arc(rwx2,rwy2,rwr2,0,Math.PI*2);ctx.stroke();
+        ctx.beginPath();ctx.arc(fwx2,rwy2,rwr2,0,Math.PI*2);ctx.stroke();
+        ctx.lineWidth=lw*0.5;ctx.globalAlpha=(isLocked?0.1:0.45);
+        for(const cx of[44,168]){ctx.beginPath();ctx.arc(x(cx),rwy2,x(6),0,Math.PI*2);ctx.stroke();}
+        ctx.lineWidth=lw;ctx.globalAlpha=(isLocked?0.3:0.92);
+        const body=[[18,60],[18,52],[26,48],[52,32],[70,22],[136,20],[158,28],[180,40],[202,44],[202,52],[184,60],[156,56],[130,60],[60,60],[36,56],[18,60]];
+        ctx.beginPath();body.forEach(([px,py],i)=>{if(i===0)ctx.moveTo(x(px),y(py));else ctx.lineTo(x(px),y(py));});ctx.stroke();
+        ctx.lineWidth=lw*0.7;ctx.globalAlpha=(isLocked?0.15:0.55);
+        ctx.beginPath();ctx.moveTo(x(136),y(20));ctx.lineTo(x(158),y(28));ctx.stroke();
+        ctx.beginPath();ctx.moveTo(x(70),y(22));ctx.lineTo(x(52),y(32));ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ── Post-delivery result banner with tachometer arcs ─────────────────
+    _showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak, orderName, base, diffMult }) {
+      if (!this.scorePopupContainer) return;
+      const timeFill  = Math.max(0.04, Math.min(1, timeLeftRatio));
+      const accFill   = stars === 3 ? 0.9 : (stars === 2 ? 0.65 : 0.3);
+      const strFill   = Math.min(1, Math.max(0.04, (streak - 1) / 9));
+      const timeColor = timeFill > 0.55 ? '#00d4bf' : (timeFill > 0.25 ? '#ff9f1c' : '#ff2d4e');
+      const strColor  = streak >= 3 ? '#ff9f1c' : 'rgba(255,255,255,0.3)';
+      const circ = Math.PI * 28;
+      const arc = (fill, colour, label) => {
+        const offset = circ * (1 - fill);
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:5px">
+          <div style="position:relative;width:62px;height:36px;overflow:hidden">
+            <svg width="62" height="36" viewBox="0 0 70 40">
+              <path d="M7,36 A28,28 0 0,1 63,36" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="5" stroke-linecap="round"/>
+              <path d="M7,36 A28,28 0 0,1 63,36" fill="none" stroke="${colour}" stroke-width="5" stroke-linecap="round"
+                stroke-dasharray="${circ.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"/>
+            </svg>
+          </div>
+          <span style="font-size:8px;letter-spacing:.12em;color:rgba(232,238,242,0.45);text-transform:uppercase">${label}</span>
+        </div>`;
+      };
+      const label = timeLeftRatio > 0.55 ? `${UI.icon('bolt')} EXPRESS SPEED` : (timeLeftRatio > 0.25 ? `${UI.icon('target')} ON-TIME` : `${UI.icon('clock')} LATE DROP`);
+      const banner = document.createElement('div');
+      banner.className = 'score-popup-banner score-popup-delivery';
+      banner.innerHTML = `
+        <div style="font-size:10px;letter-spacing:.16em;color:var(--comic-green,#22e565);font-family:var(--font-telemetry,'Chakra Petch',monospace);font-weight:800;text-transform:uppercase;margin-bottom:4px">${label}</div>
+        <div style="font-size:24px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-weight:800;color:var(--comic-yellow,#ffe600);text-shadow:2px 2px 0px #000;margin-bottom:10px">+₹${earnedBonus.toLocaleString('en-IN')}</div>
+        <div style="display:flex;gap:14px;margin-bottom:10px;justify-content:center">
+          ${arc(timeFill, timeColor, 'Time')}
+          ${arc(accFill, '#ffe600', 'Accuracy')}
+          ${arc(strFill, strColor, `${streak}× Streak`)}
+        </div>
+        <div style="font-size:10px;font-family:var(--font-telemetry,'Chakra Petch',monospace);color:rgba(232,238,242,0.65);letter-spacing:.08em">₹${(base||0)} base • ×${(diffMult||1).toFixed(1)} diff • +${streak > 1 ? Math.round((streak-1)*20) : 0}% streak</div>
+      `;
+      this.scorePopupContainer.appendChild(banner);
+      setTimeout(() => {
+        banner.style.opacity = '0';
+        banner.style.transform = 'translateY(-12px) scale(0.95)';
+        banner.style.transition = 'all 0.3s ease';
+        setTimeout(() => banner.remove(), 300);
+      }, 3200);
+    }
+
+    // ── Unlock confirmation sheet ─────────────────────────────────────────
+    _showUnlockSheet(vehId) {
+      const VEH_META_SHEET = {
+        musclecoupe: { name: 'Muscle Coupe', stat: 'Gasoline • Top speed class', price: 6000, topSpeedKmh: 194, accel: 19, brake: 30, tint: '#ffe600' },
+      };
+      const meta = VEH_META_SHEET[vehId];
+      if (!meta) return;
+      const wallet = Career ? Career.wallet() : 0;
+      const canAfford = wallet >= meta.price;
+      const after = wallet - meta.price;
+
+      const existing = document.getElementById('veh-unlock-sheet');
+      if (existing) existing.remove();
+
+      const sheet = document.createElement('div');
+      sheet.id = 'veh-unlock-sheet';
+      sheet.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;background:rgba(7,9,15,0.7);backdrop-filter:blur(4px)';
+      sheet.innerHTML = `
+        <div style="width:100%;max-width:480px;background:#0e131d;border:3px solid #000;border-bottom:none;border-radius:18px 18px 0 0;padding:24px 24px 32px;box-shadow:0 -8px 0px #000">
+          <div style="font-size:10px;letter-spacing:.18em;color:#ffe600;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-weight:800;text-transform:uppercase;margin-bottom:14px">Unlock vehicle</div>
+          <canvas id="unlock-sheet-hero" width="800" height="220" style="width:100%;height:110px;border-radius:8px;margin-bottom:16px;border:2px solid #000;display:block"></canvas>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+            <div>
+              <div style="font-family:var(--font-display,'Russo One',sans-serif);font-size:22px;font-weight:900">${meta.name}</div>
+              <div style="font-size:11px;color:rgba(232,238,242,0.65);margin-top:2px">${meta.stat}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:10px;letter-spacing:1.5px;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);font-weight:800">COST</div>
+              <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:26px;font-weight:800;color:#ffe600;text-shadow:2px 2px 0px #000">₹${meta.price.toLocaleString('en-IN')}</div>
+            </div>
+          </div>
+          <div style="display:flex;border:2px solid #000;border-radius:10px;overflow:hidden;margin-bottom:14px;background:#151c2a">
+            <div style="flex:1;padding:10px 12px;border-right:2px solid #000"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Top speed</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">${meta.topSpeedKmh} km/h</div></div>
+            <div style="flex:1;padding:10px 12px;border-right:2px solid #000"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Accel</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">${meta.accel} m/s²</div></div>
+            <div style="flex:1;padding:10px 12px"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Brake</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">${meta.brake} m/s²</div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:10px 12px;background:rgba(255,255,255,0.06);border:1.5px solid #000;border-radius:8px;margin-bottom:16px;font-size:11px">
+            <span style="color:rgba(232,238,242,0.6)">Account after unlock</span>
+            <span style="color:${canAfford ? '#00f0ff' : '#ff006e'};font-weight:800;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-variant-numeric:tabular-nums">${canAfford ? '₹' + after.toLocaleString('en-IN') : 'Insufficient funds'}</span>
+          </div>
+          <div style="display:flex;gap:10px">
+            <button id="unlock-confirm-btn" style="flex:1;background:${canAfford ? '#ffe600' : 'rgba(255,255,255,0.08)'};color:${canAfford ? '#000000' : 'rgba(232,238,242,0.3)'};border:2.5px solid #000;border-radius:10px;padding:13px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;letter-spacing:.1em;box-shadow:3px 3px 0px #000;cursor:${canAfford ? 'pointer' : 'not-allowed'}">${canAfford ? 'CLAIM SHIFT' : `NEED ₹${(meta.price - wallet).toLocaleString('en-IN')} MORE`}</button>
+            <button id="unlock-cancel-btn" style="flex:0 0 auto;background:rgba(255,255,255,0.08);border:2px solid #000;border-radius:10px;padding:13px 18px;color:rgba(232,238,242,0.8);font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;box-shadow:2px 2px 0px #000;cursor:pointer">BACK</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(sheet);
+
+      // Draw hero canvas
+      const heroCanvas = document.getElementById('unlock-sheet-hero');
+      if (heroCanvas) {
+        const hctx = heroCanvas.getContext('2d');
+        hctx.fillStyle = 'rgba(10,14,22,1)';
+        hctx.fillRect(0, 0, heroCanvas.width, heroCanvas.height);
+        hctx.strokeStyle = 'rgba(255,230,0,0.08)';
+        hctx.lineWidth = 1;
+        for (let gx = 0; gx < heroCanvas.width; gx += 40) { hctx.beginPath(); hctx.moveTo(gx, 0); hctx.lineTo(gx, heroCanvas.height); hctx.stroke(); }
+        for (let gy = 0; gy < heroCanvas.height; gy += 40) { hctx.beginPath(); hctx.moveTo(0, gy); hctx.lineTo(heroCanvas.width, gy); hctx.stroke(); }
+        const grd = hctx.createRadialGradient(heroCanvas.width*0.5, heroCanvas.height*0.65, 8, heroCanvas.width*0.5, heroCanvas.height*0.65, heroCanvas.width*0.4);
+        grd.addColorStop(0, 'rgba(255,230,0,0.15)'); grd.addColorStop(1, 'rgba(255,230,0,0)');
+        hctx.fillStyle = grd; hctx.fillRect(0, 0, heroCanvas.width, heroCanvas.height);
+        this._drawVehicleThumb(heroCanvas, vehId);
+      }
+
+      sheet.querySelector('#unlock-cancel-btn').addEventListener('click', () => sheet.remove());
+      sheet.addEventListener('click', e => { if (e.target === sheet) sheet.remove(); });
+      if (canAfford) {
+        sheet.querySelector('#unlock-confirm-btn').addEventListener('click', () => {
+          if (!Career) return;
+          const result = Career.purchase('vehicles', vehId, meta.price);
+          if (result.ok) {
+            sheet.remove();
+            this.selectedVehicle = vehId;
+            if (Career && typeof Career.setSelectedVehicle === 'function') {
+              Career.setSelectedVehicle(vehId);
+            }
+            if (this.vehicle) this.vehicle.setVehicleType(vehId);
+            sound.playTone(880, 'sine', 0.12);
+            this.addNotification(`${UI.icon('check')} ${meta.name.toUpperCase()} UNLOCKED!`, 'success', 4000);
+            this.renderDispatchHub(); // re-render hub to show owned state
+          }
+        });
+      }
+    }
+
+    // ── Scenic Postcard & Photo Mode ──────────────────────────────────────
+    openPostcardMode() {
+      const currentBiome = this.currentDistrictName || this.currentBiomeName || 'The Grand Nilambari Corridor';
+      const speedKmh = this.vehicle ? Math.abs(Math.round(this.vehicle.speed * 3.6)) : 0;
+      const totalLen = this.world?.curve?.getLength() || 5000;
+      const distKm = this.vehicle ? (this.vehicle.splineProgress * totalLen / 1000).toFixed(1) : '0.0';
+      const vehName = this.selectedVehicle === 'cycle' ? 'Delivery Cycle' : 'Muscle Coupe';
+      const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+
+      const existing = document.getElementById('postcard-modal');
+      if (existing) existing.remove();
+
+      // Render 1 frame to ensure buffer has current view
+      if (this.composer) this.composer.render();
+      else if (this.renderer && this.scene && this.camera) this.renderer.render(this.scene, this.camera);
+
+      let imgData = '';
+      try {
+        imgData = this.renderer.domElement.toDataURL('image/jpeg', 0.92);
+      } catch (e) {
+        console.warn('Postcard snapshot capture failed:', e);
+      }
+
+      const modal = document.createElement('div');
+      modal.id = 'postcard-modal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(7,9,15,0.85);backdrop-filter:blur(8px);padding:16px;';
+
+      modal.innerHTML = `
+        <div style="max-width:540px;width:100%;background:#0e131d;border:3px solid #000;border-radius:16px;overflow:hidden;box-shadow:6px 6px 0px #000;display:flex;flex-direction:column;">
+          <div style="padding:14px 18px;border-bottom:2px solid #000;background:#151c2a;display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:11px;font-weight:800;letter-spacing:.18em;color:#ffe600;text-transform:uppercase;">SCENIC POSTCARD &bull; PHOTO MODE</span>
+            <button id="postcard-close-x" style="background:none;border:none;color:#ffffff;font-size:18px;font-weight:900;cursor:pointer;padding:4px 8px;">✕</button>
+          </div>
+          <div style="padding:16px;background:#06080d;display:flex;justify-content:center;">
+            <div id="postcard-frame" style="position:relative;width:100%;max-width:480px;border-radius:8px;overflow:hidden;border:3px solid #000;box-shadow:4px 4px 0px #000;">
+              ${imgData ? `<img src="${imgData}" style="width:100%;height:auto;display:block;" alt="Scenic Snapshot">` : `<div style="height:240px;background:#1a2230;"></div>`}
+              <div style="position:absolute;top:10px;left:10px;padding:4px 10px;background:#000000;border:2px solid #ffe600;border-radius:6px;font-family:var(--font-display,'Russo One',sans-serif);font-weight:900;font-size:12px;letter-spacing:1px;color:#ffe600;box-shadow:2px 2px 0px #000;">
+                SHIP<span style="color:#fff;">LYP</span>
+              </div>
+              <div style="position:absolute;bottom:0;left:0;right:0;padding:12px 14px;background:linear-gradient(0deg,rgba(7,9,15,0.95) 0%,rgba(7,9,15,0) 100%);display:flex;justify-content:space-between;align-items:flex-end;">
+                <div>
+                  <div style="font-family:var(--font-display,'Russo One',sans-serif);font-size:15px;font-weight:900;color:#fff;text-shadow:2px 2px 0px #000">${currentBiome.toUpperCase()}</div>
+                  <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:9.5px;font-weight:800;color:rgba(255,255,255,0.85);margin-top:2px;">${vehName.toUpperCase()} &bull; ${speedKmh} KM/H &bull; KM ${distKm}</div>
+                </div>
+                <div style="text-align:right;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:9px;font-weight:800;letter-spacing:1px;color:#ffe600;">
+                  ${today}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="padding:14px 18px;display:flex;gap:10px;background:#0e131d;border-top:2px solid #000;">
+            <button id="postcard-download-btn" style="flex:1.2;background:#ffe600;color:#000000;border:2.5px solid #000;border-radius:10px;padding:12px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;letter-spacing:.1em;box-shadow:3px 3px 0px #000;cursor:pointer;">DOWNLOAD POSTCARD</button>
+            <button id="postcard-resume-btn" style="flex:1;background:rgba(255,255,255,0.08);color:#fff;border:2px solid #000;border-radius:10px;padding:12px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;box-shadow:2px 2px 0px #000;cursor:pointer;">RESUME DRIVE</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      const closeModal = () => modal.remove();
+      modal.querySelector('#postcard-close-x')?.addEventListener('click', closeModal);
+      modal.querySelector('#postcard-resume-btn')?.addEventListener('click', closeModal);
+      modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+      modal.querySelector('#postcard-download-btn')?.addEventListener('click', () => {
+        if (!imgData) return;
+        const a = document.createElement('a');
+        a.href = imgData;
+        a.download = `ShipLyp-Postcard-${distKm}km.jpg`;
+        a.click();
+        this.addNotification(`${UI.icon('camera')} POSTCARD SAVED!`, 'success', 3000);
+      });
+    }
+
+    // ── Multi-Drop Shift Milestone Summary ────────────────────────────────
+    showShiftSummary() {
+      if (this._shiftSummaryActive) return;
+      this._shiftSummaryActive = true;
+
+      const wallet = Career ? Career.wallet() : this.earnings;
+      const rank = Career ? Career.rank() : { name: 'Rookie Courier', progress: 0.5 };
+      const shiftEarnings = this.earnings;
+
+      if (Career) {
+        Career.recordShift(shiftEarnings);
+      }
+
+      sound.playRepair();
+
+      const existing = document.getElementById('shift-summary-modal');
+      if (existing) existing.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'shift-summary-modal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(7,9,15,0.85);backdrop-filter:blur(8px);padding:16px;';
+
+      modal.innerHTML = `
+        <div style="max-width:440px;width:100%;background:#0e131d;border:3px solid #000;border-radius:18px;padding:24px;box-shadow:6px 6px 0px #000;display:flex;flex-direction:column;text-align:center;">
+          <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:11px;letter-spacing:.2em;color:var(--comic-cyan,#00f0ff);font-weight:800;text-transform:uppercase;margin-bottom:8px;">★ SHIFT COMPLETED ★</div>
+          <div style="font-family:var(--font-display,'Russo One',sans-serif);font-size:28px;font-weight:900;color:#fff;text-shadow:3px 3px 0px #000;margin-bottom:4px;">EXCELLENT WORK</div>
+          <div style="font-size:12px;font-family:var(--font-primary,'Barlow',sans-serif);font-weight:600;color:rgba(232,238,242,0.65);margin-bottom:20px;">${this.deliveriesMade} Deliveries Completed This Shift</div>
+
+          <div style="background:rgba(255,255,255,0.05);border:2px solid #000;border-radius:12px;padding:16px;margin-bottom:18px;display:flex;justify-content:space-around;box-shadow:2px 2px 0px #000">
+            <div>
+              <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:9px;letter-spacing:1.2px;color:rgba(232,238,242,0.5);font-weight:800;text-transform:uppercase;">SHIFT EARNED</div>
+              <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:24px;font-weight:800;color:#ffe600;text-shadow:2px 2px 0px #000;margin-top:2px;">+₹${shiftEarnings.toLocaleString('en-IN')}</div>
+            </div>
+            <div style="border-left:2px solid #000;padding-left:16px;">
+              <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:9px;letter-spacing:1.2px;color:rgba(232,238,242,0.5);font-weight:800;text-transform:uppercase;">TOTAL BALANCE</div>
+              <div id="shift-wallet-val" style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:24px;font-weight:800;color:var(--comic-green,#22e565);text-shadow:2px 2px 0px #000;margin-top:2px;">₹${wallet.toLocaleString('en-IN')}</div>
+            </div>
+          </div>
+
+          <div style="margin-bottom:16px;text-align:left;">
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px;">
+              <span style="font-family:var(--font-display,'Russo One',sans-serif);font-weight:800;color:#fff;">${rank.name}</span>
+              <span style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-weight:800;color:var(--comic-cyan,#00f0ff);">${Math.round(rank.progress * 100)}%</span>
+            </div>
+            <div style="width:100%;height:6px;background:rgba(0,0,0,0.6);border:1.5px solid #000;border-radius:4px;overflow:hidden;">
+              <div style="width:${Math.round(rank.progress * 100)}%;height:100%;background:linear-gradient(90deg, var(--comic-yellow), var(--comic-cyan));"></div>
+            </div>
+          </div>
+
+          <button id="shift-double-btn" style="width:100%;margin-bottom:12px;background:linear-gradient(135deg, #00f0ff, #22e565);color:#000;border:2.5px solid #000;border-radius:10px;padding:12px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:900;letter-spacing:.08em;box-shadow:3px 3px 0px #000;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+            <span>📺</span> <span>WATCH AD FOR 2x PAYOUT (+₹${shiftEarnings.toLocaleString('en-IN')})</span>
+          </button>
+
+          <div style="display:flex;gap:10px;">
+            <button id="shift-next-btn" style="flex:1.2;background:#ffe600;color:#000000;border:2.5px solid #000;border-radius:10px;padding:13px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;letter-spacing:.1em;box-shadow:3px 3px 0px #000;cursor:pointer;">NEXT SHIFT</button>
+            <button id="shift-hub-btn" style="flex:1;background:rgba(255,255,255,0.08);color:#fff;border:2px solid #000;border-radius:10px;padding:13px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;box-shadow:2px 2px 0px #000;cursor:pointer;">DISPATCH HUB</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      this._shiftDoubleClaimed = false;
+      const doubleBtn = modal.querySelector('#shift-double-btn');
+      doubleBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (this._shiftDoubleClaimed) return;
+        if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+          ShiplypAds.showRewarded('shift_double', {
+            onReward: () => {
+              this._shiftDoubleClaimed = true;
+              const bonus = shiftEarnings;
+              if (Career) {
+                Career.credit(bonus, 'rewarded_ad');
+              }
+              sound.playDeliverySuccess();
+              doubleBtn.style.background = '#22e565';
+              doubleBtn.innerHTML = `<span>✅</span> <span>2X BONUS CLAIMED (+₹${bonus.toLocaleString('en-IN')})</span>`;
+              doubleBtn.disabled = true;
+              doubleBtn.style.cursor = 'default';
+              const walletValEl = modal.querySelector('#shift-wallet-val');
+              if (walletValEl && Career) {
+                walletValEl.textContent = `₹${Career.wallet().toLocaleString('en-IN')}`;
+              }
+              this.addNotification(`📺 2x SHIFT BONUS: +₹${bonus.toLocaleString('en-IN')} CREDITED!`, 'success', 4000);
+            },
+            onError: () => {
+              this.addNotification('Sponsor message unavailable', 'info', 2000);
+            }
+          });
+        }
+      });
+
+      modal.querySelector('#shift-next-btn')?.addEventListener('click', () => {
+        modal.remove();
+        this._shiftSummaryActive = false;
+        if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+          ShiplypAds.showInterstitial('shift_next');
+        }
+        this.addNotification(`${UI.icon('bolt')} NEW SHIFT STARTED`, 'success', 3000);
+      });
+
+      modal.querySelector('#shift-hub-btn')?.addEventListener('click', () => {
+        modal.remove();
+        this._shiftSummaryActive = false;
+        if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+          ShiplypAds.showInterstitial('shift_hub');
+        }
+        this.renderDispatchHub();
+      });
     }
 
     showScoreBanner(title, sub) {
@@ -10846,6 +11587,7 @@
       document.getElementById('btn-hud-reset')?.addEventListener('click', () => {
         this.returnToRoad();
       });
+      document.getElementById('btn-hud-photo')?.addEventListener('click', () => this.openPostcardMode());
       document.getElementById('btn-hud-tod')?.addEventListener('click', () => this.cycleTimeOfDay());
       document.getElementById('btn-dock-tod')?.addEventListener('click', () => this.cycleTimeOfDay());
       document.getElementById('btn-hud-camera')?.addEventListener('click', () => this.toggleCameraMode());
@@ -10909,6 +11651,37 @@
           setTimeout(() => item.remove(), 250);
         }, duration);
       }
+    }
+
+    _showOnboardingHint(step) {
+      this._dismissOnboardingHint();
+      const isTouch = document.body.classList.contains('touch-controls-active') || ('ontouchstart' in window);
+      const dropKey = isTouch ? 'DROP' : 'SPACE';
+      const dropAction = isTouch ? 'Tap' : 'Press';
+      const el = document.createElement('div');
+      el.id = 'onboarding-hint';
+      el.className = 'onboarding-hint';
+      if (step === 'drive') {
+        el.innerHTML = `
+          <span class="onboarding-hint-icon">&#9650;</span>
+          <span class="onboarding-hint-text">Drive to the glowing ring</span>
+          <span class="onboarding-hint-sub">${dropAction} <kbd>${dropKey}</kbd> to drop when you're close</span>
+        `;
+      } else if (step === 'toss') {
+        el.innerHTML = `
+          <span class="onboarding-hint-icon">&#9632;</span>
+          <span class="onboarding-hint-text">You're close — ${dropAction.toLowerCase()} <kbd>${dropKey}</kbd> to drop!</span>
+        `;
+      }
+      document.body.appendChild(el);
+      requestAnimationFrame(() => el.classList.add('visible'));
+    }
+
+    _dismissOnboardingHint() {
+      const existing = document.getElementById('onboarding-hint');
+      if (!existing) return;
+      existing.classList.remove('visible');
+      setTimeout(() => existing.remove(), 350);
     }
 
     toggleRadioMute() {
@@ -11026,10 +11799,13 @@
       // stale lateralVelocity the instant control returns — zero it here
       // so there's no timing window at all, not just a fast one.
       if (!this.vehicle.isAutodrive) this.vehicle.lateralVelocity = 0;
+      const isAuto = this.vehicle.isAutodrive;
+
+      // Desktop HUD Pill
       const pill = document.getElementById('btn-hud-autodrive');
       const text = document.getElementById('autodrive-text');
       if (pill && text) {
-        if (this.vehicle.isAutodrive) {
+        if (isAuto) {
           pill.classList.add('autodrive-active');
           text.textContent = 'AUTOPILOT [ON]';
         } else {
@@ -11037,6 +11813,23 @@
           text.textContent = 'AUTOPILOT [F]';
         }
       }
+
+      // Mobile Touch HUD Button
+      const touchAutoBtn = document.getElementById('touch-btn-autopilot');
+      if (touchAutoBtn) {
+        if (isAuto) {
+          touchAutoBtn.classList.add('autodrive-active');
+          touchAutoBtn.setAttribute('aria-pressed', 'true');
+        } else {
+          touchAutoBtn.classList.remove('autodrive-active');
+          touchAutoBtn.setAttribute('aria-pressed', 'false');
+        }
+      }
+
+      // Haptic and audio feedback
+      if (navigator.vibrate) navigator.vibrate(isAuto ? [30, 40, 30] : 35);
+      sound.playTone(isAuto ? 880 : 440, 'sine', 0.1);
+      this.showScorePopup(0, isAuto ? '🤖 AUTOPILOT ENGAGED' : '🕹️ MANUAL DRIVE');
     }
 
     toggleCameraMode() {
@@ -11398,19 +12191,21 @@
         'bottom: 120px',
         'left: 50%',
         'transform: translateX(-50%)',
-        'background: linear-gradient(135deg, rgba(255,60,0,0.96) 0%, rgba(200,10,10,0.96) 100%)',
+        'background: linear-gradient(135deg, #ff0055 0%, #e60000 100%)',
         'color: #fff',
         'padding: 14px 32px',
-        'border-radius: 50px',
-        'font-family: Outfit, sans-serif',
-        'font-size: 1.1rem',
-        'font-weight: 700',
-        'letter-spacing: 0.04em',
+        'border-radius: 12px',
+        'font-family: var(--font-display, "Russo One", sans-serif)',
+        'font-size: 1.05rem',
+        'font-weight: 900',
+        'font-style: italic',
+        'text-transform: uppercase',
+        'letter-spacing: 0.05em',
         'text-align: center',
-        'box-shadow: 0 8px 40px rgba(255,60,0,0.55), 0 2px 0 rgba(255,255,255,0.1) inset',
+        'box-shadow: 4px 4px 0px #000',
         'z-index: 8888',
         'cursor: pointer',
-        'border: 2px solid rgba(255,200,120,0.45)',
+        'border: 3px solid #000',
         'animation: rtrPulse 1.2s ease-in-out infinite alternate'
       ].join(';');
       banner.innerHTML = UI.icon('map') + '&nbsp; YOU ARE OFF-ROAD &nbsp;|&nbsp; Press <kbd style="background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:6px;">R</kbd> or tap here to Return to Road';
@@ -11441,6 +12236,19 @@
 
     startDrive() {
       this.gameState = 'playing';
+      if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+        ShiplypAds.gameplayStart();
+      }
+      this.reconcileSelectedVehicle();
+      if (this.vehicle && this.vehicle.vehicleType !== this.selectedVehicle) {
+        this.vehicle.setVehicleType(this.selectedVehicle);
+      }
+      // Career bookkeeping for the shift that is about to start. The distance
+      // marker is what makes banking idempotent: VehicleController.distanceTraveled
+      // is cumulative on a vehicle instance that outlives a single shift, so
+      // only the delta since this point may be added to the career total.
+      if (Career) Career.beginShift();
+      this._distanceBanked = this.vehicle ? this.vehicle.distanceTraveled : 0;
       sound.resumeForGameplay();
       this.modalContainer.innerHTML = '';
       this.hudOverlay.style.display = 'block';
@@ -11451,6 +12259,8 @@
       this.wantedDecayTimer = 0;
       this.isJailed = false;
       this.updateWantedHUD();
+      const gearEl = document.getElementById('telemetry-gear');
+      if (gearEl) gearEl.textContent = this.selectedVehicle === 'cycle' ? 'PEDAL' : 'DRIVE';
 
       if (this.savedProgressCheckpoint === null) {
         this.savedProgressCheckpoint = {
@@ -11476,8 +12286,26 @@
         this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
         this.vehicle.heading = this.vehicle.velocityHeading;
         this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = 10.0;
+        this.vehicle.speed = (this.vehicle.vehicleType === 'cycle') ? 8.89 : 10.0;
         this.updateGPSNavigation();
+      }
+
+      // First-run: teleport the vehicle close to the first target so the player
+      // sees it immediately and can complete a delivery within ~30 seconds.
+      if (this._onboardingActive && this.world?.deliveryTargets?.length && this.world.curve) {
+        const target = this.world.deliveryTargets[0];
+        const targetU = target.splineU;
+        const totalL = this.world.curve.getLength();
+        const approachU = Math.max(0, targetU - 18.0 / totalL);
+        const pt = this.world.curve.getPointAt(approachU);
+        const tang = this.world.curve.getTangentAt(approachU);
+        this.vehicle.mesh.position.copy(pt).add(new THREE.Vector3(0, 0.39, 0));
+        this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
+        this.vehicle.heading = this.vehicle.velocityHeading;
+        this.vehicle.splineProgress = approachU;
+        this.vehicle.speed = (this.vehicle.vehicleType === 'cycle') ? 8.89 : 8.0;
+        this.updateGPSNavigation();
+        this._showOnboardingHint('drive');
       }
 
       if (this.vehicle) {
@@ -11491,8 +12319,42 @@
       this.updateAudioHUDButtons();
     }
 
+    reconcileSelectedVehicle() {
+      const fallback = 'cycle';
+      if (typeof Career !== 'undefined' && Career && typeof Career.isUnlocked === 'function') {
+        if (!Career.isUnlocked('vehicles', this.selectedVehicle)) {
+          const validVeh = (typeof Career.selectedVehicle === 'function' ? Career.selectedVehicle() : null)
+            || (typeof Career.defaultVehicle === 'function' ? Career.defaultVehicle() : null)
+            || fallback;
+          this.selectedVehicle = validVeh;
+        }
+        if (typeof Career.setSelectedVehicle === 'function') {
+          Career.setSelectedVehicle(this.selectedVehicle);
+        }
+      } else {
+        if (this.selectedVehicle !== 'cycle' && this.selectedVehicle !== 'musclecoupe') {
+          this.selectedVehicle = fallback;
+        }
+      }
+      return this.selectedVehicle;
+    }
+
     renderDispatchHub() {
+      this.reconcileSelectedVehicle();
+      // Coming back from a drive: close the shift out BEFORE gameState flips,
+      // since that flag is the only signal that a shift was in progress. Only
+      // the distance travelled since the shift began is banked — distanceTraveled
+      // is cumulative across shifts on a surviving vehicle instance.
+      if (Career && this.gameState === 'playing') {
+        const traveled = this.vehicle ? this.vehicle.distanceTraveled : 0;
+        Career.endShift({ distanceKm: Math.max(0, traveled - (this._distanceBanked || 0)) });
+        this._distanceBanked = traveled;
+      }
+
       this.gameState = 'menu';
+      if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+        ShiplypAds.gameplayStop();
+      }
       sound.suspendForMenu();
       this.hudOverlay.style.display = 'none';
       this.dockEl.style.display = 'none';
@@ -11511,9 +12373,13 @@
       // undisturbed, so a picker can come back later without rebuilding
       // this from scratch if a second world is ever actually built out.
 
+      const VEH_META = {
+        musclecoupe: { price: 6000, topSpeedKmh: 194, accel: 19, brake: 30, tint: '#ff9f1c' },
+        cycle:       { price: 0,     topSpeedKmh: 52,  accel: 4,  brake: 8,  tint: '#00d4bf' },
+      };
       const vehList = [
-        { id: 'musclecoupe', name: 'Muscle Coupe',        stat: '194 km/h • Gasoline' },
-        { id: 'cycle',       name: 'Delivery Cycle',      stat: '22 km/h • Pedal Power' },
+        { id: 'cycle',       name: 'Delivery Cycle', stat: '32–52 km/h • Pedal Power' },
+        { id: 'musclecoupe', name: 'Muscle Coupe',   stat: '194 km/h • Gasoline'  },
       ];
 
       const styleList = [
@@ -11523,6 +12389,53 @@
       ];
       const currentStyle = this.visualStyle?.selectedStyle || VisualStyleManager.DEFAULT_STYLE;
 
+      // Career strip: the only place a returning player sees that the last
+      // session actually counted. Rendered from the persisted profile, never
+      // from live engine state, so what it shows is exactly what was saved.
+      let careerStrip = '';
+      if (Career) {
+        const rank = Career.rank();
+        const stats = Career.career();
+        const daily = this._dailyCheckIn;
+        const pct = Math.round(rank.progress * 100);
+        const nextLine = rank.next
+          ? `₹${rank.toNext.toLocaleString('en-IN')} to ${rank.next.name}`
+          : 'Top rank reached';
+        const dailyLine = (daily && daily.bonus > 0)
+          ? `<div class="career-daily-row">${UI.icon('flame', 13)} Day ${daily.streak} check-in &bull; +₹${daily.bonus} paid into your account</div>`
+          : '';
+
+        careerStrip = `
+          <div class="hub-career-strip">
+            <div class="career-top-row">
+              <div class="career-identity">
+                <span class="career-rank-name">${rank.name}</span>
+                <span class="career-rank-next">${nextLine}</span>
+              </div>
+              <div class="career-bank">
+                <span class="career-bank-label">ACCOUNT</span>
+                <span class="career-bank-value">₹${Career.wallet().toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+            <div class="career-rank-track"><div class="career-rank-fill" style="width: ${pct}%"></div></div>
+            <div class="career-stats-row">
+              <span><b>${stats.deliveries.toLocaleString('en-IN')}</b> ${stats.deliveries === 1 ? 'DROP' : 'DROPS'}</span>
+              <span><b>${stats.distanceKm.toFixed(1)}</b> KM</span>
+              <span><b>${stats.bestStreak}x</b> BEST STREAK</span>
+              <span><b>${stats.shifts}</b> ${stats.shifts === 1 ? 'SHIFT' : 'SHIFTS'}</span>
+            </div>
+            ${dailyLine}
+          </div>
+        `;
+      }
+
+      const onboardingBanner = this._onboardingActive ? `
+        <div class="hub-onboarding-banner">
+          <span class="onboarding-banner-title">Welcome to Shiplyp</span>
+          <span class="onboarding-banner-body">Your first delivery is waiting just down the road. Drive up to the glowing ring and press SPACE to drop the parcel.</span>
+        </div>
+      ` : '';
+
       this.modalContainer.innerHTML = `
         <div class="modal-backdrop">
           <div class="shiplyp-hub-card">
@@ -11531,16 +12444,29 @@
             </div>
             <p class="hub-tagline">Endless Driving • India Roads</p>
 
+            ${onboardingBanner}
+            ${careerStrip}
+
             <!-- 3. Select Vehicle -->
             <div class="hub-vehicle-selector">
               <span class="hub-section-label">SELECT VEHICLE</span>
               <div class="hub-vehicle-grid">
-                ${vehList.map(v => `
-                  <button class="vehicle-card-btn ${this.selectedVehicle === v.id ? 'active-veh' : ''}" data-veh="${v.id}">
-                    <span class="vehicle-card-title">${v.name}</span>
-                    <span class="vehicle-card-stat">${v.stat}</span>
-                  </button>
-                `).join('')}
+                ${vehList.map(v => {
+                  const meta = VEH_META[v.id] || {};
+                  const unlocked = Career ? Career.isUnlocked('vehicles', v.id) : true;
+                  const wallet = Career ? Career.wallet() : 0;
+                  const canAfford = wallet >= (meta.price || 0);
+                  const shortfall = (meta.price || 0) - wallet;
+                  const ctaLabel = canAfford ? 'CLAIM SHIFT' : `NEED ₹${shortfall.toLocaleString('en-IN')} MORE`;
+                  const isSelected = this.selectedVehicle === v.id;
+                  return `
+                    <button class="vehicle-card-btn ${isSelected ? 'active-veh' : ''} ${unlocked ? '' : 'veh-locked'}" data-veh="${v.id}" data-unlocked="${unlocked}">
+                      <span class="vehicle-card-title">${v.name}</span>
+                      <span class="vehicle-card-stat">${v.stat}</span>
+                      ${!unlocked ? `<span class="veh-lock-cost">₹${(meta.price||0).toLocaleString('en-IN')}</span><span class="veh-lock-cta">${ctaLabel}</span>` : ''}
+                    </button>
+                  `;
+                }).join('')}
               </div>
             </div>
 
@@ -11559,10 +12485,11 @@
             </div>
 
             <button id="btn-start-dispatch" class="btn-launch-dispatch">
-              <span>DRIVE</span>
+              <span>${this._onboardingActive ? 'FIRST DELIVERY' : 'DRIVE'}</span>
             </button>
 
             <div class="hub-footer-links">
+              <button id="btn-hub-sponsor" class="hub-link-btn" style="color:var(--comic-green,#22e565);font-weight:800;"><span>📺 SPONSOR (+₹500)</span></button>
               <button id="btn-hub-mute" class="hub-link-btn"><span>${sound.muted ? 'UNMUTE [M]' : 'MUTE [M]'}</span></button>
               <button id="btn-hub-fleet" class="hub-link-btn">SETTINGS</button>
             </div>
@@ -11570,11 +12497,19 @@
         </div>
       `;
 
-
       this.modalContainer.querySelectorAll('.vehicle-card-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.preventDefault();
-          this.selectedVehicle = btn.dataset.veh;
+          const vehId = btn.dataset.veh;
+          const unlocked = btn.dataset.unlocked === 'true';
+          if (!unlocked) {
+            this._showUnlockSheet(vehId);
+            return;
+          }
+          this.selectedVehicle = vehId;
+          if (Career && typeof Career.setSelectedVehicle === 'function') {
+            Career.setSelectedVehicle(vehId);
+          }
           this.modalContainer.querySelectorAll('.vehicle-card-btn').forEach(b => b.classList.remove('active-veh'));
           btn.classList.add('active-veh');
           if (this.vehicle) this.vehicle.setVehicleType(this.selectedVehicle);
@@ -11604,6 +12539,31 @@
         } else {
           this.buildWorldAndScene();
           this.startDrive();
+        }
+      });
+      document.getElementById('btn-hub-sponsor')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const now = Date.now();
+        if (this._sponsorAdCooldown && now < this._sponsorAdCooldown) {
+          const waitSecs = Math.ceil((this._sponsorAdCooldown - now) / 1000);
+          this.addNotification(`⏳ SPONSOR COOLDOWN: WAIT ${waitSecs}s`, 'info', 2000);
+          return;
+        }
+        if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
+          ShiplypAds.showRewarded('sponsor_cash', {
+            onReward: () => {
+              this._sponsorAdCooldown = Date.now() + 60000;
+              if (Career) {
+                Career.credit(500, 'sponsor_ad');
+              }
+              sound.playDeliverySuccess();
+              this.addNotification('📺 +₹500 SPONSOR CASH CREDITED TO ACCOUNT!', 'success', 3500);
+              this.renderDispatchHub();
+            },
+            onError: () => {
+              this.addNotification('Sponsor ad unavailable, try again later', 'info', 2000);
+            }
+          });
         }
       });
       document.getElementById('btn-hub-mute')?.addEventListener('click', (e) => {
@@ -11758,21 +12718,31 @@
             sound.playTone(680, 'sine', 0.1);
           };
         });
-      } else if (type === 'vehicle') {
+        const isMuscleUnlocked = Career ? Career.isUnlocked('vehicles', 'musclecoupe') : true;
+        const isCycleUnlocked = Career ? Career.isUnlocked('vehicles', 'cycle') : true;
         el.innerHTML = `
           <div class="dock-panel-grid">
             <div class="dock-panel-col">
               <span class="dock-panel-label">VEHICLE</span>
               <div class="dock-btn-row">
-                <button class="dock-sq-btn ${this.selectedVehicle === 'musclecoupe' ? 'active-sq' : ''}" data-v="musclecoupe">MUSCLE</button>
-                <button class="dock-sq-btn ${this.selectedVehicle === 'cycle' ? 'active-sq' : ''}" data-v="cycle">CYCLE</button>
+                <button class="dock-sq-btn ${this.selectedVehicle === 'musclecoupe' ? 'active-sq' : ''} ${!isMuscleUnlocked ? 'veh-dock-locked' : ''}" data-v="musclecoupe" title="${!isMuscleUnlocked ? 'Locked (Requires ₹6,000 in Career)' : 'Muscle Coupe'}">${!isMuscleUnlocked ? '🔒 ' : ''}MUSCLE</button>
+                <button class="dock-sq-btn ${this.selectedVehicle === 'cycle' ? 'active-sq' : ''} ${!isCycleUnlocked ? 'veh-dock-locked' : ''}" data-v="cycle" title="${!isCycleUnlocked ? 'Locked' : 'Delivery Cycle'}">${!isCycleUnlocked ? '🔒 ' : ''}CYCLE</button>
               </div>
             </div>
           </div>
         `;
         el.querySelectorAll('[data-v]').forEach(b => {
           b.onclick = () => {
-            this.selectedVehicle = b.dataset.v;
+            const vehId = b.dataset.v;
+            if (Career && !Career.isUnlocked('vehicles', vehId)) {
+              sound.playTone(300, 'square', 0.1);
+              this.addNotification('🔒 VEHICLE LOCKED — UNLOCK IN DISPATCH HUB', 'warning', 3000);
+              return;
+            }
+            this.selectedVehicle = vehId;
+            if (Career && typeof Career.setSelectedVehicle === 'function') {
+              Career.setSelectedVehicle(vehId);
+            }
             this.vehicle.setVehicleType(this.selectedVehicle);
             this.renderDockPanelContent('vehicle');
             sound.playTone(800, 'sine', 0.1);
@@ -11968,22 +12938,6 @@
     }
 
     updateCamera(dt) {
-      if (this.onFoot && this.walkerMesh) {
-        // Simple third-person follow cam for the on-foot courier — reuses
-        // the same spring-lerp feel as the chase cam, just closer/lower
-        // since the subject is a person, not a vehicle.
-        const walkerPos = this.walkerMesh.position;
-        const walkerForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.walkerMesh.quaternion).normalize();
-        const targetCamPos = walkerPos.clone()
-          .addScaledVector(walkerForward, -3.4)
-          .add(new THREE.Vector3(0, 1.9, 0));
-        const posLerp = Math.min(1.0, 1.0 - Math.exp(-16.0 * dt));
-        this.camera.position.lerp(targetCamPos, posLerp);
-        const lookTarget = walkerPos.clone().add(new THREE.Vector3(0, 1.1, 0));
-        this.camera.lookAt(lookTarget);
-        this.updateOccluderFade(dt, lookTarget);
-        return;
-      }
 
       if (typeof window !== 'undefined' && window.location.search.includes('view_villa=1') && this.world?.deliveryTargets?.length) {
         const target = this.world.deliveryTargets[0];
@@ -12084,31 +13038,41 @@
         this.camLookTarget.lerp(rawLookTarget, Math.min(1.0, 1.0 - Math.exp(-16.0 * dt)));
         this.camera.lookAt(this.camLookTarget);
       } else {
-        // Slow Roads Default Chase Cam — intimate framing (~7.8m back, 2.6m up, 64-72 deg FOV)
+        // Slow Roads Default Chase Cam — intimate framing (~7.8m back for cars, ~5.6m back for cycle)
+        const isCycle = (this.vehicle && this.vehicle.vehicleType === 'cycle');
+        const camDist = isCycle ? -5.6 : -7.8;
+        const camHeight = isCycle ? 2.1 : 2.6;
         const targetCamPos = carPos.clone()
-          .addScaledVector(carForward, -7.8)
-          .add(new THREE.Vector3(0, 2.6, 0));
+          .addScaledVector(carForward, camDist)
+          .add(new THREE.Vector3(0, camHeight, 0));
 
-        // High responsiveness spring-lerp (keeps camera tightly bound to vehicle at any speed)
-        const posLerp = Math.min(1.0, 1.0 - Math.exp(-14.0 * dt));
+        // High responsiveness spring-lerp tuned for vehicle scale
+        const posLerpRate = isCycle ? 8.5 : 14.0;
+        const posLerp = Math.min(1.0, 1.0 - Math.exp(-posLerpRate * dt));
         this.camera.position.lerp(targetCamPos, posLerp);
 
         // Ground clearance check relative strictly to roadbed
-        const minY = carPos.y + 1.4;
-        const maxY = carPos.y + 4.5;
+        const minY = carPos.y + (isCycle ? 1.1 : 1.4);
+        const maxY = carPos.y + (isCycle ? 3.8 : 4.5);
         this.camera.position.y = THREE.MathUtils.clamp(this.camera.position.y, minY, maxY);
 
         // Look-ahead target down the road centerline / motion direction
+        const lookAheadDist = isCycle ? 16.0 : 20.0;
+        const lookHeight = isCycle ? 0.75 : 0.85;
         const rawLookTarget = carPos.clone()
-          .addScaledVector(carForward, 20.0)
-          .add(new THREE.Vector3(0, 0.85, 0));
-        const lookLerp = Math.min(1.0, 1.0 - Math.exp(-20.0 * dt));
+          .addScaledVector(carForward, lookAheadDist)
+          .add(new THREE.Vector3(0, lookHeight, 0));
+        const lookLerpRate = isCycle ? 11.0 : 20.0;
+        const lookLerp = Math.min(1.0, 1.0 - Math.exp(-lookLerpRate * dt));
         this.camLookTarget.lerp(rawLookTarget, lookLerp);
         this.camera.lookAt(this.camLookTarget);
 
-        // Dynamic Speed FOV (64 deg baseline -> 72 deg at top speed)
-        const speedRatio = Math.min(1.0, Math.abs(this.vehicle.speed) / (this.vehicle.maxSpeed || 40));
-        const targetFOV = 64.0 + speedRatio * 8.0;
+        // Dynamic Speed FOV
+        const maxVSpd = this.vehicle.maxSpeed || (isCycle ? 10.56 : 40);
+        const speedRatio = Math.min(1.0, Math.abs(this.vehicle.speed) / maxVSpd);
+        const baseFOV = isCycle ? 62.0 : 64.0;
+        const rangeFOV = isCycle ? 6.0 : 8.0;
+        const targetFOV = baseFOV + speedRatio * rangeFOV;
         this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFOV, 0.1);
         this.camera.updateProjectionMatrix();
       }
@@ -12149,10 +13113,8 @@
 
     updateGPSNavigation() {
       if (!this.world || !this.vehicle) return;
-      const playerPos = (this.onFoot && this.walkerMesh) ? this.walkerMesh.position : this.vehicle.mesh.position;
-      const playerForward = (this.onFoot && this.walkerMesh)
-        ? new THREE.Vector3(0, 0, 1).applyQuaternion(this.walkerMesh.quaternion).normalize()
-        : new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
+      const playerPos = this.vehicle.mesh.position;
+      const playerForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
       const carPos = playerPos;
 
       // Find next undelivered target
@@ -12184,9 +13146,7 @@
 
       if (nextTarget) {
         const toTarget = nextTarget.pos.clone().sub(playerPos);
-        const playerRight = (this.onFoot && this.walkerMesh)
-          ? new THREE.Vector3(-1, 0, 0).applyQuaternion(this.walkerMesh.quaternion)
-          : new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion);
+        const playerRight = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion);
         const sideDot = playerRight.dot(toTarget);
         const sideText = sideDot > 0 ? 'RIGHT' : 'LEFT';
         const distMeters = Math.round(minDistance);
@@ -12199,7 +13159,7 @@
         if (gpsDistEl) gpsDistEl.textContent = `${distMeters}m`;
 
         // Modern Delivery Capsule update
-        if (tagTextEl) tagTextEl.textContent = this.onFoot ? 'DOORSTEP' : 'EXPRESS DROP';
+        if (tagTextEl) tagTextEl.textContent = 'EXPRESS DROP';
         if (payoutTextEl) payoutTextEl.textContent = `+₹${nextTarget.order?.reward || 85}`;
         if (destNameEl) destNameEl.textContent = nextTarget.order?.name || 'Scenic Drop Point';
         if (cargoDescEl) cargoDescEl.textContent = nextTarget.order?.cargo || 'Express Package';
@@ -12209,32 +13169,27 @@
         }
         if (sideBadgeEl) sideBadgeEl.textContent = `${aheadText} [${sideText}]`;
 
-        // Approach state within 65m or anytime on foot
-        if (this.onFoot) {
-          capsule?.classList.add('delivery-approaching');
-          if (promptEl) {
-            promptEl.style.display = 'flex';
-            promptEl.innerHTML = `
-              <div class="action-key-pill"><span class="key-cap">SPACE</span> DELIVER TO DOOR</div>
-              <span class="action-sep">•</span>
-              <div class="action-key-pill"><span class="key-cap">E</span> RETURN TO VEHICLE</div>
-            `;
-          }
-        } else if (distMeters <= 65 && isAhead) {
+        // Approach state within 75m
+        const isNearDrop = (distMeters <= 75 && isAhead);
+        const touchDropBtn = document.getElementById('touch-btn-drop');
+
+        if (isNearDrop) {
           capsule?.classList.add('delivery-approaching');
           if (promptEl) {
             promptEl.style.display = 'flex';
             promptEl.innerHTML = `
               <div class="action-key-pill"><span class="key-cap">SPACE</span> EXPRESS DROP</div>
-              <span class="action-sep">•</span>
-              <div class="action-key-pill"><span class="key-cap">E</span> DELIVER ON FOOT</div>
             `;
           }
+          if (touchDropBtn) touchDropBtn.style.display = 'flex';
         } else {
           capsule?.classList.remove('delivery-approaching');
           if (promptEl) promptEl.style.display = 'none';
+          if (touchDropBtn) touchDropBtn.style.display = 'none';
         }
       } else {
+        const touchDropBtn = document.getElementById('touch-btn-drop');
+        if (touchDropBtn) touchDropBtn.style.display = 'none';
         if (wpTargetEl) wpTargetEl.textContent = 'ALL ORDERS DELIVERED!';
         if (wpDistEl) wpDistEl.textContent = 'PROCEED TO DISPATCH HUB';
         if (gpsDistEl) gpsDistEl.textContent = '0m';
@@ -12457,10 +13412,18 @@
         this._fpsAccumFrames = 0;
       }
 
-      if (this.gameState === 'playing') {
-        if (this.onFoot) {
-          this.updateWalking(dt);
+      if (this._adPaused) {
+        if (this.composer) {
+          this.visualStyle?.preRender();
+          this.composer.render();
         } else {
+          this.renderer.render(this.scene, this.camera);
+        }
+        return;
+      }
+
+      if (this.gameState === 'playing') {
+        {
           // Fixed-step substepping: heavier post-processing (bloom/FXAA at
           // tier 5-6) can drag render FPS down enough that a single dt=0.1s
           // physics step overshoots steering/suspension integration and
@@ -12487,6 +13450,8 @@
 
         this.world.updateTraffic(dt);
         this.world.updateCrossers(dt);
+        this.world.updatePatrons(dt, this.vehicle.mesh.position);
+        this.world.updateTrafficSignals(dt);
         if (this.vehicle && this.vehicle.mesh && this.world.updateFoliageVisibility) {
           this.world.updateFoliageVisibility(this.vehicle.mesh.position);
         }
@@ -12509,6 +13474,21 @@
         this.updateClimateHUD();
         this.updateHealthHUD();
 
+        // Switch onboarding hint from "drive" to "toss" when close to target
+        if (this._onboardingActive && this.vehicle && this.world?.deliveryTargets?.length) {
+          const firstTarget = this.world.deliveryTargets.find(t => !t.delivered);
+          if (firstTarget) {
+            const d = this.vehicle.mesh.position.distanceTo(firstTarget.pos);
+            if (d < 22 && this._onboardingHintStep !== 'toss') {
+              this._onboardingHintStep = 'toss';
+              this._showOnboardingHint('toss');
+            } else if (d >= 22 && this._onboardingHintStep !== 'drive') {
+              this._onboardingHintStep = 'drive';
+              this._showOnboardingHint('drive');
+            }
+          }
+        }
+
         // Continuous Diurnal Cycle, Atmosphere, Auto-Headlights & Lighting
         this.updateDayNightCycle(dt);
 
@@ -12518,7 +13498,7 @@
 
         // Infinite Highway District Milestones (Seamless progression every 4 km)
         const nextDistrictThreshold = (this.currentDistrict || 1) * 4.0;
-        if (!this.onFoot && this.vehicle.distanceTraveled >= nextDistrictThreshold && !this.districtTransitioning) {
+        if (this.vehicle.distanceTraveled >= nextDistrictThreshold && !this.districtTransitioning) {
           this.districtTransitioning = true;
           this.currentDistrict = (this.currentDistrict || 1) + 1;
           const isOffWorldDistrict = this.selectedCity === 'offworld';
@@ -12542,6 +13522,7 @@
           }
           const bonus = 150;
           this.earnings += bonus;
+          if (Career) Career.credit(bonus, 'district');
           sound.playRepair();
           const distIcon = isOffWorldDistrict ? UI.icon('planet') : UI.icon('building');
           const distLabel = isOffWorldDistrict ? 'SECTOR' : 'DISTRICT';
@@ -12557,9 +13538,7 @@
         // foot: the vehicle is deliberately parked and stationary, so the
         // same conditions that mean "stuck" while driving are just normal
         // here.
-        if (this.onFoot) {
-          this.stuckTimer = 0;
-        } else if (this.vehicle.health <= 0) {
+        if (this.vehicle.health <= 0) {
           this.showStuckRecoveryModal(this.crashReason || 'VEHICLE BREAKDOWN: Suspension & Engine Failure');
           this.crashReason = null;
         } else if ((this.keys.w || this.keys.up || this.keys.s || this.keys.down) && Math.abs(this.vehicle.speed) < 0.45 && Math.abs(this.vehicle.lateralOffset) > (CONFIG.ROAD_WIDTH * 0.45)) {
@@ -12573,7 +13552,7 @@
 
         // Off-Road Lost Detection — show Return to Road banner (skipped on
         // foot for the same reason as above)
-        if (!this.onFoot && this.world && this.world.curve && this.vehicle) {
+        if (this.world && this.world.curve && this.vehicle) {
           const latDist = Math.abs(this.vehicle.lateralOffset || 0);
           const vp = this.vehicle.mesh.position;
           const nearU = this.vehicle.splineProgress;
@@ -12621,6 +13600,15 @@
 
         const distEl = document.getElementById('telemetry-distance');
         if (distEl) distEl.textContent = `${this.vehicle.distanceTraveled.toFixed(1)} KM`;
+
+        const gearEl = document.getElementById('telemetry-gear');
+        if (gearEl) {
+          if (this.selectedVehicle === 'cycle') {
+            gearEl.textContent = speedKmh > 2 ? 'PEDAL' : 'CRUISE';
+          } else {
+            gearEl.textContent = this.vehicle.speed < -0.1 ? 'REVERSE' : (speedKmh < 0.5 ? 'PARK' : 'DRIVE');
+          }
+        }
       } else {
         const t = Date.now() * 0.0003;
         this.camera.position.set(Math.sin(t) * 14, 6, Math.cos(t) * 14);
@@ -12643,8 +13631,8 @@
         if (app && !document.getElementById('engine-loading-toast')) {
           const loadingToast = document.createElement('div');
           loadingToast.id = 'engine-loading-toast';
-          loadingToast.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; background: rgba(10, 14, 20, 0.92); padding: 32px 48px; border-radius: 20px; text-align: center; font-family: Outfit, sans-serif; border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 20px 60px rgba(0,0,0,0.8); z-index: 999999;';
-          loadingToast.innerHTML = '<h2 style="font-size: 1.2rem; margin: 0 0 8px 0; color: #00d4bf; font-family: monospace; letter-spacing: 2px;">SHIPLYP // ENGINE</h2><p style="margin: 0; color: rgba(255,255,255,0.7); font-size: 0.82rem; font-family: monospace; letter-spacing: 1px;">INITIALIZING 3D HIGHWAY ENVIRONMENT...</p>';
+          loadingToast.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; background: #11141c; padding: 32px 48px; border-radius: 16px; text-align: center; font-family: var(--font-display, "Russo One", sans-serif); border: 3px solid #000; box-shadow: 6px 6px 0px #000; z-index: 999999;';
+          loadingToast.innerHTML = '<h2 style="font-size: 1.3rem; margin: 0 0 8px 0; color: #ffe600; font-family: var(--font-display, \'Russo One\', sans-serif); letter-spacing: 2px; text-shadow: 2px 2px 0px #000;">SHIPLYP // DISPATCH</h2><p style="margin: 0; color: rgba(255,255,255,0.8); font-size: 0.85rem; font-family: var(--font-telemetry, \'Chakra Petch\', monospace); letter-spacing: 1px; text-transform: uppercase;">INITIALIZING 3D HIGHWAY ENVIRONMENT...</p>';
           app.appendChild(loadingToast);
         }
         setTimeout(boot, 300);

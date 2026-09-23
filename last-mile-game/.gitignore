@@ -23,3 +23,11 @@ graphify-out/
 
 # Node
 node_modules/
+
+# Android web bundle — generated from last-mile/ by sync_android_assets.sh, and
+# byte-identical to it. Tracking it would store a third copy of the 18MB asset
+# tree and turn every sync into a spurious diff. Run the script after checkout.
+last-mile/android/app/src/main/assets/
+
+# Obsidian per-user UI state (the vault's notes themselves ARE tracked)
+last-mile/vault/.obsidian/workspace.json
