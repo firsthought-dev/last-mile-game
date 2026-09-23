@@ -6,6 +6,8 @@ kanban-plugin: board
 
 ## 📥 Backlog
 
+- [ ] 🟢 **Review Enhanced style fog override (0.017, ~89 m)** · @{2026-09-26}
+	Same override pattern as the B100 Classic bug; check it at dusk and night. [[Architecture/VisualStyleManager]]
 - [ ] 🟢 **Google Play Store Release Assets & Signing** · @{2026-09-28}
 	Setup release keystore, icon/banner metadata packaging, and AAB generation for Google Play Store. [[Projects/Last-Mile Game]]
 - [ ] 🟢 **AI Game Maker Prompt Orchestrator Prototype** · @{2026-10-05}
@@ -22,6 +24,8 @@ kanban-plugin: board
 
 ## ✅ Done
 
+- [x] ~~🔴 **B100: Classic style fog & night posterize**~~ ✅ 2026-09-23
+	Classic fog 0.026 → 0.009; gamma-space posterize so darks no longer go black. 35/35 checks. [[Dev Logs/2026-09-23 - B100 Classic Style Fog and Night Posterize Fix]]
 - [x] ~~🔴 **GitHub Pages: deploy current game, stop publishing vault**~~ ✅ 2026-09-23
 	[PR #4](https://github.com/firsthought-dev/last-mile-game/pull/4) merged as `453c90f` and deployed. Site root serves the current game (runtime files 200; live load has 0 errors); `/last-mile/`, vault and Android paths return 404. [[Projects/Last-Mile Game]]
 - [x] ~~🔴 **Merge roadside-npcs → main**~~ ✅ 2026-09-23
