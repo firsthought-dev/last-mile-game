@@ -27,6 +27,12 @@ kanban-plugin: board
 
 ## ✅ Done
 
+- [x] ~~🔴 **B107: Sidewalk Guardrail Lateral Offset Mismatch & Post Embedment Grounding**~~ ✅ 2026-09-23
+	Centralized barrier lateral offset to `getBarrierLateralDistance()` (5.45 m, flush 10 cm inset from sidewalk outer boundary), removed `+0.05` artificial lift, deepened Armco posts to 1.6 m (-1.05 translation, 50 cm embedment), lowered wall course heights, added dev checks 31 & 32. 37/37 checks green. [[Dev Logs/2026-09-23 - B107 Sidewalk Guardrail and Barrier Grounding Alignment]]
+- [x] ~~🔴 **B106: Android 15 (API 35) DecorView WindowInsetsController Crash Fix**~~ ✅ 2026-09-23
+	Fixed startup NullPointerException on Android 15 by moving `setImmersiveMode()` after `setContentView()` and adopting `WindowCompat.getInsetsController()`. Tested and driving at 31 km/h. [[Architecture/AndroidStudioBridge]]
+- [x] ~~🔴 **B105: Android WebView Performance & DevTools Remote Debugging**~~ ✅ 2026-09-23
+	Removed redundant `LAYER_TYPE_HARDWARE` FBO blit from MainActivity.kt, enabled `WebView.setWebContentsDebuggingEnabled(true)`, generated Gradle 8.4 wrapper, and re-assembled `app-debug.apk`. [[Architecture/AndroidStudioBridge]] [[Dev Logs/2026-09-23 - B105 Android WebView Performance and DevTools Remote Debugging]]
 - [x] ~~🔴 **B100: Classic style fog & night posterize**~~ ✅ 2026-09-23
 	Classic fog 0.026 → 0.009; gamma-space posterize so darks no longer go black. 35/35 checks. [[Dev Logs/2026-09-23 - B100 Classic Style Fog and Night Posterize Fix]]
 - [x] ~~🔴 **GitHub Pages: deploy current game, stop publishing vault**~~ ✅ 2026-09-23

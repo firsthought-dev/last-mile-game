@@ -103,14 +103,14 @@
     }
     const wShape = new THREE.Shape([...wOuter, ...wInner.reverse()]);
     const armcoRail = alongX(wShape);
-    // I-section steel post, 1.1 m tall, centred on its origin.
+    // I-section steel post, 1.4 m tall (1.1 m above ground, 0.3 m embedded into pavement/ground).
     const iShape = new THREE.Shape([
       [-0.05, -0.05], [0.05, -0.05], [0.05, -0.04], [0.008, -0.04], [0.008, 0.04], [0.05, 0.04],
       [0.05, 0.05], [-0.05, 0.05], [-0.05, 0.04], [-0.008, 0.04], [-0.008, -0.04], [-0.05, -0.04]
     ].map(([x, y]) => new THREE.Vector2(x, y)));
-    const armcoPost = new THREE.ExtrudeGeometry(iShape, { depth: 1.1, bevelEnabled: false });
+    const armcoPost = new THREE.ExtrudeGeometry(iShape, { depth: 1.6, bevelEnabled: false });
     armcoPost.rotateX(-Math.PI / 2);
-    armcoPost.translate(0, -0.55, 0);
+    armcoPost.translate(0, -1.05, 0);
     armcoPost.computeVertexNormals();
     // Amber reflector: small wedge.
     const armcoRefl = new THREE.CylinderGeometry(0.035, 0.045, 0.1, 4);
@@ -138,9 +138,9 @@
     // rock texture reads as stones rather than smeared streaks.
     const suv = stone.attributes.uv;
     for (let k = 0; k < suv.count; k++) suv.setX(k, suv.getX(k) * 9.0);
-    // Wood post: turned round post with a chamfered cap.
+    // Wood post: turned round post with a chamfered cap and 0.3 m ground embedment.
     const woodPost = new THREE.LatheGeometry([
-      [0.0, -0.6], [0.075, -0.6], [0.08, -0.3], [0.08, 0.5], [0.07, 0.56], [0.03, 0.62], [0.0, 0.63]
+      [0.0, -0.9], [0.075, -0.9], [0.08, -0.3], [0.08, 0.5], [0.07, 0.56], [0.03, 0.62], [0.0, 0.63]
     ].map(([x, y]) => new THREE.Vector2(x, y)), 10);
     // Split rail: slightly flattened round rail along X.
     const woodRail = new THREE.CylinderGeometry(0.05, 0.05, 1, 8, 1);
@@ -2450,6 +2450,18 @@
     _inTunnelAtU(u, pad = 1) {
       if (!this.roadSpacedPoints || !this.isInTunnelZone) return false;
       return this.isInTunnelZone(Math.round(u * (this.roadSpacedPoints.length - 1)), pad);
+    }
+
+    // Lateral distance from the road centerline to the continuous roadside barrier.
+    // When sidewalks are enabled, aligns flush with the outer edge of the raised
+    // footpath (10 cm inset from the outer boundary so posts and barrier courses
+    // sit firmly on top of the paver slab). Otherwise sits on the natural verge.
+    getBarrierLateralDistance() {
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.52;
+      if (CONFIG.SIDEWALK && CONFIG.SIDEWALK.enabled) {
+        return roadHalf + CONFIG.SIDEWALK.width - 0.10;
+      }
+      return CONFIG.ROAD_WIDTH * 0.5 + 2.0;
     }
 
     // Raised footpath with a painted kerb along both road edges, for the road
@@ -5915,52 +5927,21 @@
             const blockedByHouse = false;
 
             if (!blockedByHouse) {
-              // createRoadMesh's paved shoulder verge extends to
-              // ROAD_WIDTH*0.5 + 1.8 (its own shoulderWidth). This used to
-              // sit at +1.4 — INSIDE that paved verge — so the fence's
-              // height came from the terrain ribbon's shoulder formula
-              // while the ground directly under it was actually a
-              // different mesh (the road's own verge geometry, with its
-              // own banking/offset math) that formula was never computing
-              // for. The two didn't reliably agree, reading as posts
-              // sinking into the pavement. Placed clear past the verge
-              // edge instead, plus a small explicit lift, so the fence
-              // only ever needs to agree with the terrain it's actually
-              // planted in.
-              const fenceDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 2.2);
+              // Continuous roadside barrier: placed via getBarrierLateralDistance()
+              // flush along the outer edge of the raised sidewalk paver slab (or natural verge).
+              const fenceDist = side * this.getBarrierLateralDistance();
               const fencePos = pt.clone().addScaledVector(normal, fenceDist);
               const railLen = FENCE_STEP * avgSegStep * 1.08 + 0.6; // overlap so straight rails still meet on curves
 
-              // Sample true ground height at BOTH ends of this short (~6m)
-              // segment, not just its center — with a fence group spawned
-              // this frequently (FENCE_STEP=1), anchoring every segment's
-              // entire flat rail to one single center-point height meant
-              // adjacent segments didn't line up wherever the road grade
-              // changed even slightly, reading as a visibly stepped/uneven
-              // top rail (confirmed directly: sampling consecutive segment
-              // anchor heights in this game showed 0.46->0.48->0.67->0.96->
-              // 1.32m over a handful of segments; compared against
-              // slowroads.io's own reference fence, which reads as one
-              // continuously ground-following line, not stepped). Real
-              // fences follow the ground at each post and let the rail
-              // between them tilt slightly to match — that's the fix here,
-              // not a flat plate per segment.
-              // `calcTerrainY` is a closure bound to THIS iteration's `pt`
-              // (sampledPoints[i]) — correct for endA (near pt), but wrong
-              // for endB (near the NEXT sample point): groundHeightAt uses
-              // its `pt` argument as the road-elevation reference for the
-              // shoulder-drop formula, so calling it with the wrong `pt`
-              // silently computed endB's height relative to the wrong
-              // road-height baseline. That mismatch — not the segment-
-              // anchoring approach itself — is what left a real gap after
-              // the first pass at this fix. endB needs the actual next
-              // sample point as its reference, not the closure's captured
-              // one.
+              // Sample rendered surface height at BOTH ends of this short (~6m)
+              // segment using surfaceHeightNear() so the barrier follows the actual
+              // rendered sidewalk surface (or banked verge) rather than the raw
+              // ground under the slab. Eliminates floating posts/rails across bends and slopes.
               const nextPt = sampledPoints[Math.min(i + 1, sampledPoints.length - 1)];
               const endA = fencePos.clone().addScaledVector(tangent, -railLen / 2);
               const endB = fencePos.clone().addScaledVector(tangent, railLen / 2);
-              const yA = calcTerrainY(endA, fenceDist) + 0.05;
-              const yB = this.groundHeightAt(nextPt, endB, fenceDist) + 0.05;
+              const yA = this.surfaceHeightNear(endA, pt, fenceDist);
+              const yB = this.surfaceHeightNear(endB, nextPt, fenceDist);
               fencePos.y = (yA + yB) / 2;
               const offsetA = yA - fencePos.y;
               const offsetB = yB - fencePos.y;
@@ -6015,8 +5996,8 @@
                 );
                 matrices.armcoRails.push(groupMatrix.clone().multiply(railLocal));
               } else if (barrierStyle === 1) {
-                // Dry-stone wall (4 courses)
-                const rowHeights = [0.22, 0.44, 0.64, 0.8];
+                // Dry-stone wall (4 courses, bottom course seated firmly on surface)
+                const rowHeights = [0.09, 0.31, 0.53, 0.75];
                 rowHeights.forEach((ry, rowIdx) => {
                   const jitter = 1.0 - rowIdx * 0.04;
                   const local = new THREE.Matrix4().compose(
@@ -6027,8 +6008,8 @@
                   matrices.stoneRows.push(groupMatrix.clone().multiply(local));
                 });
               } else if (barrierStyle === 3) {
-                // Modern Concrete Highway Barrier (Jersey Barrier profile)
-                [0.26, 0.62].forEach((ry, rIdx) => {
+                // Modern Concrete Highway Barrier (Jersey Barrier profile, base seated on surface)
+                [0.16, 0.50].forEach((ry, rIdx) => {
                   const bScaleZ = rIdx === 0 ? 1.0 : 0.75;
                   const local = new THREE.Matrix4().compose(
                     new THREE.Vector3(0, ry, 0),
@@ -6131,7 +6112,7 @@
           if (!isOffWorld && i % 28 === 0 && side === -1 && !inTunnel) {
             const lampDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.8);
             const lampPos = pt.clone().addScaledVector(normal, lampDist);
-            lampPos.y = calcTerrainY(lampPos, lampDist);
+            lampPos.y = this.surfaceHeightNear(lampPos, pt, lampDist);
 
             const lampGroup = new THREE.Group();
             const lampStandIn = new THREE.Group();
@@ -6872,7 +6853,7 @@
       const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
       const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
       const FENCE_GAP_RADIUS = 18.0;
-      const FENCE_LATERAL_DIST = CONFIG.ROAD_WIDTH * 0.5 + 2.2; // 5.9m
+      const FENCE_LATERAL_DIST = this.getBarrierLateralDistance();
       const CAR_HALF_WIDTH = 1.05; // accounts for 1.9m chassis width + side mirrors
       const BARRIER_MARGIN = 0.15; // clearance buffer so car panels/mirrors glance along fence without penetrating posts
       // With sidewalks the kerb is the edge of the drivable road (vehicles stay
@@ -7053,7 +7034,7 @@
     // for both sides. Streamed fence pieces already emitted in the gap are removed.
     addFenceGap(pt, normal, side, halfLen) {
       this.fenceGapSites = this.fenceGapSites || [];
-      const fenceLat = CONFIG.ROAD_WIDTH * 0.5 + 2.2;
+      const fenceLat = this.getBarrierLateralDistance();
       const sides = side === 0 ? [-1, 1] : [side];
       sides.forEach((sd) => {
         const c = pt.clone().addScaledVector(normal, sd * fenceLat);
@@ -8631,7 +8612,7 @@
 
         const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
         const cityOrders = CONFIG.ORDERS_BY_CITY[this.cityKey] || CONFIG.ORDERS_BY_CITY.mumbai;
-        const fenceDist = CONFIG.ROAD_WIDTH * 0.5 + 2.2;
+        const fenceDist = this.getBarrierLateralDistance();
         const newTrees = [];
         const isWinter = (seasonCfgExt.id === 'winter');
 
@@ -8678,12 +8659,12 @@
             const railLenBar = avgSegStepBar * 1.08 + 0.6;
             const _fdummy = new THREE.Object3D();
             [-1, 1].forEach(side => {
-              const fenceDistBar = side * (CONFIG.ROAD_WIDTH * 0.5 + 2.2);
+              const fenceDistBar = side * this.getBarrierLateralDistance();
               const fencePosBar = pt.clone().addScaledVector(normal, fenceDistBar);
               const endA = fencePosBar.clone().addScaledVector(tangent, -railLenBar / 2);
               const endB = fencePosBar.clone().addScaledVector(tangent, railLenBar / 2);
-              const yA = this.groundHeightAt(pt, endA, fenceDistBar) + 0.05;
-              const yB = this.groundHeightAt(nextPtBar, endB, fenceDistBar) + 0.05;
+              const yA = this.surfaceHeightNear(endA, pt, fenceDistBar);
+              const yB = this.surfaceHeightNear(endB, nextPtBar, fenceDistBar);
               fencePosBar.y = (yA + yB) / 2;
               const offsetA = yA - fencePosBar.y;
               const offsetB = yB - fencePosBar.y;
@@ -8721,8 +8702,8 @@
                   new THREE.Vector3(railLenBar, 1, 1)
                 ));
               } else if (barrierStyle === 1) {
-                // Dry-stone (4 courses)
-                [0.22, 0.44, 0.64, 0.8].forEach((ry, rowIdx) => {
+                // Dry-stone (4 courses, bottom course seated on surface)
+                [0.09, 0.31, 0.53, 0.75].forEach((ry, rowIdx) => {
                   const jitter = 1.0 - rowIdx * 0.04;
                   emit(BA.stoneGeom, BA.stoneMat, new THREE.Matrix4().compose(
                     new THREE.Vector3(0, ry, 0),
@@ -8731,8 +8712,8 @@
                   ));
                 });
               } else if (barrierStyle === 3) {
-                // Jersey concrete (2 courses)
-                [0.26, 0.62].forEach((ry, rIdx) => {
+                // Jersey concrete (2 courses, base seated on surface)
+                [0.16, 0.50].forEach((ry, rIdx) => {
                   const bScaleZ = rIdx === 0 ? 1.0 : 0.75;
                   emit(BA.concreteGeom, BA.concreteMat, new THREE.Matrix4().compose(
                     new THREE.Vector3(0, ry, 0),
