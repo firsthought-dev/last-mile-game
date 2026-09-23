@@ -18,6 +18,8 @@ kanban-plugin: board
 
 ## 🔨 In Progress
 
+- [ ] 🔴 **GitHub Pages: deploy current game, stop publishing vault** · @{2026-09-23}
+	[PR #4](https://github.com/firsthought-dev/last-mile-game/pull/4) awaiting merge. After merge, check that the site root shows the Dispatch Hub and `/last-mile/vault/` returns 404. [[Projects/Last-Mile Game]]
 
 
 ## ✅ Done

@@ -60,6 +60,7 @@ Core subsystems in the game:
 - [[Projects/AI Game Generation Tool & Multiplatform Distribution|AI Game Generation Tool & Multiplatform Distribution Hub]]
 
 ## Links
+- Live build (GitHub Pages): https://firsthought-dev.github.io/last-mile-game/ (deployed by `.github/workflows/static.yml`, which publishes only runtime files from `last-mile/` since PR #4)
 - Android Studio Project: `last-mile/android/`
 - Sync Script: `last-mile/sync_android_assets.sh`
 - This vault's knowledge graph: `atlas.canvas` (vault root)
