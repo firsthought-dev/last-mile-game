@@ -22,7 +22,8 @@ The Android application wrapper packages the Three.js web game into a standalone
 - **Kotlin**: 1.9.23
 - **compileSdk / targetSdk**: 35 (Android 15 compliant for Google Play Store requirements)
 - **minSdk**: 26 (Android 8.0 Oreo)
-- **Hardware Acceleration**: Explicitly enabled on WebView (`setLayerType(View.LAYER_TYPE_HARDWARE, null)`).
+- **Hardware Acceleration**: Enabled by default at the window level (`android:hardwareAccelerated="true"` in AndroidManifest). Redundant and harmful `setLayerType(View.LAYER_TYPE_HARDWARE, null)` removed (it created an extra off-screen FBO texture blit on every frame that choked WebGL).
+- **Remote Web Contents Debugging**: Enabled in debug builds (`WebView.setWebContentsDebuggingEnabled(true)`) allowing live profiling, console logs, and frame-rate diagnostics via desktop Chrome at `chrome://inspect/#devices`.
 - **Fullscreen Immersive Sticky Mode**: Edge-to-edge rendering hiding navigation and status bars with cutout/notch support.
 - **WakeLock**: `FLAG_KEEP_SCREEN_ON` enabled to prevent screen timeout while driving.
 

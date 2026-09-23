@@ -66,6 +66,9 @@ Core subsystems in the game:
 - This vault's knowledge graph: `atlas.canvas` (vault root)
 
 ## Recent Dev Logs
+- [[Dev Logs/2026-09-23 - B107 Sidewalk Guardrail and Barrier Grounding Alignment]]
+- [[Dev Logs/2026-09-23 - B105 Android WebView Performance and DevTools Remote Debugging]]
+- [[Dev Logs/2026-09-23 - B100 Classic Style Fog and Night Posterize Fix]]
 - [[Dev Logs/2026-09-23 - B96-B98 Cycle Speed, New Courier Bicycle Model and Physics Lean]]
 - [[Dev Logs/2026-09-23 - B95 Fix Verification Pass and Cycle Speed Escalation Cap Fix]]
 - [[Dev Logs/2026-09-23 - B94 Web Portal Ad SDK Integration and Distribution Packaging]]
