@@ -33,11 +33,17 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
+      # Publish only the game's runtime files. last-mile/ also holds the
+      # Obsidian vault and the Android project, which must not be public.
+      - name: Stage game files
+        run: |
+          mkdir -p _site
+          cp last-mile-game/last-mile/{index.html,game.js,save.js,ads.js,style.css} _site/
+          cp -r last-mile-game/last-mile/assets _site/assets
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: './last-mile-game'
+          path: './_site'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
