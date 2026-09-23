@@ -18,12 +18,12 @@ kanban-plugin: board
 
 ## 🔨 In Progress
 
-- [ ] 🔴 **GitHub Pages: deploy current game, stop publishing vault** · @{2026-09-23}
-	[PR #4](https://github.com/firsthought-dev/last-mile-game/pull/4) awaiting merge. After merge, check that the site root shows the Dispatch Hub and `/last-mile/vault/` returns 404. [[Projects/Last-Mile Game]]
 
 
 ## ✅ Done
 
+- [x] ~~🔴 **GitHub Pages: deploy current game, stop publishing vault**~~ ✅ 2026-09-23
+	[PR #4](https://github.com/firsthought-dev/last-mile-game/pull/4) merged as `453c90f` and deployed. Site root serves the current game (runtime files 200; live load has 0 errors); `/last-mile/`, vault and Android paths return 404. [[Projects/Last-Mile Game]]
 - [x] ~~🔴 **Merge roadside-npcs → main**~~ ✅ 2026-09-23
 	[PR #3](https://github.com/firsthought-dev/last-mile-game/pull/3) merged as `1d8634f`: roadside NPCs, career/save layer, onboarding, B80–B99. [[Projects/Last-Mile Game]]
 - [x] ~~🟢 **verify_phase1.js reads speeds from CONFIG**~~ ✅ 2026-09-23
