@@ -20,8 +20,8 @@ Player vehicle physics/input handling. Reads world data from [[Architecture/Proc
 - [[Architecture/RainSystem]]
 
 ## Cycle speed envelope (B88, fixed B95)
-- Cycle target speed escalates linearly from 6.11 m/s (22 km/h) to 10.56 m/s (38 km/h) over 120 s of `cycleRideTime`, minus up to 30% under hard steer.
-- The `cycle` preset `maxSpeed` **must stay at the ceiling (10.56)**: `effectiveMaxSpeed` derives from it and clamps both the throttle and autopilot escalation paths. Setting it to the base speed silently disables escalation (B95).
+- Cycle target speed escalates linearly from `baseSpeed` to `maxSpeed` over `rampSeconds` (originally 22→38 km/h in B88; 32→52 km/h since B96) of `cycleRideTime`, minus up to 15% under hard steer (30% before B96).
+- The `cycle` preset `maxSpeed` **must stay at the top of the ramp (the ceiling)**: `effectiveMaxSpeed` derives from it and clamps both the throttle and autopilot escalation paths. Setting it to the base speed silently disables escalation (B95).
 
 ## Cycle speed envelope (B96 — supersedes the numbers above)
 - `CONFIG.VEHICLES.cycle`: `baseSpeed` 8.89 m/s (32 km/h) → `maxSpeed` 14.44 m/s (52 km/h) over `rampSeconds` 120 of `cycleRideTime`. Throttle and autopilot both read these (no duplicated literals). `maxSpeed` must remain the ramp **ceiling** (B95 rule still applies).
@@ -35,3 +35,4 @@ Player vehicle physics/input handling. Reads world data from [[Architecture/Proc
 ## Cycle model (B97)
 - `delivery-cycle.glb` nodes: `Bike_Body` (rider + frame + box, one mesh), `Wheel_Front`, `Wheel_Rear` (origins on axles, glTF z +0.583 / −0.590, y 0.362). `buildModel()` pushes only the top-level wheel nodes into `this.wheels`; the spin uses radius 0.365 for the cycle.
 - The rider is part of `Bike_Body`, so it leans with the bike; there are no arm bones to constrain.
+- Values since B96: `baseSpeed` 8.89 m/s (32 km/h), `maxSpeed` 14.44 m/s (52 km/h), `rampSeconds` 120. `scratch/verify_phase1.js` reads these from `CONFIG.VEHICLES.cycle`, and it asserts that `vehicle.maxSpeed` equals the ceiling.

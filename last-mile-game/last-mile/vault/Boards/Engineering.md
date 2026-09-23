@@ -22,6 +22,8 @@ kanban-plugin: board
 
 ## ✅ Done
 
+- [x] ~~🟢 **verify_phase1.js reads speeds from CONFIG**~~ ✅ 2026-09-23
+	BASE/CEIL read from CONFIG.VEHICLES.cycle, so tuning changes no longer break the script; STEER_PENALTY still hardcoded (not in CONFIG). 10/10 pass. [[Projects/Last-Mile Game]]
 - [x] ~~🔴 **B99: Roadside NPCs floating / sinking**~~ ✅ 2026-09-23
 	Height from nearest road point to current position, not spawn point. See BUGFIX_LOG B99. [[Projects/Last-Mile Game]]
 - [x] ~~🔴 **B98: Physics-based cycle lean (tan θ = v·ω/g)**~~ ✅ 2026-09-23

@@ -35,3 +35,4 @@ Re-verification of every fix logged in the vault for B88–B94 by re-running all
 
 ## Follow-up
 - ✅ Done: `scratch/verify_phase1.js` now asserts cruise speed, 30% steer penalty, recovery, `maxSpeed` = 10.56 ceiling, escalation after 6 s held at max ride time (> base + 0.5 m/s, ≤ ceiling), coupe isolation and zero console errors; exits 1 on failure. Verified it fails with the old 6.11 cap.
+- ✅ Done (after B96–B99 landed in `d7101bc`): `verify_phase1.js` now reads `BASE`/`CEIL` from `CONFIG.VEHICLES.cycle.baseSpeed` / `.maxSpeed` at page load (exits 1 if missing) instead of hardcoding them, so B96's retune to 32→52 km/h no longer needs a hand edit. Check labels (km/h ceiling, steer %) are derived too. `STEER_PENALTY = 0.15` stays hardcoded because it isn't in CONFIG; update it by hand if the steer penalty changes. Run: 10/10 pass (base 8.89, ceiling 14.44).
