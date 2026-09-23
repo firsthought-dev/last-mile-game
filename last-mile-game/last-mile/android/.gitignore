@@ -1,3 +1,13 @@
 keystore.properties
 *.jks
 *.keystore
+
+# Android Studio / Gradle local files
+.idea/
+.gradle/
+local.properties
+build/
+app/build/
+*.iml
+.cxx/
+captures/

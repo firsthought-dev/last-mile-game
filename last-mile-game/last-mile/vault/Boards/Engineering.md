@@ -20,6 +20,9 @@ kanban-plugin: board
 
 ## 🔨 In Progress
 
+- [ ] 🟡 **Prop upgrade pass: tapri ✅ → houses ✅ → repair shop ✅ → lamps/poles ✅ → fences + guardrails ✅ → signs ✅** · @{2026-09-24}
+	Modeled GLB props in Blender to replace box-built roadside props. Tapri polished (12.9k tris), 3 house variants in houses.glb, building-inside-house placement bug fixed. [[Projects/Last-Mile Game]]
+
 
 
 ## ✅ Done
