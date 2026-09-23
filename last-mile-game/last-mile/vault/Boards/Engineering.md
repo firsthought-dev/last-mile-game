@@ -22,6 +22,8 @@ kanban-plugin: board
 
 ## ✅ Done
 
+- [x] ~~🔴 **Merge roadside-npcs → main**~~ ✅ 2026-09-23
+	[PR #3](https://github.com/firsthought-dev/last-mile-game/pull/3) merged as `1d8634f`: roadside NPCs, career/save layer, onboarding, B80–B99. [[Projects/Last-Mile Game]]
 - [x] ~~🟢 **verify_phase1.js reads speeds from CONFIG**~~ ✅ 2026-09-23
 	BASE/CEIL read from CONFIG.VEHICLES.cycle, so tuning changes no longer break the script; STEER_PENALTY still hardcoded (not in CONFIG). 10/10 pass. [[Projects/Last-Mile Game]]
 - [x] ~~🔴 **B99: Roadside NPCs floating / sinking**~~ ✅ 2026-09-23
