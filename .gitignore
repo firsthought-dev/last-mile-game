@@ -56,3 +56,13 @@ last-mile-game/OWNERS_MANUAL.md
 # may drop at the repo root or in last-mile-game/) — internal notes, not
 # meant to ship
 *_SUMMARY.md
+
+# Vault notes that are internal by nature (kept local; the rest of the vault is
+# public and written at feature level only — see CLAUDE.md)
+last-mile-game/last-mile/vault/Architecture/
+last-mile-game/last-mile/vault/Debugging/
+last-mile-game/last-mile/vault/Knowledge/
+last-mile-game/last-mile/vault/Projects/AI Game Generation Tool & Multiplatform Distribution.md
+last-mile-game/last-mile/vault/_CLAUDE.md
+last-mile-game/last-mile/vault/atlas.canvas
+last-mile-game/last-mile/vault/log.md
