@@ -2,3 +2,5 @@
 `crosser-height-matches-formula` failed on every run (0.6–2.0u), including on HEAD `308e3aa`. The crossers were placed correctly; the check was wrong. Since `a0f400b`, `updateCrossers` grounds walkers with `surfaceHeightNear(pos) + 0.02`. That is the banked, rendered road surface at the nearest road point. The check still expected the pre-a0f400b `groundHeightAt(c.pt) + 0.15`, which is the ground under the slab at the spawn point, without banking.
 
 Fix, in dev-checks.js only: the check now mirrors the runtime formula and skips crossers beyond the 130m cull, since their Y is not updated. It also reports the in-range count, so a pass with 0 crossers can't be mistaken for real coverage. On 6 in-range crossers, the old formula measured 1.401u and the new one 0.000u. runWorldChecks: 37/37 pass. See BUGFIX_LOG B115.
+
+**Status:** vault record merged to main via PR #11 (`5dca925`). The dev-checks.js fix stays local by choice (gitignored).
