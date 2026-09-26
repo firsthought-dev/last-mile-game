@@ -9779,63 +9779,31 @@
   // --------------------------------------------------------------------------
   // 7a. VISUAL STYLE SYSTEM
   // --------------------------------------------------------------------------
-  // Three selectable, always-available visual styles (Classic / Enhanced /
-  // Cinematic) picked from the dispatch hub landing screen — no unlocking,
-  // no XP or leveling. Replaces the earlier 6-tier auto-progression system.
+  // Two selectable, always-available visual styles (Crisp / Cinematic)
+  // picked from the dispatch hub landing screen — no unlocking, no XP or
+  // leveling. The pixelated Classic style was removed in B116 and Enhanced
+  // renamed to Crisp; old saved values are migrated in the constructor.
 
   class VisualStyleManager {
-    static STYLES = ['classic', 'enhanced', 'cinematic'];
+    static STYLES = ['crisp', 'cinematic'];
     static DEFAULT_STYLE = 'cinematic'; // matches the original always-on bloom+FXAA look
     // Absolute fog density override per style (cinematic uses live curFogDens)
-    // FogExp2 hits 90% opacity at sqrt(ln 10) / density metres. Classic was
-    // 0.026 (~58 m): at dusk the posterized fog colour swallowed the road
-    // ahead. 0.009 keeps a retro haze with ~170 m of readable road.
-    static FOG_DENSITY = { classic: 0.009, enhanced: 0.017 };
+    static FOG_DENSITY = { crisp: 0.017 };
 
     constructor(game) {
       this.game = game;
       this.currentStyle = null;
       this.needsNormalPass = false;
 
-      const saved = localStorage.getItem('shiplyp_visualStyle');
+      let saved = localStorage.getItem('shiplyp_visualStyle');
+      // B116 migration: Enhanced was renamed Crisp, and Classic (removed) was
+      // the lightest style, so its players land on the lighter remaining one.
+      if (saved === 'enhanced' || saved === 'classic') saved = 'crisp';
       this.selectedStyle = VisualStyleManager.STYLES.includes(saved) ? saved : VisualStyleManager.DEFAULT_STYLE;
 
       // Normal pre-pass resources for the edge shader (Tier 2)
       this._normalTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
       this._normalMat = new THREE.MeshNormalMaterial();
-
-      // --- Pixelation + Palette Shader (Tier 1) ---
-      const PixelPaletteShader = {
-        uniforms: {
-          tDiffuse: { value: null },
-          resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
-          pixelSize: { value: 6.0 },
-          posterizeSteps: { value: 4.0 }
-        },
-        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-        fragmentShader: `
-          uniform sampler2D tDiffuse;
-          uniform vec2 resolution;
-          uniform float pixelSize;
-          uniform float posterizeSteps;
-          varying vec2 vUv;
-          void main() {
-            // Nearest-neighbour pixelation
-            vec2 blocks = floor(vUv * resolution / pixelSize) * pixelSize / resolution;
-            vec4 texel = texture2D(tDiffuse, blocks);
-            // Posterize in gamma space, not linear: linear bands put the first
-            // step at 12.5% brightness, so dark asphalt and most of a night scene
-            // rounded to pure black. Gamma bands spend more levels on the darks.
-            vec3 g = pow(max(texel.rgb, 0.0), vec3(1.0 / 2.2));
-            g = floor(g * posterizeSteps + 0.5) / posterizeSteps;
-            vec3 col = pow(g, vec3(2.2));
-            gl_FragColor = vec4(col, texel.a);
-          }
-        `
-      };
-      this.pixelPass = new THREE.ShaderPass(PixelPaletteShader);
-      this.pixelPass.enabled = false;
-      this.pixelPass.renderToScreen = false;
 
       // --- Edge Hardening Shader (Tier 2) ---
       const EdgeHardenShader = {
@@ -9911,9 +9879,9 @@
       this.gradePass.renderToScreen = false;
 
       // Insert extra passes into composer at position 1 (after RenderPass)
-      // Order: RenderPass | pixelPass | edgePass | bloomPass | filmPass | fxaaPass | gradePass
+      // Order: RenderPass | edgePass | bloomPass | filmPass | fxaaPass | gradePass
       const passes = game.composer.passes;
-      passes.splice(1, 0, this.pixelPass, this.edgePass);
+      passes.splice(1, 0, this.edgePass);
       passes.push(this.gradePass);
 
       // Apply the saved (or default) style immediately — no transition
@@ -9923,11 +9891,10 @@
 
     resize(w, h) {
       this._normalTarget.setSize(w, h);
-      if (this.pixelPass.uniforms) this.pixelPass.uniforms['resolution'].value.set(w, h);
       if (this.edgePass.uniforms) this.edgePass.uniforms['resolution'].value.set(w, h);
     }
 
-    // Called by render loop when the Enhanced style needs the normals pre-pass
+    // Called by render loop when the Crisp style needs the normals pre-pass
     renderNormalPass() {
       const { renderer, scene, camera } = this.game;
       renderer.setRenderTarget(this._normalTarget);
@@ -9937,9 +9904,8 @@
       renderer.setRenderTarget(null);
     }
 
-    // Style plan (3 styles total, consolidated from the earlier 6-tier system):
-    //  classic:   heavy pixelation + posterize, no bloom — lightest to run
-    //  enhanced:  edge-hardening pass, no bloom — flat-shaded, defined outlines
+    // Style plan (2 styles):
+    //  crisp:     edge-hardening pass, no bloom — flat-shaded, defined outlines
     //  cinematic: bloom + FXAA + color grade — the original always-on look
     applyStyle(style) {
       if (!VisualStyleManager.STYLES.includes(style)) style = VisualStyleManager.DEFAULT_STYLE;
@@ -9951,19 +9917,14 @@
       const { bloomPass, filmPass, fxaaPass } = this.game;
 
       // --- Enable / disable passes ---
-      this.pixelPass.enabled = (style === 'classic');
-      this.edgePass.enabled  = (style === 'enhanced');
-      this.needsNormalPass   = (style === 'enhanced');
+      this.edgePass.enabled  = (style === 'crisp');
+      this.needsNormalPass   = (style === 'crisp');
       this.gradePass.enabled = (style === 'cinematic');
 
       bloomPass.enabled = (style === 'cinematic');
       fxaaPass.enabled  = (style === 'cinematic');
 
-      // --- Pixelation params (classic) ---
-      this.pixelPass.uniforms['pixelSize'].value = 6.0;
-      this.pixelPass.uniforms['posterizeSteps'].value = 4.0;
-
-      // --- Edge-hardening params (enhanced) ---
+      // --- Edge-hardening params (crisp) ---
       this.edgePass.uniforms['edgeThreshold'].value = 1.35;
       this.edgePass.uniforms['edgeDarken'].value = 0.85;
       this.edgePass.uniforms['edgeThickness'].value = 0.85;
@@ -9976,17 +9937,14 @@
       // --- Film shader uniforms per style ---
       const u = filmPass.uniforms || (filmPass.material && filmPass.material.uniforms);
       if (u) {
-        if (style === 'classic')       u.saturationMult.value = 0.68;
-        else if (style === 'enhanced') u.saturationMult.value = 0.80;
-        else                           u.saturationMult.value = 0.82; // cinematic
+        u.saturationMult.value = (style === 'crisp') ? 0.80 : 0.82; // crisp : cinematic
       }
 
       // --- renderToScreen: must be true on the last enabled pass ---
-      this.pixelPass.renderToScreen = false;
       this.edgePass.renderToScreen  = false;
       bloomPass.renderToScreen      = false;
       this.gradePass.renderToScreen = false;
-      filmPass.renderToScreen       = (style === 'classic' || style === 'enhanced');
+      filmPass.renderToScreen       = (style === 'crisp');
       fxaaPass.renderToScreen       = false;
       if (style === 'cinematic') this.gradePass.renderToScreen = true;
     }
@@ -12423,9 +12381,8 @@
       ];
 
       const styleList = [
-        { id: 'classic',   name: 'Classic',   stat: 'Pixelated • Lightest',        gif: 'assets/style-previews/classic.gif' },
-        { id: 'enhanced',  name: 'Enhanced',  stat: 'Outlined • Moderate',         gif: 'assets/style-previews/enhanced.gif' },
-        { id: 'cinematic', name: 'Cinematic', stat: 'Bloom + Grade • Heaviest',    gif: 'assets/style-previews/cinematic.gif' },
+        { id: 'crisp',     name: 'Crisp',     stat: 'Sharp Outlines • Lighter',    gif: 'assets/style-previews/crisp.gif' },
+        { id: 'cinematic', name: 'Cinematic', stat: 'Bloom + Grade • Heavier',     gif: 'assets/style-previews/cinematic.gif' },
       ];
       const currentStyle = this.visualStyle?.selectedStyle || VisualStyleManager.DEFAULT_STYLE;
 
