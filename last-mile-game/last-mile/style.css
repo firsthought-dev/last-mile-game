@@ -3332,9 +3332,9 @@ body.vehicle-cycle .touch-drag-steer {
   align-items: center;
   justify-content: center;
 }
-body.vehicle-cycle .touch-steer-cluster {
-  display: none !important;
-}
+/* Steer buttons stay visible for every vehicle (B111). The drag zone
+   sits underneath them in DOM order, so it remains an optional analog
+   alternative without ever hiding the buttons. */
 .drag-steer-indicator {
   width: 64px;
   height: 64px;
