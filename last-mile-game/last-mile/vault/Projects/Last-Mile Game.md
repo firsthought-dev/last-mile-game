@@ -94,6 +94,7 @@ SORT date DESC
 ```
 
 ## Recent Activity
+- 2026-09-27 — [[2026-09-27 - B111 Restore Mobile Steer Buttons|B111]]: mobile ◀▶ steering restored on cycle/scooter; merged PR #9 (`023f855`)
 
 ```dataview
 LIST FROM "Daily"
