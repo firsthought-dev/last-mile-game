@@ -44,7 +44,6 @@
     refresh: '<path d="M20 11A8 8 0 0 0 6 5.3L4 7M4 4v3h3M4 13a8 8 0 0 0 14 5.7l2-2.7M20 20v-3h-3"/>',
     lifebuoy: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M5.6 5.6l3.4 3.4M18.4 5.6l-3.4 3.4M5.6 18.4l3.4-3.4M18.4 18.4l-3.4-3.4"/>',
     building: '<path d="M4 21V4h10v17M18 21v-9h-4M8 8h2M8 12h2M8 16h2"/>',
-    radio: '<rect x="3" y="9" width="18" height="11" rx="2"/><path d="M7 9 17 3M8 14.5h.01"/><circle cx="16" cy="14.5" r="2.5"/>',
     play: '<path d="M6 4l14 8-14 8V4z"/>',
     pause: '<path d="M7 4h3v16H7zM14 4h3v16h-3z"/>',
     skipBack: '<path d="M6 5v14M18 6l-9 6 9 6V6z"/>',
@@ -505,321 +504,31 @@
   }
 
   // --------------------------------------------------------------------------
-  // 3. SOUND SYNTHESIZER & MULTI-CHANNEL RADIO (Hindi / English / Mix)
+  // 3. SOUND SYNTHESIZER (in-game SFX, engine, wind)
   // --------------------------------------------------------------------------
-
-  // Note-to-Frequency helper for polyphonic synthesizer scores
-  const NOTE_SEMITONES = { c: 0, 'c#': 1, db: 1, d: 2, 'd#': 3, eb: 3, e: 4, f: 5, 'f#': 6, gb: 6, g: 7, 'g#': 8, ab: 8, a: 9, 'a#': 10, bb: 10, b: 11 };
-  function noteToFreq(noteStr) {
-    if (!noteStr) return 440;
-    const m = noteStr.trim().toLowerCase().match(/^([a-g][#b]?)([0-9])$/);
-    if (!m) return 440;
-    const semitone = NOTE_SEMITONES[m[1]] ?? 0;
-    const octave = parseInt(m[2], 10);
-    const midi = (octave + 1) * 12 + semitone;
-    return 440 * Math.pow(2, (midi - 69) / 12);
-  }
-
-  // ── Playlist database:
-  // - Hindi: Purely authentic MP3 tracks streaming from truckplaylist.com CDN (no synth).
-  // - English: Soothing polyphonic arrangements of legendary road-trip hits played via mellow Rhodes/lofi synthesis.
-  const RADIO_PLAYLISTS = {
-    hindi: [
-      // ── Hindi 90s Highway Classics (49 Real MP3 Tracks) ──
-      { title: "Dil Ne Yeh Kaha Hain Dil Se", artist: "Udit Narayan (Dhadkan)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ff097069568.58544488.mp3" },
-      { title: "Mujhse Mohabbat Ka", artist: "Kumar Sanu & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffb3da74333.19775211.mp3" },
-      { title: "Kyon Ki Itna Pyar", artist: "Udit Narayan", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffc0e3bbfd6.98289794.mp3" },
-      { title: "Tumse Milne Ko Dil", artist: "Alka Yagnik & Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffc6db9a737.50163040.mp3" },
-      { title: "Jeeta Tha Jiske Liye", artist: "Kumar Sanu & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffcb3d57294.79925154.mp3" },
-      { title: "Tum Dil Ki Dhadkan Mein", artist: "Abhijeet & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffd4132d929.77448836.mp3" },
-      { title: "Agar Tum Na Hote", artist: "R.D. Burman", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffd8ed8b019.32999548.mp3" },
-      { title: "Tumse Milne Ki Tamanna Hai", artist: "S.P. Balasubramaniam", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffdd61ef2c8.22241527.mp3" },
-      { title: "Tere Naam", artist: "Udit Narayan", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffe3f78a480.65866672.mp3" },
-      { title: "Mere Rang Mein Rangne Wali", artist: "S.P. Balasubrahmanyam", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffeaae2e9a6.57430078.mp3" },
-      { title: "Aaye Ho Meri Zindagi Mein", artist: "Udit Narayan", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a7ffce78ac142.67941754.mp3" },
-      { title: "Kehna Hi Kya", artist: "KS Chitra (Bombay)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800c8a6286b2.57114505.mp3" },
-      { title: "Do Dil Mil Rahe Hai", artist: "Kumar Sanu (Pardes)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800d83bd5421.02473824.mp3" },
-      { title: "Ishq Bina Ishq Bina", artist: "Kavita Krishnamurthy (Taal)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800db74d1030.74275897.mp3" },
-      { title: "Ek Sanam Chahiye Aashiqui Ke Liye", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800de59efed6.63979837.mp3" },
-      { title: "Teri Umeed Tera Intezar", artist: "Kumar Sanu (Deewana)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800e8e8ef4b4.29261544.mp3" },
-      { title: "Yeh Dil Deewana", artist: "Sonu Nigam (Pardes)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800ebd533b09.94127012.mp3" },
-      { title: "Jo Bhi Kasmein", artist: "Alka Yagnik & Udit (Raaz)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800efe5bd5a2.33668743.mp3" },
-      { title: "Pardesi Pardesi", artist: "Udit Narayan & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a800f6342cb21.48143101.mp3" },
-      { title: "Tum To Thehre Pardesi", artist: "Altaf Raja (Highway Classic)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8010245994b9.23145761.mp3" },
-      { title: "Tumse Milna", artist: "Udit Narayan & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a80106e7e38e2.92732922.mp3" },
-      { title: "Jaane Kyon Log Pyar", artist: "Udit Narayan & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a80109d970479.41448487.mp3" },
-      { title: "Oodhni", artist: "Udit Narayan & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8010db7e7e47.85862263.mp3" },
-      { title: "Jhanjharia", artist: "Abhijeet Bhattacharya", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8011079565f7.04442597.mp3" },
-      { title: "Chand Se Parda", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a80115a0fcba2.05328552.mp3" },
-      { title: "Meri Mehbooba", artist: "Kumar Sanu & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8011c06961e1.75783480.mp3" },
-      { title: "Tere Dar Par Sanam", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8011f7aea2d8.41865380.mp3" },
-      { title: "Nahin Yeh Ho Nahin Sakta", artist: "Kumar Sanu & Sadhana Sargam", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a801238cb90c3.67609094.mp3" },
-      { title: "Barsaat Ke Mausam Mein", artist: "Kumar Sanu (Naajayaz)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a80126e6822e6.26394093.mp3" },
-      { title: "Aye Mere Humsafar", artist: "Alka Yagnik & Udit Narayan", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8013a9b8b290.24804986.mp3" },
-      { title: "Ae Kash Ke Hum", artist: "Kumar Sanu (Kabhi Haan Kabhi Naa)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8013d8c5c5d0.70297864.mp3" },
-      { title: "Tu Hi Re", artist: "Hariharan & Kavita K (Bombay)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a80142213e965.53608046.mp3" },
-      { title: "Dil Ke Badle Sanam", artist: "Udit Narayan & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a80147d0253e8.52542358.mp3" },
-      { title: "Sochenge Tumhe Pyar", artist: "Kumar Sanu (Deewana)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8014b076f9f2.46008491.mp3" },
-      { title: "Aksar Is Duniya Mein", artist: "Alka Yagnik (Dhadkan)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a8014ef1173d5.53100631.mp3" },
-      { title: "Kitaben Bahut Si", artist: "Asha Bhosle & Vinod Rathod", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a801573da6357.19964470.mp3" },
-      { title: "Raah Mein Unse Mulaqat", artist: "Kumar Sanu & Alka Yagnik", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803ad6d910f9.28244193.mp3" },
-      { title: "Kitna Haseen Chehra", artist: "Kumar Sanu (Dilwale)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803c0be30ac4.66182873.mp3" },
-      { title: "Pehli Pehli Baar Mohabbat Ki Hai", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803c6bd90d33.43762303.mp3" },
-      { title: "Ye Aaina Jo Tumhen", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803cad0048f1.39334256.mp3" },
-      { title: "Tumhein Apna Banane Ki", artist: "Kumar Sanu (Sadak)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803cd16869b5.40047956.mp3" },
-      { title: "Too Cheez Badi Hain Mast", artist: "Kumar Sanu & Kavita K (Mohra)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803d87457702.02725399.mp3" },
-      { title: "Oh Mere Dil Ke Chain", artist: "Abhijeet", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803d965a5646.17723448.mp3" },
-      { title: "Mera Dil Bhi Kitna Pagal Hai", artist: "Kumar Sanu & Alka (Saajan)", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803e0654d485.12616218.mp3" },
-      { title: "Tumhein Dekhen Meri Aankhen", artist: "Alka Yagnik & Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803e3ff22f65.39915562.mp3" },
-      { title: "Mera Chand Mujhe Aaya Hai Nazar", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803e83edb239.43074334.mp3" },
-      { title: "Shikwa Nahin Kisi Se", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803ea3f3faf3.13207435.mp3" },
-      { title: "Shaam Bhi Khoob Hai", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803ebdc1e398.57981345.mp3" },
-      { title: "Hum Teri Mohabbat Mein", artist: "Kumar Sanu", era: "90s", language: "hindi", url: "https://truckplaylist.com/uploads/f_6a803edcaa0378.24037957.mp3" }
-    ],
-    english: [
-      // ── Soothing Polyphonic Road Trip Hits (Warm Rhodes / Chill Acoustic Synth) ──
-      {
-        title: "Hotel California",
-        artist: "Eagles (Lofi Acoustic Chill)",
-        era: "90s",
-        language: "english",
-        isSynth: true,
-        bpm: 78,
-        patterns: [
-          { bass: "B2", chord: ["D4", "F#4", "B4"], melody: ["F#5", "D5", "B4", "F#4"] },
-          { bass: "F#2", chord: ["C#4", "E4", "A#4"], melody: ["C#5", "A#4", "F#4", "C#4"] },
-          { bass: "A2", chord: ["C#4", "E4", "A4"], melody: ["E5", "C#5", "A4", "E4"] },
-          { bass: "E2", chord: ["B3", "E4", "G#4"], melody: ["B4", "G#4", "E4", "B3"] },
-          { bass: "G2", chord: ["B3", "D4", "G4"], melody: ["D5", "B4", "G4", "D4"] },
-          { bass: "D3", chord: ["A3", "D4", "F#4"], melody: ["A4", "F#4", "D4", "A3"] },
-          { bass: "E2", chord: ["G3", "B3", "E4"], melody: ["B4", "G4", "E4", "B3"] },
-          { bass: "F#2", chord: ["A#3", "C#4", "F#4"], melody: ["C#5", "A#4", "F#4", "A#3"] }
-        ]
-      },
-      {
-        title: "Clocks",
-        artist: "Coldplay (Warm Rhodes)",
-        era: "2000s",
-        language: "english",
-        isSynth: true,
-        bpm: 96,
-        patterns: [
-          { bass: "Eb3", chord: ["G4", "Bb4"], melody: ["Eb5", "Bb4", "G4", "Eb5", "Bb4", "G4"] },
-          { bass: "Bb2", chord: ["F4", "Db5"], melody: ["Db5", "Bb4", "F4", "Db5", "Bb4", "F4"] },
-          { bass: "F2", chord: ["C4", "Ab4"], melody: ["C5", "Ab4", "F4", "C5", "Ab4", "F4"] },
-          { bass: "F2", chord: ["C4", "Ab4"], melody: ["C5", "Ab4", "F4", "C5", "Ab4", "F4"] }
-        ]
-      },
-      {
-        title: "Careless Whisper",
-        artist: "George Michael (Smooth Mellow)",
-        era: "90s",
-        language: "english",
-        isSynth: true,
-        bpm: 76,
-        patterns: [
-          { bass: "D3", chord: ["F4", "A4"], melody: ["D5", "A4", "F4", "D4", "F4", "A4", "D5"] },
-          { bass: "G2", chord: ["Bb3", "D4"], melody: ["Bb4", "G4", "D4", "Bb3", "D4", "G4", "Bb4"] },
-          { bass: "Bb2", chord: ["D4", "F4"], melody: ["F5", "D5", "Bb4", "F4", "Bb4", "D5", "F5"] },
-          { bass: "A2", chord: ["C4", "E4"], melody: ["E5", "C5", "A4", "E4", "A4", "C5", "E5"] }
-        ]
-      },
-      {
-        title: "Boulevard of Broken Dreams",
-        artist: "Green Day (Ambient Drive)",
-        era: "2000s",
-        language: "english",
-        isSynth: true,
-        bpm: 82,
-        patterns: [
-          { bass: "E2", chord: ["G3", "B3", "E4"], melody: ["E4", "G4", "B4", "E5"] },
-          { bass: "G2", chord: ["B3", "D4", "G4"], melody: ["D4", "G4", "B4", "D5"] },
-          { bass: "D3", chord: ["A3", "D4", "F#4"], melody: ["A3", "D4", "F#4", "A4"] },
-          { bass: "A2", chord: ["C#4", "E4", "A4"], melody: ["E4", "A4", "C#5", "E5"] }
-        ]
-      },
-      {
-        title: "Counting Stars",
-        artist: "OneRepublic (Chill Synth)",
-        era: "2010s",
-        language: "english",
-        isSynth: true,
-        bpm: 90,
-        patterns: [
-          { bass: "A2", chord: ["C4", "E4", "A4"], melody: ["A4", "C5", "E5", "C5"] },
-          { bass: "C3", chord: ["E4", "G4", "C5"], melody: ["G4", "C5", "E5", "C5"] },
-          { bass: "G2", chord: ["B3", "D4", "G4"], melody: ["D4", "G4", "B4", "G4"] },
-          { bass: "F2", chord: ["A3", "C4", "F4"], melody: ["C4", "F4", "A4", "F4"] }
-        ]
-      },
-      {
-        title: "Take On Me",
-        artist: "A-ha (Lofi Piano Version)",
-        era: "90s",
-        language: "english",
-        isSynth: true,
-        bpm: 84,
-        patterns: [
-          { bass: "B2", chord: ["D4", "F#4", "B4"], melody: ["F#4", "F#4", "D4", "B3", "B3", "E4", "E4", "E4", "G#4", "G#4", "A4", "B4"] },
-          { bass: "E2", chord: ["G#3", "B3", "E4"], melody: ["A4", "A4", "A4", "E4", "D4", "F#4", "F#4", "F#4", "E4", "E4", "F#4", "E4"] },
-          { bass: "A2", chord: ["C#4", "E4", "A4"], melody: ["F#4", "F#4", "D4", "B3", "B3", "E4", "E4", "E4", "G#4", "G#4", "A4", "B4"] },
-          { bass: "D3", chord: ["F#3", "A3", "D4"], melody: ["A4", "A4", "A4", "E4", "D4", "F#4", "F#4", "F#4", "E4", "E4", "F#4", "E4"] }
-        ]
-      },
-      {
-        // Rounds out the 2000s slot (previously Clocks + Boulevard of
-        // Broken Dreams only) for a more even 90s/2000s/2010s spread.
-        title: "Chasing Cars",
-        artist: "Snow Patrol (Warm Rhodes)",
-        era: "2000s",
-        language: "english",
-        isSynth: true,
-        bpm: 104,
-        patterns: [
-          { bass: "A2", chord: ["C4", "E4"], melody: ["E5", "C5", "A4", "E4"] },
-          { bass: "E2", chord: ["G#3", "B3"], melody: ["B4", "G#4", "E4", "B3"] },
-          { bass: "F#2", chord: ["A3", "C#4"], melody: ["C#5", "A4", "F#4", "C#4"] },
-          { bass: "D3", chord: ["F#3", "A3"], melody: ["A4", "F#4", "D4", "A3"] }
-        ]
-      },
-      {
-        // Rounds out the 2010s slot (previously Counting Stars only).
-        title: "Riptide",
-        artist: "Vance Joy (Lofi Ukulele Chill)",
-        era: "2010s",
-        language: "english",
-        isSynth: true,
-        bpm: 100,
-        patterns: [
-          { bass: "A2", chord: ["C4", "E4", "A4"], melody: ["C5", "E5", "A4", "E4"] },
-          { bass: "F2", chord: ["A3", "C4", "F4"], melody: ["A4", "C5", "F4", "C4"] },
-          { bass: "C3", chord: ["E4", "G4", "C5"], melody: ["E5", "G4", "C4", "G4"] },
-          { bass: "G2", chord: ["B3", "D4", "G4"], melody: ["B4", "D5", "G4", "D4"] }
-        ]
-      }
-    ]
-  };
-
-  // Channel display names
-  const CHANNEL_NAMES = { hindi: 'DHABA FM', english: 'HIGHWAY FM', mix: 'ALL FM' };
-  const CHANNEL_ORDER = ['hindi', 'english', 'mix'];
 
   class SoundEngine {
     constructor() {
       this.ctx = null;
       this.masterFilter = null;
-      // Radio (the Hindi/English playlist, via audioEl or the synth radio
-      // interval) and SFX (in-game event tones — potholes, e-challans,
-      // delivery chimes) used to share one `muted` flag with no way to
-      // silence one without the other. Split so each is independently
-      // mutable, and persisted the same way the channel preference already
-      // is so a mute choice survives a reload.
-      this.radioMuted = localStorage.getItem('shiplyp_radio_muted') === '1';
+      // One mute flag for all game audio (SFX, engine, wind). The radio was
+      // removed entirely (B112), so there is nothing else to mute.
       this.sfxMuted = localStorage.getItem('shiplyp_sfx_muted') === '1';
-      // `muted` kept as a read-only OR of both, for any external code that
-      // still reads it (display strings etc.) — never write to it directly.
       // Whenever gameState isn't 'playing' (menu, dispatch hub, restart),
-      // ALL audio — radio and SFX alike — is fully suspended regardless of
-      // the two mute flags above, not just paused-but-still-schedulable.
-      // Initialized to TRUE so all audio is completely suspended until the
-      // player actually starts driving.
+      // all audio is fully suspended regardless of the mute flag.
+      // Initialized to TRUE so nothing plays until the player starts driving.
       this.suspended = true;
-      this.radioPlaying = false;
-      this.currentTrackIndex = 0;
-
-      // Synth player state
-      this.synthRadioTimer = null;
-      this.synthLoopCount = 0;
-      this.currentPatternIndex = 0;
-      this.currentNoteIndex = 0;
-
-      // Restore saved channel preference or default to hindi
-      this.radioChannel = localStorage.getItem('shiplyp_radio_channel') || 'hindi';
-      if (!CHANNEL_ORDER.includes(this.radioChannel)) this.radioChannel = 'hindi';
-      this._rebuildActivePlaylist();
-
-      // HTML5 Audio Streamer for real MP3s
-      this.audioEl = new Audio();
-      this.audioEl.preload = 'auto';
-      this.audioEl.volume = 0.70;
-      this.audioEl.muted = this.radioMuted;
-
-      // Radio only plays when explicitly started by the player (never autoplay on load)
-      this.userWantsRadio = false;
-      try { localStorage.removeItem('shiplyp_radio_pref'); } catch (e) {}
-
-      this.audioEl.addEventListener('ended', () => {
-        const trk = this.activePlaylist[this.currentTrackIndex];
-        if (!trk || trk.isSynth) return;
-        const title = this.nextTrack();
-        const el = document.getElementById('radio-track-title');
-        if (el) el.textContent = title;
-      });
-
-      this.audioEl.addEventListener('error', (e) => {
-        const trk = this.activePlaylist[this.currentTrackIndex];
-        // CRITICAL FIX: Only auto-skip if the current track is ACTUALLY an external MP3 stream
-        // (do not skip when audioEl is paused or empty due to switching to a synth track)
-        if (this.radioPlaying && trk && trk.url && this.audioEl.src && this.audioEl.src.startsWith('http')) {
-          console.warn('Radio stream error for track:', trk.title, 'skipping to next...');
-          const nextTitle = this.nextTrack();
-          const el = document.getElementById('radio-track-title');
-          if (el) el.textContent = nextTitle;
-        }
-      });
+      // Clear preferences left behind by the removed radio.
+      try {
+        ['shiplyp_radio_muted', 'shiplyp_radio_channel', 'shiplyp_radio_pref']
+          .forEach(k => localStorage.removeItem(k));
+      } catch (e) {}
 
       const init = () => {
         this.ensure();
       };
       window.addEventListener('click', init, { once: true });
       window.addEventListener('keydown', init, { once: true });
-    }
-
-    // Backward-compat getter — all external code that reads realTracks keeps working
-    get realTracks() { return this.activePlaylist; }
-
-    // Build the active playlist from the current channel
-    _rebuildActivePlaylist() {
-      if (this.radioChannel === 'mix') {
-        this.activePlaylist = [...RADIO_PLAYLISTS.hindi, ...RADIO_PLAYLISTS.english];
-      } else {
-        this.activePlaylist = [...(RADIO_PLAYLISTS[this.radioChannel] || RADIO_PLAYLISTS.hindi)];
-      }
-      if (this.currentTrackIndex >= this.activePlaylist.length) {
-        this.currentTrackIndex = 0;
-      }
-    }
-
-    // Dawn/dusk lean warm & nostalgic (90s), midday is upbeat cruising
-    // (2000s), night leans modern/atmospheric (2010s) — matches each era's
-    // acoustic texture to the mood of that time-of-day. Read from the game
-    // instance rather than tracked locally since SoundEngine is a
-    // standalone singleton constructed before `window.game` exists.
-    _eraForCurrentTOD() {
-      const tod = window.game?.selectedTimeOfDay;
-      if (tod === 'dawn' || tod === 'dusk') return '90s';
-      if (tod === 'night') return '2010s';
-      return '2000s'; // day, or unknown/not-yet-set
-    }
-
-    // Bias the CURRENT selection toward a track matching the current
-    // time-of-day's era, without narrowing what prevTrack/nextTrack can
-    // reach afterward — the player can still freely browse the whole
-    // channel manually, this only picks where playback starts/resumes.
-    _biasTrackIndexToEra() {
-      if (!this.activePlaylist.length) return;
-      const era = this._eraForCurrentTOD();
-      const matchIdx = this.activePlaylist.findIndex(t => t.era === era);
-      if (matchIdx !== -1) this.currentTrackIndex = matchIdx;
-    }
-
-    _formatTrackTitle(trk) {
-      if (!trk) return 'Radio';
-      return `${trk.title} — ${trk.artist} (${trk.era})`;
-    }
-
-    getChannelDisplayName() {
-      return CHANNEL_NAMES[this.radioChannel] || 'DHABA FM';
     }
 
     ensure() {
@@ -839,111 +548,23 @@
       return this.ctx;
     }
 
-    get muted() { return this.radioMuted && this.sfxMuted; }
+    get muted() { return this.sfxMuted; }
 
-    toggleRadioMute() {
-      this.radioMuted = !this.radioMuted;
-      localStorage.setItem('shiplyp_radio_muted', this.radioMuted ? '1' : '0');
-      if (this.audioEl) this.audioEl.muted = this.radioMuted;
-      if (this.radioPlaying && !this.suspended) {
-        if (this.radioMuted) {
-          this.stopSynthRadio();
-          if (this.audioEl) this.audioEl.pause();
-        } else {
-          this._playCurrentTrack();
-        }
-      }
-      return this.radioMuted;
-    }
-
-    toggleSfxMute() {
+    toggleMute() {
       this.sfxMuted = !this.sfxMuted;
       localStorage.setItem('shiplyp_sfx_muted', this.sfxMuted ? '1' : '0');
       return this.sfxMuted;
     }
 
-    // Kept for any leftover call site — now toggles both together, matching
-    // the old single-mute behavior exactly (radioMuted and sfxMuted end up
-    // equal, since both start from whatever `muted` was: true only when
-    // both were already muted).
-    toggleMute() {
-      const goingMuted = !this.muted;
-      this.radioMuted = goingMuted;
-      this.sfxMuted = goingMuted;
-      localStorage.setItem('shiplyp_radio_muted', goingMuted ? '1' : '0');
-      localStorage.setItem('shiplyp_sfx_muted', goingMuted ? '1' : '0');
-      if (this.audioEl) this.audioEl.muted = goingMuted;
-      if (this.radioPlaying && !this.suspended) {
-        if (goingMuted) {
-          this.stopSynthRadio();
-          if (this.audioEl) this.audioEl.pause();
-        } else {
-          this._playCurrentTrack();
-        }
-      }
-      return goingMuted;
-    }
-
-    // Fully suspends ALL audio (radio + SFX) regardless of the mute flags
-    // above — called whenever the player isn't actively in a driving run
-    // (menu, dispatch hub, restart) so nothing plays behind a menu screen.
-    // Distinct from muting: muting is a per-channel user preference that
-    // should survive a reload; suspension is a per-screen state that
-    // shouldn't leak the mute flags (a muted-radio player who un-mutes
-    // mid-menu shouldn't suddenly hear radio before they've started a run).
+    // Fully suspends all audio regardless of the mute flag — called whenever
+    // the player isn't actively in a driving run (menu, dispatch hub,
+    // restart) so nothing plays behind a menu screen.
     suspendForMenu() {
-      if (this.suspended) return;
       this.suspended = true;
-      if (this.audioEl) this.audioEl.pause();
-      if (this.synthRadioTimer) {
-        clearInterval(this.synthRadioTimer);
-        this.synthRadioTimer = null;
-      }
     }
 
     resumeForGameplay() {
       this.suspended = false;
-      if (this.radioPlaying && !this.radioMuted) {
-        this._playCurrentTrack();
-      }
-    }
-
-    // Soft, soothing Rhodes / Electric Piano chord and melody synthesizer note
-    playSoothingNote(freq, duration = 0.45, volume = 0.14, isBass = false) {
-      if (this.suspended || this.radioMuted || !freq || freq <= 0) return;
-      const ctx = this.ensure();
-      if (!ctx) return;
-      const now = ctx.currentTime;
-
-      // Soft envelope gain with gentle attack and warm decay
-      const gain = ctx.createGain();
-      const attackTime = isBass ? 0.045 : 0.028;
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.linearRampToValueAtTime(volume, now + attackTime);
-      gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume * 0.45), now + duration * 0.45);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
-      // Primary warm fundamental tone (sine)
-      const osc1 = ctx.createOscillator();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(freq, now);
-
-      // Secondary tone for warm harmonic presence (sub-bass sine or gentle detuned triangle)
-      const osc2 = ctx.createOscillator();
-      osc2.type = isBass ? 'sine' : 'triangle';
-      osc2.frequency.setValueAtTime(isBass ? freq * 0.5 : freq, now);
-      if (!isBass) {
-        osc2.detune.setValueAtTime(4.0, now);
-      }
-
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(this.masterFilter || ctx.destination);
-
-      osc1.start(now);
-      osc2.start(now);
-      osc1.stop(now + duration + 0.05);
-      osc2.stop(now + duration + 0.05);
     }
 
     // Gentle UI SFX (softened gains and rounded tones)
@@ -1149,164 +770,6 @@
       if (this.windGain) this.windGain.gain.setTargetAtTime(windVol, now, 0.1);
       if (this.windFilter) this.windFilter.frequency.setTargetAtTime(windCutoff, now, 0.1);
     }
-
-    // Soothing polyphonic English Synth Radio engine
-    startSynthRadio(trackObj) {
-      this.stopSynthRadio();
-      const ctx = this.ensure();
-      if (!this.radioPlaying || this.suspended || this.radioMuted) return;
-
-      const track = trackObj || this.activePlaylist[this.currentTrackIndex];
-      const scorePatterns = track?.patterns || RADIO_PLAYLISTS.english[0].patterns;
-      const bpm = track?.bpm || 80;
-      const stepInterval = Math.max(160, Math.round((60000 / bpm) / 2)); // 8th note interval in ms
-
-      this.currentPatternIndex = 0;
-      this.currentNoteIndex = 0;
-      this.synthLoopCount = 0;
-
-      const step = () => {
-        if (!this.radioPlaying || this.suspended || this.radioMuted) return;
-
-        const currentPat = scorePatterns[this.currentPatternIndex % scorePatterns.length];
-        const melodyNotes = currentPat.melody || [];
-        const chordNotes = currentPat.chord || [];
-        const bassNote = currentPat.bass;
-
-        // On pattern start: play bass & warm chord pad
-        if (this.currentNoteIndex === 0) {
-          if (bassNote) {
-            this.playSoothingNote(noteToFreq(bassNote), Math.min(1.2, (stepInterval * 4) / 1000), 0.18, true);
-          }
-          chordNotes.forEach(chNote => {
-            this.playSoothingNote(noteToFreq(chNote), Math.min(1.5, (stepInterval * 3.5) / 1000), 0.09, false);
-          });
-        }
-
-        // Play melody note
-        if (melodyNotes.length > 0) {
-          const mNote = melodyNotes[this.currentNoteIndex % melodyNotes.length];
-          this.playSoothingNote(noteToFreq(mNote), Math.min(0.8, (stepInterval * 1.6) / 1000), 0.13, false);
-        }
-
-        this.currentNoteIndex++;
-        const patternLength = Math.max(4, melodyNotes.length);
-        if (this.currentNoteIndex >= patternLength) {
-          this.currentNoteIndex = 0;
-          this.currentPatternIndex++;
-          if (this.currentPatternIndex >= scorePatterns.length) {
-            this.currentPatternIndex = 0;
-            this.synthLoopCount++;
-            // Auto advance track after 2 full relaxing cycles (~45-60s)
-            if (this.synthLoopCount >= 2) {
-              const nextTitle = this.nextTrack();
-              const el = document.getElementById('radio-track-title');
-              if (el) el.textContent = nextTitle;
-            }
-          }
-        }
-      };
-
-      // Play immediate first note/chord right away
-      step();
-      this.synthRadioTimer = setInterval(step, stepInterval);
-    }
-
-    stopSynthRadio() {
-      if (this.synthRadioTimer) {
-        clearInterval(this.synthRadioTimer);
-        this.synthRadioTimer = null;
-      }
-      this.synthLoopCount = 0;
-      this.currentPatternIndex = 0;
-      this.currentNoteIndex = 0;
-    }
-
-    _playCurrentTrack() {
-      const trk = this.activePlaylist[this.currentTrackIndex];
-      if (!trk) return '';
-
-      if (trk.isSynth) {
-        // Soothing synth track
-        this.audioEl.pause();
-        // Do NOT assign this.audioEl.src = '' because browsers fire an error event for empty src
-        if (this.radioPlaying && !this.suspended && !this.radioMuted) {
-          this.startSynthRadio(trk);
-        } else {
-          this.stopSynthRadio();
-        }
-      } else if (trk.url) {
-        // Real MP3 track
-        this.stopSynthRadio();
-        if (this.audioEl.src !== trk.url) {
-          this.audioEl.src = trk.url;
-        }
-        if (this.radioPlaying && !this.suspended && !this.radioMuted) {
-          const playPromise = this.audioEl.play();
-          if (playPromise !== undefined) {
-            playPromise.catch((err) => {
-              console.warn('Audio play prevented or stream error:', err);
-            });
-          }
-        } else {
-          this.audioEl.pause();
-        }
-      }
-      return this._formatTrackTitle(trk);
-    }
-
-    // Toggle radio on / off
-    toggleRadio() {
-      this.ensure();
-      this.radioPlaying = !this.radioPlaying;
-      this.userWantsRadio = this.radioPlaying;
-      localStorage.setItem('shiplyp_radio_pref', this.radioPlaying ? 'on' : 'off');
-      if (this.radioPlaying) {
-        this._biasTrackIndexToEra();
-        this._playCurrentTrack();
-      } else {
-        this.audioEl.pause();
-        this.stopSynthRadio();
-      }
-      return this.radioPlaying;
-    }
-
-    nextTrack() {
-      this.ensure();
-      if (!this.activePlaylist.length) return '';
-      this.currentTrackIndex = (this.currentTrackIndex + 1) % this.activePlaylist.length;
-      return this._playCurrentTrack();
-    }
-
-    prevTrack() {
-      this.ensure();
-      if (!this.activePlaylist.length) return '';
-      this.currentTrackIndex = (this.currentTrackIndex - 1 + this.activePlaylist.length) % this.activePlaylist.length;
-      return this._playCurrentTrack();
-    }
-
-    switchChannel(channel) {
-      if (!CHANNEL_ORDER.includes(channel)) channel = 'hindi';
-      this.radioChannel = channel;
-      localStorage.setItem('shiplyp_radio_channel', channel);
-      this._rebuildActivePlaylist();
-      this._biasTrackIndexToEra();
-      return this._playCurrentTrack();
-    }
-
-    cycleChannel() {
-      const idx = CHANNEL_ORDER.indexOf(this.radioChannel);
-      const next = CHANNEL_ORDER[(idx + 1) % CHANNEL_ORDER.length];
-      return this.switchChannel(next);
-    }
-
-    // Direct two-way toggle between the Hindi and English channels
-    // specifically (skips 'mix', which stays reachable via cycleChannel/[L]
-    // for anyone who wants the blended stream).
-    toggleLanguage() {
-      const next = this.radioChannel === 'hindi' ? 'english' : 'hindi';
-      return this.switchChannel(next);
-    }
   }
 
   const sound = new SoundEngine();
@@ -1328,8 +791,6 @@
   }
   const Ads = (typeof window !== 'undefined' && window.ShiplypAds) ? window.ShiplypAds : null;
   window.sound = sound;
-  window.RADIO_PLAYLISTS = RADIO_PLAYLISTS;
-  window.noteToFreq = noteToFreq;
 
   // --------------------------------------------------------------------------
   // 4. CONFIG & MISSIONS
@@ -8987,7 +8448,13 @@
       this.grip = 1.0;
       this.health = 100; // Vehicle condition (100% down to 0%)
       this.distanceTraveled = 0;
-      this.isAutodrive = false; // Default: 100% MANUAL DRIVING
+      // Two mutually exclusive assists (B114). Both default OFF (manual).
+      //  isAutodrive — AUTO STEER: the original autopilot; follows the road
+      //                and manages speed.
+      //  isCruise    — AUTO DRIVE: speed only (speeds up on straights, eases
+      //                off for bends ahead); the player still steers.
+      this.isAutodrive = false;
+      this.isCruise = false;
       this.splineProgress = 0.008;
       this.cycleRideTime = 0;
       this.cycleSteerSpeedPenalty = 0;
@@ -9566,6 +9033,40 @@
       return { u, pt, tangent, normal, latDist, distFromRoad: Math.sqrt(bestDistSq) };
     }
 
+    // Where the road goes ~10-36 m ahead, relative to the current heading.
+    // Shared by AUTO STEER (to steer and pick a speed) and AUTO DRIVE (to
+    // pick a speed only).
+    _roadAhead(world) {
+      const curveLength = world.curve.getLength() || 5000;
+      const lookaheadMeters = THREE.MathUtils.clamp(10.0 + this.speed * 0.7, 8.0, 36.0);
+      const lookaheadU = THREE.MathUtils.clamp(this.splineProgress + (lookaheadMeters / curveLength), 0, 0.999);
+      const toTarget = world.curve.getPointAt(lookaheadU).sub(this.mesh.position);
+      toTarget.y = 0;
+      if (toTarget.lengthSq() <= 0.01) return { headingDiff: 0, turnDeflection: 0, hasTarget: false };
+      let headingDiff = Math.atan2(toTarget.x, toTarget.z) - this.heading;
+      headingDiff = Math.atan2(Math.sin(headingDiff), Math.cos(headingDiff)); // wrap to [-pi, pi]
+      return { headingDiff, turnDeflection: Math.abs(headingDiff), hasTarget: true };
+    }
+
+    // Curve-adaptive speed control: accelerate toward a cruise target and
+    // slow down automatically when entering sharp turns.
+    _applyAutoSpeed(turnDeflection, effectiveMaxSpeed, isBicycle, dt) {
+      const cornerSpeedFactor = THREE.MathUtils.clamp(1.0 - (turnDeflection / Math.PI) * 1.5, 0.35, 1.0);
+      let autoMaxSpeed = effectiveMaxSpeed;
+      if (isBicycle) {
+        this.cycleRideTime += dt;
+        const cycleCfg = CONFIG.VEHICLES.cycle;
+        const escalation = Math.min(this.cycleRideTime / cycleCfg.rampSeconds, 1.0);
+        autoMaxSpeed = Math.min(effectiveMaxSpeed, cycleCfg.baseSpeed + (cycleCfg.maxSpeed - cycleCfg.baseSpeed) * escalation);
+      }
+      const autoTargetSpeed = autoMaxSpeed * (isBicycle ? 0.90 : 0.72) * cornerSpeedFactor;
+
+      if (this.speed < autoTargetSpeed) {
+        this.speed += this.accel * dt;
+      } else if (this.speed > autoTargetSpeed + 1.0) {
+        this.speed -= (this.brake || 30.0) * dt * 0.7;
+      }
+    }
     update(dt, keys, world, seasonKey = 'autumn', roadTerrainKey = 'asphalt') {
       const isRain = (seasonKey === 'autumn' || seasonKey === 'summer');
       const isWind = (seasonKey === 'winter' || seasonKey === 'summer');
@@ -9596,14 +9097,10 @@
       // Space (handbrake/parcel-toss) intentionally excluded — players toss
       // parcels while autopilot is active, and button-focus causes the browser
       // to re-fire Space when a HUD button has keyboard focus.
-      if (this.isAutodrive && (keys.down || keys.s)) {
+      if ((this.isAutodrive || this.isCruise) && (keys.down || keys.s)) {
         this.isAutodrive = false;
-        if (typeof document !== 'undefined') {
-          const pill = document.getElementById('btn-hud-autodrive');
-          const text = document.getElementById('autodrive-text');
-          if (pill) pill.classList.remove('autodrive-active');
-          if (text) text.textContent = 'AUTOPILOT [F]';
-        }
+        this.isCruise = false;
+        if (typeof window !== 'undefined') window.game?.updateAutoAssistHUD?.();
       }
 
       if (this.isAutodrive) {
@@ -9611,20 +9108,8 @@
         // scaled with forward speed (~12m at low speed, ~35m at top speed), avoiding
         // jumping across hairpin loops. We also slow down on tight curves to prevent
         // understeering or spinning into the guardrails.
-        const curveLength = world.curve.getLength() || 5000;
-        const lookaheadMeters = THREE.MathUtils.clamp(10.0 + this.speed * 0.7, 8.0, 36.0);
-        const lookaheadU = THREE.MathUtils.clamp(this.splineProgress + (lookaheadMeters / curveLength), 0, 0.999);
-        const lookaheadPt = world.curve.getPointAt(lookaheadU);
-        const toTarget = lookaheadPt.clone().sub(this.mesh.position);
-        toTarget.y = 0;
-
-        let turnDeflection = 0;
-        if (toTarget.lengthSq() > 0.01) {
-          const desiredHeading = Math.atan2(toTarget.x, toTarget.z);
-          let headingDiff = desiredHeading - this.heading;
-          headingDiff = Math.atan2(Math.sin(headingDiff), Math.cos(headingDiff)); // wrap to [-pi, pi]
-          turnDeflection = Math.abs(headingDiff);
-
+        const { headingDiff, turnDeflection, hasTarget } = this._roadAhead(world);
+        if (hasTarget) {
           // Speed-scaled turn rate: allow sharper turn rate at moderate/low speed, stable at high speed
           const autopilotTurnRate = 2.4 * climateGrip;
           const turnStep = THREE.MathUtils.clamp(headingDiff, -autopilotTurnRate * dt, autopilotTurnRate * dt);
@@ -9637,24 +9122,15 @@
           this.steerAngle = THREE.MathUtils.lerp(this.steerAngle, 0, 0.16);
         }
 
-        // Curve-adaptive speed limit: slow down automatically when entering sharp turns
-        const cornerSpeedFactor = THREE.MathUtils.clamp(1.0 - (turnDeflection / Math.PI) * 1.5, 0.35, 1.0);
-        let autoMaxSpeed = effectiveMaxSpeed;
-        if (isBicycle) {
-          this.cycleRideTime += dt;
-          const cycleCfg = CONFIG.VEHICLES.cycle;
-          const escalation = Math.min(this.cycleRideTime / cycleCfg.rampSeconds, 1.0);
-          autoMaxSpeed = Math.min(effectiveMaxSpeed, cycleCfg.baseSpeed + (cycleCfg.maxSpeed - cycleCfg.baseSpeed) * escalation);
-        }
-        const autoTargetSpeed = autoMaxSpeed * (isBicycle ? 0.90 : 0.72) * cornerSpeedFactor;
-
-        if (this.speed < autoTargetSpeed) {
-          this.speed += this.accel * dt;
-        } else if (this.speed > autoTargetSpeed + 1.0) {
-          this.speed -= (this.brake || 30.0) * dt * 0.7;
-        }
+        this._applyAutoSpeed(turnDeflection, effectiveMaxSpeed, isBicycle, dt);
       } else {
-        if (this.health <= 0) {
+        if (this.isCruise && this.health > 0) {
+          // AUTO DRIVE: speed only. Same curve-aware target speed as Auto
+          // Steer, but measured against the player's own heading, so it
+          // eases off when a bend is coming up or the rider points off-road.
+          this._downBrakingFromForward = false;
+          this._applyAutoSpeed(this._roadAhead(world).turnDeflection, effectiveMaxSpeed, isBicycle, dt);
+        } else if (this.health <= 0) {
           // Engine breakdown stall
           this.speed *= Math.exp(-2.5 * dt);
           if (Math.abs(this.speed) < 0.1) this.speed = 0;
@@ -11122,13 +10598,11 @@
         const k = (e.key || '').toLowerCase();
         const code = e.code || '';
         if (k === 'f' || code === 'KeyF') this.toggleAutodrive();
+        if (k === 'g' || code === 'KeyG') this.toggleCruise();
         if (k === 'r' || code === 'KeyR') this.returnToRoad();
         if (k === 'c' || code === 'KeyC') this.toggleCameraMode();
         if (k === 't' || code === 'KeyT') this.cycleTimeOfDay();
-        if (k === 'm' || code === 'KeyM') this.toggleRadioMute();
-        if (k === 'n' || code === 'KeyN') this.toggleSfxMute();
-        if (k === 'l' || code === 'KeyL') this.cycleRadioChannel();
-        if (k === 'p' || code === 'KeyP') this.openPostcardMode();
+        if (k === 'm' || code === 'KeyM') this.toggleMute();
         if (k === 'h' || code === 'KeyH') {
           sound.playHorn(this.selectedVehicle);
           if (navigator.vibrate) navigator.vibrate(35);
@@ -11287,10 +10761,6 @@
         sound.playHorn(this.selectedVehicle);
         if (navigator.vibrate) navigator.vibrate(35);
       });
-      bindTapButton('touch-btn-photo', () => {
-        closeTools();
-        this.openPostcardMode();
-      });
       bindTapButton('touch-btn-recenter', () => {
         closeTools();
         this.returnToRoad();
@@ -11300,6 +10770,7 @@
         this.toggleCameraMode();
       });
       bindTapButton('touch-btn-autopilot', () => this.toggleAutodrive());
+      bindTapButton('touch-btn-cruise', () => this.toggleCruise());
 
       // Close tools drawer on tap outside
       document.addEventListener('pointerdown', (e) => {
@@ -11965,80 +11436,6 @@
       }
     }
 
-    // ── Scenic Postcard & Photo Mode ──────────────────────────────────────
-    openPostcardMode() {
-      const currentBiome = this.currentDistrictName || this.currentBiomeName || 'The Grand Nilambari Corridor';
-      const speedKmh = this.vehicle ? Math.abs(Math.round(this.vehicle.speed * 3.6)) : 0;
-      const totalLen = this.world?.curve?.getLength() || 5000;
-      const distKm = this.vehicle ? (this.vehicle.splineProgress * totalLen / 1000).toFixed(1) : '0.0';
-      const vehName = this.selectedVehicle === 'cycle' ? 'Delivery Cycle' : 'Muscle Coupe';
-      const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
-
-      const existing = document.getElementById('postcard-modal');
-      if (existing) existing.remove();
-
-      // Render 1 frame to ensure buffer has current view
-      if (this.composer) this.composer.render();
-      else if (this.renderer && this.scene && this.camera) this.renderer.render(this.scene, this.camera);
-
-      let imgData = '';
-      try {
-        imgData = this.renderer.domElement.toDataURL('image/jpeg', 0.92);
-      } catch (e) {
-        console.warn('Postcard snapshot capture failed:', e);
-      }
-
-      const modal = document.createElement('div');
-      modal.id = 'postcard-modal';
-      modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(7,9,15,0.85);backdrop-filter:blur(8px);padding:16px;';
-
-      modal.innerHTML = `
-        <div style="max-width:540px;width:100%;background:#0e131d;border:3px solid #000;border-radius:16px;overflow:hidden;box-shadow:6px 6px 0px #000;display:flex;flex-direction:column;">
-          <div style="padding:14px 18px;border-bottom:2px solid #000;background:#151c2a;display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:11px;font-weight:800;letter-spacing:.18em;color:#ffe600;text-transform:uppercase;">SCENIC POSTCARD &bull; PHOTO MODE</span>
-            <button id="postcard-close-x" style="background:none;border:none;color:#ffffff;font-size:18px;font-weight:900;cursor:pointer;padding:4px 8px;">✕</button>
-          </div>
-          <div style="padding:16px;background:#06080d;display:flex;justify-content:center;">
-            <div id="postcard-frame" style="position:relative;width:100%;max-width:480px;border-radius:8px;overflow:hidden;border:3px solid #000;box-shadow:4px 4px 0px #000;">
-              ${imgData ? `<img src="${imgData}" style="width:100%;height:auto;display:block;" alt="Scenic Snapshot">` : `<div style="height:240px;background:#1a2230;"></div>`}
-              <div style="position:absolute;top:10px;left:10px;padding:4px 10px;background:#000000;border:2px solid #ffe600;border-radius:6px;font-family:var(--font-display,'Russo One',sans-serif);font-weight:900;font-size:12px;letter-spacing:1px;color:#ffe600;box-shadow:2px 2px 0px #000;">
-                SHIP<span style="color:#fff;">LYP</span>
-              </div>
-              <div style="position:absolute;bottom:0;left:0;right:0;padding:12px 14px;background:linear-gradient(0deg,rgba(7,9,15,0.95) 0%,rgba(7,9,15,0) 100%);display:flex;justify-content:space-between;align-items:flex-end;">
-                <div>
-                  <div style="font-family:var(--font-display,'Russo One',sans-serif);font-size:15px;font-weight:900;color:#fff;text-shadow:2px 2px 0px #000">${currentBiome.toUpperCase()}</div>
-                  <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:9.5px;font-weight:800;color:rgba(255,255,255,0.85);margin-top:2px;">${vehName.toUpperCase()} &bull; ${speedKmh} KM/H &bull; KM ${distKm}</div>
-                </div>
-                <div style="text-align:right;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:9px;font-weight:800;letter-spacing:1px;color:#ffe600;">
-                  ${today}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div style="padding:14px 18px;display:flex;gap:10px;background:#0e131d;border-top:2px solid #000;">
-            <button id="postcard-download-btn" style="flex:1.2;background:#ffe600;color:#000000;border:2.5px solid #000;border-radius:10px;padding:12px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;letter-spacing:.1em;box-shadow:3px 3px 0px #000;cursor:pointer;">DOWNLOAD POSTCARD</button>
-            <button id="postcard-resume-btn" style="flex:1;background:rgba(255,255,255,0.08);color:#fff;border:2px solid #000;border-radius:10px;padding:12px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;box-shadow:2px 2px 0px #000;cursor:pointer;">RESUME DRIVE</button>
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(modal);
-
-      const closeModal = () => modal.remove();
-      modal.querySelector('#postcard-close-x')?.addEventListener('click', closeModal);
-      modal.querySelector('#postcard-resume-btn')?.addEventListener('click', closeModal);
-      modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-
-      modal.querySelector('#postcard-download-btn')?.addEventListener('click', () => {
-        if (!imgData) return;
-        const a = document.createElement('a');
-        a.href = imgData;
-        a.download = `ShipLyp-Postcard-${distKm}km.jpg`;
-        a.click();
-        this.addNotification(`${UI.icon('camera')} POSTCARD SAVED!`, 'success', 3000);
-      });
-    }
-
     // ── Multi-Drop Shift Milestone Summary ────────────────────────────────
     showShiftSummary() {
       if (this._shiftSummaryActive) return;
@@ -12267,73 +11664,18 @@
         }
       }, { once: true });
 
-      // Multi-Channel Radio Controls
-      const radioCard = document.getElementById('cassette-radio-card');
-      const radioTitleEl = document.getElementById('radio-track-title');
-      const btnPlay = document.getElementById('btn-radio-play');
-      const btnNext = document.getElementById('btn-radio-next');
-      const btnPrev = document.getElementById('btn-radio-prev');
-      const btnChannel = document.getElementById('btn-radio-channel');
-
-      // Set initial channel display from saved preference
-      if (btnChannel) btnChannel.textContent = sound.getChannelDisplayName();
-
-      if (btnPlay) {
-        btnPlay.onclick = () => {
-          sound.ensure();
-          const isPlaying = sound.toggleRadio();
-          btnPlay.innerHTML = `${UI.icon(isPlaying ? 'pause' : 'play', 14)} ${isPlaying ? 'PAUSE' : 'PLAY'}`;
-          const trk = sound.realTracks[sound.currentTrackIndex];
-          if (trk && radioTitleEl) radioTitleEl.textContent = sound._formatTrackTitle(trk);
-          if (radioCard) {
-            if (isPlaying) radioCard.classList.add('playing');
-            else radioCard.classList.remove('playing');
-          }
-        };
-      }
-
-      if (btnNext) {
-        btnNext.onclick = () => {
-          sound.ensure();
-          const title = sound.nextTrack();
-          if (radioTitleEl) radioTitleEl.textContent = title;
-          if (radioCard) radioCard.classList.add('playing');
-          if (btnPlay) btnPlay.textContent = 'PAUSE';
-        };
-      }
-
-      if (btnPrev) {
-        btnPrev.onclick = () => {
-          sound.ensure();
-          const title = sound.prevTrack();
-          if (radioTitleEl) radioTitleEl.textContent = title;
-          if (radioCard) radioCard.classList.add('playing');
-          if (btnPlay) btnPlay.textContent = 'PAUSE';
-        };
-      }
-
-      // Channel toggle button click
-      if (btnChannel) {
-        btnChannel.onclick = () => this.cycleRadioChannel();
-      }
-      const btnLang = document.getElementById('btn-radio-lang');
-      if (btnLang) {
-        btnLang.onclick = () => this.toggleRadioLanguage();
-      }
-
       document.getElementById('btn-hud-autodrive')?.addEventListener('click', () => this.toggleAutodrive());
+      document.getElementById('btn-hud-cruise')?.addEventListener('click', () => this.toggleCruise());
       document.getElementById('btn-hud-reset')?.addEventListener('click', () => {
         this.returnToRoad();
       });
-      document.getElementById('btn-hud-photo')?.addEventListener('click', () => this.openPostcardMode());
       document.getElementById('btn-hud-tod')?.addEventListener('click', () => this.cycleTimeOfDay());
       document.getElementById('btn-dock-tod')?.addEventListener('click', () => this.cycleTimeOfDay());
       document.getElementById('btn-hud-camera')?.addEventListener('click', () => this.toggleCameraMode());
       document.getElementById('btn-dock-camera')?.addEventListener('click', () => this.toggleCameraMode());
       document.getElementById('btn-hud-sound')?.addEventListener('click', () => this.toggleMute());
       document.getElementById('btn-dock-sound')?.addEventListener('click', () => this.toggleMute());
-      document.getElementById('btn-hud-radio-mute')?.addEventListener('click', () => this.toggleRadioMute());
-      document.getElementById('btn-hud-sfx-mute')?.addEventListener('click', () => this.toggleSfxMute());
+      document.getElementById('btn-hud-audio')?.addEventListener('click', () => this.toggleMute());
       document.getElementById('btn-hud-status')?.addEventListener('click', () => this.toggleStatusPanel());
       document.getElementById('btn-dock-status')?.addEventListener('click', () => this.toggleStatusPanel());
       document.getElementById('btn-dock-settings')?.addEventListener('click', () => this.openSettingsModal('gameplay'));
@@ -12422,81 +11764,29 @@
       setTimeout(() => existing.remove(), 350);
     }
 
-    toggleRadioMute() {
-      const isMuted = sound.toggleRadioMute();
-      this.updateAudioHUDButtons();
-      this.showScorePopup(0, isMuted ? 'RADIO MUTED [M]' : 'RADIO ON [M]');
-    }
-
-    toggleSfxMute() {
-      const isMuted = sound.toggleSfxMute();
-      this.updateAudioHUDButtons();
-      this.showScorePopup(0, isMuted ? 'SFX MUTED [N]' : 'SFX ON [N]');
-    }
-
     updateAudioHUDButtons() {
-      const radioHudBtn = document.getElementById('btn-hud-radio-mute');
-      const sfxHudBtn = document.getElementById('btn-hud-sfx-mute');
+      const muted = sound.muted;
+      const audioHudBtn = document.getElementById('btn-hud-audio');
       const hudBtn = document.getElementById('btn-hud-sound');
       const dockBtn = document.getElementById('btn-dock-sound');
       const hubBtn = document.getElementById('btn-hub-mute');
 
-      if (radioHudBtn) {
-        radioHudBtn.classList.toggle('muted', sound.radioMuted);
+      if (audioHudBtn) {
+        audioHudBtn.classList.toggle('muted', muted);
         const audioLabel = document.getElementById('label-audio');
         const audioDot = document.getElementById('dot-audio');
-        if (audioLabel) audioLabel.textContent = sound.radioMuted ? 'AUDIO: OFF' : 'AUDIO: ON';
-        if (audioDot) audioDot.classList.toggle('dot-off', sound.radioMuted);
+        if (audioLabel) audioLabel.textContent = muted ? 'AUDIO: OFF' : 'AUDIO: ON';
+        if (audioDot) audioDot.classList.toggle('dot-off', muted);
       }
-      if (sfxHudBtn) {
-        sfxHudBtn.classList.toggle('muted', sound.sfxMuted);
-        sfxHudBtn.textContent = sound.sfxMuted ? 'SFX OFF' : 'SFX';
-      }
-      if (hudBtn) hudBtn.textContent = (sound.radioMuted && sound.sfxMuted) ? 'UNMUTE' : 'MUTE';
-      if (dockBtn) dockBtn.textContent = (sound.radioMuted && sound.sfxMuted) ? 'UNMUTE' : 'AUDIO';
-      if (hubBtn) hubBtn.innerHTML = `<span>${(sound.radioMuted && sound.sfxMuted) ? 'UNMUTE [M]' : 'MUTE [M]'}</span>`;
+      if (hudBtn) hudBtn.textContent = muted ? 'UNMUTE' : 'MUTE';
+      if (dockBtn) dockBtn.textContent = muted ? 'UNMUTE' : 'AUDIO';
+      if (hubBtn) hubBtn.innerHTML = `<span>${muted ? 'UNMUTE [M]' : 'MUTE [M]'}</span>`;
     }
 
     toggleMute() {
       const isMuted = sound.toggleMute();
       this.updateAudioHUDButtons();
-      this.showScorePopup(0, isMuted ? 'AUDIO MUTED' : 'SOUND UNMUTED');
-    }
-
-    cycleRadioChannel() {
-      sound.ensure();
-      const title = sound.cycleChannel();
-      const btnChannel = document.getElementById('btn-radio-channel');
-      const radioTitleEl = document.getElementById('radio-track-title');
-      const radioCard = document.getElementById('cassette-radio-card');
-      if (btnChannel) {
-        btnChannel.textContent = sound.getChannelDisplayName();
-        btnChannel.classList.remove('channel-flash');
-        void btnChannel.offsetWidth; // force reflow for re-triggering animation
-        btnChannel.classList.add('channel-flash');
-      }
-      if (radioTitleEl) radioTitleEl.textContent = title;
-      if (radioCard && sound.radioPlaying) radioCard.classList.add('playing');
-      this.showScorePopup(0, `RADIO: ${sound.getChannelDisplayName()}`);
-    }
-
-    // Direct Hindi/English switch (skips 'mix' — cycleRadioChannel/[L]
-    // still reaches it for anyone who wants the blended stream).
-    toggleRadioLanguage() {
-      sound.ensure();
-      const title = sound.toggleLanguage();
-      const btnChannel = document.getElementById('btn-radio-channel');
-      const radioTitleEl = document.getElementById('radio-track-title');
-      const radioCard = document.getElementById('cassette-radio-card');
-      if (btnChannel) {
-        btnChannel.textContent = sound.getChannelDisplayName();
-        btnChannel.classList.remove('channel-flash');
-        void btnChannel.offsetWidth;
-        btnChannel.classList.add('channel-flash');
-      }
-      if (radioTitleEl) radioTitleEl.textContent = title;
-      if (radioCard && sound.radioPlaying) radioCard.classList.add('playing');
-      this.showScorePopup(0, `RADIO: ${sound.getChannelDisplayName()}`);
+      this.showScorePopup(0, isMuted ? 'AUDIO MUTED [M]' : 'AUDIO ON [M]');
     }
 
     updateClimateHUD() {
@@ -12529,45 +11819,57 @@
       }
     }
 
+    // AUTO STEER (F): the original autopilot — steers along the road and
+    // manages speed. Turning it on switches AUTO DRIVE off.
     toggleAutodrive() {
-      this.vehicle.isAutodrive = !this.vehicle.isAutodrive;
+      const v = this.vehicle;
+      v.isAutodrive = !v.isAutodrive;
+      if (v.isAutodrive) v.isCruise = false;
       // Belt-and-suspenders on top of the per-frame decay in update():
       // toggling autodrive off and back on within the same frame/second
       // (decay hasn't caught up yet) could still hand manual steering a
       // stale lateralVelocity the instant control returns — zero it here
       // so there's no timing window at all, not just a fast one.
-      if (!this.vehicle.isAutodrive) this.vehicle.lateralVelocity = 0;
-      const isAuto = this.vehicle.isAutodrive;
+      if (!v.isAutodrive) v.lateralVelocity = 0;
+      this._announceAutoAssist(v.isAutodrive, 'AUTO STEER ON', 'MANUAL STEERING');
+    }
 
-      // Desktop HUD Pill
-      const pill = document.getElementById('btn-hud-autodrive');
-      const text = document.getElementById('autodrive-text');
-      if (pill && text) {
-        if (isAuto) {
-          pill.classList.add('autodrive-active');
-          text.textContent = 'AUTOPILOT [ON]';
-        } else {
-          pill.classList.remove('autodrive-active');
-          text.textContent = 'AUTOPILOT [F]';
-        }
+    // AUTO DRIVE (G): speed only — the player keeps steering. Turning it on
+    // switches AUTO STEER off.
+    toggleCruise() {
+      const v = this.vehicle;
+      v.isCruise = !v.isCruise;
+      if (v.isCruise) {
+        if (v.isAutodrive) v.lateralVelocity = 0;
+        v.isAutodrive = false;
       }
+      this._announceAutoAssist(v.isCruise, 'AUTO DRIVE ON', 'MANUAL SPEED');
+    }
 
-      // Mobile Touch HUD Button
-      const touchAutoBtn = document.getElementById('touch-btn-autopilot');
-      if (touchAutoBtn) {
-        if (isAuto) {
-          touchAutoBtn.classList.add('autodrive-active');
-          touchAutoBtn.setAttribute('aria-pressed', 'true');
-        } else {
-          touchAutoBtn.classList.remove('autodrive-active');
-          touchAutoBtn.setAttribute('aria-pressed', 'false');
-        }
-      }
+    _announceAutoAssist(on, onText, offText) {
+      this.updateAutoAssistHUD();
+      if (navigator.vibrate) navigator.vibrate(on ? [30, 40, 30] : 35);
+      sound.playTone(on ? 880 : 440, 'sine', 0.1);
+      this.showScorePopup(0, on ? onText : offText);
+    }
 
-      // Haptic and audio feedback
-      if (navigator.vibrate) navigator.vibrate(isAuto ? [30, 40, 30] : 35);
-      sound.playTone(isAuto ? 880 : 440, 'sine', 0.1);
-      this.showScorePopup(0, isAuto ? '🤖 AUTOPILOT ENGAGED' : '🕹️ MANUAL DRIVE');
+    // Sync every auto-assist control (desktop pills + touch buttons) with
+    // the vehicle state. Also called from Vehicle.update when the brake
+    // disengages an assist.
+    updateAutoAssistHUD() {
+      const v = this.vehicle;
+      const set = (id, on, textId, label, key) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.toggle('autodrive-active', !!on);
+        el.setAttribute('aria-pressed', on ? 'true' : 'false');
+        const t = textId && document.getElementById(textId);
+        if (t) t.textContent = `${label} [${on ? 'ON' : key}]`;
+      };
+      set('btn-hud-autodrive', v?.isAutodrive, 'autodrive-text', 'AUTO STEER', 'F');
+      set('btn-hud-cruise', v?.isCruise, 'cruise-text', 'AUTO DRIVE', 'G');
+      set('touch-btn-autopilot', v?.isAutodrive);
+      set('touch-btn-cruise', v?.isCruise);
     }
 
     toggleCameraMode() {
@@ -13537,16 +12839,14 @@
                 <div class="settings-row"><span class="settings-label">Doorstep Delivery (On Foot)</span><span class="slider-val">[SPACE] or Click near door</span></div>
 
                 <div class="settings-section-title" style="margin-top: 14px;"><span>${UI.icon('wrench')} ASSISTS, CAMERA & ENVIRONMENT</span></div>
-                <div class="settings-row"><span class="settings-label">AI Autopilot Cruise</span><span class="slider-val">[F]</span></div>
+                <div class="settings-row"><span class="settings-label">Auto Steer (steers + speed)</span><span class="slider-val">[F]</span></div>
+                <div class="settings-row"><span class="settings-label">Auto Drive (speed only, you steer)</span><span class="slider-val">[G]</span></div>
                 <div class="settings-row"><span class="settings-label">Return to Road (Recenter)</span><span class="slider-val">[R]</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Camera View</span><span class="slider-val">[C]</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Time of Day</span><span class="slider-val">[T]</span></div>
-                <div class="settings-row"><span class="settings-label">Toggle Rain</span><span class="slider-val">[P]</span></div>
 
-                <div class="settings-section-title" style="margin-top: 14px;"><span>${UI.icon('radio')} RADIO & AUDIO CONTROLS</span></div>
-                <div class="settings-row"><span class="settings-label">Cycle Radio Stations</span><span class="slider-val">[L]</span></div>
-                <div class="settings-row"><span class="settings-label">Mute / Unmute Radio</span><span class="slider-val">[M]</span></div>
-                <div class="settings-row"><span class="settings-label">Mute / Unmute SFX & Engine</span><span class="slider-val">[N]</span></div>
+                <div class="settings-section-title" style="margin-top: 14px;"><span>AUDIO & MENU</span></div>
+                <div class="settings-row"><span class="settings-label">Mute / Unmute Audio</span><span class="slider-val">[M]</span></div>
                 <div class="settings-row"><span class="settings-label">Controls & Settings Menu</span><span class="slider-val">[H] or [ESC]</span></div>
               ` : `
                 <div class="settings-section-title"><span>TRIP SUMMARY</span></div>

@@ -780,7 +780,7 @@ html, body {
   right: 28px;
   /* See .slowroads-obj-box for why this cap exists — this side and the
      dispatch card were each unbounded and routinely summed past 1000px
-     combined. Wraps to a second row (radio pill, then system buttons)
+     combined. Wraps to a second row (system buttons)
      instead of overlapping once it can't fit on one line. */
   max-width: min(460px, 50vw);
   display: flex;
@@ -790,105 +790,6 @@ html, body {
   gap: 8px;
   pointer-events: auto;
   z-index: 60;
-}
-
-.slowroads-radio-pill {
-  background: var(--comic-card-bg);
-  border: var(--border-comic-sm);
-  border-radius: 8px;
-  padding: 6px 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  box-shadow: var(--shadow-comic-sm);
-}
-
-.radio-label {
-  font-family: var(--font-telemetry);
-  font-size: 0.62rem;
-  letter-spacing: 2px;
-  font-weight: 800;
-  color: var(--comic-yellow);
-}
-
-.radio-sep {
-  color: rgba(255, 255, 255, 0.35);
-  font-family: var(--font-telemetry);
-  font-size: 0.68rem;
-  font-weight: 800;
-}
-
-.radio-channel-btn {
-  background: var(--comic-yellow);
-  border: 1.5px solid #000000;
-  border-radius: 5px;
-  padding: 2px 8px;
-  font-family: var(--font-telemetry);
-  font-size: 0.58rem;
-  letter-spacing: 1.5px;
-  font-weight: 800;
-  color: #000000;
-  cursor: pointer;
-  box-shadow: 1.5px 1.5px 0px #000000;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
-  white-space: nowrap;
-}
-
-.radio-channel-btn:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 2.5px 2.5px 0px #000000;
-  background: #ffffff;
-  color: #000000;
-}
-
-.radio-channel-btn.channel-flash {
-  animation: channelFlash 0.4s ease-out;
-}
-
-@keyframes channelFlash {
-  0% { background: var(--comic-pink); color: #fff; transform: scale(1.08); }
-  100% { background: var(--comic-yellow); color: #000; transform: scale(1); }
-}
-
-.slowroads-track-text {
-  font-family: var(--font-primary);
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #ffffff;
-  max-width: 140px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.slowroads-radio-btns {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 4px;
-}
-
-.slowroads-text-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1.5px solid #000000;
-  border-radius: 4px;
-  padding: 3px 8px;
-  font-family: var(--font-telemetry);
-  font-size: 0.58rem;
-  letter-spacing: 1.5px;
-  font-weight: 800;
-  color: rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-  box-shadow: 1.5px 1.5px 0px #000000;
-  transition: all 0.1s ease;
-}
-
-.slowroads-text-btn:hover {
-  background: var(--comic-yellow);
-  color: #000000;
-  transform: translate(-1px, -1px);
-  box-shadow: 2.5px 2.5px 0px #000000;
 }
 
 .slowroads-sys-btns {
@@ -1039,8 +940,9 @@ div.slowroads-status-pill {
 
 .radar-header-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column; /* distance on its own line under the label */
+  align-items: flex-start;
+  gap: 1px;
 }
 
 .radar-tag {
@@ -2582,16 +2484,6 @@ body.touch-controls-active .slowroads-dock {
     gap: 4px;
   }
 
-  .cassette-radio-card {
-    padding: 4px 8px;
-    gap: 6px;
-  }
-
-  .radio-title {
-    max-width: 110px;
-    font-size: 0.65rem;
-  }
-
   .health-pill, .climate-pill, .earnings-pill, .streak-pill, .rating-pill {
     padding: 4px 8px;
     font-size: 0.62rem;
@@ -2714,7 +2606,7 @@ body.touch-controls-active .slowroads-dock {
    RESPONSIVE DESIGN: Mobile, Tablet, Desktop Breakpoints
    ========================================================================== */
 
-/* In-game HUD (dispatch card / radio+controls bar / wanted meter): below
+/* In-game HUD (dispatch card / controls bar / wanted meter): below
    this width, capping each box's max-width in vw isn't enough on its own
    — a long delivery name or a missed-order banner can still make the
    dispatch card grow to 2-3 lines tall, and since it and the top-bar are
@@ -2722,7 +2614,7 @@ body.touch-controls-active .slowroads-dock {
    constrained horizontally), nothing stops the now-taller card from
    running into the top-bar vertically. Stack them in normal document flow
    instead of two independent absolute corner boxes — DOM order in
-   index.html is dispatch card, then wanted meter, then radio/controls
+   index.html is dispatch card, then wanted meter, then controls
    bar, so switching all three to position:static stacks them in exactly
    that (sensible) top-to-bottom order without touching the HTML. */
 @media (max-width: 700px) {
@@ -2807,22 +2699,6 @@ body.touch-controls-active .slowroads-dock {
   .slowroads-obj-meta {
     font-size: 0.58rem;
     gap: 5px;
-  }
-
-  /* Radio track title + PREV/NEXT aren't needed to play — collapsing them
-     to just PLAY turns a 2-line control cluster into a single compact
-     row, matching the height of one HUD row instead of two. */
-  .slowroads-radio-btns #btn-radio-prev,
-  .slowroads-radio-btns #btn-radio-next {
-    display: none;
-  }
-
-  .slowroads-track-text {
-    max-width: 84px;
-  }
-
-  .slowroads-radio-pill {
-    padding: 4px 8px;
   }
 
   .slowroads-sys-btns .slowroads-icon-btn {
@@ -3865,6 +3741,15 @@ body.vehicle-cycle .touch-drag-steer {
   /* Hide desktop top-bar buttons when mobile touch is active to prevent clutter */
   .slowroads-top-bar {
     display: none !important;
+  }
+
+  /* Event notifications: stack ABOVE the radar box (bottom 124px + ~100px
+     tall) instead of at bottom 180px, where they slid under the radar and
+     had their first words clipped (B113). */
+  .notification-panel {
+    bottom: 236px;
+    right: 12px;
+    max-width: min(280px, calc(100vw - 24px));
   }
 
   /* Bottom-Left Radar: Docked safely above the steering touch zone */
