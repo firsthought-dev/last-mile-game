@@ -27,6 +27,7 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B116 Removed Classic visual style; styles are now Crisp + Cinematic · @{2026-09-27}
 - [x] B115 Fix a false failure in an internal regression check (no gameplay change) — merged PR #11 · @{2026-09-27}
 - [x] B114 Remove photo mode; split AUTO into Auto Steer (F) + Auto Drive (G) — merged PR #10 · @{2026-09-27}
 - [x] B113 Mobile toast no longer overlaps the radar; radar distance on its own line — merged PR #10 · @{2026-09-27}
