@@ -94,6 +94,9 @@ SORT date DESC
 ```
 
 ## Recent Activity
+- 2026-09-27 — [[2026-09-27 - B114 Remove Photo Mode, Split Auto Steer and Auto Drive|B114]]: photo mode removed; Auto Steer + Auto Drive
+- 2026-09-27 — [[2026-09-27 - B113 Toast Radar Overlap|B113]]: mobile toast/radar overlap fixed
+- 2026-09-27 — [[2026-09-27 - B112 Remove Radio|B112]]: in-game radio removed; single audio mute
 - 2026-09-27 — [[2026-09-27 - B111 Restore Mobile Steer Buttons|B111]]: mobile ◀▶ steering restored on cycle/scooter; merged PR #9 (`023f855`)
 
 ```dataview

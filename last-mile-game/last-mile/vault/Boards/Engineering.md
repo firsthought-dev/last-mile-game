@@ -19,6 +19,7 @@ kanban-plugin: board
 	Maintain continuous tracking against Anul Agarwal workflow blueprint across all sessions. [[Knowledge/Anul Agarwal AI Game Dev & Multiplatform Publishing Blueprint]]
 
 ## 🔨 In Progress
+- [ ] 🔴 **Launch blockers**: bundle CDN deps locally → GD gameId → portal loading calls → ≤ 8 MB initial download · @{2026-09-23}
 
 - [ ] 🟡 **Prop upgrade pass: tapri ✅ → houses ✅ → repair shop ✅ → lamps/poles ✅ → fences + guardrails ✅ → signs ✅** · @{2026-09-24}
 	Modeled GLB props in Blender to replace box-built roadside props. Tapri polished (12.9k tris), 3 house variants in houses.glb, building-inside-house placement bug fixed. [[Projects/Last-Mile Game]]
@@ -26,8 +27,12 @@ kanban-plugin: board
 
 
 ## ✅ Done
-
+- [x] B114 Remove photo mode; split AUTO into Auto Steer (F) + Auto Drive speed-only (G) · @{2026-09-27}
+- [x] B113 Mobile toast no longer overlaps radar; radar distance on its own line · @{2026-09-27}
+- [x] B112 Remove radio completely (HUD pill, synth radio, L/N keys); single audio mute · @{2026-09-27}
 - [x] B111 Restore mobile steer buttons on cycle/scooter — merged PR #9 (`023f855`) · @{2026-09-27}
+- [x] 🔴 **B110 Radio licence launch blocker** — original synth soundtrack · @{2026-09-23}
+
 - [x] B108/B109 far-road density: shared spawners stream lamps, poles, signs, milestones, repair shops, motor garage, bus shelters, gantries, monuments, city buildings #done
 - [x] ~~🔴 **B107: Sidewalk Guardrail Lateral Offset Mismatch & Post Embedment Grounding**~~ ✅ 2026-09-23
 	Centralized barrier lateral offset to `getBarrierLateralDistance()` (5.45 m, flush 10 cm inset from sidewalk outer boundary), removed `+0.05` artificial lift, deepened Armco posts to 1.6 m (-1.05 translation, 50 cm embedment), lowered wall course heights, added dev checks 31 & 32. 37/37 checks green. [[Dev Logs/2026-09-23 - B107 Sidewalk Guardrail and Barrier Grounding Alignment]]
