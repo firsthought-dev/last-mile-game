@@ -4,3 +4,5 @@
   - **Auto Steer** (`F`, A-STEER): the original autopilot, which steers and controls speed.
   - **Auto Drive** (`G`, A-DRIVE): speed only. It speeds up on straights and eases off for bends ahead; the player steers.
 - Braking turns off either one. See [[Architecture/Auto Assists]] and BUGFIX_LOG B114.
+
+**Status:** merged to main via PR #10 (`e66f223`). Browser-tested; on-device Android check pending.

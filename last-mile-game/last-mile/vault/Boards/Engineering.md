@@ -27,9 +27,10 @@ kanban-plugin: board
 
 
 ## ✅ Done
-- [x] B114 Remove photo mode; split AUTO into Auto Steer (F) + Auto Drive speed-only (G) · @{2026-09-27}
-- [x] B113 Mobile toast no longer overlaps radar; radar distance on its own line · @{2026-09-27}
-- [x] B112 Remove radio completely (HUD pill, synth radio, L/N keys); single audio mute · @{2026-09-27}
+- [x] B115 Fix stale dev-check crosser-height-matches-formula (now mirrors surfaceHeightNear+0.02, skips culled) — 37/37 green · @{2026-09-27}
+- [x] B114 Remove photo mode; split AUTO into Auto Steer (F) + Auto Drive speed-only (G) — merged PR #10 (`e66f223`) · @{2026-09-27}
+- [x] B113 Mobile toast no longer overlaps radar; radar distance on its own line — merged PR #10 (`e66f223`) · @{2026-09-27}
+- [x] B112 Remove radio completely (HUD pill, synth radio, L/N keys); single audio mute — merged PR #10 (`e66f223`) · @{2026-09-27}
 - [x] B111 Restore mobile steer buttons on cycle/scooter — merged PR #9 (`023f855`) · @{2026-09-27}
 - [x] 🔴 **B110 Radio licence launch blocker** — original synth soundtrack · @{2026-09-23}
 
