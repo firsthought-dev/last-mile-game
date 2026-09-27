@@ -2289,84 +2289,82 @@ body.touch-controls-active .slowroads-dock {
 /* ==========================================================================
    SETTINGS MODAL
    ========================================================================== */
+/* Restyled to the comic hub language (B125): the settings screen was
+   never brought over in the UI overhaul and was still the old dark glass
+   panel with thin grey rules and a monospace footer. */
 .settings-modal {
-  width: 860px;
+  width: 760px;
   max-width: 94vw;
-  max-height: 86vh;
-  background: var(--glass-panel);
-  backdrop-filter: blur(36px);
-  border: 1px solid var(--glass-border);
+  max-height: calc(100dvh - 24px);
+  background: #ffffff;
+  border: var(--border-comic);
   border-radius: 16px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8);
+  box-shadow: var(--shadow-comic-lg);
   overflow: hidden;
-  animation: fadeIn 0.2s ease;
+  animation: hubEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #0f172a;
 }
 
 .settings-header-tabs {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 36px;
-  padding: 18px 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 10px;
+  padding: 14px 16px;
+  background: #f1f4f8;
+  border-bottom: var(--border-comic);
 }
 
 .tab-link {
-  background: none;
-  border: none;
-  color: var(--text-faint);
-  font-family: var(--font-primary);
-  font-size: 0.82rem;
-  letter-spacing: 3px;
+  background: #ffffff;
+  border: var(--border-comic-sm);
+  border-radius: 10px;
+  box-shadow: var(--shadow-comic-sm);
+  color: #334155;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
-  font-weight: 600;
   cursor: pointer;
-  padding: 6px 10px;
-  position: relative;
-  transition: color 0.2s ease;
+  padding: 6px 14px 4px;
+  white-space: nowrap;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
 .tab-link:hover {
-  color: #ffffff;
+  transform: translate(-1px, -1px);
+  box-shadow: 3.5px 3.5px 0 #000000;
+  color: #000000;
 }
 
 .tab-link.active-tab {
-  color: var(--brand-saffron);
-}
-
-.tab-link.active-tab::after {
-  content: '';
-  position: absolute;
-  bottom: -19px;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background: var(--brand-saffron);
+  background: var(--comic-yellow);
+  color: #000000;
 }
 
 .settings-body {
-  padding: 24px 36px;
+  padding: 18px 26px 22px;
   overflow-y: auto;
   flex: 1;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f8fb 100%);
 }
 
 .settings-section-title {
-  background: rgba(255, 255, 255, 0.06);
-  color: #adb5bd;
-  font-family: var(--font-mono);
-  font-size: 0.70rem;
-  letter-spacing: 2px;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
-  font-weight: 700;
-  padding: 6px 14px;
-  border-radius: 4px;
-  margin: 18px 0 14px 0;
+  color: #0f172a;
+  margin: 18px 0 8px 0;
+  padding: 0 0 4px;
+  border-bottom: var(--border-comic-sm);
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
+.settings-section-title .ui-icon { margin-right: 6px; vertical-align: -2px; }
 
 .settings-section-title:first-child {
   margin-top: 0;
@@ -2376,13 +2374,17 @@ body.touch-controls-active .slowroads-dock {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1.5px dashed #cbd5e1;
 }
+.settings-row:last-child { border-bottom: none; }
 
 .settings-label {
-  font-size: 0.86rem;
-  color: #e9ecef;
+  font-family: var(--font-primary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #1e293b;
 }
 
 .settings-control {
@@ -2396,57 +2398,84 @@ body.touch-controls-active .slowroads-dock {
 .settings-slider {
   -webkit-appearance: none;
   appearance: none;
-  width: 130px;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
+  width: 140px;
+  height: 8px;
+  background: #e2e8f0;
+  border: var(--border-comic-sm);
+  border-radius: 6px;
   outline: none;
 }
 
 .settings-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: var(--brand-saffron);
+  background: var(--comic-yellow);
+  border: var(--border-comic-sm);
+  box-shadow: 1.5px 1.5px 0 #000000;
+  cursor: pointer;
+}
+.settings-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--comic-yellow);
+  border: var(--border-comic-sm);
   cursor: pointer;
 }
 
 .slider-val {
+  font-family: var(--font-telemetry);
   font-size: 0.8rem;
-  color: var(--text-muted);
+  font-weight: 800;
+  color: #0f172a;
   min-width: 28px;
   text-align: right;
-  font-family: var(--font-mono);
+  white-space: nowrap;
 }
 
 .settings-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 28px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.2);
+  gap: 12px;
+  padding: 12px 18px;
+  background: #f1f4f8;
+  border-top: var(--border-comic);
+}
+
+.settings-version {
+  font-family: var(--font-telemetry);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #64748b;
 }
 
 .btn-settings-close {
-  background: #2b333e;
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 0.75rem;
+  background: linear-gradient(135deg, var(--comic-yellow) 0%, var(--comic-pink) 100%);
+  color: #000000;
+  border: var(--border-comic);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
   letter-spacing: 2px;
   text-transform: uppercase;
-  padding: 8px 24px;
-  border-radius: 20px;
+  padding: 6px 26px 4px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-comic);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
 
 .btn-settings-close:hover {
-  background: #3c4856;
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 #000000;
+}
+.btn-settings-close:active {
+  transform: translate(2px, 2px);
+  box-shadow: var(--shadow-comic-active);
 }
 
 /* ==========================================================================
@@ -2853,8 +2882,10 @@ body.touch-controls-active .slowroads-dock {
     padding: 10px 8px;
   }
 
+  /* Was 0.68rem (~11px): vehicle names read as fine print next to the
+     20px section labels on tablets and ~1000px laptop windows (B126). */
   .vehicle-card-title, .city-pill-name {
-    font-size: 0.68rem;
+    font-size: 1.2rem;
   }
 
   .dock-sq-btn {
@@ -3911,7 +3942,11 @@ body.vehicle-cycle .touch-drag-steer {
   .touch-util-btn .util-text {
     display: inline;
   }
-  .slowroads-telemetry-box {
+  /* Touch only (B126): these corner positions assume the touch layout,
+     where the dock is hidden and the steer/pedal buttons own the corners.
+     Ungated, a <=1024px-wide laptop window (dock visible) got them too and
+     the dock bar covered the radar, the AUTO pills and the speed readout. */
+  body.touch-controls-active .slowroads-telemetry-box {
     bottom: 18px;
     right: 170px;
     padding: 6px 12px;
@@ -3927,7 +3962,7 @@ body.vehicle-cycle .touch-drag-steer {
   body.touch-controls-active .telemetry-controls-col {
     display: none;
   }
-  .slowroads-radar-box {
+  body.touch-controls-active .slowroads-radar-box {
     bottom: 18px;
     left: 170px;
     padding: 4px 8px;
@@ -3935,7 +3970,7 @@ body.vehicle-cycle .touch-drag-steer {
     border: var(--border-comic-sm);
     box-shadow: var(--shadow-comic-sm);
   }
-  #gps-radar-canvas {
+  body.touch-controls-active #gps-radar-canvas {
     width: 60px !important;
     height: 60px !important;
   }
@@ -4004,7 +4039,9 @@ body.vehicle-cycle .touch-drag-steer {
   width: 0%;
   background: linear-gradient(90deg, var(--comic-yellow) 0%, var(--comic-cyan) 100%);
   border-radius: 4px;
-  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  /* No width transition: world generation blocks the main thread between
+     progress updates, so a 0.35s slide barely advanced before the next
+     jump and the bar sat near 5% while the label read 65%. */
   box-shadow: 0 0 12px var(--comic-yellow);
 }
 
@@ -4226,4 +4263,128 @@ body.vehicle-cycle .touch-drag-steer {
   .hub-style-grid .vehicle-card-stat { display: none; }
   .btn-launch-dispatch { padding: 9px 16px; font-size: 1.4rem; margin-top: 2px; }
   .hub-footer-links { margin-top: 4px; gap: 12px; }
+}
+
+/* ==========================================================================
+   Delivery capsule on portrait phones (B123, revised)
+   Two constraints: keep the top-centre sky open (QA invariant: >= 80px
+   between the capsule and the top-right button cluster), and never wrap
+   "0 / 33" or the payout onto two lines. The cluster's left edge is
+   100vw - 204px above 380px (194px wide, 10px inset) and 100vw - 179px at
+   <= 380px (171px wide, 8px inset), so cap the capsule at that minus 80px,
+   its own inset and a 4px rounding margin, fit the header on one line, and ellipsise the name.
+   ========================================================================== */
+@media (max-aspect-ratio: 1/1) and (max-width: 768px) {
+  .slowroads-delivery-capsule {
+    max-width: calc(100vw - 298px) !important;
+    padding: 4px 6px;
+  }
+  .delivery-capsule-header { flex-wrap: nowrap; white-space: nowrap; gap: 3px; }
+  .delivery-sep { display: none; }
+  .delivery-order-seq, .delivery-payout { white-space: nowrap; }
+  .delivery-dest-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .delivery-dest-name {
+    max-width: none;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.6rem;
+  }
+  .delivery-dist-badge { flex: 0 0 auto; white-space: nowrap; }
+}
+@media (max-aspect-ratio: 1/1) and (max-width: 380px) {
+  .slowroads-delivery-capsule { max-width: calc(100vw - 271px) !important; }
+}
+/* Worst case "33 / 33 +₹140" needs ~83px of header; at 360 there is 73
+   and at 393 there is 79. The badge is only a blinking dot on phones (its
+   label is already hidden), so drop it up to 400px wide. */
+@media (max-aspect-ratio: 1/1) and (max-width: 400px) {
+  .delivery-badge { display: none; }
+}
+
+/* Settings tabs on phones: HUB / VEHICLE TUNING / CONTROLS / TRIP needed
+   ~385px at 36px gaps + 3px letter-spacing, so on a 375px phone the
+   centred row hung off both edges and HUB / TRIP were clipped by the
+   modal (HUB barely tappable). Tighten so all four fit on one line. */
+@media (max-width: 520px) {
+  .settings-header-tabs { gap: 5px; padding: 10px 8px; justify-content: space-between; }
+  .tab-link { font-size: 0.86rem; letter-spacing: 0.6px; padding: 5px 7px 3px; flex: 0 1 auto; }
+  .settings-body { padding: 14px 14px 16px; }
+  .settings-label { font-size: 0.84rem; }
+  .settings-control { min-width: 0; gap: 8px; }
+  .settings-slider { width: 100px; }
+  .settings-footer { padding: 10px 12px; }
+  .btn-settings-close { font-size: 1.1rem; padding: 5px 18px 3px; }
+}
+
+/* ==========================================================================
+   Dispatch hub on short wide screens (B126) — laptops and landscape phones.
+   Applies up to 1000px tall: first-launch one-column content is ~956px, so
+   a 1440x900 laptop needed it too.
+   B121 made the hub card scroll with a sticky start button everywhere; on a
+   MacBook window (~1000x514 CSS px) the one-column hub is ~860px tall, so
+   DRIVE sat on top of the visual-style cards. Lay it out in two columns
+   (account on the left, vehicle + style on the right) so it fits without
+   scrolling. .hub-col wrappers are display:contents everywhere else, so the
+   one-column flex layout is unchanged on phones and tall windows.
+   ========================================================================== */
+.hub-col { display: contents; }
+@media (min-aspect-ratio: 1/1) and (max-height: 1000px) and (min-width: 700px) {
+  .shiplyp-hub-card {
+    width: 980px;
+    max-width: 96vw;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    column-gap: 22px;
+    row-gap: 6px;
+    align-items: start;
+    padding: 14px 22px 12px;
+  }
+  .hub-brand-header, .hub-tagline, .btn-launch-dispatch, .hub-footer-links {
+    grid-column: 1 / -1;
+    justify-self: center;
+  }
+  .btn-launch-dispatch { justify-self: stretch; }
+  .hub-col {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    width: 100%;
+  }
+  .hub-col-left { align-self: stretch; justify-content: center; }
+  .hub-tagline { margin-bottom: 4px; }
+  .hub-onboarding-banner, .hub-career-strip,
+  .hub-vehicle-selector, .hub-difficulty-selector { margin-bottom: 0; width: 100%; }
+  .hub-vehicle-grid, .hub-style-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+  }
+  .hub-vehicle-grid .vehicle-card-btn, .hub-style-grid .style-card-btn { max-width: none; flex: none; }
+  .hub-footer-links { margin-top: 2px; }
+}
+@media (min-aspect-ratio: 1/1) and (max-height: 620px) and (min-width: 700px) {
+  .shiplyp-hub-card { padding: 10px 22px 8px; row-gap: 4px; }
+  .hub-brand-title { font-size: 1.6rem; }
+  .hub-brand-header { margin-bottom: 0; }
+  .hub-tagline { margin-bottom: 0; font-size: 0.8rem; }
+  .hub-col { gap: 6px; }
+  .hub-section-label { margin-bottom: 2px; }
+  .style-card-preview { aspect-ratio: 16 / 5; }
+  .hub-vehicle-grid .vehicle-card-btn { padding: 6px 8px; }
+  .btn-launch-dispatch { padding: 8px 18px; }
+  .hub-footer-links { margin-top: 0; }
+}
+@media (min-aspect-ratio: 1/1) and (max-height: 430px) and (min-width: 700px) {
+  /* Landscape phones (~852x393): drop the tagline and the style preview
+     images (the style names stay) so the hub fits without scrolling. */
+  .hub-tagline { display: none; }
+  .style-card-preview { display: none; }
+  .hub-onboarding-banner { padding: 6px 10px; }
+  .onboarding-banner-body { font-size: 0.72rem; line-height: 1.3; }
+  .career-stats-row { flex-wrap: nowrap; gap: 4px; letter-spacing: 0.3px; }
+  .career-stats-row span { padding: 2px 5px; white-space: nowrap; }
+  .hub-brand-title { font-size: 1.4rem; }
+  .shiplyp-hub-card { padding-top: 6px; padding-bottom: 6px; }
 }

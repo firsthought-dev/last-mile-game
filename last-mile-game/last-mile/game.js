@@ -11014,6 +11014,7 @@
         <div style="font-size:10px;font-family:var(--font-telemetry,'Chakra Petch',monospace);color:rgba(232,238,242,0.65);letter-spacing:.08em">₹${(base||0)} base • ×${(diffMult||1).toFixed(1)} diff • +${streak > 1 ? Math.round((streak-1)*20) : 0}% streak</div>
       `;
       this.scorePopupContainer.appendChild(banner);
+      this._placeScorePopups();
       setTimeout(() => {
         banner.style.opacity = '0';
         banner.style.transform = 'translateY(-12px) scale(0.95)';
@@ -11219,6 +11220,26 @@
       });
     }
 
+    // The popup stack sits 88px down, centred. On narrow screens the top-right
+    // telemetry box (speed / gear / distance, plus the STREAK pill when a
+    // streak is live) reaches past that, so the banner covered it. Call after
+    // appending a banner: if the stack's real box intersects the telemetry
+    // box, drop the stack just below it. Its height changes (streak pill), and
+    // on wide layouts it sits at the bottom of the screen, so measure every time.
+    _placeScorePopups() {
+      const c = this.scorePopupContainer;
+      if (!c) return;
+      c.style.top = '';
+      const tel = document.querySelector('.slowroads-telemetry-box');
+      if (!tel || !tel.offsetParent) return;
+      const t = tel.getBoundingClientRect();
+      const r = c.getBoundingClientRect();
+      const hits = r.left < t.right && r.right > t.left && r.top < t.bottom && r.bottom > t.top;
+      if (!hits) return;
+      const parentTop = (c.offsetParent || document.body).getBoundingClientRect().top;
+      c.style.top = Math.round(t.bottom - parentTop + 8) + 'px';
+    }
+
     showScoreBanner(title, sub) {
       if (!this.scorePopupContainer) return;
       const banner = document.createElement('div');
@@ -11228,6 +11249,7 @@
         <span class="popup-sub">${sub}</span>
       `;
       this.scorePopupContainer.appendChild(banner);
+      this._placeScorePopups();
       setTimeout(() => {
         banner.style.opacity = '0';
         banner.style.transform = 'translateY(-12px) scale(0.95)';
@@ -11451,13 +11473,13 @@
       }
       if (hudBtn) hudBtn.textContent = muted ? 'UNMUTE' : 'MUTE';
       if (dockBtn) dockBtn.textContent = muted ? 'UNMUTE' : 'AUDIO';
-      if (hubBtn) hubBtn.innerHTML = `<span>${muted ? 'UNMUTE [M]' : 'MUTE [M]'}</span>`;
+      if (hubBtn) hubBtn.innerHTML = `<span>${(muted ? 'UNMUTE' : 'MUTE') + (document.body.classList.contains('touch-controls-active') ? '' : ' [M]')}</span>`;
     }
 
     toggleMute() {
       const isMuted = sound.toggleMute();
       this.updateAudioHUDButtons();
-      this.showScorePopup(0, isMuted ? 'AUDIO MUTED [M]' : 'AUDIO ON [M]');
+      this.showScorePopup(0, (isMuted ? 'AUDIO MUTED' : 'AUDIO ON') + (document.body.classList.contains('touch-controls-active') ? '' : ' [M]'));
     }
 
     updateClimateHUD() {
@@ -12158,7 +12180,7 @@
       const onboardingBanner = this._onboardingActive ? `
         <div class="hub-onboarding-banner">
           <span class="onboarding-banner-title">Welcome to Shiplyp</span>
-          <span class="onboarding-banner-body">Your first delivery is waiting just down the road. Drive up to the glowing ring and press SPACE to drop the parcel.</span>
+          <span class="onboarding-banner-body">Your first delivery is waiting just down the road. Drive up to the glowing ring and ${document.body.classList.contains('touch-controls-active') ? 'tap DROP' : 'press SPACE'} to drop the parcel.</span>
         </div>
       ` : '';
 
@@ -12170,9 +12192,12 @@
             </div>
             <p class="hub-tagline">Endless Driving • India Roads</p>
 
+            <div class="hub-col hub-col-left">
             ${onboardingBanner}
             ${careerStrip}
+            </div>
 
+            <div class="hub-col hub-col-right">
             <!-- 3. Select Vehicle -->
             <div class="hub-vehicle-selector">
               <span class="hub-section-label">SELECT VEHICLE</span>
@@ -12209,6 +12234,7 @@
                 `).join('')}
               </div>
             </div>
+            </div>
 
             <button id="btn-start-dispatch" class="btn-launch-dispatch">
               <span>${this._onboardingActive ? 'FIRST DELIVERY' : 'DRIVE'}</span>
@@ -12216,7 +12242,7 @@
 
             <div class="hub-footer-links">
               <button id="btn-hub-sponsor" class="hub-link-btn" style="color:var(--comic-green,#22e565);font-weight:800;"><span>📺 SPONSOR (+₹500)</span></button>
-              <button id="btn-hub-mute" class="hub-link-btn"><span>${sound.muted ? 'UNMUTE [M]' : 'MUTE [M]'}</span></button>
+              <button id="btn-hub-mute" class="hub-link-btn"><span>${(sound.muted ? 'UNMUTE' : 'MUTE') + (document.body.classList.contains('touch-controls-active') ? '' : ' [M]')}</span></button>
               <button id="btn-hub-fleet" class="hub-link-btn">SETTINGS</button>
             </div>
           </div>
@@ -12383,13 +12409,16 @@
           <div class="settings-modal">
             <div class="settings-header-tabs">
               <button class="tab-link ${tab === 'home' ? 'active-tab' : ''}" data-tab="home">HUB</button>
-              <button class="tab-link ${tab === 'gameplay' ? 'active-tab' : ''}" data-tab="gameplay">• VEHICLE TUNING •</button>
+              <button class="tab-link ${tab === 'gameplay' ? 'active-tab' : ''}" data-tab="gameplay">VEHICLE TUNING</button>
               <button class="tab-link ${tab === 'controls' ? 'active-tab' : ''}" data-tab="controls">CONTROLS</button>
               <button class="tab-link ${tab === 'profile' ? 'active-tab' : ''}" data-tab="profile">TRIP</button>
             </div>
 
             <div class="settings-body">
-              ${tab === 'gameplay' ? `
+              ${tab === 'gameplay' && !this.vehicle ? `
+                <div class="settings-section-title"><span>PERFORMANCE CALIBRATION</span></div>
+                <div class="settings-row"><span class="settings-label">Start a drive to tune your vehicle.</span></div>
+              ` : tab === 'gameplay' ? `
                 <div class="settings-section-title"><span>PERFORMANCE CALIBRATION</span></div>
                 <div class="settings-row">
                   <span class="settings-label">Max Speed (m/s)</span>
@@ -12413,16 +12442,28 @@
                   </div>
                 </div>
               ` : tab === 'controls' ? `
-                <div class="settings-section-title"><span>${UI.icon('car')} DRIVING & MOVEMENT</span></div>
-                <div class="settings-row"><span class="settings-label">Accelerate / Walk Forward</span><span class="slider-val">W / ↑</span></div>
-                <div class="settings-row"><span class="settings-label">Brake / Reverse / Walk Back</span><span class="slider-val">S / ↓</span></div>
-                <div class="settings-row"><span class="settings-label">Steer / Turn Left & Right</span><span class="slider-val">A / D or ← / →</span></div>
+                ${document.body.classList.contains('touch-controls-active') ? `
+                <div class="settings-section-title"><span>${UI.icon('car')} DRIVING</span></div>
+                <div class="settings-row"><span class="settings-label">Accelerate</span><span class="slider-val">▲ button</span></div>
+                <div class="settings-row"><span class="settings-label">Brake / Reverse</span><span class="slider-val">▼ button</span></div>
+                <div class="settings-row"><span class="settings-label">Steer Left / Right</span><span class="slider-val">◀ ▶ buttons</span></div>
+
+                <div class="settings-section-title" style="margin-top: 14px;"><span>${UI.icon('package')} DELIVERY</span></div>
+                <div class="settings-row"><span class="settings-label">Express Drop (near the ring)</span><span class="slider-val">DROP</span></div>
+
+                <div class="settings-section-title" style="margin-top: 14px;"><span>${UI.icon('wrench')} ASSISTS & TOOLS</span></div>
+                <div class="settings-row"><span class="settings-label">Auto Steer (steers + speed)</span><span class="slider-val">A-STEER</span></div>
+                <div class="settings-row"><span class="settings-label">Auto Drive (speed only, you steer)</span><span class="slider-val">A-DRIVE</span></div>
+                <div class="settings-row"><span class="settings-label">Camera, Recenter, Horn, Time, Weather, Vehicle</span><span class="slider-val">TOOLS</span></div>
+                ` : `
+                <div class="settings-section-title"><span>${UI.icon('car')} DRIVING</span></div>
+                <div class="settings-row"><span class="settings-label">Accelerate</span><span class="slider-val">W / ↑</span></div>
+                <div class="settings-row"><span class="settings-label">Brake / Reverse</span><span class="slider-val">S / ↓</span></div>
+                <div class="settings-row"><span class="settings-label">Steer Left / Right</span><span class="slider-val">A / D or ← / →</span></div>
                 <div class="settings-row"><span class="settings-label">Power-Slide Drift</span><span class="slider-val">[SPACE] (hold while steering)</span></div>
 
-                <div class="settings-section-title" style="margin-top: 14px;"><span>${UI.icon('package')} DELIVERY & COURIER ACTIONS</span></div>
+                <div class="settings-section-title" style="margin-top: 14px;"><span>${UI.icon('package')} DELIVERY</span></div>
                 <div class="settings-row"><span class="settings-label">Express Drop (Drive-by Toss)</span><span class="slider-val">[SPACE] or Click</span></div>
-                <div class="settings-row"><span class="settings-label">Hop Out / Enter Vehicle (On Foot)</span><span class="slider-val">[E]</span></div>
-                <div class="settings-row"><span class="settings-label">Doorstep Delivery (On Foot)</span><span class="slider-val">[SPACE] or Click near door</span></div>
 
                 <div class="settings-section-title" style="margin-top: 14px;"><span>${UI.icon('wrench')} ASSISTS, CAMERA & ENVIRONMENT</span></div>
                 <div class="settings-row"><span class="settings-label">Auto Steer (steers + speed)</span><span class="slider-val">[F]</span></div>
@@ -12430,18 +12471,21 @@
                 <div class="settings-row"><span class="settings-label">Return to Road (Recenter)</span><span class="slider-val">[R]</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Camera View</span><span class="slider-val">[C]</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Time of Day</span><span class="slider-val">[T]</span></div>
+                <div class="settings-row"><span class="settings-label">Horn / Bell</span><span class="slider-val">[H]</span></div>
 
                 <div class="settings-section-title" style="margin-top: 14px;"><span>AUDIO & MENU</span></div>
                 <div class="settings-row"><span class="settings-label">Mute / Unmute Audio</span><span class="slider-val">[M]</span></div>
-                <div class="settings-row"><span class="settings-label">Controls & Settings Menu</span><span class="slider-val">[H] or [ESC]</span></div>
+                <div class="settings-row"><span class="settings-label">Controls List</span><span class="slider-val">[O] or [?]</span></div>
+                <div class="settings-row"><span class="settings-label">Settings Menu</span><span class="slider-val">[ESC]</span></div>
+                `}
               ` : `
                 <div class="settings-section-title"><span>TRIP SUMMARY</span></div>
-                <div class="settings-row"><span class="settings-label">Distance Driven</span><span class="slider-val">${this.vehicle.distanceTraveled.toFixed(1)} KM</span></div>
+                <div class="settings-row"><span class="settings-label">Distance Driven</span><span class="slider-val">${(this.vehicle ? this.vehicle.distanceTraveled : 0).toFixed(1)} KM</span></div>
               `}
             </div>
 
             <div class="settings-footer">
-              <span style="font-size: 0.75rem; color: #6c757d; font-family: monospace;">SHIPLYP LAST MILE CHRONICLES V1.0</span>
+              <span class="settings-version">SHIPLYP V1.0</span>
               <button id="btn-close-settings" class="btn-settings-close">CLOSE</button>
             </div>
           </div>

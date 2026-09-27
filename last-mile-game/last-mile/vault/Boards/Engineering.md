@@ -27,6 +27,11 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B126 Laptop start menu (two columns) and laptop HUD layout fixed; QA suite green · @{2026-09-27}
+- [x] B125 Settings screen restyled to match the rest of the game · @{2026-09-27}
+- [x] B124 Phone wording, accurate controls list, Settings opens from the menu, tabs fit on phones, loading bar · @{2026-09-27}
+- [x] B123 Delivery info in the top-left corner readable on phones · @{2026-09-27}
+- [x] B122 Delivery result card no longer covers the speed box on phones · @{2026-09-27}
 - [x] B121 Start menu fits small phones; reachable in landscape · @{2026-09-27}
 - [x] B120 Zebra-crossing pedestrians cross once and carry on (houses, tea stalls, garages), with no pacing or idling · @{2026-09-27}
 - [x] B119 Pedestrian T-pose arms fixed · @{2026-09-27}
