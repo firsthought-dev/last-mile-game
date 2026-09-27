@@ -12481,7 +12481,7 @@
             </div>
 
             <div class="settings-footer">
-              <span style="font-size: 0.75rem; color: #6c757d; font-family: monospace;">SHIPLYP LAST MILE CHRONICLES V1.0</span>
+              <span class="settings-version">SHIPLYP V1.0</span>
               <button id="btn-close-settings" class="btn-settings-close">CLOSE</button>
             </div>
           </div>
