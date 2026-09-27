@@ -187,9 +187,12 @@
   // all badges and lettering removed; our own grille, lamps, hood and tail;
   // new wheels and interior. Source: assets/models/muscle-coupe-source.blend.
   // Paint: the "Default Metallic Paint" slot is recoloured to dusty slate-blue.
+  // The replacement keeps the source material's side: the body is a single
+  // skin exported double-sided, and a default (front-side) material culls
+  // the roof, pillars and door panels when seen from the first-person cabin.
   const MuscleCoupeAsset = makeVehicleAsset('assets/models/muscle-coupe.glb?v=' + ASSET_VERSION, (child) => {
     if (child.material && child.material.name && child.material.name.startsWith('Default Metallic Paint')) {
-      child.material = new THREE.MeshStandardMaterial({ color: 0x5c7285, metalness: 0.55, roughness: 0.35 });
+      child.material = new THREE.MeshStandardMaterial({ color: 0x5c7285, metalness: 0.55, roughness: 0.35, side: child.material.side });
     }
   }, 'MuscleCoupeAsset');
 
