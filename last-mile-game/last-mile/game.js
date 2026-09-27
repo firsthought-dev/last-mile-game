@@ -1077,10 +1077,21 @@
     // The kerb is also the vehicles' lateral limit (see getLateralClamp).
     SIDEWALK: { enabled: true, width: 1.7, kerb: 0.12 },
 
+    // Single vehicle registry: physics, menus, pricing and payout all read
+    // from here. `order` is the progression slot. `handling` picks shared
+    // behaviour: 'pedal' (cycle only), 'twoWheeler' (lean, small-vehicle
+    // camera), 'threeWheeler' / 'car' (four-wheel style body roll). Speeds m/s.
     VEHICLES: {
-      musclecoupe: { id: 'musclecoupe', name: 'Muscle Coupe', maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0, wheelRadius: 0.315 },
-      // maxSpeed = end of the ride-time ramp (52 km/h); baseSpeed = start of it (32 km/h). Both m/s.
-      cycle: { id: 'cycle', name: 'Delivery Cycle', maxSpeed: 14.44, baseSpeed: 8.89, rampSeconds: 120, accel: 6.5, drag: 0.55, brake: 14.0, wheelRadius: 0.365 }
+      // maxSpeed = end of the ride-time ramp (52 km/h); baseSpeed = start of it (32 km/h).
+      cycle: { id: 'cycle', order: 1, name: 'Delivery Cycle', short: 'CYCLE', handling: 'pedal', speedLabel: '32–52 km/h',
+        price: 0, payoutMult: 1.0, wheelRadius: 0.365,
+        maxSpeed: 14.44, baseSpeed: 8.89, rampSeconds: 120, accel: 6.5, drag: 0.55, brake: 14.0 },
+      motorbike: { id: 'motorbike', order: 2, name: 'Motorbike', short: 'BIKE', handling: 'twoWheeler', speedLabel: '90 km/h',
+        price: 1500, payoutMult: 1.25, wheelRadius: 0.31,
+        maxSpeed: 25.0, accel: 11.0, drag: 0.65, brake: 20.0 },
+      musclecoupe: { id: 'musclecoupe', order: 4, name: 'Muscle Coupe', short: 'COUPE', handling: 'car', speedLabel: '194 km/h',
+        price: 6000, payoutMult: 2.0, wheelRadius: 0.315, bodyRoll: 0.12,
+        maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0 }
     },
 
     DIFFICULTY_TIERS: {
@@ -1146,6 +1157,17 @@
       ]
     }
   });
+
+  // Vehicle registry helpers. Unknown IDs (e.g. a removed vehicle still named
+  // in an old save) resolve to the cycle, never to undefined.
+  function vehicleSpec(id) { return CONFIG.VEHICLES[id] || CONFIG.VEHICLES.cycle; }
+  function vehicleList() { return Object.values(CONFIG.VEHICLES).sort((a, b) => a.order - b.order); }
+  function isTwoWheeler(id) { const h = vehicleSpec(id).handling; return h === 'pedal' || h === 'twoWheeler'; }
+  function isPedalVehicle(id) { return vehicleSpec(id).handling === 'pedal'; }
+  function hornStyle(id) {
+    const h = vehicleSpec(id).handling;
+    return h === 'pedal' ? 'bell' : (h === 'car' ? 'horn' : 'beep');
+  }
 
   // --------------------------------------------------------------------------
   // 4B. PROCEDURAL GROUND TEXTURES
@@ -8148,7 +8170,7 @@
     }
 
     applyVehicleConfig() {
-      const cfg = CONFIG.VEHICLES[this.vehicleType] || CONFIG.VEHICLES.car;
+      const cfg = vehicleSpec(this.vehicleType);
       this.maxSpeed = cfg.maxSpeed;
       this.accel = cfg.accel;
       this.drag = cfg.drag;
@@ -11763,18 +11785,20 @@
 
     reconcileSelectedVehicle() {
       const fallback = 'cycle';
+      // A removed vehicle can still be "owned" in an old save; never select an ID the registry lacks.
+      if (!CONFIG.VEHICLES[this.selectedVehicle]) this.selectedVehicle = fallback;
       if (typeof Career !== 'undefined' && Career && typeof Career.isUnlocked === 'function') {
         if (!Career.isUnlocked('vehicles', this.selectedVehicle)) {
           const validVeh = (typeof Career.selectedVehicle === 'function' ? Career.selectedVehicle() : null)
             || (typeof Career.defaultVehicle === 'function' ? Career.defaultVehicle() : null)
             || fallback;
-          this.selectedVehicle = validVeh;
+          this.selectedVehicle = CONFIG.VEHICLES[validVeh] ? validVeh : fallback;
         }
         if (typeof Career.setSelectedVehicle === 'function') {
           Career.setSelectedVehicle(this.selectedVehicle);
         }
       } else {
-        if (this.selectedVehicle !== 'cycle' && this.selectedVehicle !== 'musclecoupe') {
+        if (!CONFIG.VEHICLES[this.selectedVehicle]) {
           this.selectedVehicle = fallback;
         }
       }
