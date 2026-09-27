@@ -4004,7 +4004,9 @@ body.vehicle-cycle .touch-drag-steer {
   width: 0%;
   background: linear-gradient(90deg, var(--comic-yellow) 0%, var(--comic-cyan) 100%);
   border-radius: 4px;
-  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  /* No width transition: world generation blocks the main thread between
+     progress updates, so a 0.35s slide barely advanced before the next
+     jump and the bar sat near 5% while the label read 65%. */
   box-shadow: 0 0 12px var(--comic-yellow);
 }
 
@@ -4251,4 +4253,14 @@ body.vehicle-cycle .touch-drag-steer {
     font-size: 0.62rem;
   }
   .delivery-dist-badge { flex: 0 0 auto; white-space: nowrap; }
+}
+
+/* Settings tabs on phones: HUB / VEHICLE TUNING / CONTROLS / TRIP needed
+   ~385px at 36px gaps + 3px letter-spacing, so on a 375px phone the
+   centred row hung off both edges and HUB / TRIP were clipped by the
+   modal (HUB barely tappable). Tighten so all four fit on one line. */
+@media (max-width: 520px) {
+  .settings-header-tabs { gap: 2px; padding: 12px 6px; justify-content: space-between; }
+  .tab-link { font-size: 0.68rem; letter-spacing: 1px; padding: 6px 6px; white-space: nowrap; flex: 0 1 auto; }
+  .tab-link.active-tab::after { bottom: -13px; }
 }

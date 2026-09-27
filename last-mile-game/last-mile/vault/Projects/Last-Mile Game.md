@@ -82,6 +82,7 @@ SORT date DESC
 - 2026-09-27 — [[2026-09-27 - B121 Start Menu Fits Small Phones and Landscape|B121]]: start menu fits small phones and works in landscape
 - 2026-09-27 — [[2026-09-27 - B122 Delivery Result Card No Longer Covers Speed Box|B122]]: delivery result card no longer covers the speed box on phones
 - 2026-09-27 — [[2026-09-27 - B123 Delivery Info Readable on Phones|B123]]: delivery info in the top-left corner readable on phones
+- 2026-09-27 — [[2026-09-27 - B124 Phone Wording, Settings Fixes, Loading Bar|B124]]: phone wording, Settings fixes, loading bar
 - 2026-09-27 — [[2026-09-27 - B118 Mobile Time Weather Vehicle in Tools; WORLD Tab Removed|B118]]: mobile Time / Weather / Vehicle controls; WORLD tab removed
 - 2026-09-27 — [[2026-09-27 - B117 Environment Panel Fix, Off-World Map and Road Types Removed|B117]]: Environment tab fixed; single City map on asphalt
 - 2026-09-27 — [[2026-09-27 - B116 Two Visual Styles Crisp and Cinematic|B116]]: graphics styles are now Crisp and Cinematic

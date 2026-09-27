@@ -27,6 +27,7 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B124 Phone wording, accurate controls list, Settings opens from the menu, tabs fit on phones, loading bar · @{2026-09-27}
 - [x] B123 Delivery info in the top-left corner readable on phones · @{2026-09-27}
 - [x] B122 Delivery result card no longer covers the speed box on phones · @{2026-09-27}
 - [x] B121 Start menu fits small phones; reachable in landscape · @{2026-09-27}
