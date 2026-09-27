@@ -4168,3 +4168,62 @@ body.vehicle-cycle .touch-drag-steer {
     padding: 5px 12px;
   }
 }
+
+/* ==========================================================================
+   Dispatch hub on short portrait phones (iPhone SE 667, Galaxy A-series 800)
+   The hub card used to scroll inside a 96vh box: on first launch (welcome
+   banner showing) an iPhone SE had ~830px of content in a 640px box, and
+   on real phones 100vh/96vh includes the area under the browser toolbar,
+   so the card's bottom edge sliced through the style cards / the FIRST
+   DELIVERY button with no hint that it scrolled. Size to the VISIBLE
+   viewport (dvh), compact the tall pieces, and pin the start button.
+   ========================================================================== */
+#modal-container {
+  height: 100dvh;
+}
+/* Every orientation: landscape phones (e.g. 852x393) had a 941px card
+   centred in a 393px non-scrolling backdrop, so the logo was cut off at
+   the top and the start button was unreachable below the bottom edge. */
+.shiplyp-hub-card {
+  max-height: calc(100dvh - 20px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* Always reachable, even if a short screen still has to scroll. */
+.shiplyp-hub-card .btn-launch-dispatch {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  flex-shrink: 0;
+}
+@media (min-aspect-ratio: 1/1) and (max-height: 500px) {
+  .modal-backdrop { padding: 6px; }
+  .shiplyp-hub-card { padding: 8px 20px; gap: 6px; }
+  .hub-brand-title { font-size: 1.5rem; }
+  .hub-tagline { margin-bottom: 2px; }
+  .hub-onboarding-banner, .hub-career-strip { margin-bottom: 0; padding: 6px 12px; }
+  .hub-vehicle-selector, .hub-difficulty-selector { margin-bottom: 0; }
+  .style-card-preview { aspect-ratio: 16 / 5; }
+  .btn-launch-dispatch { padding: 8px 16px; }
+  .hub-footer-links { margin-top: 4px; }
+}
+@media (max-aspect-ratio: 1/1) and (max-height: 860px) {
+  .modal-backdrop { padding: 8px; }
+  .shiplyp-hub-card { gap: 6px; padding: 10px 14px; }
+  .hub-brand-title { font-size: 1.6rem; }
+  .hub-tagline { margin-bottom: 2px; font-size: 0.78rem; }
+  .hub-onboarding-banner { padding: 8px 12px; margin-bottom: 0; gap: 2px; }
+  .onboarding-banner-body { font-size: 0.74rem; line-height: 1.35; }
+  .hub-career-strip { padding: 8px 10px; margin-bottom: 0; gap: 6px; }
+  .career-stats-row { flex-wrap: nowrap; font-size: 0.56rem; gap: 4px; letter-spacing: 0.3px; }
+  .career-stats-row span { padding: 2px 5px; white-space: nowrap; }
+  .career-daily-row { font-size: 0.64rem; }
+  .hub-vehicle-selector, .hub-difficulty-selector { margin-bottom: 0; }
+  .hub-vehicle-grid .vehicle-card-btn { padding: 6px 6px; gap: 1px; }
+  .veh-lock-cost { font-size: 1.2rem; line-height: 1.1; }
+  .veh-lock-cta { padding: 2px 6px; font-size: 0.6rem; }
+  .style-card-preview { aspect-ratio: 16 / 7; }
+  .hub-style-grid .vehicle-card-stat { display: none; }
+  .btn-launch-dispatch { padding: 9px 16px; font-size: 1.4rem; margin-top: 2px; }
+  .hub-footer-links { margin-top: 4px; gap: 12px; }
+}
