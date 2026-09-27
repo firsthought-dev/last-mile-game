@@ -11791,6 +11791,9 @@
       }
 
       this.gameState = 'menu';
+      // updateCamera only runs while playing, so it can't undo a first-person
+      // near-clip itself; the hub's orbit camera must not inherit it.
+      this._setFirstPersonNearPlane(false);
       if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
         ShiplypAds.gameplayStop();
       }
@@ -12296,6 +12299,20 @@
       });
     }
 
+    // First-person gets a much closer near-clip than every other view: any
+    // cabin geometry in front of the driver's eye (dash, steering wheel)
+    // sits well inside the default 0.5 used by the other camera modes and
+    // would get clipped. The one camera is shared by every view, so this is
+    // also called with false wherever the game stops driving (the hub),
+    // or the closer plane would leak into views that don't need it. Only
+    // touches the camera when the state actually changes.
+    _setFirstPersonNearPlane(on) {
+      if (!this.camera || !!this._fpNearApplied === on) return;
+      this.camera.near = on ? 0.1 : 0.5;
+      this.camera.updateProjectionMatrix();
+      this._fpNearApplied = on;
+    }
+
     updateCamera(dt) {
 
       if (typeof window !== 'undefined' && window.location.search.includes('view_villa=1') && this.world?.deliveryTargets?.length) {
@@ -12337,22 +12354,7 @@
         this.camLookTarget = carPos.clone().addScaledVector(carForward, 18.0);
       }
 
-      // First-person needs a much closer near-clip: the dash and steering
-      // wheel sit well under 1m from the driver's eye, inside the default
-      // 0.5 used by every other camera mode, so they'd get clipped. Only
-      // touch it on a mode change (not every frame) to avoid a redundant
-      // updateProjectionMatrix() call 60x/second.
-      if (this.activeCameraMode === 'first-person') {
-        if (!this._fpNearApplied) {
-          this.camera.near = 0.1;
-          this.camera.updateProjectionMatrix();
-          this._fpNearApplied = true;
-        }
-      } else if (this._fpNearApplied) {
-        this.camera.near = 0.5;
-        this.camera.updateProjectionMatrix();
-        this._fpNearApplied = false;
-      }
+      this._setFirstPersonNearPlane(this.activeCameraMode === 'first-person');
 
       if (this.activeCameraMode === 'hood') {
         // Bumper Cam - rigidly bolted at forward bumper height
