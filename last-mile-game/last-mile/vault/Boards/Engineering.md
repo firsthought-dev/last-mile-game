@@ -29,7 +29,7 @@ kanban-plugin: board
 
 
 ## ✅ Done
-- [x] B129 Muscle Coupe redesigned as our own car; plain cycle box; first-person cockpit fixed · @{2026-09-28}
+- [x] B129 Muscle Coupe reworked (badges removed; our own front, rear, hood, wheels and interior); plain cycle box; first-person cockpit fixed · @{2026-09-28}
 - [x] B128 In-game currency (₹) disclaimer on the loading screen and in Settings · @{2026-09-27}
 - [x] B127 Licence cleanup: branded intro artwork and unused vehicles/assets removed · @{2026-09-27}
 - [x] B126 Laptop start menu (two columns) and laptop HUD layout fixed; QA suite green · @{2026-09-27}
