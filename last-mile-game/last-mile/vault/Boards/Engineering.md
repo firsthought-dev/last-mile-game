@@ -27,6 +27,7 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B118 Mobile Time/Weather/Vehicle controls added; WORLD tab removed · @{2026-09-27}
 - [x] B117 Environment tab fixed (time of day + weather); Off-World map and road types removed · @{2026-09-27}
 - [x] B116 Removed Classic visual style; styles are now Crisp + Cinematic · @{2026-09-27}
 - [x] B115 Fix a false failure in an internal regression check (no gameplay change) — merged PR #11 · @{2026-09-27}

@@ -10311,6 +10311,32 @@
         closeTools();
         this.toggleCameraMode();
       });
+      bindTapButton('touch-btn-tod', () => {
+        this.cycleTimeOfDay();
+        this._refreshMobileToolsDrawer();
+      });
+      bindTapButton('touch-btn-weather', () => {
+        this.toggleWeather();
+        this._refreshMobileToolsDrawer();
+      });
+      bindTapButton('touch-btn-vehicle', () => {
+        // Cycle to the next unlocked vehicle. On mobile the dock's VEHICLE
+        // panel is hidden, so this is the only in-drive way to switch.
+        const order = ['cycle', 'musclecoupe'];
+        const unlocked = order.filter(id => !Career || Career.isUnlocked('vehicles', id));
+        if (unlocked.length < 2) {
+          this.addNotification('🔒 UNLOCK MORE VEHICLES IN THE HUB', 'warning', 2500);
+          return;
+        }
+        const cur = this.selectedVehicle;
+        const nextId = unlocked[(unlocked.indexOf(cur) + 1) % unlocked.length];
+        this.selectedVehicle = nextId;
+        if (Career && typeof Career.setSelectedVehicle === 'function') Career.setSelectedVehicle(nextId);
+        this.vehicle.setVehicleType(nextId);
+        this._refreshMobileToolsDrawer();
+        sound.playTone(800, 'sine', 0.1);
+        this.showScorePopup(0, `VEHICLE: ${nextId === 'cycle' ? 'CYCLE' : 'MUSCLE COUPE'}`);
+      });
       bindTapButton('touch-btn-autopilot', () => this.toggleAutodrive());
       bindTapButton('touch-btn-cruise', () => this.toggleCruise());
 
@@ -11450,8 +11476,23 @@
       this.initWeatherSystem();
       this.updateClimateHUD();
       if (this.activeDockPanel === 'style') this.renderDockPanelContent('style');
+      this._refreshMobileToolsDrawer();
       this.showScorePopup(0, this.selectedWeather === 'blizzard' ? `${UI.icon('cloud')} BLIZZARD` : `${UI.icon('sun')} CLEAR SKIES`);
       sound.playTone(600, 'sine', 0.08);
+    }
+
+    // Keep the mobile Tools drawer labels/icons in sync with game state.
+    // Called after any change that could shift Time / Weather / Vehicle.
+    _refreshMobileToolsDrawer() {
+      const todIcons = { dawn: '🌅', day: '☀️', dusk: '🌇', night: '🌙' };
+      const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+      setText('touch-btn-tod-icon', todIcons[this.selectedTimeOfDay] || '☀️');
+      setText('touch-btn-tod-label', `TIME: ${(this.selectedTimeOfDay || 'day').toUpperCase()}`);
+      const isBlizzard = this.selectedWeather === 'blizzard';
+      setText('touch-btn-weather-icon', isBlizzard ? '❄️' : '☀️');
+      setText('touch-btn-weather-label', `WEATHER: ${isBlizzard ? 'BLIZZARD' : 'CLEAR'}`);
+      const vName = this.selectedVehicle === 'cycle' ? 'CYCLE' : 'MUSCLE COUPE';
+      setText('touch-btn-vehicle-label', `VEHICLE: ${vName}`);
     }
 
     applyWindowGlow(tod) {
@@ -11474,6 +11515,7 @@
       const dockTod = document.getElementById('btn-dock-tod');
       if (hudTodLabel) hudTodLabel.textContent = (tod.id || todKey).toUpperCase();
       if (dockTod) dockTod.innerHTML = UI.icon(tod.icon, 18);
+      this._refreshMobileToolsDrawer();
 
       this.showScorePopup(0, `${UI.icon(tod.icon, 16)} ${tod.name.toUpperCase()}`);
       sound.playTone(720, 'sine', 0.1);
@@ -12160,33 +12202,7 @@
     renderDockPanelContent(type) {
       const el = this.dockPanelEl;
 
-      if (type === 'world') {
-        // One map (the City corridor, B117 removed Off-World) on a single
-        // asphalt surface, so the World panel only picks the route seed.
-        el.innerHTML = `
-          <div class="dock-panel-grid">
-            <div class="dock-panel-col">
-              <span class="dock-panel-label">ROUTE SEED</span>
-              <div class="dock-stepper-box">
-                <span class="dock-stepper-val" style="font-family: monospace;">${this.selectedSeed}</span>
-                <button id="dp-s-rand" class="stepper-arrow">RANDOM</button>
-              </div>
-            </div>
-            <button id="dp-gen-btn" class="btn-generate-dock">APPLY & REGEN</button>
-          </div>
-        `;
-        document.getElementById('dp-s-rand').onclick = () => {
-          this.selectedSeed = Math.random().toString(36).substring(2, 10);
-          this.renderDockPanelContent('world');
-        };
-        document.getElementById('dp-gen-btn').onclick = () => {
-          this.buildWorldAndScene();
-          this.dockPanelEl.style.display = 'none';
-          this.activeDockPanel = null;
-          document.querySelectorAll('.dock-tab-btn').forEach(b => b.classList.remove('active-dock-tab'));
-          sound.playTone(600, 'sine', 0.15);
-        };
-      } else if (type === 'style') {
+      if (type === 'style') {
         el.innerHTML = `
           <div class="dock-panel-grid" style="display: flex; gap: 24px; justify-content: flex-start; align-items: flex-start;">
             <div class="dock-panel-col" style="flex: 2;">
