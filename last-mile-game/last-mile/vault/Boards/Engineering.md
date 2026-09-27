@@ -27,6 +27,7 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B126 Laptop start menu (two columns) and laptop HUD layout fixed; QA suite green · @{2026-09-27}
 - [x] B125 Settings screen restyled to match the rest of the game · @{2026-09-27}
 - [x] B124 Phone wording, accurate controls list, Settings opens from the menu, tabs fit on phones, loading bar · @{2026-09-27}
 - [x] B123 Delivery info in the top-left corner readable on phones · @{2026-09-27}

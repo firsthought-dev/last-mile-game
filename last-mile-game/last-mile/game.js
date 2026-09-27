@@ -12192,9 +12192,12 @@
             </div>
             <p class="hub-tagline">Endless Driving • India Roads</p>
 
+            <div class="hub-col hub-col-left">
             ${onboardingBanner}
             ${careerStrip}
+            </div>
 
+            <div class="hub-col hub-col-right">
             <!-- 3. Select Vehicle -->
             <div class="hub-vehicle-selector">
               <span class="hub-section-label">SELECT VEHICLE</span>
@@ -12230,6 +12233,7 @@
                   </button>
                 `).join('')}
               </div>
+            </div>
             </div>
 
             <button id="btn-start-dispatch" class="btn-launch-dispatch">
