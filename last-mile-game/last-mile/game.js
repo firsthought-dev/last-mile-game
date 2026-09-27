@@ -5518,11 +5518,24 @@
         walk.setEffectiveTimeScale(this.prng.range(0.85, 1.2));
         walk.play();
       }
+      // courier-crowd.glb's Walking clip has broken arm tracks — every
+      // keyframe on the shoulders/arms is baked to the T-pose bind quaternion,
+      // so pedestrians walked with arms held straight out. Cache the shoulder
+      // bones so updateCrossers can post-correct their rotation each frame to
+      // bring the arms down to a natural resting angle. Legs animate fine.
+      const shoulders = [];
+      root.traverse((b) => {
+        if (b.isBone && (b.name.endsWith('LeftShoulder') || b.name.endsWith('RightShoulder'))) {
+          shoulders.push({ bone: b, side: b.name.endsWith('LeftShoulder') ? 1 : -1 });
+        }
+      });
+      root.userData.shoulders = shoulders;
       root.userData.hitRadius = 1.1;
       root.userData.walkSpeed = this.prng.range(1.0, 1.8);
       root.userData.isCrosser = true;
       return root;
     }
+
 
     // One cluster of pedestrians strolling the verge at a road sample.
     // Shared by the initial build and the streaming builder.
@@ -6669,6 +6682,21 @@
             if (c._lodTick === 0) {
               c.mesh.userData.mixer.update(c._lodAccum);
               c._lodAccum = 0;
+            }
+          }
+          // T-pose arm fix (see buildPedestrian): the Walking clip bakes the
+          // shoulder to its T-pose bind quaternion, so we override it every
+          // frame after the mixer runs. Applied post-mixer so it survives
+          // whatever the clip wrote.
+          const shoulders = c.mesh.userData.shoulders;
+          if (shoulders && shoulders.length) {
+            for (let s = 0; s < shoulders.length; s++) {
+              const { bone, side } = shoulders[s];
+              const q = this._armDownQ || (this._armDownQ = {
+                1: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -1.1),
+                '-1': new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), 1.1)
+              });
+              bone.quaternion.multiply(q[side]);
             }
           }
         } else {
