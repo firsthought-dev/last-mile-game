@@ -181,7 +181,7 @@
   // models each time, most painfully on the Android WebView's cold start.
   // Bump this by hand whenever a file under assets/models/ changes; that
   // invalidates the old copy exactly when it should and never otherwise.
-  const ASSET_VERSION = '4';
+  const ASSET_VERSION = '5';
 
   // 0f. MUSCLE COUPE — user-supplied model; headlights already face +Z, no
   // rotation needed. Brand references stripped per user instruction; see CREDITS.
@@ -195,7 +195,7 @@
   }, 'MuscleCoupeAsset');
 
   // 0g. DELIVERY CYCLE — Blender-exported GLB with corrected Y-up orientation.
-  const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?t=' + Date.now(), () => {}, 'DeliveryCycleAsset');
+  const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?v=' + ASSET_VERSION, () => {}, 'DeliveryCycleAsset');
 
   // 0g2. CHAI TAPRI — static roadside tea-stall prop. Origin at ground centre,
   // counter facing +Z (the road, once buildViewpointOrChai's lookAt runs).
