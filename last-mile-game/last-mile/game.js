@@ -12337,6 +12337,23 @@
         this.camLookTarget = carPos.clone().addScaledVector(carForward, 18.0);
       }
 
+      // First-person needs a much closer near-clip: the dash and steering
+      // wheel sit well under 1m from the driver's eye, inside the default
+      // 0.5 used by every other camera mode, so they'd get clipped. Only
+      // touch it on a mode change (not every frame) to avoid a redundant
+      // updateProjectionMatrix() call 60x/second.
+      if (this.activeCameraMode === 'first-person') {
+        if (!this._fpNearApplied) {
+          this.camera.near = 0.1;
+          this.camera.updateProjectionMatrix();
+          this._fpNearApplied = true;
+        }
+      } else if (this._fpNearApplied) {
+        this.camera.near = 0.5;
+        this.camera.updateProjectionMatrix();
+        this._fpNearApplied = false;
+      }
+
       if (this.activeCameraMode === 'hood') {
         // Bumper Cam - rigidly bolted at forward bumper height
         const hoodPos = carPos.clone().addScaledVector(bodyForward, 1.35).add(new THREE.Vector3(0, 0.65, 0));
