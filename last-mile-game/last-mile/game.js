@@ -5518,18 +5518,33 @@
         walk.setEffectiveTimeScale(this.prng.range(0.85, 1.2));
         walk.play();
       }
-      // courier-crowd.glb's Walking clip has broken arm tracks — every
-      // keyframe on the shoulders/arms is baked to the T-pose bind quaternion,
-      // so pedestrians walked with arms held straight out. Cache the shoulder
-      // bones so updateCrossers can post-correct their rotation each frame to
-      // bring the arms down to a natural resting angle. Legs animate fine.
-      const shoulders = [];
-      root.traverse((b) => {
-        if (b.isBone && (b.name.endsWith('LeftShoulder') || b.name.endsWith('RightShoulder'))) {
-          shoulders.push({ bone: b, side: b.name.endsWith('LeftShoulder') ? 1 : -1 });
-        }
-      });
-      root.userData.shoulders = shoulders;
+      // courier-crowd.glb's Walking clip has broken arm tracks: every
+      // keyframe on the shoulders and upper arms is baked to the T-pose bind
+      // quaternion (Shoulder tracks have 2 identical keyframes; Arm tracks
+      // have 87 identical keyframes). Legs animate fine. The Idle clip in
+      // the same GLB has proper "arms at sides" values on those same bones,
+      // so we copy Idle's shoulder+arm quaternions and force them onto the
+      // walking pedestrians each frame after the mixer runs (see
+      // updateCrossers). Cached once here, per-crosser, allocation-free.
+      const idleClip = rig.actions['Idle']?.getClip();
+      const armOverrides = [];
+      if (idleClip) {
+        const boneMap = new Map();
+        root.traverse((b) => { if (b.isBone) boneMap.set(b.name, b); });
+        const trackFor = (boneName) => idleClip.tracks.find(t => t.name === `${boneName}.quaternion`);
+        ['mixamorigLeftShoulder', 'mixamorigRightShoulder', 'mixamorigLeftArm', 'mixamorigRightArm',
+         'mixamorigLeftForeArm', 'mixamorigRightForeArm'].forEach((name) => {
+          const bone = boneMap.get(name);
+          const track = trackFor(name);
+          if (bone && track && track.values.length >= 4) {
+            armOverrides.push({
+              bone,
+              q: new THREE.Quaternion(track.values[0], track.values[1], track.values[2], track.values[3])
+            });
+          }
+        });
+      }
+      root.userData.armOverrides = armOverrides;
       root.userData.hitRadius = 1.1;
       root.userData.walkSpeed = this.prng.range(1.0, 1.8);
       root.userData.isCrosser = true;
@@ -6684,19 +6699,14 @@
               c._lodAccum = 0;
             }
           }
-          // T-pose arm fix (see buildPedestrian): the Walking clip bakes the
-          // shoulder to its T-pose bind quaternion, so we override it every
-          // frame after the mixer runs. Applied post-mixer so it survives
-          // whatever the clip wrote.
-          const shoulders = c.mesh.userData.shoulders;
-          if (shoulders && shoulders.length) {
-            for (let s = 0; s < shoulders.length; s++) {
-              const { bone, side } = shoulders[s];
-              const q = this._armDownQ || (this._armDownQ = {
-                1: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -1.1),
-                '-1': new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), 1.1)
-              });
-              bone.quaternion.multiply(q[side]);
+          // T-pose arm fix (see buildPedestrian for why): overwrite the
+          // shoulder/arm bones with the quaternions the Idle clip holds them
+          // at (arms hanging at the sides), since the Walking clip's arm
+          // tracks are baked to the T-pose bind pose.
+          const overrides = c.mesh.userData.armOverrides;
+          if (overrides && overrides.length) {
+            for (let o = 0; o < overrides.length; o++) {
+              overrides[o].bone.quaternion.copy(overrides[o].q);
             }
           }
         } else {
