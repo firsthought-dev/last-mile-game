@@ -4158,3 +4158,41 @@ body.vehicle-cycle .touch-drag-steer {
   .hub-brand-title { font-size: 1.4rem; }
   .shiplyp-hub-card { padding-top: 6px; padding-bottom: 6px; }
 }
+
+/* ==========================================================================
+   In-game currency disclaimer (B128). One sentence, authored once in
+   index.html (#currency-disclaimer); Settings re-renders the same text.
+   ========================================================================== */
+.loader-disclaimer {
+  position: absolute;
+  left: 50%;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 820px;
+  margin: 0;
+  font-family: var(--font-primary);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.62);
+  text-align: center;
+}
+
+.settings-legal {
+  margin: 18px 0 0;
+  padding-top: 12px;
+  border-top: 2px dashed #cbd5e1;
+  font-family: var(--font-primary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+/* Landscape phones: the loader card is centred in ~360-430px of height, so
+   compact it to keep clear of the disclaimer line (and the card's shadow). */
+@media (max-height: 430px) {
+  .loader-inner { padding: 24px 40px; gap: 12px; }
+  .loader-disclaimer { bottom: max(8px, env(safe-area-inset-bottom)); }
+}

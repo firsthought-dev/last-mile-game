@@ -12172,6 +12172,7 @@
                 <div class="settings-section-title"><span>TRIP SUMMARY</span></div>
                 <div class="settings-row"><span class="settings-label">Distance Driven</span><span class="slider-val">${(this.vehicle ? this.vehicle.distanceTraveled : 0).toFixed(1)} KM</span></div>
               `}
+              <p class="settings-legal">${document.getElementById('currency-disclaimer')?.textContent || ''}</p>
             </div>
 
             <div class="settings-footer">

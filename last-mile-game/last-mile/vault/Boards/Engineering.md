@@ -6,7 +6,6 @@ kanban-plugin: board
 
 ## 📥 Backlog
 
-- [ ] 🟡 **In-game currency disclaimer (₹ is fictional money)** on the loading screen and in Settings · @{2026-09-27}
 - [ ] 🟡 **Plain delivery box on the cycle (remove the box icon)** · @{2026-09-27}
 - [ ] 🟢 **Review Enhanced style fog at dusk and night** · @{2026-09-26}
 	Check it doesn't have the same problem B100 fixed for Classic.
@@ -31,6 +30,7 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B128 In-game currency (₹) disclaimer on the loading screen and in Settings · @{2026-09-27}
 - [x] B127 Licence cleanup: branded intro artwork and unused vehicles/assets removed · @{2026-09-27}
 - [x] B126 Laptop start menu (two columns) and laptop HUD layout fixed; QA suite green · @{2026-09-27}
 - [x] B125 Settings screen restyled to match the rest of the game · @{2026-09-27}
