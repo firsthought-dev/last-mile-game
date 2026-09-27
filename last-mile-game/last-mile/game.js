@@ -5521,30 +5521,50 @@
       // courier-crowd.glb's Walking clip has broken arm tracks: every
       // keyframe on the shoulders and upper arms is baked to the T-pose bind
       // quaternion (Shoulder tracks have 2 identical keyframes; Arm tracks
-      // have 87 identical keyframes). Legs animate fine. The Idle clip in
-      // the same GLB has proper "arms at sides" values on those same bones,
-      // so we copy Idle's shoulder+arm quaternions and force them onto the
-      // walking pedestrians each frame after the mixer runs (see
-      // updateCrossers). Cached once here, per-crosser, allocation-free.
+      // have 87 identical keyframes). Legs animate fine. The Idle clip has
+      // proper "arms at sides" values on those same bones, so we cache those
+      // as the base pose and add a procedural forward-back shoulder swing on
+      // top per frame (see updateCrossers) to keep the walk from reading as
+      // a stiff zombie shuffle.
       const idleClip = rig.actions['Idle']?.getClip();
-      const armOverrides = [];
+      const armBase = [];
+      let leftShoulder = null, rightShoulder = null;
       if (idleClip) {
         const boneMap = new Map();
         root.traverse((b) => { if (b.isBone) boneMap.set(b.name, b); });
         const trackFor = (boneName) => idleClip.tracks.find(t => t.name === `${boneName}.quaternion`);
-        ['mixamorigLeftShoulder', 'mixamorigRightShoulder', 'mixamorigLeftArm', 'mixamorigRightArm',
+        // Keep the upper arms and forearms fixed at Idle (their tracks in
+        // Walking are also stuck on the bind pose, so overwriting them keeps
+        // the elbow angle sensible). Shoulders get the swing on top.
+        ['mixamorigLeftArm', 'mixamorigRightArm',
          'mixamorigLeftForeArm', 'mixamorigRightForeArm'].forEach((name) => {
           const bone = boneMap.get(name);
           const track = trackFor(name);
           if (bone && track && track.values.length >= 4) {
-            armOverrides.push({
+            armBase.push({
               bone,
               q: new THREE.Quaternion(track.values[0], track.values[1], track.values[2], track.values[3])
             });
           }
         });
+        const shoulderEntry = (boneName, sign) => {
+          const bone = boneMap.get(boneName);
+          const track = trackFor(boneName);
+          if (!bone || !track || track.values.length < 4) return null;
+          return {
+            bone,
+            baseQ: new THREE.Quaternion(track.values[0], track.values[1], track.values[2], track.values[3]),
+            sign
+          };
+        };
+        // Left arm swings opposite to right (contralateral to the leg swing).
+        leftShoulder = shoulderEntry('mixamorigLeftShoulder', 1);
+        rightShoulder = shoulderEntry('mixamorigRightShoulder', -1);
       }
-      root.userData.armOverrides = armOverrides;
+      root.userData.armBase = armBase;
+      root.userData.leftShoulder = leftShoulder;
+      root.userData.rightShoulder = rightShoulder;
+      root.userData.armSwingPhase = Math.random() * Math.PI * 2;
       root.userData.hitRadius = 1.1;
       root.userData.walkSpeed = this.prng.range(1.0, 1.8);
       root.userData.isCrosser = true;
@@ -6369,33 +6389,43 @@
       this.trafficSignals = this.trafficSignals || [];
       this.trafficSignals.push(signal);
       this.crossingInfo = this.crossingInfo || [];
-      this.crossingInfo.push({ s: (i / (pts.length - 1)) * this.curve.getLength(), signal, pt: pt.clone() });
+      const crossingEntry = { s: (i / (pts.length - 1)) * this.curve.getLength(), signal, pt: pt.clone() };
+      this.crossingInfo.push(crossingEntry);
       this._applySignalPhase(signal);
 
-      // Two pedestrians who actually use the crossing. They hold at the kerb
-      // and only step off on the STOP phase — see updateCrossers' gate.
+      // Two pedestrians waiting at the kerb, one each side. They run the same
+      // wander brain as the roadside walkers (_stepWanderer), starting in
+      // 'waitSignal': cross once on the STOP phase, then carry on along the
+      // far sidewalk — left, right, or to a house / tea stall / garage —
+      // instead of shuttling back and forth over the same crossing.
+      const walkLat = (CONFIG.SIDEWALK && CONFIG.SIDEWALK.enabled)
+        ? CONFIG.ROAD_WIDTH * 0.52 + 0.85
+        : roadHalf + 1.6;
       for (let k = 0; k < 2; k++) {
         const mesh = this.buildPedestrian();
         if (!mesh) break;
-        const latA = (roadHalf + 1.6) * (k === 0 ? 1 : -1);
-        const latB = -latA;
+        const latA = walkLat * (k === 0 ? 1 : -1);
         const depthOff = this.prng.range(-1.2, 1.2);
-        const startPos = pt.clone().addScaledVector(normal, latA).addScaledVector(tangent, depthOff);
-        const endPos = pt.clone().addScaledVector(normal, latB).addScaledVector(tangent, depthOff);
-        startPos.y = this.groundHeightAt(pt, startPos, latA) + 0.15;
-        endPos.y = this.groundHeightAt(pt, endPos, latB) + 0.15;
+        const sHere = crossingEntry.s + depthOff;
+        const startPos = new THREE.Vector3();
+        this._alongPoint(sHere, latA, startPos);
+        const endPos = new THREE.Vector3();
+        this._alongPoint(sHere, -latA, endPos);
+        startPos.y = this.surfaceHeightNear(startPos, pt, latA) + 0.02;
+        endPos.y = startPos.y;
         mesh.position.copy(startPos);
         mesh.lookAt(endPos.x, mesh.position.y, endPos.z);
         (this.foliageGroup || scene).add(mesh);
         this.crossers.push({
           mesh, kind: 'pedestrian', start: startPos, end: endPos,
           pt: pt.clone(), normal: normal.clone(),
-          latStart: latA, latEnd: latB, progress: 0,
-          speed: mesh.userData.walkSpeed * 1.15,
+          latStart: latA, latEnd: latA, progress: 1,
+          speed: mesh.userData.walkSpeed * 0.9,
           hitRadius: mesh.userData.hitRadius, struck: false,
           legPhase: this.prng.next() * Math.PI * 2,
-          pathLen: startPos.distanceTo(endPos),
-          signal
+          pathLen: 0.5,
+          along: { sA: sHere, sB: sHere, lat: latA },
+          wander: { mode: 'waitSignal', crossing: crossingEntry }
         });
       }
       return signal;
@@ -6503,27 +6533,43 @@
       };
       const walkTo = (sTarget, then) => {
         const sCur = THREE.MathUtils.lerp(A.sA, A.sB, THREE.MathUtils.clamp(c.progress, 0, 1));
-        A.sA = sCur; A.sB = sTarget; c.progress = 0;
+        // Stay on the built road: past either end _alongPoint clamps, and the
+        // walker would tread in place there forever.
+        const sMax = this.curve.getLength() - 5;
+        A.sA = sCur; A.sB = THREE.MathUtils.clamp(sTarget, 5, Math.max(5, sMax)); c.progress = 0;
         c.pathLen = Math.max(0.5, Math.abs(A.sB - A.sA));
         W.mode = 'walk'; W.then = then;
       };
-      const chooseNext = () => {
+      // Walk off left or right along the sidewalk, reversing if that way
+      // runs out of road.
+      const stroll = (d) => {
+        const sCur = A.sB;
+        const len = 20 + Math.random() * 30;
+        const sMax = this.curve.getLength() - 5;
+        if (sCur + d * len > sMax || sCur + d * len < 5) d = -d;
+        walkTo(sCur + d * len, null);
+      };
+      // `moveOn`: just crossed, or just left a stall/house/garage. They carry
+      // on with their journey (left, right, or another place) — never stand
+      // around on the kerb, and never cross straight back.
+      const chooseNext = (moveOn = false) => {
         const sCur = A.sB;
         const dir = Math.sign(A.sB - A.sA) || 1;
         const side = Math.sign(A.lat) || 1;
-        // Nearby places on this side of the road (within 60 m along it), not the one just visited.
-        const dests = (this.pedDestinations || []).filter((d) => d.side === side && Math.abs(d.s - sCur) < 60 && d !== W.lastDest);
-        const crossing = (this.crossingInfo || []).find((ci) => Math.abs(ci.s - sCur) < 60 && ci !== W.lastCrossing);
+        // Nearby places on this side of the road (houses, tea stalls, repair
+        // shops, motor garages), not the one just visited.
+        const dests = (this.pedDestinations || []).filter((d) => d.side === side && Math.abs(d.s - sCur) < 90 && d !== W.lastDest);
+        const crossing = moveOn ? null : (this.crossingInfo || []).find((ci) => Math.abs(ci.s - sCur) < 70 && ci !== W.lastCrossing);
         const r = Math.random();
-        if (dests.length && r < 0.45) {
+        if (dests.length && r < 0.5) {
           W.dest = dests[Math.floor(Math.random() * dests.length)];
           walkTo(W.dest.s, 'dest'); return;
         }
-        if (crossing && r < 0.6) { W.crossing = crossing; walkTo(crossing.s, 'cross'); return; }
-        if (r < 0.68) { W.mode = 'idle'; W.timer = 1.5 + Math.random() * 3; W.then = null; return; }
-        const turn = r < 0.76;
-        const d = turn ? -dir : dir;
-        walkTo(sCur + d * (15 + Math.random() * 25), null);
+        if (moveOn) { stroll(Math.random() < 0.5 ? 1 : -1); return; }
+        if (crossing && r < 0.65) { W.crossing = crossing; walkTo(crossing.s, 'cross'); return; }
+        if (r < 0.7 && !W.pausedLast) { W.mode = 'idle'; W.pausedLast = true; W.timer = 1 + Math.random() * 2; W.then = null; return; }
+        W.pausedLast = false;
+        stroll(r < 0.8 ? -dir : dir);
       };
       const arriveWalk = () => {
         const then = W.then; W.then = null;
@@ -6532,6 +6578,8 @@
           startFree(W.dest.pos, 'toStall', null);
         } else if (then === 'cross' && W.crossing) {
           W.mode = 'waitSignal';
+          this._alongPoint(A.sB, -A.lat, tmp);
+          face(tmp.x - c.mesh.position.x, tmp.z - c.mesh.position.z);
         } else {
           chooseNext();
         }
@@ -6587,9 +6635,9 @@
               W.timer = k === 'house' ? 15 + Math.random() * 30 : (k === 'shop' ? 5 + Math.random() * 8 : 6 + Math.random() * 10);
               if (W.dest.facePos) face(W.dest.facePos.x - c.mesh.position.x, W.dest.facePos.z - c.mesh.position.z);
             } else if (W.mode === 'crossing') {
-              A.lat = -A.lat; A.sA = A.sB; W.lastCrossing = W.crossing; chooseNext();
+              A.lat = -A.lat; A.sA = A.sB; W.lastCrossing = W.crossing; chooseNext(true);
             } else {
-              chooseNext();
+              chooseNext(true);
             }
           }
           break;
@@ -6699,15 +6747,32 @@
               c._lodAccum = 0;
             }
           }
-          // T-pose arm fix (see buildPedestrian for why): overwrite the
-          // shoulder/arm bones with the quaternions the Idle clip holds them
-          // at (arms hanging at the sides), since the Walking clip's arm
-          // tracks are baked to the T-pose bind pose.
-          const overrides = c.mesh.userData.armOverrides;
-          if (overrides && overrides.length) {
-            for (let o = 0; o < overrides.length; o++) {
-              overrides[o].bone.quaternion.copy(overrides[o].q);
+          // T-pose arm fix (see buildPedestrian for why): pin the upper
+          // arms/forearms to their Idle-clip pose and drive the shoulders
+          // with a procedural forward/back swing on top of Idle's base
+          // quaternion, so walking pedestrians don't shuffle stiff-armed.
+          const armBase = c.mesh.userData.armBase;
+          if (armBase && armBase.length) {
+            for (let a = 0; a < armBase.length; a++) {
+              armBase[a].bone.quaternion.copy(armBase[a].q);
             }
+          }
+          const ls = c.mesh.userData.leftShoulder;
+          const rs = c.mesh.userData.rightShoulder;
+          if (ls && rs) {
+            // Sync roughly with the leg cadence (~1.6 Hz walk cycle).
+            c.mesh.userData.armSwingPhase += dt * 5.0;
+            const swing = Math.sin(c.mesh.userData.armSwingPhase) * 0.42;
+            const swingQ = this._swingQ || (this._swingQ = new THREE.Quaternion());
+            // Pre-multiply the swing onto the base quaternion so the rotation
+            // is applied in the parent (spine) frame, not the bone's local
+            // frame. In spine space, X is left/right, so a rotation about X
+            // swings the whole arm forward/back rather than pendulum-side.
+            const axis = this._swingAxis || (this._swingAxis = new THREE.Vector3(1, 0, 0));
+            swingQ.setFromAxisAngle(axis, swing * ls.sign);
+            ls.bone.quaternion.multiplyQuaternions(swingQ, ls.baseQ);
+            swingQ.setFromAxisAngle(axis, swing * rs.sign);
+            rs.bone.quaternion.multiplyQuaternions(swingQ, rs.baseQ);
           }
         } else {
           c.legPhase += dt * 9.0;
