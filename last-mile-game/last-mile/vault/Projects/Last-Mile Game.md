@@ -77,6 +77,7 @@ SORT date DESC
 ```
 
 ## Recent Activity
+- 2026-09-28 — [[2026-09-28 - B129 Original Muscle Coupe and Plain Cycle Box|B129]]: Muscle Coupe reworked with our own front, rear, hood, wheels and interior (badges/lettering removed, new grille/lamps/hood/tail/wheels/interior); wheels now spin and steer, cockpit no longer see-through; cycle's box-logo decal removed
 - 2026-09-27 — [[2026-09-27 - B119 Pedestrian T-pose Arms Fix|B119]]: pedestrian T-pose arms fixed
 - 2026-09-27 — [[2026-09-27 - B120 Pedestrians Keep Walking After Zebra Crossings|B120]]: zebra-crossing pedestrians cross once and carry on, with no pacing or idling
 - 2026-09-27 — [[2026-09-27 - B121 Start Menu Fits Small Phones and Landscape|B121]]: start menu fits small phones and works in landscape

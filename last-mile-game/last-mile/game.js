@@ -181,21 +181,23 @@
   // models each time, most painfully on the Android WebView's cold start.
   // Bump this by hand whenever a file under assets/models/ changes; that
   // invalidates the old copy exactly when it should and never otherwise.
-  const ASSET_VERSION = '4';
+  const ASSET_VERSION = '6';
 
-  // 0f. MUSCLE COUPE — user-supplied model; headlights already face +Z, no
-  // rotation needed. Brand references stripped per user instruction; see CREDITS.
-  // Paint swapped from the model's stock fire-engine red ("Default Metallic
-  // Paint") to a muted dusty-blue slate — the red read as too loud against
-  // the game's soft, desaturated visual styles.
+  // 0f. MUSCLE COUPE — reworked in Blender (B129) from a user-supplied model:
+  // all badges and lettering removed; our own grille, lamps, hood and tail;
+  // new wheels and interior. Source: assets/models/muscle-coupe-source.blend.
+  // Paint: the "Default Metallic Paint" slot is recoloured to dusty slate-blue.
+  // The replacement keeps the source material's side: the body is a single
+  // skin exported double-sided, and a default (front-side) material culls
+  // the roof, pillars and door panels when seen from the first-person cabin.
   const MuscleCoupeAsset = makeVehicleAsset('assets/models/muscle-coupe.glb?v=' + ASSET_VERSION, (child) => {
     if (child.material && child.material.name && child.material.name.startsWith('Default Metallic Paint')) {
-      child.material = new THREE.MeshStandardMaterial({ color: 0x5c7285, metalness: 0.55, roughness: 0.35 });
+      child.material = new THREE.MeshStandardMaterial({ color: 0x5c7285, metalness: 0.55, roughness: 0.35, side: child.material.side });
     }
   }, 'MuscleCoupeAsset');
 
   // 0g. DELIVERY CYCLE — Blender-exported GLB with corrected Y-up orientation.
-  const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?t=' + Date.now(), () => {}, 'DeliveryCycleAsset');
+  const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?v=' + ASSET_VERSION, () => {}, 'DeliveryCycleAsset');
 
   // 0g2. CHAI TAPRI — static roadside tea-stall prop. Origin at ground centre,
   // counter facing +Z (the road, once buildViewpointOrChai's lookAt runs).
@@ -1076,9 +1078,9 @@
     SIDEWALK: { enabled: true, width: 1.7, kerb: 0.12 },
 
     VEHICLES: {
-      musclecoupe: { id: 'musclecoupe', name: 'Muscle Coupe', maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0 },
+      musclecoupe: { id: 'musclecoupe', name: 'Muscle Coupe', maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0, wheelRadius: 0.315 },
       // maxSpeed = end of the ride-time ramp (52 km/h); baseSpeed = start of it (32 km/h). Both m/s.
-      cycle: { id: 'cycle', name: 'Delivery Cycle', maxSpeed: 14.44, baseSpeed: 8.89, rampSeconds: 120, accel: 6.5, drag: 0.55, brake: 14.0 }
+      cycle: { id: 'cycle', name: 'Delivery Cycle', maxSpeed: 14.44, baseSpeed: 8.89, rampSeconds: 120, accel: 6.5, drag: 0.55, brake: 14.0, wheelRadius: 0.365 }
     },
 
     DIFFICULTY_TIERS: {
@@ -8174,9 +8176,43 @@
     }
 
 
+    // Lens meshes are named in Blender (Lens_Head*, Lens_Tail*) so the
+    // day/night emissive swap reaches the model's own lamps.
+    _bindLensMaterials(model) {
+      model.traverse((o) => {
+        if (!o.isMesh || !o.name) return;
+        if (o.name.startsWith('Lens_Head')) o.material = this.headlightLensMat;
+        else if (o.name.startsWith('Lens_Tail')) o.material = this.taillightLensMat;
+      });
+    }
+
+    // A multi-material wheel loads as a Group plus one child mesh per
+    // material, and they share the name prefix, so only the outermost
+    // matching node is taken (or the wheel would spin twice). Steered wheels
+    // are re-parented under a pivot: the pivot yaws, the wheel rolls, and
+    // the two rotations never compose into a wobble.
+    _collectWheels(model, wheelRe, steerRe) {
+      const found = [];
+      model.traverse((o) => {
+        if (wheelRe.test(o.name || '') && !wheelRe.test((o.parent && o.parent.name) || '')) found.push(o);
+      });
+      found.forEach((w) => {
+        this.wheels.push(w);
+        if (steerRe && steerRe.test(w.name)) {
+          const pivot = new THREE.Group();
+          pivot.position.copy(w.position);
+          w.parent.add(pivot);
+          pivot.add(w);
+          w.position.set(0, 0, 0);
+          this.frontWheels.push(pivot);
+        }
+      });
+    }
+
     buildModel() {
       this.mesh.clear();
       this.wheels = [];
+      this.frontWheels = [];
 
       // Dynamic automotive projector lens materials:
       // Dark specular glass when OFF; bright warm-white xenon emissive when ON
@@ -8199,16 +8235,13 @@
         const cycleModel = DeliveryCycleAsset.clone();
         // Blender -Y forward exports to glTF +Z forward, so no rotation correction is needed.
         this.mesh.add(cycleModel);
-        const isWheelNode = (o) => !!o && /^Wheel_(Front|Rear)/.test(o.name || '');
         cycleModel.traverse(child => {
           if (child.isMesh) {
             child.castShadow = true;
             child.receiveShadow = true;
           }
-          // A multi-material wheel loads as a group plus one mesh per material, and all
-          // share the name prefix; spin only the outermost node or the wheel turns twice.
-          if (isWheelNode(child) && !isWheelNode(child.parent)) this.wheels.push(child);
         });
+        this._collectWheels(cycleModel, /^Wheel_(Front|Rear)/, null);
         // The rear box is a closed thermal box, so there is no open parcel stack to deplete.
         this.trolleyParcels = [];
       } else if (this.vehicleType === 'cycle') {
@@ -8230,44 +8263,14 @@
 
       } else if (this.vehicleType === 'musclecoupe' && MuscleCoupeAsset.template) {
         // ====================================================================
-        // 4. MUSCLE COUPE (user-supplied model, see MuscleCoupeAsset comment
-        // above for source/conversion/brand-scrubbing notes)
-        // Scaled to real-world dimensions (0.82x brings width from 2.31m to ~1.89m,
-        // fitting cleanly within the 3.7m road lane).
+        // 4. MUSCLE COUPE: reworked in Blender (B129) with our own grille,
+        // lamps, hood and tail, no badges, new wheels and interior. Real-world
+        // scale is baked into the file, so there is no runtime scaling.
         // ====================================================================
         const carModel = MuscleCoupeAsset.clone();
-        const scaleFactor = 0.82;
-        carModel.scale.setScalar(scaleFactor);
         this.mesh.add(carModel);
-        this.frontWheels = [];
-        this.rearWheels = [];
-        carModel.traverse((child) => {
-          if (child.isMesh && child.name && /^(wheel|brakes)_/i.test(child.name)) {
-            this.wheels.push(child);
-            if (/_f_/i.test(child.name)) {
-              this.frontWheels.push(child);
-            } else if (/_r_/i.test(child.name)) {
-              this.rearWheels.push(child);
-            }
-          }
-        });
-        // Blank cover plates over two front badges — scaled proportionally
-        const badgeMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
-        const scriptCover = new THREE.Mesh(new THREE.BoxGeometry(0.55 * scaleFactor, 0.16 * scaleFactor, 0.03), badgeMat);
-        scriptCover.position.set(0, 0.826 * scaleFactor, 2.46 * scaleFactor);
-        this.mesh.add(scriptCover);
-        const plateCover = new THREE.Mesh(new THREE.BoxGeometry(0.4 * scaleFactor, 0.13 * scaleFactor, 0.03), badgeMat);
-        plateCover.position.set(0, 0.729 * scaleFactor, 2.42 * scaleFactor);
-        this.mesh.add(plateCover);
-
-        // Projector Headlight Lenses (+Z front)
-        const mcHeadGeom = new THREE.BoxGeometry(0.35 * scaleFactor, 0.09 * scaleFactor, 0.06);
-        const mcLeftHead = new THREE.Mesh(mcHeadGeom, this.headlightLensMat);
-        mcLeftHead.position.set(-0.68 * scaleFactor, 0.62 * scaleFactor, 2.45 * scaleFactor);
-        const mcRightHead = new THREE.Mesh(mcHeadGeom, this.headlightLensMat);
-        mcRightHead.position.set(0.68 * scaleFactor, 0.62 * scaleFactor, 2.45 * scaleFactor);
-        this.mesh.add(mcLeftHead);
-        this.mesh.add(mcRightHead);
+        this._bindLensMaterials(carModel);
+        this._collectWheels(carModel, /^wheel_[fr]_[lr]/, /^wheel_f_/);
 
       } else if (this.vehicleType === 'musclecoupe') {
         // Procedural fallback, used only until MuscleCoupeAsset finishes
@@ -8903,7 +8906,7 @@
       }
       // Spin all wheels along pitch axis with forward ground speed
       if (this.wheels && this.wheels.length > 0) {
-        const wheelRadius = isBicycle ? 0.365 : 0.38;
+        const wheelRadius = (CONFIG.VEHICLES[this.vehicleType] || {}).wheelRadius || 0.38;
         this.wheels.forEach(w => w.rotateX((this.speed * dt) / wheelRadius));
       }
 
@@ -11791,6 +11794,9 @@
       }
 
       this.gameState = 'menu';
+      // updateCamera only runs while playing, so it can't undo a first-person
+      // near-clip itself; the hub's orbit camera must not inherit it.
+      this._setFirstPersonNearPlane(false);
       if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
         ShiplypAds.gameplayStop();
       }
@@ -12296,6 +12302,20 @@
       });
     }
 
+    // First-person gets a much closer near-clip than every other view: any
+    // cabin geometry in front of the driver's eye (dash, steering wheel)
+    // sits well inside the default 0.5 used by the other camera modes and
+    // would get clipped. The one camera is shared by every view, so this is
+    // also called with false wherever the game stops driving (the hub),
+    // or the closer plane would leak into views that don't need it. Only
+    // touches the camera when the state actually changes.
+    _setFirstPersonNearPlane(on) {
+      if (!this.camera || !!this._fpNearApplied === on) return;
+      this.camera.near = on ? 0.1 : 0.5;
+      this.camera.updateProjectionMatrix();
+      this._fpNearApplied = on;
+    }
+
     updateCamera(dt) {
 
       if (typeof window !== 'undefined' && window.location.search.includes('view_villa=1') && this.world?.deliveryTargets?.length) {
@@ -12336,6 +12356,8 @@
       if (!this.camLookTarget) {
         this.camLookTarget = carPos.clone().addScaledVector(carForward, 18.0);
       }
+
+      this._setFirstPersonNearPlane(this.activeCameraMode === 'first-person');
 
       if (this.activeCameraMode === 'hood') {
         // Bumper Cam - rigidly bolted at forward bumper height
