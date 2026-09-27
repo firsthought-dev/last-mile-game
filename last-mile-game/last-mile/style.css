@@ -4227,3 +4227,28 @@ body.vehicle-cycle .touch-drag-steer {
   .btn-launch-dispatch { padding: 9px 16px; font-size: 1.4rem; margin-top: 2px; }
   .hub-footer-links { margin-top: 4px; gap: 12px; }
 }
+
+/* ==========================================================================
+   Delivery capsule on portrait phones (B122 follow-up)
+   The capsule was clamped to 116px (98px at <=380px), so "0 / 33" and the
+   "+₹85" payout wrapped onto two lines each and the destination name was cut
+   to a few letters, while ~80px to its right sat empty up to the top-right
+   button cluster (which starts ~177px in from the right edge). Grow into
+   that gap and keep each piece on one line.
+   ========================================================================== */
+@media (max-aspect-ratio: 1/1) and (max-width: 768px) {
+  .slowroads-delivery-capsule {
+    max-width: calc(100vw - 196px) !important;
+    padding: 4px 8px;
+  }
+  .delivery-capsule-header { flex-wrap: nowrap; white-space: nowrap; }
+  .delivery-order-seq, .delivery-payout, .delivery-sep { white-space: nowrap; }
+  .delivery-dest-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .delivery-dest-name {
+    max-width: none;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.62rem;
+  }
+  .delivery-dist-badge { flex: 0 0 auto; white-space: nowrap; }
+}

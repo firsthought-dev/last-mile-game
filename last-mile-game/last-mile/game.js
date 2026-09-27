@@ -11014,6 +11014,7 @@
         <div style="font-size:10px;font-family:var(--font-telemetry,'Chakra Petch',monospace);color:rgba(232,238,242,0.65);letter-spacing:.08em">₹${(base||0)} base • ×${(diffMult||1).toFixed(1)} diff • +${streak > 1 ? Math.round((streak-1)*20) : 0}% streak</div>
       `;
       this.scorePopupContainer.appendChild(banner);
+      this._placeScorePopups();
       setTimeout(() => {
         banner.style.opacity = '0';
         banner.style.transform = 'translateY(-12px) scale(0.95)';
@@ -11219,6 +11220,26 @@
       });
     }
 
+    // The popup stack sits 88px down, centred. On narrow screens the top-right
+    // telemetry box (speed / gear / distance, plus the STREAK pill when a
+    // streak is live) reaches past that, so the banner covered it. Call after
+    // appending a banner: if the stack's real box intersects the telemetry
+    // box, drop the stack just below it. Its height changes (streak pill), and
+    // on wide layouts it sits at the bottom of the screen, so measure every time.
+    _placeScorePopups() {
+      const c = this.scorePopupContainer;
+      if (!c) return;
+      c.style.top = '';
+      const tel = document.querySelector('.slowroads-telemetry-box');
+      if (!tel || !tel.offsetParent) return;
+      const t = tel.getBoundingClientRect();
+      const r = c.getBoundingClientRect();
+      const hits = r.left < t.right && r.right > t.left && r.top < t.bottom && r.bottom > t.top;
+      if (!hits) return;
+      const parentTop = (c.offsetParent || document.body).getBoundingClientRect().top;
+      c.style.top = Math.round(t.bottom - parentTop + 8) + 'px';
+    }
+
     showScoreBanner(title, sub) {
       if (!this.scorePopupContainer) return;
       const banner = document.createElement('div');
@@ -11228,6 +11249,7 @@
         <span class="popup-sub">${sub}</span>
       `;
       this.scorePopupContainer.appendChild(banner);
+      this._placeScorePopups();
       setTimeout(() => {
         banner.style.opacity = '0';
         banner.style.transform = 'translateY(-12px) scale(0.95)';
