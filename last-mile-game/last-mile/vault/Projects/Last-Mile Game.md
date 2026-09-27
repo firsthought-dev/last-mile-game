@@ -86,6 +86,7 @@ SORT date DESC
 - 2026-09-27 — [[2026-09-27 - B125 Settings Screen Matches Game Style|B125]]: Settings screen matches the game's style
 - 2026-09-27 — [[2026-09-27 - B126 Laptop Start Menu and HUD Layout|B126]]: start menu and HUD fixed for laptop-sized windows
 - 2026-09-27 — [[2026-09-27 - B127 Licence Cleanup and Unused Assets Removed|B127]]: branded old artwork and unused vehicles removed; vehicle roster (motorbike, cargo three-wheeler, original car) planned
+- 2026-09-27 — [[2026-09-27 - B128 In-Game Currency Disclaimer|B128]]: ₹ fictional-currency notice on the loading screen and in Settings
 - 2026-09-27 — [[2026-09-27 - B118 Mobile Time Weather Vehicle in Tools; WORLD Tab Removed|B118]]: mobile Time / Weather / Vehicle controls; WORLD tab removed
 - 2026-09-27 — [[2026-09-27 - B117 Environment Panel Fix, Off-World Map and Road Types Removed|B117]]: Environment tab fixed; single City map on asphalt
 - 2026-09-27 — [[2026-09-27 - B116 Two Visual Styles Crisp and Cinematic|B116]]: graphics styles are now Crisp and Cinematic
