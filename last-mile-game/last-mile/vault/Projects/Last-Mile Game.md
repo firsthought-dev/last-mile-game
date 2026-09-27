@@ -77,6 +77,7 @@ SORT date DESC
 ```
 
 ## Recent Activity
+- 2026-09-27 — [[2026-09-27 - B117 Environment Panel Fix, Off-World Map and Road Types Removed|B117]]: Environment tab fixed; single City map on asphalt
 - 2026-09-27 — [[2026-09-27 - B116 Two Visual Styles Crisp and Cinematic|B116]]: graphics styles are now Crisp and Cinematic
 - 2026-09-27 — PR #10 merged to main: radio + photo mode removed, Auto Steer / Auto Drive, mobile toast fix
 - 2026-09-27 — [[2026-09-27 - B114 Remove Photo Mode, Split Auto Steer and Auto Drive|B114]]: photo mode removed; Auto Steer + Auto Drive

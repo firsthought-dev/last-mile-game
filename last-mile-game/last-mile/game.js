@@ -21,7 +21,6 @@
     cloud: '<path d="M7 18a4.5 4.5 0 0 1-.5-8.97A6 6 0 0 1 18 9.5a4 4 0 0 1-1 7.9H7z"/>',
     cloudRain: '<path d="M7 15a4.5 4.5 0 0 1-.5-8.97A6 6 0 0 1 18 6.5a4 4 0 0 1-1 7.9H7z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/>',
     wind: '<path d="M3 8h10.5a2.5 2.5 0 1 0-2.5-2.5M3 12h14.5a2.5 2.5 0 1 1-2.5 2.5M3 16h8.5a2.5 2.5 0 1 1-2.5 2.5"/>',
-    planet: '<circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="10" ry="3.2" transform="rotate(-18 12 12)"/>',
     road: '<path d="M8 2 4 22M16 2l4 20M12 2v3M12 9.5v3M12 17v3"/>',
     mountain: '<path d="M3 20 9 8l4 6 2-3 6 9H3z"/>',
     waves: '<path d="M2 8q2.5-3 5 0t5 0 5 0 5 0M2 14q2.5-3 5 0t5 0 5 0 5 0M2 20q2.5-3 5 0t5 0 5 0 5 0"/>',
@@ -866,7 +865,7 @@
         // reads as sand/dune, not bare hillside, and since steep terrain
         // (this color) covers a lot of ground next to the road it was
         // visually swamping the green grass, making the whole map read as
-        // "no grass, just tan". Sand/soil tone is reserved for Off-World's
+        // "no grass, just tan".
         // Rich lush natural hillside greens (prevents washout under bright daylight)
         grassColor: 0x276638,
         grassLight: 0x3a874d,
@@ -940,65 +939,11 @@
         cliffColor: 0x7c2d12,
         treeLeaves: [0x78716c, 0xa8a29e, 0x57534e, 0xb45309]
       },
-      space: {
-        id: 'space',
-        name: 'Lunar Horizon & Nebula',
-        skyTop: 0x050510,
-        skyBottom: 0x111827,
-        fog: 0x0f172a,
-        fogDensity: 0.0012,
-        grassColor: 0x334155, // lunar dark basalt
-        grassLight: 0x64748b, // bright lunar regolith
-        cliffColor: 0x1e293b,
-        treeLeaves: [0x475569, 0x334155, 0x64748b, 0x94a3b8],
-        gravity: 0.45 // low lunar gravity
-      },
-      offworld: {
-        id: 'offworld',
-        name: 'Off-World Martian Dunes — Rosewater Horizon',
-        // "Rosewater Horizon" — brought back by direct request after the
-        // Mars-science-accurate butterscotch-only sky (real Mars dust
-        // scatters via Mie scattering, producing a uniform tan sky, not a
-        // blue-to-warm gradient — see the Wikipedia "Mars surface color"
-        // sourcing on the butterscotch version) read as flatter and less
-        // striking in play. This keeps that same warm dust-scattering
-        // logic at the horizon (still butterscotch/amber down low, not an
-        // Earth blue) but lets the upper sky drift into a soft dusty
-        // rose/mauve rather than stopping at plain tan — an artistic
-        // liberty on top of the real physics, not a claim that Mars' sky
-        // actually looks like this.
-        skyTop: 0xa8829a,     // Soft dusty rose/mauve zenith
-        skyHorizon: 0xe0b485, // Warm butterscotch/amber haze near the horizon
-        skyBottom: 0xecc99c,
-        fog: 0xe0b485,
-        fogDensity: 0.0052,
-        // Ground tones checked against the same Mars-color sourcing above:
-        // real regolith reads as "butterscotch, golden, brown, tan" up
-        // close (not the old saturated terracotta-red) — these were
-        // already in that family and didn't need correcting.
-        grassColor: 0xc4a882, // Golden-amber dune base
-        grassLight: 0xd4b896, // Pale dune crest highlight
-        cliffColor: 0x8a5a3e, // Iron-oxide rust-brown bedrock — a bit more mineral-red than plain brown, per the limonite/iron-oxide dust real Mars regolith is colored by
-        treeLeaves: [0x9c7856, 0xab8562, 0x8a6b4e, 0xb08f68],
-        gravity: 0.62,        // Low Martian gravity for floating suspension
-        isOffWorld: true
-      }
     },
 
-    ROAD_TERRAINS: {
-      asphalt: { id: 'asphalt', name: 'Asphalt Expressway', icon: 'road', color: 0x1e2229, roughness: 0.82, metalness: 0.05, gripMult: 1.00, paintLines: true, desc: 'Smooth highway tarmac' },
-      dirt: { id: 'dirt', name: 'Martian Dirt Trail', icon: 'planet', color: 0xab8a5e, roughness: 0.96, metalness: 0.0, gripMult: 0.88, paintLines: false, desc: 'Unpaved Martian regolith tire trail' },
-      gravel: { id: 'gravel', name: 'Mountain Ghats Gravel', icon: 'mountain', color: 0x8a7d6a, roughness: 0.94, metalness: 0.02, gripMult: 0.82, paintLines: false, desc: 'Scenic mountain gravel & rally shale' },
-      // roughness raised 0.38->0.58 and metalness 0.15->0.06 — at the old
-      // values the road's dark brown tint (verified correct in the vertex
-      // color data) was still getting Fresnel-washed by the now much
-      // brighter Off-World sky/ambient at typical grazing viewing angle
-      // down the road, reading as pale grey instead of dark wet mud. Still
-      // glossier than the fully matte surfaces (dirt/gravel/sand) for the
-      // "wet sheen" character, just not enough to wash out the base color.
-      mud: { id: 'mud', name: 'Monsoon Mud & Slush', icon: 'cloudRain', color: 0x4a3322, roughness: 0.58, metalness: 0.06, gripMult: 0.68, paintLines: false, desc: 'Slippery drift clay track with wet sheen' },
-      sand: { id: 'sand', name: 'Coastal Dune Sand', icon: 'waves', color: 0xd4b896, roughness: 0.96, metalness: 0.02, gripMult: 0.72, paintLines: false, desc: 'Soft golden dune trail' }
-    },
+    // Single road surface. Selectable road types (dirt, gravel, mud, sand)
+    // were removed together with the Off-World map (B117).
+    ROAD_SURFACE: { id: 'asphalt', name: 'Asphalt Expressway', color: 0x1e2229, roughness: 0.82, metalness: 0.05, gripMult: 1.00 },
 
     TIME_OF_DAY: {
       dawn: {
@@ -1078,11 +1023,9 @@
 
     CITIES: {
       mumbai: { id: 'mumbai', name: 'The Grand Nilambari Corridor', tagline: 'Continuous Scenic Highway Across Districts', season: 'autumn', openRoad: false },
-      offworld: { id: 'offworld', name: 'Off-World Red Planet', tagline: 'Martian Regolith Dunes & Boulder Fields', season: 'offworld', openRoad: true },
       desert: { id: 'desert', name: 'Suryavann Open Desert', tagline: 'Endless Red Rock Canyons & Dunes', season: 'desert', openRoad: true },
       mountains: { id: 'mountains', name: 'Chandragiri Open Pass', tagline: 'Rolling Foothills & Natural Arches', season: 'spring', openRoad: true },
-      highlands: { id: 'highlands', name: 'Highland Dusk Highway', tagline: 'Sweeping Heather & Rolling Horizon', season: 'autumn', openRoad: true },
-      lunar: { id: 'lunar', name: 'Lunar Crater Expanse', tagline: 'Off-World Basalt & Starry Cosmos', season: 'space', openRoad: true }
+      highlands: { id: 'highlands', name: 'Highland Dusk Highway', tagline: 'Sweeping Heather & Rolling Horizon', season: 'autumn', openRoad: true }
     },
 
     DISTRICT_BIOMES: [
@@ -1563,21 +1506,9 @@
     // self-loading Texture instance instead.
     grassColorFloor() { return this._get('grassColorFloor', 'assets/textures/grass_color.webp'); },
     grassNormal() { return this._get('grassNormal', 'assets/textures/grass_normal.webp'); },
-    sandColor() { return this._get('sandColor', 'assets/textures/sand_color.webp'); },
     rockColor() { return this._get('rockColor', 'assets/textures/rock_color.webp'); },
     rockNormal() { return this._get('rockNormal', 'assets/textures/rock_normal.webp'); },
-    roadColor(roadTerrainKey = 'asphalt') {
-      if (roadTerrainKey === 'gravel') return this._get('roadGravel', 'assets/textures/gravel_color.webp');
-      if (roadTerrainKey === 'sand') return this._get('roadSand', 'assets/textures/sand_color.webp');
-      if (roadTerrainKey === 'mud') return this._get('roadMud', 'assets/textures/rock_color.webp');
-      // Off-World's only surface — was silently falling through to the
-      // generic paved-tarmac photo (road_color.webp), which is exactly
-      // backwards for a bare Martian dust trail. Same sand photo the
-      // terrain itself uses, so the tire-track ruts read as compacted
-      // sand, not asphalt with an orange tint.
-      if (roadTerrainKey === 'dirt') return this._get('roadSand', 'assets/textures/sand_color.webp');
-      return this._get('roadColor', 'assets/textures/road_color.webp');
-    },
+    roadColor() { return this._get('roadColor', 'assets/textures/road_color.webp'); },
     roadNormal() { return this._get('roadNormal', 'assets/textures/road_normal.webp'); },
     woodColor() { return this._get('woodColor', 'assets/textures/wood_color.webp'); },
     woodNormal() { return this._get('woodNormal', 'assets/textures/wood_normal.webp'); },
@@ -1770,22 +1701,6 @@
     // Dynamic District Biome Palette Evaluator (interpolating colors along corridor)
     getDistrictPalette(z, defaultSeason) {
       const defSeason = defaultSeason || (CONFIG.SEASONS && CONFIG.SEASONS[this.seasonKey]) || (CONFIG.SEASONS && CONFIG.SEASONS.autumn) || { grassColor: 0x276638, grassLight: 0x3a874d, cliffColor: 0x8a7458 };
-      if (this.cityKey === 'offworld' || defSeason.isOffWorld || defSeason.id === 'offworld') {
-        const baseGrass = new THREE.Color(defSeason.grassColor);
-        const baseLight = new THREE.Color(defSeason.grassLight);
-        const baseCliff = new THREE.Color(defSeason.cliffColor);
-        const baseSoil = new THREE.Color(defSeason.grassLight).lerp(new THREE.Color(0x2a2824), 0.35);
-        return {
-          grassColor: baseGrass,
-          grassLight: baseLight,
-          cliffColor: baseCliff,
-          shoulderSoil: baseSoil,
-          treeLeaves: defSeason.treeLeaves || [0x78716c],
-          rockColor: 0x7a5a42,
-          treeDensity: 0.0,
-          districtName: 'Off-World Red Planet'
-        };
-      }
       if (defSeason.id === 'winter' || this.seasonKey === 'winter') {
         const baseGrass = new THREE.Color(defSeason.grassColor);
         const baseLight = new THREE.Color(defSeason.grassLight);
@@ -2414,15 +2329,9 @@
 
     createSkyDome(season, todKey = 'day') {
       const tod = CONFIG.TIME_OF_DAY[todKey] || CONFIG.TIME_OF_DAY.day;
-      // See buildWorldAndScene's matching comment — sky gradient colors
-      // were always read from `tod` only, so `season` (passed in as a
-      // param right here!) never actually reached the sky shader. Off-
-      // World gets its own gradient during daylight; night keeps the
-      // shared starry preset.
-      const useSeasonSky = season.isOffWorld && !tod.night;
-      const skyTopHex = useSeasonSky ? season.skyTop : tod.skyTop;
-      const skyHorizHex = useSeasonSky ? season.skyHorizon : tod.skyHorizon;
-      const skyBotHex = useSeasonSky ? season.skyBottom : tod.skyBottom;
+      const skyTopHex = tod.skyTop;
+      const skyHorizHex = tod.skyHorizon;
+      const skyBotHex = tod.skyBottom;
       // Sky color used to be Gouraud-interpolated per-VERTEX, baked onto a
       // coarse sphere — every ring boundary was a visible kink where the
       // interpolation slope changed (the vertical blend uses a non-linear
@@ -2541,7 +2450,7 @@
         transparent: true,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-        opacity: (tod.night || this.seasonKey === 'space' ? 1.0 : (tod.id === 'dusk' ? 0.45 : 0.0))
+        opacity: (tod.night ? 1.0 : (tod.id === 'dusk' ? 0.45 : 0.0))
       });
       this.starMesh = new THREE.Points(starGeom, starMat);
       this.skyMesh.add(this.starMesh);
@@ -2549,7 +2458,7 @@
       return this.skyMesh;
     }
 
-    createRoadMesh(roadTerrainKey = 'asphalt') {
+    createRoadMesh() {
       const tubularSegments = CONFIG.ROAD_MESH_SEGMENTS;
       const roadWidth = CONFIG.ROAD_WIDTH;
       const shoulderWidth = CONFIG.ROAD_SHOULDER_WIDTH;
@@ -2586,33 +2495,12 @@
       this.roadNormals = new Array(tubularSegments + 1);
       this.roadBinormals = new Array(tubularSegments + 1);
       this.roadBankedUp = new Array(tubularSegments + 1);
-      const tCfg = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
+      const tCfg = CONFIG.ROAD_SURFACE;
       const seasonCfg = CONFIG.SEASONS[this.seasonKey] || CONFIG.SEASONS.autumn;
       const baseTarmac = new THREE.Color(tCfg.color);
       // Soft organic transition: verge color blends base tarmac with the shoulder terrain ground tone
       const shoulderSoilColor = new THREE.Color(seasonCfg.grassLight).lerp(baseTarmac, 0.40);
       const vergeColor = shoulderSoilColor.clone();
-
-      // Off-World "road" is structurally not a road at all in the
-      // slowroads.io reference — it's two dark tire-track ruts worn into
-      // the open dune sand, with soft organic edges and no defined
-      // shoulder, not a uniform paved-looking strip. Reusing the SAME
-      // 7-point cross-section (no geometry restructure needed — the two
-      // "lane tarmac" columns already sit right about where wheel tracks
-      // would be) but repainting it: the two wheel-path columns become a
-      // dark compacted-dirt rut color, everything else (center strip and
-      // both edges) becomes light undisturbed sand blending straight into
-      // the terrain color, instead of one uniform tarmac band.
-      const isOffWorldRoad = this.cityKey === 'offworld';
-      // Corrected against the developer's own official Steam screenshots
-      // (store.steampowered.com/app/3431300, current build) — the actual
-      // Mars track is a single SUBTLE worn groove, close in value to the
-      // surrounding dirt, not two stark dark ruts with a hard-contrast
-      // light band between them. 0.32 (checked only against the older,
-      // simpler free-web build) way overshot that. 0.72 reads as "worn
-      // compacted path", not "black tire mark".
-      const trackColor = baseTarmac.clone().multiplyScalar(0.72);
-      const sandBetweenColor = new THREE.Color(seasonCfg.grassLight);
 
       // Lane paint used to be baked into this ribbon's own vertex colors —
       // first as a single column (a bright line that was actually a smooth
@@ -2633,26 +2521,13 @@
       // meshes with a fixed physical width that can't drift with the
       // base road's vertex spacing.
       const laneHalf = roadWidth * 0.5;
-      // Off-World gets a single-vehicle-track width instead of the full
-      // two-lane-plus-shoulder look — by direct request: this should read
-      // as ONE car's tire trail, not two lanes with sidewalks. Points 0
-      // and 6 (the outer verge) stay at the ORIGINAL wide laneHalf +
-      // shoulderWidth position — that's the exact lateral distance
-      // createTerrainMesh's own shoulder slice is placed at, and moving
-      // it would tear a gap open between the road ribbon and the terrain
-      // ribbon. Only the inner points (1-5, the visible track/tarmac
-      // columns) pull in narrow — everything from the narrow track out to
-      // that unchanged outer seam is painted the same sand tone as the
-      // terrain anyway (see the color block below), so it merges away
-      // rather than reading as a wide shoulder.
-      const trackHalf = isOffWorldRoad ? 1.15 : laneHalf;
       const offsets = [
         -laneHalf - shoulderWidth, // 0: Left Verge Outer
-        -trackHalf,                  // 1: Left Tarmac Edge
-        -trackHalf * 0.46 / 0.5,     // 2: Left Lane Tarmac
+        -laneHalf,                   // 1: Left Tarmac Edge
+        -laneHalf * 0.46 / 0.5,      // 2: Left Lane Tarmac
         0.0,                        // 3: Center
-        trackHalf * 0.46 / 0.5,      // 4: Right Lane Tarmac
-        trackHalf,                   // 5: Right Tarmac Edge
+        laneHalf * 0.46 / 0.5,       // 4: Right Lane Tarmac
+        laneHalf,                    // 5: Right Tarmac Edge
         laneHalf + shoulderWidth    // 6: Right Verge Outer
       ];
       for (let i = 0; i <= tubularSegments; i++) {
@@ -2722,34 +2597,7 @@
           normals.push(bankedUp.x, bankedUp.y, bankedUp.z);
           uvs.push(off * 0.5, i * 0.3);
 
-          if (isOffWorldRoad) {
-            // j: 0=outer verge, 1=edge, 2=LEFT WHEEL TRACK, 3=center,
-            // 4=RIGHT WHEEL TRACK, 5=edge, 6=outer verge
-            if (j === 2 || j === 4) {
-              // Track ruts also get the same noise so they don't read as
-              // a perfectly flat dark band either. Clamped to only ever
-              // darken (never brighten past base) — see the sand comment
-              // below for why.
-              const trackNoise = 0.75 + Math.max(0, this.simplex.noise2D(p.x * 0.06, p.z * 0.06)) * 0.2;
-              colors.push(trackColor.r * trackNoise, trackColor.g * trackNoise, trackColor.b * trackNoise);
-            } else {
-              // The sand-colored columns (verge + between-tracks) used to
-              // be one perfectly flat, uniform color end to end — right
-              // next to createTerrainMesh's shoulder, which has real noise
-              // variation baked into its color. That flatness is exactly
-              // what read as a hard artificial "white strip" running the
-              // whole road once directional lighting had enough contrast
-              // to show it. Clamped to 0.7-1.0 (never brighter than the
-              // base sand color) — the previous 0.85-1.10 range could push
-              // this flat, uniformly-angled ribbon's color past the
-              // bloom-pass luminance threshold under strong directional
-              // sun while the terrain's varied, curved normals rarely hit
-              // the same peak at the same spot, which is what actually
-              // read as the road "shining brighter than the terrain."
-              const sandNoise = 0.7 + Math.max(0, this.simplex.noise2D(p.x * 0.04, p.z * 0.04)) * 0.3;
-              colors.push(sandBetweenColor.r * sandNoise, sandBetweenColor.g * sandNoise, sandBetweenColor.b * sandNoise);
-            }
-          } else if (j === 0 || j === 6) {
+          if (j === 0 || j === 6) {
             // Plain tarmac/verge only — paint is a separate decal mesh now
             // (see createLaneMarkingMeshes), not baked into this ribbon.
             colors.push(curVergeColor.r, curVergeColor.g, curVergeColor.b);
@@ -2802,7 +2650,7 @@
       // goes unstable on it, corrupting the perturbed normal and zeroing
       // out the lighting entirely. Same risk applies to the terrain ribbon
       // below (same custom-UV pattern) — normalMap skipped there too.
-      const roadTex = RealTextureFactory.roadColor(roadTerrainKey);
+      const roadTex = RealTextureFactory.roadColor();
       const roadMaterial = new THREE.MeshStandardMaterial({
         vertexColors: true,
         side: THREE.DoubleSide,
@@ -2824,11 +2672,7 @@
       return this.roadMesh;
     }
 
-    createLaneMarkingMeshes(roadTerrainKey = 'asphalt') {
-      const tCfg = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
-      // Only render painted highway decals on paved asphalt — gravel, mud, and sand are unpainted natural routes
-      if (!tCfg.paintLines) return new THREE.Group();
-
+    createLaneMarkingMeshes() {
       const points = this.roadSpacedPoints;
       const bankingAngles = this.roadBankingAngles;
       const normals = this.roadNormals;
@@ -2944,19 +2788,6 @@
     // tube walls). Indices are into curve.getSpacedPoints(tubularSegments),
     // so they line up 1:1 with createTerrainMesh's own `i` loop variable.
     computeTunnelZones() {
-      // No tunnels on Off-World at all — checked directly against
-      // slowroads.io's own Mars reference: the road always just climbs
-      // over the dunes, never bores through them, and there's obviously no
-      // reinforced-concrete highway tunnel (with electric lamps and a
-      // yellow road sign) on an alien dust road. That tunnel styling is
-      // Earth-highway-specific infrastructure; forcing it into Off-World
-      // (this used to guarantee at least 2 tunnels regardless of terrain)
-      // was exactly the kind of thing making it read as a reskinned Earth
-      // map instead of its own place.
-      if (this.cityKey === 'offworld') {
-        this.tunnelZones = [];
-        return;
-      }
       const tubularSegments = CONFIG.ROAD_MESH_SEGMENTS;
       const points = this.curve.getSpacedPoints(tubularSegments);
       const up = new THREE.Vector3(0, 1, 0);
@@ -3223,17 +3054,13 @@
       // cliffCol grey-brown in steep bands per the embankment logic above)
       // exactly as it did over the old texture — same mechanism, just a
       // real photo underneath instead of procedural speckle noise.
-      const isOffWorldTerrain = (season.id === 'offworld' || this.cityKey === 'offworld' || !!season.isOffWorld);
       const terrainMat = new THREE.MeshStandardMaterial({
         vertexColors: true,
         side: THREE.DoubleSide,
         roughness: 0.95,
         metalness: 0.0,
-        // Martian regolith reads as sand/dune, not turf — using the grass
-        // photo here under orange vertex-color tint produced a muddy
-        // grass-under-rust look instead of dry dune sand.
-        map: isOffWorldTerrain ? RealTextureFactory.sandColor() : RealTextureFactory.grassColor(),
-        normalMap: isOffWorldTerrain ? null : RealTextureFactory.grassNormal(),
+        map: RealTextureFactory.grassColor(),
+        normalMap: RealTextureFactory.grassNormal(),
         normalScale: new THREE.Vector2(0.6, 0.6),
         // The warm scene IBL + AmbientLight 0.42 + HemisphereLight 0.22
         // together lift a #245e33 deep-green vertex colour to RGB(135,171,136)
@@ -3245,7 +3072,7 @@
         // meaningful highlights, so dialing it down loses no useful lighting
         // — it only stops washing out the vertex-colored ground. Restricted
         // to terrain: trees, buildings, the car all keep full env intensity.
-        envMapIntensity: isOffWorldTerrain ? 1.0 : 0.35
+        envMapIntensity: 0.35
       });
 
       this.terrainMesh = new THREE.Mesh(geom, terrainMat);
@@ -4406,7 +4233,7 @@
       this.crossingInfo = [];
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
-      const cityCfg = CONFIG.CITIES[this.cityKey] || CONFIG.CITIES.offworld;
+      const cityCfg = CONFIG.CITIES[this.cityKey] || CONFIG.CITIES.mumbai;
       const isOpenRoad = !!cityCfg.openRoad;
 
       // Reusable Low-Poly Foliage & Prop Geometries
@@ -4421,23 +4248,9 @@
       const rockGeom = rockGeomPool[0]; // fallback for legacy references
       const poleGeom = new THREE.CylinderGeometry(0.1, 0.12, 6.5, 6);
       const crossbarGeom = new THREE.BoxGeometry(1.8, 0.12, 0.12);
-      // Thin Off-World guardrail — checked against the developer's own
-      // current official Steam screenshots (store.steampowered.com, Mars
-      // and Moon shots): both DO have a simple thin metal guardrail on one
-      // side of the road (not the earlier assumption of zero barriers,
-      // which was based on the older/simpler free web build). Kept
-      // deliberately separate from the Earth barrierStyle system below
-      // (never reused/extended) so this can't regress that system's
-      // batching — a plain low-frequency post+rail, not a fourth style
-      // added to it.
-      const owRailPostGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.65, 5);
-      const owRailBeamGeom = new THREE.BoxGeometry(1, 0.09, 0.03);
-      const owRailMat = new THREE.MeshStandardMaterial({ color: 0x6b6862, roughness: 0.6, metalness: 0.5 });
-
-      const isOffWorld = (season.id === 'offworld' || this.cityKey === 'offworld' || !!season.isOffWorld);
       const isWinter = (season.id === 'winter');
-      // Rock color: Martian red-brown for off-world, frost-grey for winter, warm sandy for everything else
-      const rockBaseColor = isOffWorld ? 0x8a4f2b : (isWinter ? (season.snowRockColor || 0xbec4cc) : 0x7a5c3a);
+      // Rock color: frost-grey for winter, warm sandy for everything else
+      const rockBaseColor = isWinter ? (season.snowRockColor || 0xbec4cc) : 0x7a5c3a;
       const rockMat = new THREE.MeshStandardMaterial({
         color: rockBaseColor,
         roughness: isWinter ? 0.75 : 0.85,
@@ -4446,7 +4259,7 @@
         normalMap: RealTextureFactory.rockNormal()
       });
       const poleMat = new THREE.MeshStandardMaterial({
-        color: isOffWorld ? 0x7a4325 : 0x4a4e52,
+        color: 0x4a4e52,
         flatShading: true,
         roughness: 0.7,
         metalness: 0.25
@@ -4795,9 +4608,7 @@
         // bus shelters and delivery houses, not at fixed intervals.)
 
         // 2. Roadside Chevron Turn Warning Signs (Yellow/Black <<< >>> on metal poles)
-        // Skipped on Off-World — DOT-style highway signage doesn't belong
-        // on an alien dust road; slowroads.io's own Mars reference has none.
-        if (!isOffWorld && i % 14 === 0 && i > 0 && i < sampledPoints.length - 4) {
+        if (i % 14 === 0 && i > 0 && i < sampledPoints.length - 4) {
           const nextTang = new THREE.Vector3().subVectors(sampledPoints[i + 3], sampledPoints[i - 1]).normalize();
           this.spawnCurveSign(pt, normal, tangent, tangent.x * nextTang.z - tangent.z * nextTang.x);
         }
@@ -4815,20 +4626,11 @@
 
         // 6. Dense Multi-Tiered Pine & Broadleaf Forests, Rocks, Fences & Lanterns (Left and Right)
         [-1, 1].forEach(side => {
-          // Off-World Martian Dunes have zero trees — replaced with dense multi-scale boulder fields
-          const spawnTree = !isOffWorld && (this.prng.next() > 0.55) && !inTunnel;
+          const spawnTree = (this.prng.next() > 0.55) && !inTunnel;
 
-          // Off-World Near-Road Rock Scatter — checked directly against
-          // slowroads.io's own Off-World > Mars reference (Style panel's
-          // planet toggle): the ground there is densely peppered with tiny
-          // pebbles almost everywhere you look, not a handful of isolated
-          // rocks with big empty gaps between them. Near-certain spawn
-          // Dense Near-Road Rock Scatter — applies across ALL biomes (Earth cities get
-          // dense basalt/granite scree along roadside cuttings and shoulders; Off-World gets
-          // pebble scatter across dunes).
+          // Dense near-road rock scatter: small pebbles along the shoulders.
           if (!inTunnel && this.prng.next() > 0.08) {
-            // City uses exact off-world scatter setup: 0.4–34m offset, pebble scale,
-            // same clearance and cluster count — only the rock color differs.
+            // 0.4–34m offset, pebble scale.
             const rockDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(0.4, 34.0));
             const rPos = pt.clone().addScaledVector(normal, rockDist);
             const clusterCount = Math.floor(this.prng.range(3, 8));
@@ -4847,7 +4649,7 @@
               // up to +/-1.5m in x and z — landing them near 2.6m — and on the
               // inside of a bend the nearest road sample can be closer still.
               // Measured before this fix: 14 rocks on the asphalt in mumbai,
-              // closest 3.11m; 10 in offworld at 2.33m. See dev-checks
+              // closest 3.11m. See dev-checks
               // rocks-clear-of-road. Matches the correct form already used by
               // the other rock spawner (search: ROAD_WIDTH * 0.5 + 1.6).
               const requiredClearance = CONFIG.ROAD_WIDTH * 0.5 + 1.3 + rockScale * 0.8;
@@ -4911,55 +4713,8 @@
             }
           } // end spawnTree
 
-          // Background props: background trees for Earth, background dunes/boulders for Off-World
-          if (isOffWorld && i % 3 === 0 && this.prng.next() > 0.25 && !inTunnel) {
-            const bgDist = side * this.prng.range(28.0, 85.0);
-            const bgPos = pt.clone().addScaledVector(normal, bgDist);
-            const bgClusterCount = Math.floor(this.prng.range(2, 6));
-            for (let ci = 0; ci < bgClusterCount; ci++) {
-              const bgOffset = new THREE.Vector3((this.prng.next() - 0.5) * 12.0, 0, (this.prng.next() - 0.5) * 12.0);
-              const cBgPos = bgPos.clone().add(bgOffset);
-              const rockScale = this.prng.range(0.8, 3.6);
-              if (!clearsRoad(cBgPos, CONFIG.ROAD_WIDTH * 0.5 + 2.5)) continue;
-              // Same two bugs as the near-road cluster spawner had (fixed
-              // there already): (1) latDist must be the true projection of
-              // the cluster offset onto the lateral normal, not the
-              // un-jittered base bgDist, or groundHeightAt samples the
-              // wrong point on the dune slope; (2) embedding by a flat
-              // `+0.2 * rockScale` heuristic doesn't account for the
-              // rock's actual lowest vertex, so larger/irregular rocks
-              // visibly float above the sampled ground point.
-              const bgLatDist = normal.dot(bgOffset) + bgDist;
-              cBgPos.y = calcTerrainY(cBgPos, bgLatDist);
-              const bgGeomIdx = Math.floor(this.prng.next() * rockGeomPool.length);
-              const bgChosenGeom = rockGeomPool[bgGeomIdx];
-              const sX = rockScale * this.prng.range(0.7, 1.4);
-              const sY = rockScale * this.prng.range(0.6, 1.1);
-              const sZ = rockScale * this.prng.range(0.7, 1.4);
-              const scaleVec = new THREE.Vector3(sX, sY, sZ);
-              const rotX = this.prng.next() * 3, rotY = this.prng.next() * 3;
-              const bgRotMat = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
-              const bgPosAttr = bgChosenGeom.attributes.position;
-              let bgMinY = Infinity;
-              const bgV = new THREE.Vector3();
-              for (let vi = 0; vi < bgPosAttr.count; vi++) {
-                bgV.set(bgPosAttr.getX(vi), bgPosAttr.getY(vi), bgPosAttr.getZ(vi)).applyMatrix4(bgRotMat).multiply(scaleVec);
-                if (bgV.y < bgMinY) bgMinY = bgV.y;
-              }
-              const finalRockPos = new THREE.Vector3(cBgPos.x, cBgPos.y - bgMinY, cBgPos.z);
-              const rockMat4 = new THREE.Matrix4();
-              rockMat4.makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
-              rockMat4.scale(scaleVec);
-              rockMat4.setPosition(finalRockPos);
-              pendingRocks.push({
-                geomIdx: bgGeomIdx,
-                matrix: rockMat4,
-                pos: finalRockPos,
-                radius: 1.4 * rockScale,
-                type: 'rock'
-              });
-            }
-          } else if (!isOffWorld && i % 4 === 0 && this.prng.next() > 0.45 && !inTunnel) {
+          // Background trees
+          if (i % 4 === 0 && this.prng.next() > 0.45 && !inTunnel) {
             const bgDist = side * this.prng.range(24.0, 90.0);
             const bgPos = pt.clone().addScaledVector(normal, bgDist);
             bgPos.y = calcTerrainY(bgPos, bgDist);
@@ -4982,8 +4737,8 @@
 
           // City/Earth large background boulder formations — pushed far behind
           // the treeline (55–120m) so they read as distant landscape, not
-          // roadside rubble.  Off-world has its own block above.
-          if (!isOffWorld && i % 6 === 0 && this.prng.next() > 0.50 && !inTunnel) {
+          // roadside rubble.
+          if (i % 6 === 0 && this.prng.next() > 0.50 && !inTunnel) {
             const bgBoulderDist = side * this.prng.range(90.0, 180.0);
             const bgBoulderPos = pt.clone().addScaledVector(normal, bgBoulderDist);
             const bgBoulderCount = Math.floor(this.prng.range(1, 4));
@@ -5041,12 +4796,7 @@
           // so the gap itself reads as "turn in here" (houses always spawn
           // at i % 24 === 0, alternating sides via i % 48 — see the cabin
           // block below).
-          // Skipped entirely for Off-World: slowroads.io's own off-world
-          // reference has zero guardrails/barriers of any kind — just open
-          // dust terrain with a bare tire-track path — since there's no
-          // highway infrastructure on an alien dust road. Keeping ours had
-          // it reading as generic Earth-highway dressed in a Mars texture.
-          if (!isOffWorld && i % FENCE_STEP === 0 && !inTunnel) {
+          if (i % FENCE_STEP === 0 && !inTunnel) {
             const nearestHouseCheckpoint = Math.round(i / 24) * 24;
             const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
             const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
@@ -5168,48 +4918,17 @@
             }
           }
 
-          // Off-World thin guardrail — matches the developer's own current
-          // Mars/Moon Steam screenshots: a sparse, simple metal rail on one
-          // shoulder only, not a continuous barrier. Deliberately its own
-          // small, uninstanced prop (like the milestone markers/lamps
-          // below) rather than hooked into the Earth fence system above —
-          // that system's per-point batching is already load-bearing for
-          // every other biome, and this only needs to appear occasionally.
-          if (isOffWorld && side === -1 && i % 6 === 0 && !inTunnel) {
-            const owRailDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 1.2);
-            const owRailPos = pt.clone().addScaledVector(normal, owRailDist);
-            if (clearsRoad(owRailPos, CONFIG.ROAD_WIDTH * 0.5 + 1.0)) {
-              owRailPos.y = calcTerrainY(owRailPos, owRailDist);
-              const owRailGroup = new THREE.Group();
-              [-0.5, 0.5].forEach(px => {
-                const post = new THREE.Mesh(owRailPostGeom, owRailMat);
-                post.position.set(px, 0.32, 0);
-                owRailGroup.add(post);
-              });
-              const beam = new THREE.Mesh(owRailBeamGeom, owRailMat);
-              beam.position.set(0, 0.55, 0);
-              owRailGroup.add(beam);
-              owRailGroup.position.copy(owRailPos);
-              owRailGroup.lookAt(pt.x, owRailPos.y, pt.z); // flatten: see BUGFIX_LOG.md lookAt-tilt pattern
-              this.foliageGroup.add(owRailGroup);
-            }
-          }
-
           // Indian Highway Milestone Markers (National Highway Standard: Yellow Dome + White Base)
-          if (!isOffWorld && i % 32 === 0 && side === 1 && !inTunnel) this.spawnMilestone(pt, normal, side);
+          if (i % 32 === 0 && side === 1 && !inTunnel) this.spawnMilestone(pt, normal, side);
 
-          // Street lamps (skipped in tunnels, which have their own lighting, and off-world).
-          if (!isOffWorld && i % 28 === 0 && side === -1 && !inTunnel) this.spawnStreetLamp(pt, normal, side);
+          // Street lamps (skipped in tunnels, which have their own lighting).
+          if (i % 28 === 0 && side === -1 && !inTunnel) this.spawnStreetLamp(pt, normal, side);
 
           // Roadside Bus Shelter & Waiting Passengers
-          // Skipped on Off-World — a transit shelter with a waiting human
-          // passenger makes no sense on an alien dust road with no bus
-          // service; matches slowroads.io's Mars reference having zero
-          // human-infrastructure props of any kind.
-          if (!isOffWorld && i % 72 === 0 && side === 1 && !this.spawnBusShelter(pt, normal, side, clearsRoad)) return;
+          if (i % 72 === 0 && side === 1 && !this.spawnBusShelter(pt, normal, side, clearsRoad)) return;
 
           // Roadside Dhaba / Chai Tapri with Customers drinking tea
-          if (!isOffWorld && i % 34 === 0 && side === -1) {
+          if (i % 34 === 0 && side === -1) {
             const tapriDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 4.6);
             const tapriPos = pt.clone().addScaledVector(normal, tapriDist);
 
@@ -5243,9 +4962,8 @@
           // format, no fit for a single-file browser Three.js project).
           if (!isOpenRoad && i % 400 === 0 && i > 50 && side === 1 && !this.spawnMonument(pt, normal, side, clearsRoad)) return;
 
-          // Firewood Log Stacks along forest verges — wooden logs implies
-          // trees/forest, which Off-World doesn't have at all.
-          if (!isOffWorld && i % 38 === 0 && this.prng.next() > 0.5) {
+          // Firewood Log Stacks along forest verges.
+          if (i % 38 === 0 && this.prng.next() > 0.5) {
             const logDist = side * (CONFIG.ROAD_WIDTH * 0.5 + this.prng.range(2.6, 4.5));
             const logPos = pt.clone().addScaledVector(normal, logDist);
             logPos.y = calcTerrainY(logPos, logDist);
@@ -5280,20 +4998,12 @@
             const rockPos = pt.clone().addScaledVector(normal, rockDist);
             const overlapsExisting = this.obstacles.some(o => o.pos.distanceTo(rockPos) < (o.radius + 1.6)) ||
                                      pendingRocks.some(r => r.pos.distanceTo(rockPos) < (r.radius + 1.6));
-            // Varying sizes, small pebble to large boulder — matches the
-            // Off-World cluster spawner's range instead of every rock here
-            // being the same fixed geometry size. Off-World itself gets the
-            // smaller pebble-scale range (see the dedicated cluster spawner
-            // above) to match slowroads.io's scattered-pebble Mars
-            // reference rather than large boulders.
-            const rockScale = isOffWorld ? this.prng.range(0.02, 0.16) : this.prng.range(0.4, 2.2);
+            // Varying sizes, small pebble to large boulder.
+            const rockScale = this.prng.range(0.4, 2.2);
             // Curve-aware clearance: a fixed lateral offset from `pt` can
             // still land inside the road ribbon a few meters up/down the
-            // curve where it bends back toward this lateral position — the
-            // Off-World cluster spawner already guards against this with
-            // clearsRoad(); this spawner runs on every biome (not just
-            // Off-World) and previously had no such check at all, which is
-            // why rocks could end up sitting on the road.
+            // curve where it bends back toward this lateral position, so
+            // clearsRoad() guards it (without it, rocks ended up on the road).
             const requiredClearance = CONFIG.ROAD_WIDTH * 0.5 + 1.6 + rockScale * 0.8;
 
             if (!nearHouseZone && !overlapsExisting && clearsRoad(rockPos, requiredClearance)) {
@@ -7055,7 +6765,7 @@
       }
     }
 
-    updateStreaming(carPos, scene, season, difficulty = 'medium', roadTerrainKey = 'asphalt', vehicle = null) {
+    updateStreaming(carPos, scene, season, difficulty = 'medium', vehicle = null) {
       if (!this.curve || !this.splineNodes || this.splineNodes.length < 10) return;
 
       // A previous stream's build is still running incrementally across
@@ -7122,7 +6832,7 @@
         this.roadBinormals = new Array(totalSegments + 1);
         this.roadBankedUp = new Array(totalSegments + 1);
 
-        this._streamBuildGen = this._streamBuildSequence(scene, oldLength, newLength, totalSegments, season, difficulty, roadTerrainKey, prevEndPos);
+        this._streamBuildGen = this._streamBuildSequence(scene, oldLength, newLength, totalSegments, season, difficulty, prevEndPos);
         this.advanceStreamBuild(); // start chewing through it this very frame
       }
     }
@@ -7134,7 +6844,7 @@
     // in a single call. Nothing here changes the actual math — the
     // sub-generators (buildExtensionMeshes, sweepTerrainBelowRoad) already
     // yield internally at their own natural loop boundaries.
-    *_streamBuildSequence(scene, oldLength, newLength, totalSegments, season, difficulty, roadTerrainKey, prevEndPos) {
+    *_streamBuildSequence(scene, oldLength, newLength, totalSegments, season, difficulty, prevEndPos) {
       for (let i = 0; i <= totalSegments; i++) {
         const pt = this.roadSpacedPoints[i];
         let tangent;
@@ -7170,7 +6880,7 @@
       yield;
 
       // Generate forward extension meshes for road, lane markings, terrain, and roadside props
-      yield* this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, roadTerrainKey, prevEndPos);
+      yield* this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, prevEndPos);
       scene.add(this.buildSidewalkRange(Math.max(0, oldLength / newLength), 1));
       yield* this.sweepTerrainBelowRoad();
       yield* this.sweepFloorBelowRoad();
@@ -7490,7 +7200,7 @@
       }
     }
 
-    *buildExtensionMeshes(scene, oldNodeCount, newNodeCount, season, difficulty = 'medium', roadTerrainKey = 'asphalt', prevEndPos = null) {
+    *buildExtensionMeshes(scene, oldNodeCount, newNodeCount, season, difficulty = 'medium', prevEndPos = null) {
       const totalSegments = newNodeCount * 3;
       const endSeg = totalSegments;
       const points = this.roadSpacedPoints;
@@ -7535,34 +7245,19 @@
       const laneHalf = roadWidth * 0.5;
       const roadHalf = roadWidth * 0.52;
       const vergeLat = roadWidth * 0.5 + shoulderWidth;
-      const isOffWorldExt = this.cityKey === 'offworld';
-      // Same single-vehicle-track narrowing as createRoadMesh — outer
-      // verge (points 0/6) stays at the wide laneHalf+shoulderWidth so it
-      // still meets the terrain ribbon's shoulder slice with no gap; only
-      // the inner track columns pull in narrow.
-      const trackHalf = isOffWorldExt ? 1.15 : laneHalf;
       const offsets = [
         -vergeLat,
-        -trackHalf,
-        -trackHalf * 0.46 / 0.5,
+        -laneHalf,
+        -laneHalf * 0.46 / 0.5,
         0.0,
-        trackHalf * 0.46 / 0.5,
-        trackHalf,
+        laneHalf * 0.46 / 0.5,
+        laneHalf,
         vergeLat
       ];
 
-      // Was hardcoded generic dark-asphalt colors (0x3a3d40/0x2d3033)
-      // regardless of roadTerrainKey/season/biome — this whole extension
-      // path runs once the world streams past its initial length (~6km),
-      // silently reverting the road to plain grey tarmac colors on every
-      // biome, undoing the Off-World tire-track/dirt-tint work the
-      // moment a drive went far enough to hit it. Mirrors createRoadMesh's
-      // actual per-terrain/per-biome color logic instead.
-      const tCfgExt = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
+      // Mirrors createRoadMesh's per-biome verge color logic.
       const seasonCfgExt = season || CONFIG.SEASONS.autumn;
-      const baseTarmac = new THREE.Color(tCfgExt.color);
-      const trackColorExt = baseTarmac.clone().multiplyScalar(0.72); // matches createRoadMesh's correction — see its comment
-      const sandBetweenColorExt = new THREE.Color(seasonCfgExt.grassLight || 0xd4b896);
+      const baseTarmac = new THREE.Color(CONFIG.ROAD_SURFACE.color);
 
       // 1. Road extension mesh
       const roadGeom = new THREE.BufferGeometry();
@@ -7591,19 +7286,7 @@
           rPositions.push(p.x, p.y, p.z);
           rNormals.push(bankedUp.x, bankedUp.y, bankedUp.z);
           rUvs.push(off * 0.5, i * 0.3);
-          if (isOffWorldExt) {
-            // Same noise-matched blending as createRoadMesh — a flat
-            // uniform color here reads as an artificial "white strip"
-            // seam against the terrain's own noise-varied shading.
-            if (j === 2 || j === 4) {
-              // Clamped to darken-only, same reasoning as createRoadMesh.
-              const tN = 0.75 + Math.max(0, this.simplex.noise2D(p.x * 0.06, p.z * 0.06)) * 0.2;
-              rColors.push(trackColorExt.r * tN, trackColorExt.g * tN, trackColorExt.b * tN);
-            } else {
-              const sN = 0.7 + Math.max(0, this.simplex.noise2D(p.x * 0.04, p.z * 0.04)) * 0.3;
-              rColors.push(sandBetweenColorExt.r * sN, sandBetweenColorExt.g * sN, sandBetweenColorExt.b * sN);
-            }
-          } else if (isVerge) {
+          if (isVerge) {
             rColors.push(vergeColor.r, vergeColor.g, vergeColor.b);
           } else {
             rColors.push(baseTarmac.r, baseTarmac.g, baseTarmac.b);
@@ -7707,7 +7390,7 @@
         }
       };
 
-      if (roadTerrainKey === 'asphalt') {
+      {
         const edgeLineColor = new THREE.Color(0x9aa0a8);
         const centerLineColor = new THREE.Color(0xb9a968);
         const edgeOffset = roadWidth * 0.46;
@@ -7930,475 +7613,396 @@
         this._pendingRowN = null;
       }
 
-      // 3. Roadside Props (Trees) along the new segment — this only ever
-      // spawned trees despite the comment (no rocks/fences were actually
-      // implemented here), and had no biome check at all: driving far
-      // enough on Off-World to trigger streaming (extends the world past
-      // the initial ~6km once the car gets within 1600m of the scouted
-      // horizon) silently planted Earth trees on Mars. Off-World gets a
-      // matching small-pebble rock scatter instead, at the same tiny
-      // scale established in createFoliageAndProps.
-      if (this.cityKey === 'offworld') {
-        const streamRockGeom = RockGeometryFactory.createFacetedRockGeometry(42);
-        const streamRockMat = new THREE.MeshStandardMaterial({
-          color: 0x7a5a42, roughness: 0.85, metalness: 0.05,
-          map: RealTextureFactory.rockColor(), normalMap: RealTextureFactory.rockNormal()
-        });
-        // Same thin one-sided guardrail as createFoliageAndProps' initial
-        // build (matches the developer's own official Mars/Moon Steam
-        // screenshots) — kept here too so it doesn't disappear once a
-        // drive goes far enough to hit the streaming/extension path.
-        const owRailPostGeomExt = new THREE.CylinderGeometry(0.04, 0.04, 0.65, 5);
-        const owRailBeamGeomExt = new THREE.BoxGeometry(1, 0.09, 0.03);
-        const owRailMatExt = new THREE.MeshStandardMaterial({ color: 0x6b6862, roughness: 0.6, metalness: 0.5 });
-        for (let i = startSeg; i <= endSeg; i += 6) {
-          const pt = points[i];
-          const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
-          const owRailDist = -(CONFIG.ROAD_WIDTH * 0.5 + 1.2);
-          const owRailPos = pt.clone().addScaledVector(normal, owRailDist);
-          owRailPos.y = this.groundHeightAt(pt, owRailPos, owRailDist);
-          const owRailGroup = new THREE.Group();
-          [-0.5, 0.5].forEach(px => {
-            const post = new THREE.Mesh(owRailPostGeomExt, owRailMatExt);
-            post.position.set(px, 0.32, 0);
-            owRailGroup.add(post);
-          });
-          const beam = new THREE.Mesh(owRailBeamGeomExt, owRailMatExt);
-          beam.position.set(0, 0.55, 0);
-          owRailGroup.add(beam);
-          owRailGroup.position.copy(owRailPos);
-          owRailGroup.lookAt(pt.x, owRailPos.y, pt.z);
-          scene.add(owRailGroup);
-          yield;
-        }
-        for (let i = startSeg; i <= endSeg; i += 2) {
-          const pt = points[i];
-          const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
-          [-1, 1].forEach(side => {
-            if ((this.prng ? this.prng.next() : Math.random()) < 0.75) return;
-            const lat = (CONFIG.ROAD_WIDTH * 0.5 + 3.5 + (this.prng ? this.prng.next() : Math.random()) * 30.0) * side;
-            const p = pt.clone().addScaledVector(normal, lat);
-            // A perpendicular offset of >=7.2m from THIS sample can still land
-            // inside the asphalt further along a bend, because the road curves
-            // back toward the offset point — the nearest road sample is not
-            // necessarily the one we offset from. The full clearsRoad() helper
-            // isn't in scope here (it's local to createFoliageAndProps) and
-            // scanning the whole spline per rock would be too slow for this
-            // streaming path, so check a window of nearby samples instead,
-            // which is what actually covers the local bend.
-            const minClear = CONFIG.ROAD_WIDTH * 0.5 + 1.5;
-            const minClearSq = minClear * minClear;
-            let tooClose = false;
-            for (let k = Math.max(0, i - 60); k < Math.min(points.length, i + 61); k++) {
-              const dx = p.x - points[k].x, dz = p.z - points[k].z;
-              if (dx * dx + dz * dz < minClearSq) { tooClose = true; break; }
+      // 3. Roadside props along the new segment (guardrails, villas, kiosks,
+      // rocks and billboard trees), matching the initial build.
+      const railMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.32 });
+      const postMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.80, roughness: 0.40 });
+      const railGeom = new THREE.BoxGeometry(0.08, 0.30, 4.2);
+      const postGeom = new THREE.BoxGeometry(0.10, 1.1, 0.10);
+      const streamRockGeom = RockGeometryFactory.createFacetedRockGeometry(42);
+
+      const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
+      const cityOrders = CONFIG.ORDERS_BY_CITY[this.cityKey] || CONFIG.ORDERS_BY_CITY.mumbai;
+      const fenceDist = this.getBarrierLateralDistance();
+      const newTrees = [];
+      const isWinter = (seasonCfgExt.id === 'winter');
+
+      // Was a linear scan over the FULL road points array (stride 2) on
+      // every single call — correct (still checks every stretch of road,
+      // catching adjacent loops of hairpin switchbacks the way the old
+      // comment describes), but its cost scales with total road length
+      // driven so far, not with this stream's new segment range. Called
+      // many times per node (villa/kiosk/rock/tree checks), this was the
+      // single biggest contributor to the streaming stutter on any drive
+      // long enough to have built up a few thousand road points — one
+      // "unlucky" node with several candidate placements could block the
+      // main thread for 100-300ms by itself. this.roadSpatialGrid is
+      // rebuilt fresh from these exact points right before this generator
+      // runs (see _streamBuildSequence), so a bounded local-cell lookup
+      // finds the same nearest point without walking the whole road.
+      const clearsRoadExt = (pos, minClear) => {
+        return !this.roadSpatialGrid.getNearestRoadPoint(pos.x, pos.z, minClear);
+      };
+
+      for (let i = startSeg; i <= endSeg; i++) {
+        const pt = points[i];
+        const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
+        const rng = () => (this.prng ? this.prng.next() : Math.random());
+        const curPalette = this.getDistrictPalette(pt.z, seasonCfgExt);
+
+        let tangent;
+        if (i === 0) tangent = new THREE.Vector3().subVectors(points[1], points[0]).normalize();
+        else if (i === points.length - 1) tangent = new THREE.Vector3().subVectors(points[points.length - 1], points[points.length - 2]).normalize();
+        else tangent = new THREE.Vector3().subVectors(points[i + 1], points[i - 1]).normalize();
+
+        // 0. Street furniture — the same shared spawners the initial build
+        // uses, on matching real-world spacing (streamed chunks used to get
+        // none of these, which is why the road thinned out past ~6 km).
+        try {
+          const stepM = this.curve.getLength() / (points.length - 1);
+          const crossed = (every, offset = 0) => i > startSeg && Math.floor((i * stepM + offset) / every) !== Math.floor(((i - 1) * stepM + offset) / every);
+          const inTunnelHere = this.isInTunnelZone && this.isInTunnelZone(i, 4);
+          if (!inTunnelHere) {
+            if (crossed(100) && i + 3 < points.length && i > 0) {
+              const nt = new THREE.Vector3().subVectors(points[i + 3], points[i - 1]).normalize();
+              this.spawnCurveSign(pt, normal, tangent, tangent.x * nt.z - tangent.z * nt.x);
             }
-            if (tooClose) return;
-            p.y = this.groundHeightAt(pt, p, lat);
-            const rockScale = 0.02 + (this.prng ? this.prng.next() : Math.random()) * 0.14;
-            const rock = new THREE.Mesh(streamRockGeom, streamRockMat);
-            rock.scale.setScalar(rockScale);
-            rock.rotation.set(Math.random() * 3, Math.random() * 3, 0);
-            rock.position.set(p.x, p.y + 0.15 * rockScale, p.z);
-            rock.userData.isRock = true;
-            scene.add(rock);
-            this.obstacles.push({ pos: p, radius: 1.2 * rockScale, type: 'rock', mesh: rock });
-          });
-          yield;
-        }
-      } else {
-        // City streaming props: Armco guardrails + scenic villas + kiosks + rocks + clustered billboard trees,
-        // matching the density and architectural style of the initial createFoliageAndProps pass.
-        const railMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.32 });
-        const postMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.80, roughness: 0.40 });
-        const railGeom = new THREE.BoxGeometry(0.08, 0.30, 4.2);
-        const postGeom = new THREE.BoxGeometry(0.10, 1.1, 0.10);
-        const streamRockGeom = RockGeometryFactory.createFacetedRockGeometry(42);
-
-        const diffCfg = CONFIG.DIFFICULTY_TIERS[difficulty] || CONFIG.DIFFICULTY_TIERS.medium;
-        const cityOrders = CONFIG.ORDERS_BY_CITY[this.cityKey] || CONFIG.ORDERS_BY_CITY.mumbai;
-        const fenceDist = this.getBarrierLateralDistance();
-        const newTrees = [];
-        const isWinter = (seasonCfgExt.id === 'winter');
-
-        // Was a linear scan over the FULL road points array (stride 2) on
-        // every single call — correct (still checks every stretch of road,
-        // catching adjacent loops of hairpin switchbacks the way the old
-        // comment describes), but its cost scales with total road length
-        // driven so far, not with this stream's new segment range. Called
-        // many times per node (villa/kiosk/rock/tree checks), this was the
-        // single biggest contributor to the streaming stutter on any drive
-        // long enough to have built up a few thousand road points — one
-        // "unlucky" node with several candidate placements could block the
-        // main thread for 100-300ms by itself. this.roadSpatialGrid is
-        // rebuilt fresh from these exact points right before this generator
-        // runs (see _streamBuildSequence), so a bounded local-cell lookup
-        // finds the same nearest point without walking the whole road.
-        const clearsRoadExt = (pos, minClear) => {
-          return !this.roadSpatialGrid.getNearestRoadPoint(pos.x, pos.z, minClear);
-        };
-
-        for (let i = startSeg; i <= endSeg; i++) {
-          const pt = points[i];
-          const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
-          const rng = () => (this.prng ? this.prng.next() : Math.random());
-          const curPalette = this.getDistrictPalette(pt.z, seasonCfgExt);
-
-          let tangent;
-          if (i === 0) tangent = new THREE.Vector3().subVectors(points[1], points[0]).normalize();
-          else if (i === points.length - 1) tangent = new THREE.Vector3().subVectors(points[points.length - 1], points[points.length - 2]).normalize();
-          else tangent = new THREE.Vector3().subVectors(points[i + 1], points[i - 1]).normalize();
-
-          // 0. Street furniture — the same shared spawners the initial build
-          // uses, on matching real-world spacing (streamed chunks used to get
-          // none of these, which is why the road thinned out past ~6 km).
-          try {
-            const stepM = this.curve.getLength() / (points.length - 1);
-            const crossed = (every, offset = 0) => i > startSeg && Math.floor((i * stepM + offset) / every) !== Math.floor(((i - 1) * stepM + offset) / every);
-            const inTunnelHere = this.isInTunnelZone && this.isInTunnelZone(i, 4);
-            if (!inTunnelHere) {
-              if (crossed(100) && i + 3 < points.length && i > 0) {
-                const nt = new THREE.Vector3().subVectors(points[i + 3], points[i - 1]).normalize();
-                this.spawnCurveSign(pt, normal, tangent, tangent.x * nt.z - tangent.z * nt.x);
-              }
-              if (crossed(170)) this.spawnUtilityPole(pt, normal);
-              if (crossed(200, 60)) this.spawnStreetLamp(pt, normal, -1);
-              if (crossed(225, 110)) this.spawnMilestone(pt, normal, 1);
-              if (crossed(480, 40)) this.spawnRepairShop(pt, normal, 1, 'cycle', true);
-              if (crossed(480, 280)) this.spawnRepairShop(pt, normal, -1, 'motor', true);
-              // Remaining initial-only props, same real-world spacing as the
-              // first build (its 800 samples are ~10.5 m apart).
-              const offWorldHere = this.cityKey === 'offworld';
-              const openRoadHere = !!(CONFIG.CITIES[this.cityKey]?.openRoad);
-              if (!openRoadHere && crossed(550, 300)) this.spawnGantry(pt, normal, tangent);
-              if (!offWorldHere && crossed(750, 180)) this.spawnBusShelter(pt, normal, 1);
-              if (!openRoadHere && crossed(4200, 2000)) this.spawnMonument(pt, normal, 1);
-              if (!openRoadHere && rng() > 0.15) {
-                if (crossed(75)) this.spawnCityBuilding(pt, normal, 1);
-                if (crossed(75, 37)) this.spawnCityBuilding(pt, normal, -1);
-              }
+            if (crossed(170)) this.spawnUtilityPole(pt, normal);
+            if (crossed(200, 60)) this.spawnStreetLamp(pt, normal, -1);
+            if (crossed(225, 110)) this.spawnMilestone(pt, normal, 1);
+            if (crossed(480, 40)) this.spawnRepairShop(pt, normal, 1, 'cycle', true);
+            if (crossed(480, 280)) this.spawnRepairShop(pt, normal, -1, 'motor', true);
+            // Remaining initial-only props, same real-world spacing as the
+            // first build (its 800 samples are ~10.5 m apart).
+            const openRoadHere = !!(CONFIG.CITIES[this.cityKey]?.openRoad);
+            if (!openRoadHere && crossed(550, 300)) this.spawnGantry(pt, normal, tangent);
+            if (crossed(750, 180)) this.spawnBusShelter(pt, normal, 1);
+            if (!openRoadHere && crossed(4200, 2000)) this.spawnMonument(pt, normal, 1);
+            if (!openRoadHere && rng() > 0.15) {
+              if (crossed(75)) this.spawnCityBuilding(pt, normal, 1);
+              if (crossed(75, 37)) this.spawnCityBuilding(pt, normal, -1);
             }
-          } catch (err) {
-            console.error('Streamed street furniture failed:', err);
           }
+        } catch (err) {
+          console.error('Streamed street furniture failed:', err);
+        }
 
-          // 1. Barriers — 4-style rotation matching createFoliageAndProps
-          // (Armco / dry-stone / wood split-rail / Jersey concrete). Was
-          // Armco-only every 4 nodes: any wooden split-rail fencing the
-          // player saw for the first ~6km silently vanished the moment
-          // streaming took over, replaced by a thin grey metal rail.
-          // Only runs when the initial pass produced a barrier asset
-          // cache (Earth cities), matches the initial's per-node cadence
-          // (FENCE_STEP=1), and skips vertices inside tunnel zones.
-          if (this._barrierAssets && !this.isInTunnelZone?.(i)) {
-            const BA = this._barrierAssets;
-            const nextPtBar = points[Math.min(points.length - 1, i + 1)];
-            const avgSegStepBar = this.curve.getLength() / (points.length - 1);
-            const railLenBar = avgSegStepBar * 1.08 + 0.6;
-            const _fdummy = new THREE.Object3D();
-            [-1, 1].forEach(side => {
-              const fenceDistBar = side * this.getBarrierLateralDistance();
-              const fencePosBar = pt.clone().addScaledVector(normal, fenceDistBar);
-              const endA = fencePosBar.clone().addScaledVector(tangent, -railLenBar / 2);
-              const endB = fencePosBar.clone().addScaledVector(tangent, railLenBar / 2);
-              const yA = this.surfaceHeightNear(endA, pt, fenceDistBar);
-              const yB = this.surfaceHeightNear(endB, nextPtBar, fenceDistBar);
-              fencePosBar.y = (yA + yB) / 2;
-              const offsetA = yA - fencePosBar.y;
-              const offsetB = yB - fencePosBar.y;
-              const tiltAngle = Math.atan2(yB - yA, railLenBar);
+        // 1. Barriers — 4-style rotation matching createFoliageAndProps
+        // (Armco / dry-stone / wood split-rail / Jersey concrete). Was
+        // Armco-only every 4 nodes: any wooden split-rail fencing the
+        // player saw for the first ~6km silently vanished the moment
+        // streaming took over, replaced by a thin grey metal rail.
+        // Only runs when the initial pass produced a barrier asset
+        // cache (Earth cities), matches the initial's per-node cadence
+        // (FENCE_STEP=1), and skips vertices inside tunnel zones.
+        if (this._barrierAssets && !this.isInTunnelZone?.(i)) {
+          const BA = this._barrierAssets;
+          const nextPtBar = points[Math.min(points.length - 1, i + 1)];
+          const avgSegStepBar = this.curve.getLength() / (points.length - 1);
+          const railLenBar = avgSegStepBar * 1.08 + 0.6;
+          const _fdummy = new THREE.Object3D();
+          [-1, 1].forEach(side => {
+            const fenceDistBar = side * this.getBarrierLateralDistance();
+            const fencePosBar = pt.clone().addScaledVector(normal, fenceDistBar);
+            const endA = fencePosBar.clone().addScaledVector(tangent, -railLenBar / 2);
+            const endB = fencePosBar.clone().addScaledVector(tangent, railLenBar / 2);
+            const yA = this.surfaceHeightNear(endA, pt, fenceDistBar);
+            const yB = this.surfaceHeightNear(endB, nextPtBar, fenceDistBar);
+            fencePosBar.y = (yA + yB) / 2;
+            const offsetA = yA - fencePosBar.y;
+            const offsetB = yB - fencePosBar.y;
+            const tiltAngle = Math.atan2(yB - yA, railLenBar);
 
-              if (this.isFenceGap(fencePosBar)) return;
-              if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(fencePosBar) < o.radius + 2.5)) return;
-              const segMeshes = [];
-              this._streamFenceMeshes = this._streamFenceMeshes || [];
-              this._streamFenceMeshes.push({ pos: fencePosBar.clone(), meshes: segMeshes });
+            if (this.isFenceGap(fencePosBar)) return;
+            if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(fencePosBar) < o.radius + 2.5)) return;
+            const segMeshes = [];
+            this._streamFenceMeshes = this._streamFenceMeshes || [];
+            this._streamFenceMeshes.push({ pos: fencePosBar.clone(), meshes: segMeshes });
 
-              _fdummy.position.copy(fencePosBar);
-              _fdummy.up.set(0, 1, 0);
-              _fdummy.lookAt(fencePosBar.clone().add(normal));
-              _fdummy.updateMatrix();
-              const groupMatrix = _fdummy.matrix;
+            _fdummy.position.copy(fencePosBar);
+            _fdummy.up.set(0, 1, 0);
+            _fdummy.lookAt(fencePosBar.clone().add(normal));
+            _fdummy.updateMatrix();
+            const groupMatrix = _fdummy.matrix;
 
-              const barrierStyle = CONFIG.BARRIER_STYLE;
-              const emit = (geom, mat, localM) => {
-                const m = new THREE.Mesh(geom, mat);
-                m.applyMatrix4(groupMatrix.clone().multiply(localM));
-                scene.add(m);
-                segMeshes.push(m);
-              };
+            const barrierStyle = CONFIG.BARRIER_STYLE;
+            const emit = (geom, mat, localM) => {
+              const m = new THREE.Mesh(geom, mat);
+              m.applyMatrix4(groupMatrix.clone().multiply(localM));
+              scene.add(m);
+              segMeshes.push(m);
+            };
 
-              if (barrierStyle === 0) {
-                // Armco W-Beam
-                barrierPostStations(railLenBar, offsetA, offsetB).forEach(([px, offset]) => {
-                  emit(BA.armcoPostGeom, BA.armcoPostMat, new THREE.Matrix4().makeTranslation(px, offset + 0.55, 0));
-                  emit(BA.armcoReflGeom, BA.armcoReflMat, new THREE.Matrix4().makeTranslation(px, offset + 0.78, 0.08));
-                });
-                emit(BA.armcoRailGeom, BA.armcoRailMat, new THREE.Matrix4().compose(
-                  new THREE.Vector3(0, 0.65, 0),
+            if (barrierStyle === 0) {
+              // Armco W-Beam
+              barrierPostStations(railLenBar, offsetA, offsetB).forEach(([px, offset]) => {
+                emit(BA.armcoPostGeom, BA.armcoPostMat, new THREE.Matrix4().makeTranslation(px, offset + 0.55, 0));
+                emit(BA.armcoReflGeom, BA.armcoReflMat, new THREE.Matrix4().makeTranslation(px, offset + 0.78, 0.08));
+              });
+              emit(BA.armcoRailGeom, BA.armcoRailMat, new THREE.Matrix4().compose(
+                new THREE.Vector3(0, 0.65, 0),
+                new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                new THREE.Vector3(railLenBar, 1, 1)
+              ));
+            } else if (barrierStyle === 1) {
+              // Dry-stone (4 courses, bottom course seated on surface)
+              [0.09, 0.31, 0.53, 0.75].forEach((ry, rowIdx) => {
+                const jitter = 1.0 - rowIdx * 0.04;
+                emit(BA.stoneGeom, BA.stoneMat, new THREE.Matrix4().compose(
+                  new THREE.Vector3(0, ry, 0),
+                  new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                  new THREE.Vector3(railLenBar, 1, jitter)
+                ));
+              });
+            } else if (barrierStyle === 3) {
+              // Jersey concrete (2 courses, base seated on surface)
+              [0.16, 0.50].forEach((ry, rIdx) => {
+                const bScaleZ = rIdx === 0 ? 1.0 : 0.75;
+                emit(BA.concreteGeom, BA.concreteMat, new THREE.Matrix4().compose(
+                  new THREE.Vector3(0, ry, 0),
+                  new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
+                  new THREE.Vector3(railLenBar, 1, bScaleZ)
+                ));
+              });
+            } else {
+              // Wood split-rail (2 posts + 2 rails)
+              barrierPostStations(railLenBar, offsetA, offsetB).forEach(([px, offset]) => {
+                emit(BA.postGeom, BA.postMat, new THREE.Matrix4().makeTranslation(px, offset + 0.6, 0));
+              });
+              [0.45, 0.85].forEach(ry => {
+                emit(BA.railGeom, BA.railMat, new THREE.Matrix4().compose(
+                  new THREE.Vector3(0, ry, 0),
                   new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
                   new THREE.Vector3(railLenBar, 1, 1)
                 ));
-              } else if (barrierStyle === 1) {
-                // Dry-stone (4 courses, bottom course seated on surface)
-                [0.09, 0.31, 0.53, 0.75].forEach((ry, rowIdx) => {
-                  const jitter = 1.0 - rowIdx * 0.04;
-                  emit(BA.stoneGeom, BA.stoneMat, new THREE.Matrix4().compose(
-                    new THREE.Vector3(0, ry, 0),
-                    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
-                    new THREE.Vector3(railLenBar, 1, jitter)
-                  ));
-                });
-              } else if (barrierStyle === 3) {
-                // Jersey concrete (2 courses, base seated on surface)
-                [0.16, 0.50].forEach((ry, rIdx) => {
-                  const bScaleZ = rIdx === 0 ? 1.0 : 0.75;
-                  emit(BA.concreteGeom, BA.concreteMat, new THREE.Matrix4().compose(
-                    new THREE.Vector3(0, ry, 0),
-                    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
-                    new THREE.Vector3(railLenBar, 1, bScaleZ)
-                  ));
-                });
-              } else {
-                // Wood split-rail (2 posts + 2 rails)
-                barrierPostStations(railLenBar, offsetA, offsetB).forEach(([px, offset]) => {
-                  emit(BA.postGeom, BA.postMat, new THREE.Matrix4().makeTranslation(px, offset + 0.6, 0));
-                });
-                [0.45, 0.85].forEach(ry => {
-                  emit(BA.railGeom, BA.railMat, new THREE.Matrix4().compose(
-                    new THREE.Vector3(0, ry, 0),
-                    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tiltAngle)),
-                    new THREE.Vector3(railLenBar, 1, 1)
-                  ));
-                });
-              }
-            });
-          }
-
-          // 2. Architectural Mountain Villas, Turnout Bays & Parcel Drop Plinths (settlement waves every ~36 nodes)
-          if (i % 36 === 0) {
-            const orderIdx = Math.floor(i / 36) % cityOrders.length;
-            const order = cityOrders[orderIdx];
-            const houseSide = (Math.floor(i / 36) % 2 === 0 ? 1 : -1);
-            const houseDist = houseSide * (CONFIG.ROAD_WIDTH * 0.5 + 13.0 + rng() * 6.0);
-            const housePos = pt.clone().addScaledVector(normal, houseDist);
-            housePos.y = this.groundHeightAt(pt, housePos, houseDist);
-
-            if (clearsRoadExt(housePos, CONFIG.ROAD_WIDTH * 0.5 + 4.5, i) &&
-                !this.obstacles.some(o => o.pos.distanceTo(housePos) < (o.radius + 5.5))) {
-              // Rule 15: Prune any existing rocks or trees near the new villa site
-              const HOUSE_CLEARANCE = 7.0;
-              const overlapping = this.obstacles.filter(o =>
-                (o.type === 'rock' || o.type === 'tree') && o.pos.distanceTo(housePos) < (o.radius + HOUSE_CLEARANCE)
-              );
-              overlapping.forEach(o => {
-                if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
-              });
-              if (overlapping.length > 0) {
-                this.obstacles = this.obstacles.filter(o => !overlapping.includes(o));
-              }
-
-              const isModernVilla = (Math.floor(i / 36) % 2 === 0);
-              this.buildScenicVillaAndTurnout({
-                pt, normal, tangent, houseSide, houseDist, order, isModernVilla, isWinter,
-                u: i / Math.max(1, points.length - 1),
-                tossRadius: diffCfg.tossRadius,
-                targetParentGroup: this.foliageGroup || scene
               });
             }
-          }
+          });
+        }
 
-          // 3. Roadside Viewpoint Pavilions & Chai Tapris (every ~48 nodes, offset by 24)
-          if (i % 48 === 24) {
-            const isChai = (Math.floor(i / 48) % 2 === 0);
-            const kioskSide = isChai ? -1 : 1;
-            const kioskDist = CONFIG.ROAD_WIDTH * 0.5 + (isChai ? 5.2 : 7.2);
-            const kioskPos = pt.clone().addScaledVector(normal, kioskSide * kioskDist);
-            kioskPos.y = this.groundHeightAt(pt, kioskPos, kioskSide * kioskDist);
+        // 2. Architectural Mountain Villas, Turnout Bays & Parcel Drop Plinths (settlement waves every ~36 nodes)
+        if (i % 36 === 0) {
+          const orderIdx = Math.floor(i / 36) % cityOrders.length;
+          const order = cityOrders[orderIdx];
+          const houseSide = (Math.floor(i / 36) % 2 === 0 ? 1 : -1);
+          const houseDist = houseSide * (CONFIG.ROAD_WIDTH * 0.5 + 13.0 + rng() * 6.0);
+          const housePos = pt.clone().addScaledVector(normal, houseDist);
+          housePos.y = this.groundHeightAt(pt, housePos, houseDist);
 
-            if (clearsRoadExt(kioskPos, CONFIG.ROAD_WIDTH * 0.5 + 3.0, i) &&
-                !this.obstacles.some(o => o.pos.distanceTo(kioskPos) < (o.radius + 3.2))) {
-              // Rule 15: Prune any existing rocks or trees near the kiosk site
-              const KIOSK_CLEARANCE = 4.5;
-              const overlapping = this.obstacles.filter(o =>
-                (o.type === 'rock' || o.type === 'tree') && o.pos.distanceTo(kioskPos) < (o.radius + KIOSK_CLEARANCE)
-              );
-              overlapping.forEach(o => {
-                if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
-              });
-              if (overlapping.length > 0) {
-                this.obstacles = this.obstacles.filter(o => !overlapping.includes(o));
-              }
-
-              this.buildViewpointOrChai({
-                pt, normal, tangent, side: kioskSide, dist: kioskDist, isChaiTapri: isChai,
-                targetParentGroup: this.foliageGroup || scene
-              });
+          if (clearsRoadExt(housePos, CONFIG.ROAD_WIDTH * 0.5 + 4.5, i) &&
+              !this.obstacles.some(o => o.pos.distanceTo(housePos) < (o.radius + 5.5))) {
+            // Rule 15: Prune any existing rocks or trees near the new villa site
+            const HOUSE_CLEARANCE = 7.0;
+            const overlapping = this.obstacles.filter(o =>
+              (o.type === 'rock' || o.type === 'tree') && o.pos.distanceTo(housePos) < (o.radius + HOUSE_CLEARANCE)
+            );
+            overlapping.forEach(o => {
+              if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
+            });
+            if (overlapping.length > 0) {
+              this.obstacles = this.obstacles.filter(o => !overlapping.includes(o));
             }
-          }
 
-          // 3d. Roadside pedestrians.
-          //
-          // Streamed chunks used to spawn none at all, so every pedestrian in
-          // the game lived on the initial ~8.4km spline and the world emptied
-          // of people the moment streaming took over. Same cadence and cluster
-          // shape as the initial build; yields because this is a generator and
-          // a rig clone per pedestrian would otherwise hitch the stream.
-          if (i % 16 === 0 && this.prng.next() > 0.2) {
-            this.spawnPedestrianCluster(pt, normal, tangent);
-            yield;
-          }
-
-          // 3e. Signalled zebra crossing — streamed chunks get these too, or
-          // crossings would stop existing past the initial spline exactly the
-          // way pedestrians did.
-          // (crossings: see tryPlaceCrossingNear, called where stalls/houses are built)
-
-          // 4. District Biome Rocks (scatter 12–40m off road, adaptive district rock color)
-          if (i % 8 === 0) {
-            [-1, 1].forEach(side => {
-              if (rng() > 0.45) return;
-              const rockLat = side * (CONFIG.ROAD_WIDTH * 0.5 + 6.0 + rng() * 26.0);
-              const rp = pt.clone().addScaledVector(normal, rockLat);
-              if (!clearsRoadExt(rp, CONFIG.ROAD_WIDTH * 0.5 + 2.5, i)) return;
-              const rs = 0.4 + rng() * 1.6;
-              const rockRadius = 1.2 * rs;
-              // Rule 15: Check clearance against existing buildings before placing rock
-              if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(rp) < (o.radius + rockRadius + 2.0))) return;
-
-              rp.y = this.groundHeightAt(pt, rp, rockLat);
-              const rockMatCurrent = new THREE.MeshStandardMaterial({
-                color: curPalette.rockColor, roughness: 0.88, metalness: 0.04,
-                map: RealTextureFactory.rockColor(), normalMap: RealTextureFactory.rockNormal()
-              });
-              const rock = new THREE.Mesh(streamRockGeom, rockMatCurrent);
-              rock.scale.setScalar(rs);
-              rock.rotation.set(rng() * 3, rng() * 3, 0);
-              rock.position.set(rp.x, rp.y + rs * 0.3, rp.z);
-              (this.foliageGroup || scene).add(rock);
-              this.obstacles.push({ pos: rp.clone(), radius: rockRadius, type: 'rock', mesh: rock });
+            const isModernVilla = (Math.floor(i / 36) % 2 === 0);
+            this.buildScenicVillaAndTurnout({
+              pt, normal, tangent, houseSide, houseDist, order, isModernVilla, isWinter,
+              u: i / Math.max(1, points.length - 1),
+              tossRadius: diffCfg.tossRadius,
+              targetParentGroup: this.foliageGroup || scene
             });
           }
+        }
 
-          // 5. Clustered Multi-Tier Trees (matching createFoliageAndProps density and fidelity)
-          const treeDensity = curPalette.treeDensity !== undefined ? curPalette.treeDensity : 0.75;
-          const treeLeaves = curPalette.treeLeaves && curPalette.treeLeaves.length > 0 ? curPalette.treeLeaves : [0x366247, 0x3c7652, 0x5baa78];
+        // 3. Roadside Viewpoint Pavilions & Chai Tapris (every ~48 nodes, offset by 24)
+        if (i % 48 === 24) {
+          const isChai = (Math.floor(i / 48) % 2 === 0);
+          const kioskSide = isChai ? -1 : 1;
+          const kioskDist = CONFIG.ROAD_WIDTH * 0.5 + (isChai ? 5.2 : 7.2);
+          const kioskPos = pt.clone().addScaledVector(normal, kioskSide * kioskDist);
+          kioskPos.y = this.groundHeightAt(pt, kioskPos, kioskSide * kioskDist);
 
-          // Near-road tree clusters (every 4 nodes)
-          if (i % 4 === 0 && rng() < treeDensity) {
-            [-1, 1].forEach(side => {
-              if (rng() > 0.70) return;
-              const nearDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 8.0 + rng() * 10.0);
-              const nearPos = pt.clone().addScaledVector(normal, nearDist);
-              const clusterCount = Math.floor(2 + rng() * 3); // 2 to 4 trees
-              const isPine = isWinter ? true : (rng() > 0.4);
+          if (clearsRoadExt(kioskPos, CONFIG.ROAD_WIDTH * 0.5 + 3.0, i) &&
+              !this.obstacles.some(o => o.pos.distanceTo(kioskPos) < (o.radius + 3.2))) {
+            // Rule 15: Prune any existing rocks or trees near the kiosk site
+            const KIOSK_CLEARANCE = 4.5;
+            const overlapping = this.obstacles.filter(o =>
+              (o.type === 'rock' || o.type === 'tree') && o.pos.distanceTo(kioskPos) < (o.radius + KIOSK_CLEARANCE)
+            );
+            overlapping.forEach(o => {
+              if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
+            });
+            if (overlapping.length > 0) {
+              this.obstacles = this.obstacles.filter(o => !overlapping.includes(o));
+            }
 
-              for (let ci = 0; ci < clusterCount; ci++) {
-                const leafColHex = treeLeaves[Math.floor(rng() * treeLeaves.length)];
-                const cOffset = new THREE.Vector3((rng() - 0.5) * 5.0, 0, (rng() - 0.5) * 5.0);
-                const cPos = nearPos.clone().add(cOffset);
-                const cLat = side * (CONFIG.ROAD_WIDTH * 0.5 + 8.0) + normal.dot(cOffset);
-                cPos.y = this.groundHeightAt(pt, cPos, cLat);
-
-                const scale = 0.85 + rng() * 0.6;
-                const radius = 1.8 * scale;
-                const treeClearance = (CONFIG.ROAD_WIDTH * 0.5) + (radius * 1.25) + 1.2;
-                if (!clearsRoadExt(cPos, treeClearance, i)) continue;
-                if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(cPos) < (o.radius + radius + 1.0))) continue;
-
-                newTrees.push({
-                  kind: isPine ? 'pine' : 'broadleaf', worldHeight: 16.0, tintHex: leafColHex,
-                  pos: cPos.clone(), scale, rotY: rng() * Math.PI * 2, radius
-                });
-                this.obstacles.push({ pos: cPos.clone(), radius, type: 'tree' });
-              }
+            this.buildViewpointOrChai({
+              pt, normal, tangent, side: kioskSide, dist: kioskDist, isChaiTapri: isChai,
+              targetParentGroup: this.foliageGroup || scene
             });
           }
+        }
 
-          // Background forest clusters (every 6 nodes)
-          if (i % 6 === 0 && rng() < treeDensity * 0.75) {
-            [-1, 1].forEach(side => {
-              if (rng() > 0.65) return;
-              const bgDist = side * (24.0 + rng() * 60.0);
-              const bgPos = pt.clone().addScaledVector(normal, bgDist);
-              const bgClusterCount = Math.floor(3 + rng() * 4); // 3 to 6 trees
-              const bgIsPine = isWinter ? true : (rng() > 0.35);
-
-              for (let ci = 0; ci < bgClusterCount; ci++) {
-                const bgLeafHex = treeLeaves[Math.floor(rng() * treeLeaves.length)];
-                const bgOffset = new THREE.Vector3((rng() - 0.5) * 9.0, 0, (rng() - 0.5) * 9.0);
-                const cBgPos = bgPos.clone().add(bgOffset);
-                const bgLat = bgDist + normal.dot(bgOffset);
-                cBgPos.y = this.groundHeightAt(pt, cBgPos, bgLat);
-
-                const bgScale = 0.9 + rng() * 0.65;
-                const bgRadius = 2.2 * bgScale;
-                const bgClearance = (CONFIG.ROAD_WIDTH * 0.5) + (bgRadius * 1.25) + 1.2;
-                if (!clearsRoadExt(cBgPos, bgClearance, i)) continue;
-                if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(cBgPos) < (o.radius + bgRadius + 1.0))) continue;
-
-                newTrees.push({
-                  kind: bgIsPine ? 'pine' : 'broadleaf', worldHeight: 22.0, tintHex: bgLeafHex,
-                  pos: cBgPos.clone(), scale: bgScale, rotY: rng() * Math.PI * 2, radius: bgRadius
-                });
-                this.obstacles.push({ pos: cBgPos.clone(), radius: bgRadius, type: 'tree' });
-              }
-            });
-          }
+        // 3d. Roadside pedestrians.
+        //
+        // Streamed chunks used to spawn none at all, so every pedestrian in
+        // the game lived on the initial ~8.4km spline and the world emptied
+        // of people the moment streaming took over. Same cadence and cluster
+        // shape as the initial build; yields because this is a generator and
+        // a rig clone per pedestrian would otherwise hitch the stream.
+        if (i % 16 === 0 && this.prng.next() > 0.2) {
+          this.spawnPedestrianCluster(pt, normal, tangent);
           yield;
         }
 
-        if (newTrees.length > 0) {
-          const treeBatch = TreeBillboardFactory.buildInstancedBatches(newTrees);
-          (this.foliageGroup || scene).add(treeBatch);
+        // 3e. Signalled zebra crossing — streamed chunks get these too, or
+        // crossings would stop existing past the initial spline exactly the
+        // way pedestrians did.
+        // (crossings: see tryPlaceCrossingNear, called where stalls/houses are built)
 
-          if (isWinter) {
-            const snowCapGeom = new THREE.SphereGeometry(1, 6, 3);
-            const snowCapMat = new THREE.MeshStandardMaterial({ color: 0xf0f5f9, roughness: 0.9, metalness: 0 });
-            const snowCapMesh = new THREE.InstancedMesh(snowCapGeom, snowCapMat, newTrees.length);
-            snowCapMesh.frustumCulled = false;
-            const dummy = new THREE.Object3D();
-            newTrees.forEach((t, idx) => {
-              const capR = t.worldHeight * t.scale * 0.22;
-              dummy.position.set(t.pos.x, t.pos.y + t.worldHeight * t.scale * 0.85, t.pos.z);
-              dummy.scale.set(capR, capR * 0.48, capR);
-              dummy.updateMatrix();
-              snowCapMesh.setMatrixAt(idx, dummy.matrix);
+        // 4. District Biome Rocks (scatter 12–40m off road, adaptive district rock color)
+        if (i % 8 === 0) {
+          [-1, 1].forEach(side => {
+            if (rng() > 0.45) return;
+            const rockLat = side * (CONFIG.ROAD_WIDTH * 0.5 + 6.0 + rng() * 26.0);
+            const rp = pt.clone().addScaledVector(normal, rockLat);
+            if (!clearsRoadExt(rp, CONFIG.ROAD_WIDTH * 0.5 + 2.5, i)) return;
+            const rs = 0.4 + rng() * 1.6;
+            const rockRadius = 1.2 * rs;
+            // Rule 15: Check clearance against existing buildings before placing rock
+            if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(rp) < (o.radius + rockRadius + 2.0))) return;
+
+            rp.y = this.groundHeightAt(pt, rp, rockLat);
+            const rockMatCurrent = new THREE.MeshStandardMaterial({
+              color: curPalette.rockColor, roughness: 0.88, metalness: 0.04,
+              map: RealTextureFactory.rockColor(), normalMap: RealTextureFactory.rockNormal()
             });
-            snowCapMesh.instanceMatrix.needsUpdate = true;
-            (this.foliageGroup || scene).add(snowCapMesh);
-          }
+            const rock = new THREE.Mesh(streamRockGeom, rockMatCurrent);
+            rock.scale.setScalar(rs);
+            rock.rotation.set(rng() * 3, rng() * 3, 0);
+            rock.position.set(rp.x, rp.y + rs * 0.3, rp.z);
+            (this.foliageGroup || scene).add(rock);
+            this.obstacles.push({ pos: rp.clone(), radius: rockRadius, type: 'rock', mesh: rock });
+          });
         }
 
-        // Rule 15 & 16: Unconditional final sweep for rock/tree overlaps with buildings and road corridor
-        {
-          const buildings = this.obstacles.filter(o => o.type === 'building');
-          const stillOverlapping = this.obstacles.filter(o =>
-            (o.type === 'rock' || o.type === 'tree') &&
-            buildings.some(b => o.pos.distanceTo(b.pos) < (o.radius + b.radius + 0.5))
-          );
-          stillOverlapping.forEach(o => {
-            if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
-          });
-          if (stillOverlapping.length > 0) {
-            this.obstacles = this.obstacles.filter(o => !stillOverlapping.includes(o));
-          }
+        // 5. Clustered Multi-Tier Trees (matching createFoliageAndProps density and fidelity)
+        const treeDensity = curPalette.treeDensity !== undefined ? curPalette.treeDensity : 0.75;
+        const treeLeaves = curPalette.treeLeaves && curPalette.treeLeaves.length > 0 ? curPalette.treeLeaves : [0x366247, 0x3c7652, 0x5baa78];
 
-          // Road corridor clearance sweep
-          const minCorridorClear = CONFIG.ROAD_WIDTH * 0.5 + 1.0;
-          const breachingRoad = this.obstacles.filter(o => {
-            if (o.type === 'rock' || o.type === 'tree') {
-              const reqDist = minCorridorClear + (o.radius || 1.0);
-              return !clearsRoadExt(o.pos, reqDist);
+        // Near-road tree clusters (every 4 nodes)
+        if (i % 4 === 0 && rng() < treeDensity) {
+          [-1, 1].forEach(side => {
+            if (rng() > 0.70) return;
+            const nearDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 8.0 + rng() * 10.0);
+            const nearPos = pt.clone().addScaledVector(normal, nearDist);
+            const clusterCount = Math.floor(2 + rng() * 3); // 2 to 4 trees
+            const isPine = isWinter ? true : (rng() > 0.4);
+
+            for (let ci = 0; ci < clusterCount; ci++) {
+              const leafColHex = treeLeaves[Math.floor(rng() * treeLeaves.length)];
+              const cOffset = new THREE.Vector3((rng() - 0.5) * 5.0, 0, (rng() - 0.5) * 5.0);
+              const cPos = nearPos.clone().add(cOffset);
+              const cLat = side * (CONFIG.ROAD_WIDTH * 0.5 + 8.0) + normal.dot(cOffset);
+              cPos.y = this.groundHeightAt(pt, cPos, cLat);
+
+              const scale = 0.85 + rng() * 0.6;
+              const radius = 1.8 * scale;
+              const treeClearance = (CONFIG.ROAD_WIDTH * 0.5) + (radius * 1.25) + 1.2;
+              if (!clearsRoadExt(cPos, treeClearance, i)) continue;
+              if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(cPos) < (o.radius + radius + 1.0))) continue;
+
+              newTrees.push({
+                kind: isPine ? 'pine' : 'broadleaf', worldHeight: 16.0, tintHex: leafColHex,
+                pos: cPos.clone(), scale, rotY: rng() * Math.PI * 2, radius
+              });
+              this.obstacles.push({ pos: cPos.clone(), radius, type: 'tree' });
             }
-            return false;
           });
-          breachingRoad.forEach(o => {
-            if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
+        }
+
+        // Background forest clusters (every 6 nodes)
+        if (i % 6 === 0 && rng() < treeDensity * 0.75) {
+          [-1, 1].forEach(side => {
+            if (rng() > 0.65) return;
+            const bgDist = side * (24.0 + rng() * 60.0);
+            const bgPos = pt.clone().addScaledVector(normal, bgDist);
+            const bgClusterCount = Math.floor(3 + rng() * 4); // 3 to 6 trees
+            const bgIsPine = isWinter ? true : (rng() > 0.35);
+
+            for (let ci = 0; ci < bgClusterCount; ci++) {
+              const bgLeafHex = treeLeaves[Math.floor(rng() * treeLeaves.length)];
+              const bgOffset = new THREE.Vector3((rng() - 0.5) * 9.0, 0, (rng() - 0.5) * 9.0);
+              const cBgPos = bgPos.clone().add(bgOffset);
+              const bgLat = bgDist + normal.dot(bgOffset);
+              cBgPos.y = this.groundHeightAt(pt, cBgPos, bgLat);
+
+              const bgScale = 0.9 + rng() * 0.65;
+              const bgRadius = 2.2 * bgScale;
+              const bgClearance = (CONFIG.ROAD_WIDTH * 0.5) + (bgRadius * 1.25) + 1.2;
+              if (!clearsRoadExt(cBgPos, bgClearance, i)) continue;
+              if (this.obstacles.some(o => o.type === 'building' && o.pos.distanceTo(cBgPos) < (o.radius + bgRadius + 1.0))) continue;
+
+              newTrees.push({
+                kind: bgIsPine ? 'pine' : 'broadleaf', worldHeight: 22.0, tintHex: bgLeafHex,
+                pos: cBgPos.clone(), scale: bgScale, rotY: rng() * Math.PI * 2, radius: bgRadius
+              });
+              this.obstacles.push({ pos: cBgPos.clone(), radius: bgRadius, type: 'tree' });
+            }
           });
-          if (breachingRoad.length > 0) {
-            this.obstacles = this.obstacles.filter(o => !breachingRoad.includes(o));
+        }
+        yield;
+      }
+
+      if (newTrees.length > 0) {
+        const treeBatch = TreeBillboardFactory.buildInstancedBatches(newTrees);
+        (this.foliageGroup || scene).add(treeBatch);
+
+        if (isWinter) {
+          const snowCapGeom = new THREE.SphereGeometry(1, 6, 3);
+          const snowCapMat = new THREE.MeshStandardMaterial({ color: 0xf0f5f9, roughness: 0.9, metalness: 0 });
+          const snowCapMesh = new THREE.InstancedMesh(snowCapGeom, snowCapMat, newTrees.length);
+          snowCapMesh.frustumCulled = false;
+          const dummy = new THREE.Object3D();
+          newTrees.forEach((t, idx) => {
+            const capR = t.worldHeight * t.scale * 0.22;
+            dummy.position.set(t.pos.x, t.pos.y + t.worldHeight * t.scale * 0.85, t.pos.z);
+            dummy.scale.set(capR, capR * 0.48, capR);
+            dummy.updateMatrix();
+            snowCapMesh.setMatrixAt(idx, dummy.matrix);
+          });
+          snowCapMesh.instanceMatrix.needsUpdate = true;
+          (this.foliageGroup || scene).add(snowCapMesh);
+        }
+      }
+
+      // Rule 15 & 16: Unconditional final sweep for rock/tree overlaps with buildings and road corridor
+      {
+        const buildings = this.obstacles.filter(o => o.type === 'building');
+        const stillOverlapping = this.obstacles.filter(o =>
+          (o.type === 'rock' || o.type === 'tree') &&
+          buildings.some(b => o.pos.distanceTo(b.pos) < (o.radius + b.radius + 0.5))
+        );
+        stillOverlapping.forEach(o => {
+          if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
+        });
+        if (stillOverlapping.length > 0) {
+          this.obstacles = this.obstacles.filter(o => !stillOverlapping.includes(o));
+        }
+
+        // Road corridor clearance sweep
+        const minCorridorClear = CONFIG.ROAD_WIDTH * 0.5 + 1.0;
+        const breachingRoad = this.obstacles.filter(o => {
+          if (o.type === 'rock' || o.type === 'tree') {
+            const reqDist = minCorridorClear + (o.radius || 1.0);
+            return !clearsRoadExt(o.pos, reqDist);
           }
+          return false;
+        });
+        breachingRoad.forEach(o => {
+          if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh);
+        });
+        if (breachingRoad.length > 0) {
+          this.obstacles = this.obstacles.filter(o => !breachingRoad.includes(o));
         }
       }
     }
@@ -9067,15 +8671,11 @@
         this.speed -= (this.brake || 30.0) * dt * 0.7;
       }
     }
-    update(dt, keys, world, seasonKey = 'autumn', roadTerrainKey = 'asphalt') {
+    update(dt, keys, world, seasonKey = 'autumn') {
       const isRain = (seasonKey === 'autumn' || seasonKey === 'summer');
       const isWind = (seasonKey === 'winter' || seasonKey === 'summer');
 
-      // Surface Terrain Grip Modifiers
-      const tCfg = CONFIG.ROAD_TERRAINS[roadTerrainKey] || CONFIG.ROAD_TERRAINS.asphalt;
-      let terrainGrip = tCfg.gripMult || 1.0;
-
-      let climateGrip = terrainGrip;
+      let climateGrip = CONFIG.ROAD_SURFACE.gripMult;
       if (isRain) {
         if (this.vehicleType === 'cycle') climateGrip *= 0.62;
         else climateGrip *= 0.68;
@@ -9420,16 +9020,6 @@
 
       const targetPitch = -trueRoadPitch - throttlePitch;
 
-      let terrainPitchJitter = 0;
-      let terrainRollJitter = 0;
-      if (roadTerrainKey === 'gravel' && Math.abs(this.speed) > 2.0) {
-        const speedScale = Math.min(1.0, Math.abs(this.speed) / 20);
-        terrainPitchJitter = Math.sin(Date.now() * 0.015) * 0.0012 * speedScale;
-        terrainRollJitter = Math.cos(Date.now() * 0.018) * 0.0010 * speedScale;
-      } else if (roadTerrainKey === 'mud' && Math.abs(this.speed) > 2.0) {
-        terrainRollJitter = Math.sin(Date.now() * 0.006) * 0.0022;
-      }
-
       // Bicycle inward lean vs car centrifugal body roll — separated.
       let dynamicRoll = 0;
       if (isBicycle) {
@@ -9447,18 +9037,18 @@
           const MAX_LEAN = 0.56; // 32 deg
           const balanceLean = Math.atan((this.speed * this._leanYawRate) / 9.81);
           const inwardLean = -THREE.MathUtils.clamp(balanceLean, -MAX_LEAN, MAX_LEAN);
-          dynamicRoll = trueRoadRoll * 0.12 + inwardLean + terrainRollJitter;
+          dynamicRoll = trueRoadRoll * 0.12 + inwardLean;
         } catch (err) {
           console.error('Cycle lean calculation failed:', err);
-          dynamicRoll = trueRoadRoll * 0.12 + terrainRollJitter;
+          dynamicRoll = trueRoadRoll * 0.12;
         }
       } else {
         const centrifugalBodyRoll = this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.12;
-        dynamicRoll = trueRoadRoll + centrifugalBodyRoll + terrainRollJitter;
+        dynamicRoll = trueRoadRoll + centrifugalBodyRoll;
       }
 
       const targetRoll = dynamicRoll;
-      const targetPitchWithJitter = targetPitch + terrainPitchJitter;
+      const targetPitchWithJitter = targetPitch;
 
       // 2nd-Order Spring-Mass-Damper Suspension Filter
       const subDt = Math.min(dt, 0.05);
@@ -9973,7 +9563,6 @@
       this.selectedTimeOfDay = 'day'; // 'dawn', 'day', 'dusk', 'night'
       this.dayProgress = 0.30; // Continuous day-night cycle progression [0.0, 1.0)
       this.targetDayProgress = null; // Target for smooth animated transitions
-      this.selectedRoadTerrain = 'asphalt';
       this.selectedWeather = 'clear';
       this.weather = 'clear'; // 'clear', 'blizzard', 'rain' — see SLOWROADS_PARITY_LOG.md item 4
       this.selectedSeed = '5927cd04';
@@ -10086,9 +9675,9 @@
       // --- Stage 1: Scene lighting & fog (mirrors buildWorldAndScene preamble) ---
       const season         = CONFIG.SEASONS[this.selectedSeason];
       const tod            = CONFIG.TIME_OF_DAY[this.selectedTimeOfDay] || CONFIG.TIME_OF_DAY.day;
-      const skyBottomHex   = (season.isOffWorld && !tod.night) ? season.skyBottom : tod.skyBottom;
-      const fogHex         = (season.isOffWorld && !tod.night) ? season.fog : tod.fog;
-      const fogDensityVal  = (season.isOffWorld && !tod.night) ? season.fogDensity : tod.fogDensity;
+      const skyBottomHex   = tod.skyBottom;
+      const fogHex         = tod.fog;
+      const fogDensityVal  = tod.fogDensity;
 
       this.scene.background = new THREE.Color(skyBottomHex);
       this.scene.fog = new THREE.FogExp2(fogHex, fogDensityVal);
@@ -10107,11 +9696,11 @@
       this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
       this.world._game = this;
       this.scene.add(this.world.createSkyDome(season, this.selectedTimeOfDay));
-      this.scene.add(this.world.createRoadMesh(this.selectedRoadTerrain));
+      this.scene.add(this.world.createRoadMesh());
       if (this._sidewalks) this.scene.remove(this._sidewalks);
       this._sidewalks = this.world.buildSidewalkRange(0, 1);
       this.scene.add(this._sidewalks);
-      this.scene.add(this.world.createLaneMarkingMeshes(this.selectedRoadTerrain));
+      this.scene.add(this.world.createLaneMarkingMeshes());
 
       setProgress(45, 'Sculpting mountain valley terrain & road verges...');
       await frame();
@@ -10414,15 +10003,10 @@
     buildWorldAndScene() {
       const season = CONFIG.SEASONS[this.selectedSeason];
       const tod = CONFIG.TIME_OF_DAY[this.selectedTimeOfDay] || CONFIG.TIME_OF_DAY.day;
-      // Sky/fog color always came from `tod` (shared across every biome),
-      // never `season` — every Off-World sky palette tuned into
-      // CONFIG.SEASONS.offworld this whole time was dead code; the sky
-      // was always just the generic Earth day/night preset regardless of
-      // map. Off-World gets its own sky colors during daylight (night
-      // still uses the shared starry-night preset, which suits any biome).
-      const skyBottomHex = (season.isOffWorld && !tod.night) ? season.skyBottom : tod.skyBottom;
-      const fogHex = (season.isOffWorld && !tod.night) ? season.fog : tod.fog;
-      const fogDensityVal = (season.isOffWorld && !tod.night) ? season.fogDensity : tod.fogDensity;
+      // Sky/fog color comes from the time-of-day preset.
+      const skyBottomHex = tod.skyBottom;
+      const fogHex = tod.fog;
+      const fogDensityVal = tod.fogDensity;
 
       this.scene.background = new THREE.Color(skyBottomHex);
       this.scene.fog = new THREE.FogExp2(fogHex, fogDensityVal);
@@ -10455,11 +10039,11 @@
       this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
       this.world._game = this; // back-reference for distance culling in updateCrossers
       this.scene.add(this.world.createSkyDome(season, this.selectedTimeOfDay));
-      this.scene.add(this.world.createRoadMesh(this.selectedRoadTerrain));
+      this.scene.add(this.world.createRoadMesh());
       if (this._sidewalks) this.scene.remove(this._sidewalks);
       this._sidewalks = this.world.buildSidewalkRange(0, 1);
       this.scene.add(this._sidewalks);
-      this.scene.add(this.world.createLaneMarkingMeshes(this.selectedRoadTerrain));
+      this.scene.add(this.world.createLaneMarkingMeshes());
       this.scene.add(this.world.createWorldFloor(season));
       this.scene.add(this.world.createTerrainMesh(season));
       this.scene.add(this.world.createTunnelMeshes());
@@ -12577,40 +12161,10 @@
       const el = this.dockPanelEl;
 
       if (type === 'world') {
-        // Two maps, matching slowroads.io's own World panel (which offers
-        // exactly two locations — HILLS and OFF-WORLD, confirmed by
-        // cycling their location stepper end to end). Off-World is our
-        // Mars biome; Nilambari Corridor is the "city"/populated-world
-        // counterpart to their Hills location — our only non-open-road
-        // map with houses, shops, and monuments along it.
+        // One map (the City corridor, B117 removed Off-World) on a single
+        // asphalt surface, so the World panel only picks the route seed.
         el.innerHTML = `
           <div class="dock-panel-grid">
-            <div class="dock-panel-col" style="grid-column: span 2;">
-              <span class="dock-panel-label">MAP & ENVIRONMENT</span>
-              <div class="dock-btn-row">
-                <button class="dock-sq-btn ${this.selectedCity === 'offworld' ? 'active-sq' : ''}" data-city="offworld">${UI.icon('planet', 16)} OFF-WORLD</button>
-                <button class="dock-sq-btn ${this.selectedCity === 'mumbai' ? 'active-sq' : ''}" data-city="mumbai">${UI.icon('building', 16)} CITY</button>
-              </div>
-            </div>
-            <div class="dock-panel-col">
-              <span class="dock-panel-label">ROAD SURFACE</span>
-              <div class="dock-btn-row">
-                ${this.selectedCity === 'offworld' ? `
-                <!-- Off-World: one surface only — Dirt. slowroads.io's own
-                     Mars reference is always the same bare dust/tire-track
-                     trail, never a choice of paved/gravel/sand, so giving
-                     a pick here was itself the wrong idea, not just the
-                     wrong options within it. -->
-                <button class="dock-sq-btn active-sq" data-rt="dirt">${UI.icon('planet', 14)} DIRT</button>
-                ` : `
-                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'dirt' ? 'active-sq' : ''}" data-rt="dirt">${UI.icon('planet', 14)} DIRT</button>
-                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'asphalt' ? 'active-sq' : ''}" data-rt="asphalt">${UI.icon('road', 14)} ASPHALT</button>
-                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'gravel' ? 'active-sq' : ''}" data-rt="gravel">${UI.icon('mountain', 14)} GRAVEL</button>
-                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'mud' ? 'active-sq' : ''}" data-rt="mud">${UI.icon('cloudRain', 14)} MUD</button>
-                <button class="dock-sq-btn ${this.selectedRoadTerrain === 'sand' ? 'active-sq' : ''}" data-rt="sand">${UI.icon('waves', 14)} SAND</button>
-                `}
-              </div>
-            </div>
             <div class="dock-panel-col">
               <span class="dock-panel-label">ROUTE SEED</span>
               <div class="dock-stepper-box">
@@ -12621,26 +12175,6 @@
             <button id="dp-gen-btn" class="btn-generate-dock">APPLY & REGEN</button>
           </div>
         `;
-        el.querySelectorAll('[data-city]').forEach(b => {
-          b.onclick = () => {
-            this.selectedCity = b.dataset.city;
-            const cCfg = CONFIG.CITIES[this.selectedCity];
-            if (cCfg && cCfg.season) this.selectedSeason = cCfg.season;
-            if (this.selectedCity === 'offworld') this.selectedRoadTerrain = 'dirt';
-            else if (this.selectedCity === 'mumbai') this.selectedRoadTerrain = 'asphalt';
-            this.buildWorldAndScene();
-            this.renderDockPanelContent('world');
-            sound.playTone(750, 'sine', 0.12);
-          };
-        });
-        el.querySelectorAll('[data-rt]').forEach(b => {
-          b.onclick = () => {
-            this.selectedRoadTerrain = b.dataset.rt;
-            this.buildWorldAndScene();
-            this.renderDockPanelContent('world');
-            sound.playTone(650, 'sine', 0.1);
-          };
-        });
         document.getElementById('dp-s-rand').onclick = () => {
           this.selectedSeed = Math.random().toString(36).substring(2, 10);
           this.renderDockPanelContent('world');
@@ -12655,14 +12189,7 @@
       } else if (type === 'style') {
         el.innerHTML = `
           <div class="dock-panel-grid" style="display: flex; gap: 24px; justify-content: flex-start; align-items: flex-start;">
-            <div class="dock-panel-col" style="flex: 1.4;">
-              <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">WORLD</span>
-              <div class="dock-btn-row" style="display: flex; gap: 8px;">
-                <button class="dock-sq-btn icon-only-btn ${this.selectedCity === 'offworld' ? 'active-sq' : ''}" data-s="offworld" title="Off-World Martian Dunes">${UI.icon('planet', 18)}</button>
-                <button class="dock-sq-btn icon-only-btn ${this.selectedCity === 'mumbai' ? 'active-sq' : ''}" data-s="mumbai" title="City">${UI.icon('building', 18)}</button>
-              </div>
-            </div>
-            <div class="dock-panel-col" style="flex: 1.1;">
+            <div class="dock-panel-col" style="flex: 2;">
               <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">TIME</span>
               <div class="dock-btn-row" style="display: flex; gap: 8px;">
                 <button class="dock-sq-btn icon-only-btn ${this.selectedTimeOfDay === 'dawn' ? 'active-sq' : ''}" data-tod="dawn" title="Sunrise / Dawn">${UI.icon('sunrise', 18)}</button>
@@ -12671,7 +12198,7 @@
                 <button class="dock-sq-btn icon-only-btn ${this.selectedTimeOfDay === 'night' ? 'active-sq' : ''}" data-tod="night" title="Starry Night">${UI.icon('moon', 18)}</button>
               </div>
             </div>
-            <div class="dock-panel-col" style="flex: 0.8;">
+            <div class="dock-panel-col" style="flex: 1;">
               <span class="dock-panel-label" style="font-size: 0.68rem; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; display: block;">WEATHER</span>
               <div class="dock-btn-row" style="display: flex; gap: 8px;">
                 <button class="dock-sq-btn icon-only-btn ${(!this.selectedWeather || this.selectedWeather === 'clear' || this.selectedWeather === 'rain') ? 'active-sq' : ''}" data-w="clear" title="Clear Sky">${UI.icon('sun', 18)}</button>
@@ -12687,24 +12214,6 @@
             sound.playTone(720, 'sine', 0.1);
           };
         });
-        el.querySelectorAll('[data-s]').forEach(b => {
-          b.onclick = () => {
-            if (b.dataset.s === 'mumbai') {
-              this.selectedCity = 'mumbai';
-              this.selectedSeason = CONFIG.CITIES.mumbai.season;
-              this.selectedRoadTerrain = 'asphalt';
-            } else {
-              this.selectedSeason = b.dataset.s;
-              if (this.selectedSeason === 'offworld') {
-                this.selectedCity = 'offworld';
-                this.selectedRoadTerrain = 'dirt';
-              }
-            }
-            this.buildWorldAndScene();
-            this.renderDockPanelContent('style');
-            sound.playTone(700, 'sine', 0.1);
-          };
-        });
         el.querySelectorAll('[data-w]').forEach(b => {
           b.onclick = () => {
             this.selectedWeather = b.dataset.w;
@@ -12715,6 +12224,7 @@
             sound.playTone(680, 'sine', 0.1);
           };
         });
+      } else if (type === 'vehicle') {
         const isMuscleUnlocked = Career ? Career.isUnlocked('vehicles', 'musclecoupe') : true;
         const isCycleUnlocked = Career ? Career.isUnlocked('vehicles', 'cycle') : true;
         el.innerHTML = `
@@ -13431,7 +12941,7 @@
           let substeps = 0;
           while (remaining > 0.0001 && substeps < 6) {
             const stepDt = Math.min(remaining, maxSubDt);
-            this.vehicle.update(stepDt, this.keys, this.world, this.selectedSeason, this.selectedRoadTerrain);
+            this.vehicle.update(stepDt, this.keys, this.world, this.selectedSeason);
             remaining -= stepDt;
             substeps++;
           }
@@ -13440,7 +12950,7 @@
 
         // Infinite Forward Highway Chunk Streaming (Slow Roads Parity)
         if (this.world && this.world.updateStreaming && this.vehicle && this.vehicle.mesh) {
-          this.world.updateStreaming(this.vehicle.mesh.position, this.scene, CONFIG.SEASONS[this.selectedSeason], this.selectedDifficulty, this.selectedRoadTerrain, this.vehicle);
+          this.world.updateStreaming(this.vehicle.mesh.position, this.scene, CONFIG.SEASONS[this.selectedSeason], this.selectedDifficulty, this.vehicle);
         }
 
         this.world.updateTraffic(dt);
@@ -13496,31 +13006,16 @@
         if (this.vehicle.distanceTraveled >= nextDistrictThreshold && !this.districtTransitioning) {
           this.districtTransitioning = true;
           this.currentDistrict = (this.currentDistrict || 1) + 1;
-          const isOffWorldDistrict = this.selectedCity === 'offworld';
-          let distName, distTagline = '';
-          if (isOffWorldDistrict) {
-            const offworldSectors = [
-              { name: 'Olympus Mons Foothills', tagline: 'Dust Plains & Basalt Ridges' },
-              { name: 'Valles Marineris Rim', tagline: 'Deep Canyon Descents' },
-              { name: 'Gale Crater Traverse', tagline: 'Ancient Clay Basin' },
-              { name: 'Arabia Terra Plateau', tagline: 'Cratered Highland Expanse' },
-              { name: 'Hellas Basin Descent', tagline: 'Lowland Dust Tempest' }
-            ];
-            const sector = offworldSectors[(this.currentDistrict - 1) % offworldSectors.length];
-            distName = sector.name;
-            distTagline = sector.tagline;
-          } else {
-            const biomes = CONFIG.DISTRICT_BIOMES || [];
-            const biome = biomes[(this.currentDistrict - 1) % biomes.length];
-            distName = biome ? biome.name : 'Cloudspire Ridge';
-            distTagline = biome ? biome.tagline : '';
-          }
+          const biomes = CONFIG.DISTRICT_BIOMES || [];
+          const biome = biomes[(this.currentDistrict - 1) % biomes.length];
+          const distName = biome ? biome.name : 'Cloudspire Ridge';
+          const distTagline = biome ? biome.tagline : '';
           const bonus = 150;
           this.earnings += bonus;
           if (Career) Career.credit(bonus, 'district');
           sound.playRepair();
-          const distIcon = isOffWorldDistrict ? UI.icon('planet') : UI.icon('building');
-          const distLabel = isOffWorldDistrict ? 'SECTOR' : 'DISTRICT';
+          const distIcon = UI.icon('building');
+          const distLabel = 'DISTRICT';
           const taglineSnippet = distTagline ? ` — ${distTagline}` : '';
           this.addNotification(`${distIcon} ENTERED ${distLabel} ${this.currentDistrict}: ${distName}!${taglineSnippet} • Highway Bonus +₹${bonus}`, 'success', 5500);
           this.showScorePopup(bonus, `${distLabel} ${this.currentDistrict}: ${distName.toUpperCase()}`);
