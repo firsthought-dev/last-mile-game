@@ -27,6 +27,9 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B120 Zebra-crossing pedestrians cross once and carry on (houses, tea stalls, garages), with no pacing or idling · @{2026-09-27}
+- [x] B119 Pedestrian T-pose arms fixed · @{2026-09-27}
+- [x] B118 Mobile Time/Weather/Vehicle controls added; WORLD tab removed · @{2026-09-27}
 - [x] B117 Environment tab fixed (time of day + weather); Off-World map and road types removed · @{2026-09-27}
 - [x] B116 Removed Classic visual style; styles are now Crisp + Cinematic · @{2026-09-27}
 - [x] B115 Fix a false failure in an internal regression check (no gameplay change) — merged PR #11 · @{2026-09-27}
