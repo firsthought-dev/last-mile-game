@@ -6,7 +6,6 @@ kanban-plugin: board
 
 ## 📥 Backlog
 
-- [ ] 🟡 **Plain delivery box on the cycle (remove the box icon)** · @{2026-09-27}
 - [ ] 🟢 **Review Enhanced style fog at dusk and night** · @{2026-09-26}
 	Check it doesn't have the same problem B100 fixed for Classic.
 - [ ] 🟢 **Google Play Store release assets & signing** · @{2026-09-28}
@@ -30,6 +29,7 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B129 Muscle Coupe redesigned as our own car; plain cycle box; first-person cockpit fixed · @{2026-09-28}
 - [x] B128 In-game currency (₹) disclaimer on the loading screen and in Settings · @{2026-09-27}
 - [x] B127 Licence cleanup: branded intro artwork and unused vehicles/assets removed · @{2026-09-27}
 - [x] B126 Laptop start menu (two columns) and laptop HUD layout fixed; QA suite green · @{2026-09-27}
