@@ -6,6 +6,8 @@ kanban-plugin: board
 
 ## 📥 Backlog
 
+- [ ] 🟡 **In-game currency disclaimer (₹ is fictional money)** on the loading screen and in Settings · @{2026-09-27}
+- [ ] 🟡 **Plain delivery box on the cycle (remove the box icon)** · @{2026-09-27}
 - [ ] 🟢 **Review Enhanced style fog at dusk and night** · @{2026-09-26}
 	Check it doesn't have the same problem B100 fixed for Classic.
 - [ ] 🟢 **Google Play Store release assets & signing** · @{2026-09-28}
@@ -19,6 +21,8 @@ kanban-plugin: board
 	Tracked privately.
 
 ## 🔨 In Progress
+- [ ] 🔴 **Vehicle roster: Cycle → Motorbike → Cargo three-wheeler → Car** · @{2026-09-27}
+	New motorbike and three-wheeler, and the car reworked into an original design with no badges. Waiting on reference images. [[Projects/Last-Mile Game]]
 - [ ] 🔴 **Launch blockers**: bundle third-party libraries locally, web portal setup, keep the first download small · @{2026-09-23}
 
 - [ ] 🟡 **Prop upgrade pass: tapri ✅ → houses ✅ → repair shop ✅ → lamps/poles ✅ → fences + guardrails ✅ → signs ✅** · @{2026-09-24}
@@ -27,6 +31,7 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B127 Licence cleanup: branded intro artwork and unused vehicles/assets removed · @{2026-09-27}
 - [x] B126 Laptop start menu (two columns) and laptop HUD layout fixed; QA suite green · @{2026-09-27}
 - [x] B125 Settings screen restyled to match the rest of the game · @{2026-09-27}
 - [x] B124 Phone wording, accurate controls list, Settings opens from the menu, tabs fit on phones, loading bar · @{2026-09-27}
