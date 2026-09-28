@@ -10378,7 +10378,7 @@
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[this.selectedDifficulty];
       const timeBonus = Math.max(0, Math.round(this.orderTimer * 1.8));
-      const earnedBonus = Math.round((target.order.reward + timeBonus) * diffCfg.payoutMult * (1 + this.streakCount * 0.2) * (missed ? 0.5 : 1));
+      const earnedBonus = this._deliveryPayout(target.order.reward, timeBonus, diffCfg.payoutMult, this.streakCount, missed);
       this.earnings += earnedBonus;
 
       // Bank it into the career wallet the instant it is earned, not at the
@@ -10403,7 +10403,7 @@
         ShiplypAds.happyTime();
       }
       this.spawnConfetti(target.pos, 36);
-      this._showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak: this.streakCount, orderId: target.order?.id, orderName: target.order?.name || 'Delivery', base: target.order?.reward || 0, diffMult: diffCfg.payoutMult, missed });
+      this._showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak: this.streakCount, orderId: target.order?.id, orderName: target.order?.name || 'Delivery', base: target.order?.reward || 0, diffMult: diffCfg.payoutMult, vehId: this.selectedVehicle, missed });
       this.addNotification(`${UI.icon('check')} DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
 
       // Rank-up is the only career event loud enough to interrupt a shift.
@@ -10758,8 +10758,15 @@
       ctx.restore();
     }
 
+    // Delivery payout: order reward plus time bonus, scaled by difficulty,
+    // streak and the vehicle's pay multiplier (bigger vehicles take bigger orders).
+    _deliveryPayout(reward, timeBonus, diffMult, streak, missed) {
+      const vehMult = vehicleSpec(this.selectedVehicle).payoutMult;
+      return Math.round((reward + timeBonus) * diffMult * (1 + streak * 0.2) * vehMult * (missed ? 0.5 : 1));
+    }
+
     // ── Post-delivery result banner with tachometer arcs ─────────────────
-    _showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak, orderName, base, diffMult, missed }) {
+    _showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak, orderName, base, diffMult, vehId, missed }) {
       if (!this.scorePopupContainer) return;
       const timeFill  = Math.max(0.04, Math.min(1, timeLeftRatio));
       const accFill   = stars === 3 ? 0.9 : (stars === 2 ? 0.65 : 0.3);
@@ -10791,7 +10798,7 @@
           ${arc(accFill, '#ffe600', 'Accuracy')}
           ${arc(strFill, strColor, `${streak}× Streak`)}
         </div>
-        <div style="font-size:10px;font-family:var(--font-telemetry,'Chakra Petch',monospace);color:rgba(232,238,242,0.65);letter-spacing:.08em">₹${(base||0)} base • ×${(diffMult||1).toFixed(1)} diff • +${streak > 1 ? Math.round((streak-1)*20) : 0}% streak${missed ? ' • −50% missed' : ''}</div>
+        <div style="font-size:10px;font-family:var(--font-telemetry,'Chakra Petch',monospace);color:rgba(232,238,242,0.65);letter-spacing:.08em">₹${(base||0)} base • ×${(diffMult||1).toFixed(1)} diff • +${streak > 1 ? Math.round((streak-1)*20) : 0}% streak • ×${vehicleSpec(vehId).payoutMult} ${vehicleSpec(vehId).short.toUpperCase()}${missed ? ' • −50% missed' : ''}</div>
       `;
       this.scorePopupContainer.appendChild(banner);
       this._placeScorePopups();
