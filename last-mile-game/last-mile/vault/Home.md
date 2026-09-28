@@ -43,5 +43,5 @@ LIMIT 5
 
 | What | Where |
 | :--- | :--- |
-| **Live game** | https://firsthought-dev.github.io/last-mile-game/ |
+| **Live game** | https://shiplyp.vercel.app/ |
 | **Engineering board** | [[Boards/Engineering]] |
