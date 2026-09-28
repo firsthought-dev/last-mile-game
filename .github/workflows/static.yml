@@ -37,9 +37,7 @@ jobs:
       # Obsidian vault and the Android project, which must not be public.
       - name: Stage game files
         run: |
-          mkdir -p _site
-          cp last-mile-game/last-mile/{index.html,game.js,save.js,ads.js,style.css} _site/
-          cp -r last-mile-game/last-mile/assets _site/assets
+          bash last-mile-game/last-mile/stage_web.sh _site
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
