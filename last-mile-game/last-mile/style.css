@@ -4196,3 +4196,20 @@ body.vehicle-cycle .touch-drag-steer {
   .loader-inner { padding: 24px 40px; gap: 12px; }
   .loader-disclaimer { bottom: max(8px, env(safe-area-inset-bottom)); }
 }
+
+/* Vehicle roster (B133): three to four vehicle cards. On short wide screens
+   (laptops, landscape phones) the stat line is dropped so the 2x2 grid keeps
+   the two-column hub within one screen, as B126 measured. */
+@media (min-aspect-ratio: 1/1) and (max-height: 620px) and (min-width: 700px) {
+  /* Three vehicle cards no longer fit two-per-row without wrapping to an
+     extra grid row (B126 broke at 1000x514 once motorbike joined cycle and
+     musclecoupe) — go three-across here so the vehicle grid stays one row. */
+  .hub-vehicle-grid { grid-template-columns: repeat(3, 1fr); }
+  .hub-vehicle-grid .vehicle-card-btn { padding: 4px 8px; gap: 0; }
+  .hub-vehicle-grid .vehicle-card-stat { display: none; }
+  .hub-tagline { display: none; }
+  .hub-onboarding-banner { padding: 6px 10px; margin-bottom: 0; gap: 2px; }
+  .onboarding-banner-body { font-size: 0.7rem; line-height: 1.3; }
+  .hub-career-strip { padding: 8px 10px; margin-bottom: 0; gap: 6px; }
+  .career-daily-row { display: none; }
+}

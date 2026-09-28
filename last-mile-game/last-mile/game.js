@@ -10201,7 +10201,7 @@
       bindTapButton('touch-btn-vehicle', () => {
         // Cycle to the next unlocked vehicle. On mobile the dock's VEHICLE
         // panel is hidden, so this is the only in-drive way to switch.
-        const order = ['cycle', 'musclecoupe'];
+        const order = vehicleList().map((v) => v.id);
         const unlocked = order.filter(id => !Career || Career.isUnlocked('vehicles', id));
         if (unlocked.length < 2) {
           this.addNotification('🔒 UNLOCK MORE VEHICLES IN THE HUB', 'warning', 2500);
@@ -10214,7 +10214,7 @@
         this.vehicle.setVehicleType(nextId);
         this._refreshMobileToolsDrawer();
         sound.playTone(800, 'sine', 0.1);
-        this.showScorePopup(0, `VEHICLE: ${nextId === 'cycle' ? 'CYCLE' : 'MUSCLE COUPE'}`);
+        this.showScorePopup(0, `VEHICLE: ${vehicleSpec(nextId).name.toUpperCase()}`);
       });
       bindTapButton('touch-btn-autopilot', () => this.toggleAutodrive());
       bindTapButton('touch-btn-cruise', () => this.toggleCruise());
@@ -10740,6 +10740,16 @@
         ctx.strokeRect(x(14),y(18),x(50),y(20));
         ctx.beginPath();ctx.moveTo(x(14),y(18)+y(20)*0.28);ctx.lineTo(x(14)+x(50),y(18)+y(20)*0.28);ctx.stroke();
         ctx.beginPath();ctx.arc(bbx,bby,x(4),0,Math.PI*2);ctx.stroke();
+      } else if (vehId === 'motorbike') {
+        ctx.strokeStyle = '#00d4bf';
+        const rw=[46,58], fw=[166,58], r=x(17);
+        for (const [cx, cy] of [rw, fw]) { ctx.beginPath(); ctx.arc(x(cx), y(cy), r, 0, Math.PI*2); ctx.stroke(); }
+        const P = (pts) => { ctx.beginPath(); pts.forEach(([px,py],i) => i ? ctx.lineTo(x(px),y(py)) : ctx.moveTo(x(px),y(py))); ctx.stroke(); };
+        P([[46,58],[92,50],[128,52],[146,24],[166,58]]);          // swingarm, engine, fork
+        P([[70,30],[128,28],[140,20]]);                             // seat to tank to head
+        P([[146,24],[150,14],[160,14]]);                            // bars
+        ctx.strokeRect(x(22), y(10), x(38), y(18));                // delivery box
+        ctx.beginPath(); ctx.arc(x(154), y(26), x(4), 0, Math.PI*2); ctx.stroke(); // headlight
       } else {
         // musclecoupe
         ctx.strokeStyle = '#ff9f1c';
@@ -10812,11 +10822,12 @@
 
     // ── Unlock confirmation sheet ─────────────────────────────────────────
     _showUnlockSheet(vehId) {
-      const VEH_META_SHEET = {
-        musclecoupe: { name: 'Muscle Coupe', stat: 'Gasoline • Top speed class', price: 6000, topSpeedKmh: 194, accel: 19, brake: 30, tint: '#ffe600' },
+      const spec = CONFIG.VEHICLES[vehId];
+      if (!spec || !spec.price) return;
+      const meta = {
+        name: spec.name, price: spec.price, stat: `${spec.speedLabel} • ×${spec.payoutMult} pay per drop`,
+        topSpeedKmh: Math.round(spec.maxSpeed * 3.6), accel: spec.accel, brake: spec.brake
       };
-      const meta = VEH_META_SHEET[vehId];
-      if (!meta) return;
       const wallet = Career ? Career.wallet() : 0;
       const canAfford = wallet >= meta.price;
       const after = wallet - meta.price;
@@ -10843,7 +10854,7 @@
           </div>
           <div style="display:flex;border:2px solid #000;border-radius:10px;overflow:hidden;margin-bottom:14px;background:#151c2a">
             <div style="flex:1;padding:10px 12px;border-right:2px solid #000"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Top speed</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">${meta.topSpeedKmh} km/h</div></div>
-            <div style="flex:1;padding:10px 12px;border-right:2px solid #000"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Accel</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">${meta.accel} m/s²</div></div>
+            <div style="flex:1;padding:10px 12px;border-right:2px solid #000"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Pay</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">×${spec.payoutMult}</div></div>
             <div style="flex:1;padding:10px 12px"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Brake</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">${meta.brake} m/s²</div></div>
           </div>
           <div style="display:flex;justify-content:space-between;padding:10px 12px;background:rgba(255,255,255,0.06);border:1.5px solid #000;border-radius:8px;margin-bottom:16px;font-size:11px">
@@ -11404,7 +11415,7 @@
       const isBlizzard = this.selectedWeather === 'blizzard';
       setText('touch-btn-weather-icon', isBlizzard ? '❄️' : '☀️');
       setText('touch-btn-weather-label', `WEATHER: ${isBlizzard ? 'BLIZZARD' : 'CLEAR'}`);
-      const vName = this.selectedVehicle === 'cycle' ? 'CYCLE' : 'MUSCLE COUPE';
+      const vName = vehicleSpec(this.selectedVehicle).name.toUpperCase();
       setText('touch-btn-vehicle-label', `VEHICLE: ${vName}`);
     }
 
@@ -11916,14 +11927,7 @@
       // undisturbed, so a picker can come back later without rebuilding
       // this from scratch if a second world is ever actually built out.
 
-      const VEH_META = {
-        musclecoupe: { price: 6000, topSpeedKmh: 194, accel: 19, brake: 30, tint: '#ff9f1c' },
-        cycle:       { price: 0,     topSpeedKmh: 52,  accel: 4,  brake: 8,  tint: '#00d4bf' },
-      };
-      const vehList = [
-        { id: 'cycle',       name: 'Delivery Cycle', stat: '32–52 km/h • Pedal Power' },
-        { id: 'musclecoupe', name: 'Muscle Coupe',   stat: '194 km/h • Gasoline'  },
-      ];
+      const vehList = vehicleList();
 
       const styleList = [
         { id: 'crisp',     name: 'Crisp',     stat: 'Sharp Outlines • Lighter',    gif: 'assets/style-previews/crisp.gif' },
@@ -11997,7 +12001,7 @@
               <span class="hub-section-label">SELECT VEHICLE</span>
               <div class="hub-vehicle-grid">
                 ${vehList.map(v => {
-                  const meta = VEH_META[v.id] || {};
+                  const meta = v;
                   const unlocked = Career ? Career.isUnlocked('vehicles', v.id) : true;
                   const wallet = Career ? Career.wallet() : 0;
                   const canAfford = wallet >= (meta.price || 0);
@@ -12007,7 +12011,7 @@
                   return `
                     <button class="vehicle-card-btn ${isSelected ? 'active-veh' : ''} ${unlocked ? '' : 'veh-locked'}" data-veh="${v.id}" data-unlocked="${unlocked}">
                       <span class="vehicle-card-title">${v.name}</span>
-                      <span class="vehicle-card-stat">${v.stat}</span>
+                      <span class="vehicle-card-stat">${v.speedLabel} • ${v.payoutMult === 1 ? 'Base pay' : '×' + v.payoutMult + ' pay'}</span>
                       ${!unlocked ? `<span class="veh-lock-cost">₹${(meta.price||0).toLocaleString('en-IN')}</span><span class="veh-lock-cta">${ctaLabel}</span>` : ''}
                     </button>
                   `;
@@ -12164,16 +12168,16 @@
           };
         });
       } else if (type === 'vehicle') {
-        const isMuscleUnlocked = Career ? Career.isUnlocked('vehicles', 'musclecoupe') : true;
-        const isCycleUnlocked = Career ? Career.isUnlocked('vehicles', 'cycle') : true;
+        const btns = vehicleList().map((v) => {
+          const owned = Career ? Career.isUnlocked('vehicles', v.id) : true;
+          const title = owned ? v.name : `Locked (₹${v.price.toLocaleString('en-IN')} in Career)`;
+          return `<button class="dock-sq-btn ${this.selectedVehicle === v.id ? 'active-sq' : ''} ${owned ? '' : 'veh-dock-locked'}" data-v="${v.id}" title="${title}">${owned ? '' : '🔒 '}${v.short}</button>`;
+        }).join('');
         el.innerHTML = `
           <div class="dock-panel-grid">
             <div class="dock-panel-col">
               <span class="dock-panel-label">VEHICLE</span>
-              <div class="dock-btn-row">
-                <button class="dock-sq-btn ${this.selectedVehicle === 'musclecoupe' ? 'active-sq' : ''} ${!isMuscleUnlocked ? 'veh-dock-locked' : ''}" data-v="musclecoupe" title="${!isMuscleUnlocked ? 'Locked (Requires ₹6,000 in Career)' : 'Muscle Coupe'}">${!isMuscleUnlocked ? '🔒 ' : ''}MUSCLE</button>
-                <button class="dock-sq-btn ${this.selectedVehicle === 'cycle' ? 'active-sq' : ''} ${!isCycleUnlocked ? 'veh-dock-locked' : ''}" data-v="cycle" title="${!isCycleUnlocked ? 'Locked' : 'Delivery Cycle'}">${!isCycleUnlocked ? '🔒 ' : ''}CYCLE</button>
-              </div>
+              <div class="dock-btn-row">${btns}</div>
             </div>
           </div>
         `;
