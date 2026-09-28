@@ -46,7 +46,7 @@ Shiplyp is a delivery driving game set on a procedurally generated scenic road t
 - **B75 (2026-09-18)**: 60+ FPS rendering.
 
 ## Links
-- Live build (GitHub Pages): https://firsthought-dev.github.io/last-mile-game/
+- Live build (Vercel): https://shiplyp.vercel.app/
 
 ## Recent Dev Logs
 - [[Dev Logs/2026-09-23 - B107 Sidewalk Guardrail and Barrier Grounding Alignment]]
