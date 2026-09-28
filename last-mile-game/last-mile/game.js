@@ -785,6 +785,8 @@
     console.warn('[Shiplyp] save.js not loaded — career progress will not persist this session.');
   }
   const Ads = (typeof window !== 'undefined' && window.ShiplypAds) ? window.ShiplypAds : null;
+  // B132: chance a pedestrian cluster also gets a signalled crossing (tuned for ~+15%).
+  const CROSSING_AT_CLUSTER_CHANCE = 0.85;
   window.sound = sound;
 
   // --------------------------------------------------------------------------
@@ -5648,6 +5650,15 @@
         });
         spawned++;
       }
+      // B132: occasionally also offer a signalled crossing where a group of
+      // pedestrians walks (~15% more crossings overall). Same placement rules
+      // (tryPlaceCrossingNear: spacing, straight/unbanked, no tunnels). The
+      // gate is a hash of the position, not this.prng, so it doesn't shift
+      // the rest of the world layout.
+      if (spawned > 0) {
+        const h = Math.sin(pt.x * 12.9898 + pt.z * 78.233) * 43758.5453;
+        if (h - Math.floor(h) < CROSSING_AT_CLUSTER_CHANCE) this.tryPlaceCrossingNear(pt);
+      }
       return spawned;
     }
 
@@ -6279,7 +6290,7 @@
     tryPlaceCrossingNear(roadPt) {
       try {
         if (!this.roadSpatialGrid || !this.roadSpacedPoints || !this.roadBankingAngles) return null;
-        const MIN_SPACING = 220.0;
+        const MIN_SPACING = 185.0; // B132: was 220 (~15% more crossings, same site rules)
         this.crossingSites = this.crossingSites || [];
         if (this.crossingSites.some((p) => p.distanceTo(roadPt) < MIN_SPACING)) return null;
         const near = this.roadSpatialGrid.getNearestRoadPoint(roadPt.x, roadPt.z, 14.0);
@@ -6330,20 +6341,32 @@
       const positions = [];
       const indices = [];
       let v = 0;
+      // B132: each stripe is split along its depth and every vertex is set on
+      // the rendered road surface (+2.5 cm). A single flat quad at pt's height
+      // sank under the road's crown and vertical curve, so only fragments of
+      // the paint showed and the crossing was hard to see from any distance.
+      const SEGS = 4;
+      const wp = new THREE.Vector3();
       for (let lat = -roadHalf + 0.35; lat <= roadHalf - STRIPE_W - 0.3; lat += PERIOD) {
-        for (const [dLat, dDepth] of [[0, -1], [STRIPE_W, -1], [STRIPE_W, 1], [0, 1]]) {
-          // Built LOCAL to pt, with the mesh positioned there below. World-space
-          // verts on an object still sitting at the origin make
-          // updateFoliageVisibility measure distance from (0,0,0), which culled
-          // every crossing the instant it was added.
-          const p = new THREE.Vector3()
-            .addScaledVector(bankedNormal, lat + dLat)
-            .addScaledVector(tangent, dDepth * DEPTH * 0.5)
-            .addScaledVector(bankedUp, LIFT);
-          positions.push(p.x, p.y, p.z);
+        for (let k = 0; k <= SEGS; k++) {
+          const dDepth = -1 + 2 * k / SEGS;
+          for (const dLat of [0, STRIPE_W]) {
+            // Built LOCAL to pt, with the mesh positioned there below. World-space
+            // verts on an object still sitting at the origin make
+            // updateFoliageVisibility measure distance from (0,0,0), which culled
+            // every crossing the instant it was added.
+            const p = new THREE.Vector3()
+              .addScaledVector(bankedNormal, lat + dLat)
+              .addScaledVector(tangent, dDepth * DEPTH * 0.5)
+              .addScaledVector(bankedUp, LIFT);
+            wp.copy(pt).add(p);
+            const surf = this.surfaceHeightNear ? this.surfaceHeightNear(wp, pt, lat + dLat) : null;
+            if (Number.isFinite(surf)) p.y = Math.max(p.y, surf + 0.025 - pt.y);
+            positions.push(p.x, p.y, p.z);
+          }
+          if (k > 0) indices.push(v - 2, v - 1, v + 1, v - 2, v + 1, v);
+          v += 2;
         }
-        indices.push(v, v + 1, v + 2, v, v + 2, v + 3);
-        v += 4;
       }
       if (!positions.length) return null;
 
@@ -6354,10 +6377,14 @@
       geom.setIndex(indices);
       geom.computeVertexNormals();
       const zebra = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({
-        color: 0xb8bdc4, side: THREE.DoubleSide, depthWrite: false
+        color: 0xd0d4da, side: THREE.DoubleSide, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
       }));
       zebra.renderOrder = 1;
       zebra.position.copy(pt);
+      // B132: drawn out to the landmark range (750 m) like the signal post,
+      // instead of popping in at the 350 m minor-prop cull.
+      zebra.userData._foliageBox = 20;
       (this.foliageGroup || scene).add(zebra);
       this.addFenceGap(pt, normal, 0, 4.0);
 
@@ -6380,18 +6407,31 @@
       // Unlit base colours stay dark so an off lamp never crosses the 0.94
       // bloom threshold; the lit one is driven by emissive, same as the
       // vehicle headlight/taillight lenses.
-      const lampGeom = new THREE.SphereGeometry(0.075, 8, 6);
+      // B132: the head faces along the road (both directions) instead of
+      // across it, so approaching riders see the lamps rather than the side
+      // of the box. A thin backplate in the head's plane frames the lamps
+      // from either side against sky and trees.
+      const backplate = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.98, 0.02),
+        new THREE.MeshStandardMaterial({ color: 0x111317, roughness: 0.9 }));
+      backplate.position.set(0, 3.15, 0);
+      post.add(backplate);
+      const lampGeom = new THREE.SphereGeometry(0.095, 10, 8);
       const lamps = [];
       [['red', 0xff3b30, 0.30], ['amber', 0xffb300, 0.0], ['green', 0x27d17c, -0.30]].forEach(([name, hex, dy]) => {
-        const mat = new THREE.MeshStandardMaterial({ color: 0x14161a, emissive: hex, emissiveIntensity: 0.0, roughness: 0.4 });
-        const lamp = new THREE.Mesh(lampGeom, mat);
-        lamp.position.set(0, 3.15 + dy, 0.13);
-        post.add(lamp);
+        // fog:false so the lamp colour still reads through haze at distance.
+        const mat = new THREE.MeshStandardMaterial({ color: 0x14161a, emissive: hex, emissiveIntensity: 0.0, roughness: 0.4, fog: false });
+        for (const face of [1, -1]) {
+          const lamp = new THREE.Mesh(lampGeom, mat);
+          lamp.position.set(0, 3.15 + dy, 0.13 * face);
+          post.add(lamp);
+        }
         lamps.push({ name, mat, hex });
       });
 
+      post.scale.setScalar(1.4); // B132: ~1.4x so it reads from a distance (not a giant)
+      post.userData._foliageBox = 20;  // landmark range, same as before (5+ children)
       post.position.copy(postPos);
-      post.lookAt(pt.x, postPos.y, pt.z);
+      post.lookAt(postPos.x + tangent.x, postPos.y, postPos.z + tangent.z);
       (this.foliageGroup || scene).add(post);
       this.obstacles.push({ pos: postPos.clone(), radius: 0.7, type: 'pole' });
       if (this.occluderMeshes) this.occluderMeshes.push(post);
@@ -6449,7 +6489,9 @@
 
     _applySignalPhase(s) {
       const lit = s.phase === 0 ? 'green' : (s.phase === 1 ? 'amber' : 'red');
-      for (const l of s.lamps) l.mat.emissiveIntensity = (l.name === lit) ? 2.0 : 0.0;
+      // B132: off lamps glow faintly so all three read as a signal head; the
+      // lit one is clearly brighter (and blooms in the cinematic style).
+      for (const l of s.lamps) l.mat.emissiveIntensity = (l.name === lit) ? 1.8 : 0.12;
     }
 
     updateTrafficSignals(dt) {
@@ -10322,6 +10364,10 @@
       target.ring.material.color.setHex(0xff9f1c);
 
       this.deliveriesMade++;
+      // Clock ran out before the drop: missed delivery. Streak resets and the
+      // payout is halved (money-only penalty; never touches the wallet).
+      const missed = this.orderTimer <= 0;
+      if (missed) this.streakCount = 0;
       this.streakCount++;
 
       // Capture the clock BEFORE it is reset for the next order. Both the
@@ -10332,7 +10378,7 @@
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[this.selectedDifficulty];
       const timeBonus = Math.max(0, Math.round(this.orderTimer * 1.8));
-      const earnedBonus = Math.round((target.order.reward + timeBonus) * diffCfg.payoutMult * (1 + this.streakCount * 0.2));
+      const earnedBonus = Math.round((target.order.reward + timeBonus) * diffCfg.payoutMult * (1 + this.streakCount * 0.2) * (missed ? 0.5 : 1));
       this.earnings += earnedBonus;
 
       // Bank it into the career wallet the instant it is earned, not at the
@@ -10357,7 +10403,7 @@
         ShiplypAds.happyTime();
       }
       this.spawnConfetti(target.pos, 36);
-      this._showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak: this.streakCount, orderId: target.order?.id, orderName: target.order?.name || 'Delivery', base: target.order?.reward || 0, diffMult: diffCfg.payoutMult });
+      this._showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak: this.streakCount, orderId: target.order?.id, orderName: target.order?.name || 'Delivery', base: target.order?.reward || 0, diffMult: diffCfg.payoutMult, missed });
       this.addNotification(`${UI.icon('check')} DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
 
       // Rank-up is the only career event loud enough to interrupt a shift.
@@ -10713,7 +10759,7 @@
     }
 
     // ── Post-delivery result banner with tachometer arcs ─────────────────
-    _showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak, orderName, base, diffMult }) {
+    _showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak, orderName, base, diffMult, missed }) {
       if (!this.scorePopupContainer) return;
       const timeFill  = Math.max(0.04, Math.min(1, timeLeftRatio));
       const accFill   = stars === 3 ? 0.9 : (stars === 2 ? 0.65 : 0.3);
@@ -10734,7 +10780,7 @@
           <span style="font-size:8px;letter-spacing:.12em;color:rgba(232,238,242,0.45);text-transform:uppercase">${label}</span>
         </div>`;
       };
-      const label = timeLeftRatio > 0.55 ? `${UI.icon('bolt')} EXPRESS SPEED` : (timeLeftRatio > 0.25 ? `${UI.icon('target')} ON-TIME` : `${UI.icon('clock')} LATE DROP`);
+      const label = missed ? `${UI.icon('clock')} MISSED • HALF PAY` : timeLeftRatio > 0.55 ? `${UI.icon('bolt')} EXPRESS SPEED` : (timeLeftRatio > 0.25 ? `${UI.icon('target')} ON-TIME` : `${UI.icon('clock')} LATE DROP`);
       const banner = document.createElement('div');
       banner.className = 'score-popup-banner score-popup-delivery';
       banner.innerHTML = `
@@ -10745,7 +10791,7 @@
           ${arc(accFill, '#ffe600', 'Accuracy')}
           ${arc(strFill, strColor, `${streak}× Streak`)}
         </div>
-        <div style="font-size:10px;font-family:var(--font-telemetry,'Chakra Petch',monospace);color:rgba(232,238,242,0.65);letter-spacing:.08em">₹${(base||0)} base • ×${(diffMult||1).toFixed(1)} diff • +${streak > 1 ? Math.round((streak-1)*20) : 0}% streak</div>
+        <div style="font-size:10px;font-family:var(--font-telemetry,'Chakra Petch',monospace);color:rgba(232,238,242,0.65);letter-spacing:.08em">₹${(base||0)} base • ×${(diffMult||1).toFixed(1)} diff • +${streak > 1 ? Math.round((streak-1)*20) : 0}% streak${missed ? ' • −50% missed' : ''}</div>
       `;
       this.scorePopupContainer.appendChild(banner);
       this._placeScorePopups();
@@ -10998,7 +11044,7 @@
       if (countEl) countEl.textContent = `${this.deliveriesMade} / ${totalTargets}`;
 
       const earnEl = document.getElementById('hud-earnings');
-      if (earnEl) earnEl.textContent = this.earnings;
+      if (earnEl) earnEl.textContent = Career ? Career.wallet() : this.earnings; // spendable wallet, same pot the police and fines use
 
       const streakEl = document.getElementById('hud-streak-pill');
       if (streakEl) streakEl.textContent = `${this.streakCount}x STREAK`;
@@ -11059,6 +11105,7 @@
         const d = carPos.distanceTo(c.mesh.position);
         if (d < (c.hitRadius + 1.0) && Math.abs(this.vehicle.speed) > 1.5) {
           c.struck = true;
+          if (c.kind === 'pedestrian') window.ShiplypPolice?.reportOffence('hitPedestrian');
           this.world.foliageGroup.remove(c.mesh);
           this.world.crossers.splice(i, 1);
           sound.playCrash();
@@ -11742,6 +11789,7 @@
       this.wantedDecayTimer = 0;
       this.isJailed = false;
       this.updateWantedHUD();
+      window.ShiplypPolice?.reset();
       const gearEl = document.getElementById('telemetry-gear');
       if (gearEl) gearEl.textContent = isPedalVehicle(this.selectedVehicle) ? 'PEDAL' : 'DRIVE';
 
@@ -12194,6 +12242,7 @@
                 <div class="settings-row"><span class="settings-label">Auto Steer (steers + speed)</span><span class="slider-val">A-STEER</span></div>
                 <div class="settings-row"><span class="settings-label">Auto Drive (speed only, you steer)</span><span class="slider-val">A-DRIVE</span></div>
                 <div class="settings-row"><span class="settings-label">Camera, Recenter, Horn, Time, Weather, Vehicle</span><span class="slider-val">TOOLS</span></div>
+                <div class="settings-row"><span class="settings-label">Settle with the police (when wanted)</span><span class="slider-val">Tap the ★ meter</span></div>
                 ` : `
                 <div class="settings-section-title"><span>${UI.icon('car')} DRIVING</span></div>
                 <div class="settings-row"><span class="settings-label">Accelerate</span><span class="slider-val">W / ↑</span></div>
@@ -12211,6 +12260,7 @@
                 <div class="settings-row"><span class="settings-label">Cycle Camera View</span><span class="slider-val">[C]</span></div>
                 <div class="settings-row"><span class="settings-label">Cycle Time of Day</span><span class="slider-val">[T]</span></div>
                 <div class="settings-row"><span class="settings-label">Horn / Bell</span><span class="slider-val">[H]</span></div>
+                <div class="settings-row"><span class="settings-label">Settle with the police (when wanted)</span><span class="slider-val">[B] or click the ★ meter</span></div>
 
                 <div class="settings-section-title" style="margin-top: 14px;"><span>AUDIO & MENU</span></div>
                 <div class="settings-row"><span class="settings-label">Mute / Unmute Audio</span><span class="slider-val">[M]</span></div>
@@ -12221,6 +12271,7 @@
                 <div class="settings-section-title"><span>TRIP SUMMARY</span></div>
                 <div class="settings-row"><span class="settings-label">Distance Driven</span><span class="slider-val">${(this.vehicle ? this.vehicle.distanceTraveled : 0).toFixed(1)} KM</span></div>
               `}
+              ${tab === 'gameplay' && window.ShiplypPolice ? window.ShiplypPolice.settingsHTML() : ''}
               <p class="settings-legal">${document.getElementById('currency-disclaimer')?.textContent || ''}</p>
             </div>
 
@@ -12232,6 +12283,7 @@
         </div>
       `;
 
+      window.ShiplypPolice?.bindSettings(this.modalContainer);
       this.modalContainer.querySelectorAll('.tab-link').forEach(btn => {
         btn.onclick = () => {
           if (btn.dataset.tab === 'home') {
@@ -12836,7 +12888,7 @@
         this._fpsAccumFrames = 0;
       }
 
-      if (this._adPaused) {
+      if (this._adPaused || window.ShiplypPolice?.isPaused()) {
         if (this.composer) {
           this.visualStyle?.preRender();
           this.composer.render();
@@ -12880,6 +12932,9 @@
           this.world.updateFoliageVisibility(this.vehicle.mesh.position);
         }
         this.checkCrosserCollisions();
+        // Order clock counts down (floors at 0; a late drop just earns no time bonus).
+        this.orderTimer = Math.max(0, (this.orderTimer || 0) - dt);
+        window.ShiplypPolice?.update(this, dt); // police.js: offences, wanted stars, encounters, clock tick
         if (this.rain && this.vehicle && this.vehicle.mesh) {
           const rainForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion);
           this.rain.update(dt, this.vehicle.mesh.position, rainForward, this.vehicle.speed);
