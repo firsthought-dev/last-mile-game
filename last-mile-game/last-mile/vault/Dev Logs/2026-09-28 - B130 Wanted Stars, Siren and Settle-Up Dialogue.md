@@ -13,4 +13,5 @@
 - No police objects appear in the world. All police lines are in English and kept in one place for future translation.
 - **Future idea (not built):** watch an ad to clear your stars.
 - **Planned later:** police vehicles, road closures and stronger high-star pressure; offences for parked vehicles once they exist.
+- **Update (B135):** scraping the curb or roadside barrier no longer counts as an offence.
 - Related: [[Projects/Last-Mile Game]]
