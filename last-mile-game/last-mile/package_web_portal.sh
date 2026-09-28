@@ -36,6 +36,7 @@ echo "--> Staging runtime scripts and markup..."
 cp "$DIR/index.html" "$STAGE_DIR/"
 cp "$DIR/game.js" "$STAGE_DIR/"
 cp "$DIR/save.js" "$STAGE_DIR/"
+cp "$DIR/police.js" "$STAGE_DIR/"
 cp "$DIR/ads.js" "$STAGE_DIR/"
 cp "$DIR/style.css" "$STAGE_DIR/"
 

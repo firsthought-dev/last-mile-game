@@ -77,6 +77,8 @@ SORT date DESC
 ```
 
 ## Recent Activity
+- 2026-09-28 — [[2026-09-28 - B130 Wanted Stars, Siren and Settle-Up Dialogue|B130]]: wanted stars, siren glow and sound, settle-up dialogue with the police
+- 2026-09-28 — [[2026-09-28 - B132 Clearer Traffic Signals and Zebra Crossings|B132]]: clearer traffic signals and zebra crossings visible from further away, about 15% more crossings; missed deliveries (B131) now cost a small fine and half pay
 - 2026-09-28 — [[2026-09-28 - B129 Original Muscle Coupe and Plain Cycle Box|B129]]: Muscle Coupe reworked with our own front, rear, hood, wheels and interior (badges/lettering removed, new grille/lamps/hood/tail/wheels/interior); wheels now spin and steer, cockpit no longer see-through; cycle's box-logo decal removed
 - 2026-09-27 — [[2026-09-27 - B119 Pedestrian T-pose Arms Fix|B119]]: pedestrian T-pose arms fixed
 - 2026-09-27 — [[2026-09-27 - B120 Pedestrians Keep Walking After Zebra Crossings|B120]]: zebra-crossing pedestrians cross once and carry on, with no pacing or idling

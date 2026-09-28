@@ -5,6 +5,8 @@ kanban-plugin: board
 ---
 
 ## 📥 Backlog
+- [ ] 🟢 **Idea: watch an ad to clear wanted stars** · @{2026-09-28}
+	Future idea only, not planned yet. [[2026-09-28 - B130 Wanted Stars, Siren and Settle-Up Dialogue]]
 
 - [ ] 🟢 **Review Enhanced style fog at dusk and night** · @{2026-09-26}
 	Check it doesn't have the same problem B100 fixed for Classic.
@@ -29,6 +31,8 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] **Wanted stars, siren and settle-up dialogue (B130), missed-delivery penalty (B131), clearer signals and crossings (B132)** · @{2026-09-28}
+	0 to 5 wanted stars; edge glow and siren; settle with the police by tea money, an excuse duel with a way out, or speeding off (money only). Delivery clock ticks in the last 15 seconds; missed deliveries cost a small fine and half pay. Bigger signals, zebra crossings visible from further away, about 15% more crossings. [[2026-09-28 - B130 Wanted Stars, Siren and Settle-Up Dialogue]] [[2026-09-28 - B132 Clearer Traffic Signals and Zebra Crossings]]
 - [x] B129 Muscle Coupe reworked (badges removed; our own front, rear, hood, wheels and interior); plain cycle box; first-person cockpit fixed · @{2026-09-28}
 - [x] B128 In-game currency (₹) disclaimer on the loading screen and in Settings · @{2026-09-27}
 - [x] B127 Licence cleanup: branded intro artwork and unused vehicles/assets removed · @{2026-09-27}

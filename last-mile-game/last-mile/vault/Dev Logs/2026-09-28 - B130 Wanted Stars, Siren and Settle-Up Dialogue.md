@@ -1,0 +1,16 @@
+# 2026-09-28 — B130 Wanted Stars, Siren and Settle-Up Dialogue
+- **Added:** a GTA-style wanted level, 0 to 5 stars, shown top-right (under the delivery card on phones in portrait).
+- **Offences:** running a red light at a zebra crossing, hitting a pedestrian (counts double), crashing into the roadside barrier, and staying over the posted speed limit. Committing another offence within a minute adds an extra star. Stars fade slowly with clean driving.
+- **Heat build-up (1 to 4 stars):** a soft red and blue glow on the screen edges and a faint distant siren, getting a little stronger with each star. No strobing.
+- **Settle up:** tap the star meter (or press B on desktop) to talk to the police. Choices: Tea money (clears your stars; the price rises steeply with stars, so settling early is cheaper; short of cash, you can pay what you have for two stars off), Argue, or Speed off (+1 star). Paid from your in-game ₹ wallet, which the HUD now shows. At 5 stars you are caught and the conversation opens by itself.
+- **Argue is an excuse duel:** two or three quick rounds where you pick one of three excuses before a timer runs out, against an officer whose personality decides what works. The button shows how many rounds and your best chance of winning. Win and you lose a star, with an optional double-or-nothing round; lose and you pay a small fine. Every round also has a way out: tell him your story. The first time in a drive he gets emotional, hands you some useless life advice and takes a star off; after that he just waves you off.
+- **After a bribe** the officer pockets it, then gives you a hard-hitting line of advice about the road and your family.
+- **Police penalties are money only:** the police never cost you delivery time.
+- **Delivery clock:** each order's timer counts down again (it had stopped). A soft tick starts 15 seconds before time runs out and speeds up in the last 8 seconds; it is silent when muted, in menus, while paused and while talking to the police.
+- **Missed delivery (B131):** if the clock runs out, you are fined ₹25 and the late drop pays half, with your streak reset.
+- **Controls list** in Settings now mentions settling up (B, or tap the stars).
+- **Settings:** new Siren volume slider and Reduce flashing toggle. The siren follows the game's mute.
+- No police objects appear in the world. All police lines are in English and kept in one place for future translation.
+- **Future idea (not built):** watch an ad to clear your stars.
+- **Planned later:** police vehicles, road closures and stronger high-star pressure; offences for parked vehicles once they exist.
+- Related: [[Projects/Last-Mile Game]]
