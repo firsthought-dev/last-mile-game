@@ -616,7 +616,8 @@
       if (this._lastHornTime && now - this._lastHornTime < 0.28) return;
       this._lastHornTime = now;
 
-      if (vehicleType === 'cycle' || vehicleType === 'scooter') {
+      const style = hornStyle(vehicleType);
+      if (style === 'bell') {
         // Bicycle Bell: classic high-pitch twin-chime "ting-ting"
         const ringBell = (t, freq) => {
           const osc = ctx.createOscillator();
@@ -633,6 +634,24 @@
         ringBell(now, 1760);        // A6
         ringBell(now + 0.08, 2093);  // C7
         ringBell(now + 0.18, 1760);  // A6
+      } else if (style === 'beep') {
+        // Small-engine horn (motorbike / three-wheeler): short, bright two-tone "beep-beep".
+        const beep = (t) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(620, t);
+          osc.frequency.setValueAtTime(740, t + 0.05);
+          gain.gain.setValueAtTime(0.0001, t);
+          gain.gain.exponentialRampToValueAtTime(0.16, t + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+          osc.connect(gain);
+          gain.connect(this.masterFilter || ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.13);
+        };
+        beep(now);
+        beep(now + 0.17);
       } else {
         // Automotive Dual-Tone Electric Horn: 392Hz (G4) + 494Hz (B4)
         const osc1 = ctx.createOscillator();
@@ -726,7 +745,7 @@
       this._initAmbience();
       const now = this.ctx.currentTime;
       const speedRatio = Math.min(1.0, Math.abs(speed || 0) / (maxSpeed || 40));
-      const isPedal = vehicleType === 'cycle';
+      const isPedal = isPedalVehicle(vehicleType);
 
       // Engine hum — silent for pedal vehicles
       if (!isPedal) {
@@ -8166,7 +8185,7 @@
 
       this.applyVehicleConfig();
       this.buildModel();
-      document.body.classList.toggle('vehicle-cycle', vehicleType === 'cycle' || vehicleType === 'scooter');
+      document.body.classList.toggle('vehicle-cycle', isTwoWheeler(vehicleType));
     }
 
     applyVehicleConfig() {
@@ -8182,7 +8201,7 @@
         this.vehicleType = type;
         this.applyVehicleConfig();
         this.buildModel();
-        document.body.classList.toggle('vehicle-cycle', type === 'cycle' || type === 'scooter');
+        document.body.classList.toggle('vehicle-cycle', isTwoWheeler(type));
       }
     }
 
@@ -8495,14 +8514,14 @@
 
       let climateGrip = CONFIG.ROAD_SURFACE.gripMult;
       if (isRain) {
-        if (this.vehicleType === 'cycle') climateGrip *= 0.62;
+        if (isTwoWheeler(this.vehicleType)) climateGrip *= 0.62;
         else climateGrip *= 0.68;
       }
 
-      const windDrag = isWind ? (this.vehicleType === 'cycle' ? 1.8 : 1.4) : 0.0;
+      const windDrag = isWind ? (isTwoWheeler(this.vehicleType) ? 1.8 : 1.4) : 0.0;
 
       // 1. Throttle / Acceleration, Service Brakes & Emergency Handbrake
-      const isBicycle = (this.vehicleType === 'cycle' || this.vehicleType === 'scooter');
+      const isBicycle = isTwoWheeler(this.vehicleType);
 
       // Health degradation penalty on top speed & engine performance
       const healthFactor = (this.health >= 50) ? 1.0 : Math.max(0.25, 0.4 + 0.6 * (this.health / 50));
@@ -8594,7 +8613,7 @@
             // Reversing — pressing forward throttle acts as brake to bring vehicle to a full stop
             this.speed += (this.brake || 30.0) * dt * 2.4;
             if (this.speed >= -0.08) this.speed = 0;
-          } else if (this.vehicleType === 'cycle') {
+          } else if (isPedalVehicle(this.vehicleType)) {
             try {
               this.cycleRideTime += dt;
               const cycleCfg = CONFIG.VEHICLES.cycle;
@@ -8622,7 +8641,7 @@
         } else {
           // Natural coasting / drag; clear hold mode so fresh press can reverse
           this._downBrakingFromForward = false;
-          const rollingDrag = (this.vehicleType === 'cycle') ? this.drag * 0.30 : this.drag * 0.85;
+          const rollingDrag = isPedalVehicle(this.vehicleType) ? this.drag * 0.30 : this.drag * 0.85;
           this.speed *= Math.exp(-rollingDrag * dt);
           if (Math.abs(this.speed) < 0.08) this.speed = 0;
         }
@@ -8861,7 +8880,7 @@
           dynamicRoll = trueRoadRoll * 0.12;
         }
       } else {
-        const centrifugalBodyRoll = this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.12;
+        const centrifugalBodyRoll = this.steerAngle * (this.speed / (this.maxSpeed || 40)) * (vehicleSpec(this.vehicleType).bodyRoll || 0.12);
         dynamicRoll = trueRoadRoll + centrifugalBodyRoll;
       }
 
@@ -11210,11 +11229,11 @@
         if (isSnow) {
           pill.className = 'climate-pill wind';
           if (icon) icon.innerHTML = UI.icon('cloud');
-          text.textContent = `BLIZZARD SNOW • SLIPPERY GRIP (${this.vehicle && this.vehicle.vehicleType === 'cycle' ? '45%' : '60%'})`;
+          text.textContent = `BLIZZARD SNOW • SLIPPERY GRIP (${this.vehicle && isTwoWheeler(this.vehicle.vehicleType) ? '45%' : '60%'})`;
         } else if (isRain) {
           pill.className = 'climate-pill rain';
           if (icon) icon.innerHTML = UI.icon('cloudRain');
-          text.textContent = `MONSOON RAIN • SLIPPERY GRIP (${this.vehicle && this.vehicle.vehicleType === 'cycle' ? '48%' : '68%'})`;
+          text.textContent = `MONSOON RAIN • SLIPPERY GRIP (${this.vehicle && isTwoWheeler(this.vehicle.vehicleType) ? '48%' : '68%'})`;
         } else if (isWind) {
           pill.className = 'climate-pill wind';
           if (icon) icon.innerHTML = UI.icon('wind');
@@ -11724,7 +11743,7 @@
       this.isJailed = false;
       this.updateWantedHUD();
       const gearEl = document.getElementById('telemetry-gear');
-      if (gearEl) gearEl.textContent = this.selectedVehicle === 'cycle' ? 'PEDAL' : 'DRIVE';
+      if (gearEl) gearEl.textContent = isPedalVehicle(this.selectedVehicle) ? 'PEDAL' : 'DRIVE';
 
       if (this.savedProgressCheckpoint === null) {
         this.savedProgressCheckpoint = {
@@ -11750,7 +11769,7 @@
         this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
         this.vehicle.heading = this.vehicle.velocityHeading;
         this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = (this.vehicle.vehicleType === 'cycle') ? 8.89 : 10.0;
+        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 8.89 : 10.0;
         this.updateGPSNavigation();
       }
 
@@ -11767,7 +11786,7 @@
         this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
         this.vehicle.heading = this.vehicle.velocityHeading;
         this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = (this.vehicle.vehicleType === 'cycle') ? 8.89 : 8.0;
+        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 8.89 : 8.0;
         this.updateGPSNavigation();
         this._showOnboardingHint('drive');
       }
@@ -12444,7 +12463,7 @@
         this.camera.lookAt(this.camLookTarget);
       } else {
         // Slow Roads Default Chase Cam — intimate framing (~7.8m back for cars, ~5.6m back for cycle)
-        const isCycle = (this.vehicle && this.vehicle.vehicleType === 'cycle');
+        const isCycle = !!(this.vehicle && isTwoWheeler(this.vehicle.vehicleType));
         const camDist = isCycle ? -5.6 : -7.8;
         const camHeight = isCycle ? 2.1 : 2.6;
         const targetCamPos = carPos.clone()
@@ -12993,7 +13012,7 @@
 
         const gearEl = document.getElementById('telemetry-gear');
         if (gearEl) {
-          if (this.selectedVehicle === 'cycle') {
+          if (isPedalVehicle(this.selectedVehicle)) {
             gearEl.textContent = speedKmh > 2 ? 'PEDAL' : 'CRUISE';
           } else {
             gearEl.textContent = this.vehicle.speed < -0.1 ? 'REVERSE' : (speedKmh < 0.5 ? 'PARK' : 'DRIVE');
