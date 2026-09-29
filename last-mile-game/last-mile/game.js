@@ -181,7 +181,7 @@
   // models each time, most painfully on the Android WebView's cold start.
   // Bump this by hand whenever a file under assets/models/ changes; that
   // invalidates the old copy exactly when it should and never otherwise.
-  const ASSET_VERSION = '6';
+  const ASSET_VERSION = '7';
 
   // 0f. MUSCLE COUPE — reworked in Blender (B129) from a user-supplied model:
   // all badges and lettering removed; our own grille, lamps, hood and tail;
@@ -198,6 +198,11 @@
 
   // 0g. DELIVERY CYCLE — Blender-exported GLB with corrected Y-up orientation.
   const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?v=' + ASSET_VERSION, () => {}, 'DeliveryCycleAsset');
+
+  // 0g1. MOTORBIKE — built in Blender (B133): commuter bike with the courier
+  // seated on it, baked as static geometry. Wheel_Front/Wheel_Rear spin about
+  // their axle origins. Source: assets/models/motorbike-source.blend.
+  const MotorbikeAsset = makeVehicleAsset('assets/models/motorbike.glb?v=' + ASSET_VERSION, () => {}, 'MotorbikeAsset');
 
   // 0g2. CHAI TAPRI — static roadside tea-stall prop. Origin at ground centre,
   // counter facing +Z (the road, once buildViewpointOrChai's lookAt runs).
@@ -8343,6 +8348,35 @@
         const box = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.28, 0.52), new THREE.MeshLambertMaterial({ color: 0xff9f1c }));
         box.position.set(0, 1.05, 0.68);
         this.mesh.add(box);
+
+      } else if (this.vehicleType === 'motorbike' && MotorbikeAsset.template) {
+        // ====================================================================
+        // MOTORBIKE: built in Blender (B133), seated courier rider baked in.
+        // ====================================================================
+        const bikeModel = MotorbikeAsset.clone();
+        this.mesh.add(bikeModel);
+        bikeModel.traverse((child) => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
+        this._bindLensMaterials(bikeModel);
+        this._collectWheels(bikeModel, /^Wheel_(Front|Rear)/, null);
+        this.trolleyParcels = [];
+
+      } else if (this.vehicleType === 'motorbike') {
+        // Procedural stand-in until MotorbikeAsset loads, then auto-rebuilt.
+        if (MotorbikeAsset.pendingControllers.indexOf(this) === -1) {
+          MotorbikeAsset.pendingControllers.push(this);
+        }
+        const wheelGeom = new THREE.CylinderGeometry(0.31, 0.31, 0.09, 16);
+        wheelGeom.rotateZ(Math.PI / 2);
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+        [[0, 0.31, 0.63], [0, 0.31, -0.63]].forEach(p => {
+          const w = new THREE.Mesh(wheelGeom, wheelMat);
+          w.position.set(...p);
+          this.mesh.add(w);
+          this.wheels.push(w);
+        });
+        const tank = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.25, 1.0), new THREE.MeshLambertMaterial({ color: 0x00d4bf }));
+        tank.position.set(0, 0.8, 0.1);
+        this.mesh.add(tank);
 
       } else if (this.vehicleType === 'musclecoupe' && MuscleCoupeAsset.template) {
         // ====================================================================
