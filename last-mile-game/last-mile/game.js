@@ -181,7 +181,7 @@
   // models each time, most painfully on the Android WebView's cold start.
   // Bump this by hand whenever a file under assets/models/ changes; that
   // invalidates the old copy exactly when it should and never otherwise.
-  const ASSET_VERSION = '6';
+  const ASSET_VERSION = '7';
 
   // 0f. MUSCLE COUPE — reworked in Blender (B129) from a user-supplied model:
   // all badges and lettering removed; our own grille, lamps, hood and tail;
@@ -198,6 +198,11 @@
 
   // 0g. DELIVERY CYCLE — Blender-exported GLB with corrected Y-up orientation.
   const DeliveryCycleAsset = makeVehicleAsset('assets/models/delivery-cycle.glb?v=' + ASSET_VERSION, () => {}, 'DeliveryCycleAsset');
+
+  // 0g1. MOTORBIKE — built in Blender (B133): commuter bike with the courier
+  // seated on it, baked as static geometry. Wheel_Front/Wheel_Rear spin about
+  // their axle origins. Source: assets/models/motorbike-source.blend.
+  const MotorbikeAsset = makeVehicleAsset('assets/models/motorbike.glb?v=' + ASSET_VERSION, () => {}, 'MotorbikeAsset');
 
   // 0g2. CHAI TAPRI — static roadside tea-stall prop. Origin at ground centre,
   // counter facing +Z (the road, once buildViewpointOrChai's lookAt runs).
@@ -616,7 +621,8 @@
       if (this._lastHornTime && now - this._lastHornTime < 0.28) return;
       this._lastHornTime = now;
 
-      if (vehicleType === 'cycle' || vehicleType === 'scooter') {
+      const style = hornStyle(vehicleType);
+      if (style === 'bell') {
         // Bicycle Bell: classic high-pitch twin-chime "ting-ting"
         const ringBell = (t, freq) => {
           const osc = ctx.createOscillator();
@@ -633,6 +639,24 @@
         ringBell(now, 1760);        // A6
         ringBell(now + 0.08, 2093);  // C7
         ringBell(now + 0.18, 1760);  // A6
+      } else if (style === 'beep') {
+        // Small-engine horn (motorbike / three-wheeler): short, bright two-tone "beep-beep".
+        const beep = (t) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(620, t);
+          osc.frequency.setValueAtTime(740, t + 0.05);
+          gain.gain.setValueAtTime(0.0001, t);
+          gain.gain.exponentialRampToValueAtTime(0.16, t + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+          osc.connect(gain);
+          gain.connect(this.masterFilter || ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.13);
+        };
+        beep(now);
+        beep(now + 0.17);
       } else {
         // Automotive Dual-Tone Electric Horn: 392Hz (G4) + 494Hz (B4)
         const osc1 = ctx.createOscillator();
@@ -726,7 +750,7 @@
       this._initAmbience();
       const now = this.ctx.currentTime;
       const speedRatio = Math.min(1.0, Math.abs(speed || 0) / (maxSpeed || 40));
-      const isPedal = vehicleType === 'cycle';
+      const isPedal = isPedalVehicle(vehicleType);
 
       // Engine hum — silent for pedal vehicles
       if (!isPedal) {
@@ -1079,10 +1103,21 @@
     // The kerb is also the vehicles' lateral limit (see getLateralClamp).
     SIDEWALK: { enabled: true, width: 1.7, kerb: 0.12 },
 
+    // Single vehicle registry: physics, menus, pricing and payout all read
+    // from here. `order` is the progression slot. `handling` picks shared
+    // behaviour: 'pedal' (cycle only), 'twoWheeler' (lean, small-vehicle
+    // camera), 'threeWheeler' / 'car' (four-wheel style body roll). Speeds m/s.
     VEHICLES: {
-      musclecoupe: { id: 'musclecoupe', name: 'Muscle Coupe', maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0, wheelRadius: 0.315 },
-      // maxSpeed = end of the ride-time ramp (52 km/h); baseSpeed = start of it (32 km/h). Both m/s.
-      cycle: { id: 'cycle', name: 'Delivery Cycle', maxSpeed: 14.44, baseSpeed: 8.89, rampSeconds: 120, accel: 6.5, drag: 0.55, brake: 14.0, wheelRadius: 0.365 }
+      // maxSpeed = end of the ride-time ramp (52 km/h); baseSpeed = start of it (32 km/h).
+      cycle: { id: 'cycle', order: 1, name: 'Delivery Cycle', short: 'CYCLE', handling: 'pedal', speedLabel: '32–52 km/h',
+        price: 0, payoutMult: 1.0, wheelRadius: 0.365,
+        maxSpeed: 14.44, baseSpeed: 8.89, rampSeconds: 120, accel: 6.5, drag: 0.55, brake: 14.0 },
+      motorbike: { id: 'motorbike', order: 2, name: 'Motorbike', short: 'BIKE', handling: 'twoWheeler', speedLabel: '90 km/h',
+        price: 1500, payoutMult: 1.25, wheelRadius: 0.31,
+        maxSpeed: 25.0, accel: 11.0, drag: 0.65, brake: 20.0 },
+      musclecoupe: { id: 'musclecoupe', order: 4, name: 'Muscle Coupe', short: 'COUPE', handling: 'car', speedLabel: '194 km/h',
+        price: 6000, payoutMult: 2.0, wheelRadius: 0.315, bodyRoll: 0.12,
+        maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0 }
     },
 
     DIFFICULTY_TIERS: {
@@ -1148,6 +1183,17 @@
       ]
     }
   });
+
+  // Vehicle registry helpers. Unknown IDs (e.g. a removed vehicle still named
+  // in an old save) resolve to the cycle, never to undefined.
+  function vehicleSpec(id) { return CONFIG.VEHICLES[id] || CONFIG.VEHICLES.cycle; }
+  function vehicleList() { return Object.values(CONFIG.VEHICLES).sort((a, b) => a.order - b.order); }
+  function isTwoWheeler(id) { const h = vehicleSpec(id).handling; return h === 'pedal' || h === 'twoWheeler'; }
+  function isPedalVehicle(id) { return vehicleSpec(id).handling === 'pedal'; }
+  function hornStyle(id) {
+    const h = vehicleSpec(id).handling;
+    return h === 'pedal' ? 'bell' : (h === 'car' ? 'horn' : 'beep');
+  }
 
   // --------------------------------------------------------------------------
   // 4B. PROCEDURAL GROUND TEXTURES
@@ -8186,11 +8232,11 @@
 
       this.applyVehicleConfig();
       this.buildModel();
-      document.body.classList.toggle('vehicle-cycle', vehicleType === 'cycle' || vehicleType === 'scooter');
+      document.body.classList.toggle('vehicle-cycle', isTwoWheeler(vehicleType));
     }
 
     applyVehicleConfig() {
-      const cfg = CONFIG.VEHICLES[this.vehicleType] || CONFIG.VEHICLES.car;
+      const cfg = vehicleSpec(this.vehicleType);
       this.maxSpeed = cfg.maxSpeed;
       this.accel = cfg.accel;
       this.drag = cfg.drag;
@@ -8202,7 +8248,7 @@
         this.vehicleType = type;
         this.applyVehicleConfig();
         this.buildModel();
-        document.body.classList.toggle('vehicle-cycle', type === 'cycle' || type === 'scooter');
+        document.body.classList.toggle('vehicle-cycle', isTwoWheeler(type));
       }
     }
 
@@ -8302,6 +8348,35 @@
         const box = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.28, 0.52), new THREE.MeshLambertMaterial({ color: 0xff9f1c }));
         box.position.set(0, 1.05, 0.68);
         this.mesh.add(box);
+
+      } else if (this.vehicleType === 'motorbike' && MotorbikeAsset.template) {
+        // ====================================================================
+        // MOTORBIKE: built in Blender (B133), seated courier rider baked in.
+        // ====================================================================
+        const bikeModel = MotorbikeAsset.clone();
+        this.mesh.add(bikeModel);
+        bikeModel.traverse((child) => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
+        this._bindLensMaterials(bikeModel);
+        this._collectWheels(bikeModel, /^Wheel_(Front|Rear)/, null);
+        this.trolleyParcels = [];
+
+      } else if (this.vehicleType === 'motorbike') {
+        // Procedural stand-in until MotorbikeAsset loads, then auto-rebuilt.
+        if (MotorbikeAsset.pendingControllers.indexOf(this) === -1) {
+          MotorbikeAsset.pendingControllers.push(this);
+        }
+        const wheelGeom = new THREE.CylinderGeometry(0.31, 0.31, 0.09, 16);
+        wheelGeom.rotateZ(Math.PI / 2);
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+        [[0, 0.31, 0.63], [0, 0.31, -0.63]].forEach(p => {
+          const w = new THREE.Mesh(wheelGeom, wheelMat);
+          w.position.set(...p);
+          this.mesh.add(w);
+          this.wheels.push(w);
+        });
+        const tank = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.25, 1.0), new THREE.MeshLambertMaterial({ color: 0x00d4bf }));
+        tank.position.set(0, 0.8, 0.1);
+        this.mesh.add(tank);
 
       } else if (this.vehicleType === 'musclecoupe' && MuscleCoupeAsset.template) {
         // ====================================================================
@@ -8515,14 +8590,14 @@
 
       let climateGrip = CONFIG.ROAD_SURFACE.gripMult;
       if (isRain) {
-        if (this.vehicleType === 'cycle') climateGrip *= 0.62;
+        if (isTwoWheeler(this.vehicleType)) climateGrip *= 0.62;
         else climateGrip *= 0.68;
       }
 
-      const windDrag = isWind ? (this.vehicleType === 'cycle' ? 1.8 : 1.4) : 0.0;
+      const windDrag = isWind ? (isTwoWheeler(this.vehicleType) ? 1.8 : 1.4) : 0.0;
 
       // 1. Throttle / Acceleration, Service Brakes & Emergency Handbrake
-      const isBicycle = (this.vehicleType === 'cycle' || this.vehicleType === 'scooter');
+      const isBicycle = isTwoWheeler(this.vehicleType);
 
       // Health degradation penalty on top speed & engine performance
       const healthFactor = (this.health >= 50) ? 1.0 : Math.max(0.25, 0.4 + 0.6 * (this.health / 50));
@@ -8614,7 +8689,7 @@
             // Reversing — pressing forward throttle acts as brake to bring vehicle to a full stop
             this.speed += (this.brake || 30.0) * dt * 2.4;
             if (this.speed >= -0.08) this.speed = 0;
-          } else if (this.vehicleType === 'cycle') {
+          } else if (isPedalVehicle(this.vehicleType)) {
             try {
               this.cycleRideTime += dt;
               const cycleCfg = CONFIG.VEHICLES.cycle;
@@ -8642,7 +8717,7 @@
         } else {
           // Natural coasting / drag; clear hold mode so fresh press can reverse
           this._downBrakingFromForward = false;
-          const rollingDrag = (this.vehicleType === 'cycle') ? this.drag * 0.30 : this.drag * 0.85;
+          const rollingDrag = isPedalVehicle(this.vehicleType) ? this.drag * 0.30 : this.drag * 0.85;
           this.speed *= Math.exp(-rollingDrag * dt);
           if (Math.abs(this.speed) < 0.08) this.speed = 0;
         }
@@ -8881,7 +8956,7 @@
           dynamicRoll = trueRoadRoll * 0.12;
         }
       } else {
-        const centrifugalBodyRoll = this.steerAngle * (this.speed / (this.maxSpeed || 40)) * 0.12;
+        const centrifugalBodyRoll = this.steerAngle * (this.speed / (this.maxSpeed || 40)) * (vehicleSpec(this.vehicleType).bodyRoll || 0.12);
         dynamicRoll = trueRoadRoll + centrifugalBodyRoll;
       }
 
@@ -10160,7 +10235,7 @@
       bindTapButton('touch-btn-vehicle', () => {
         // Cycle to the next unlocked vehicle. On mobile the dock's VEHICLE
         // panel is hidden, so this is the only in-drive way to switch.
-        const order = ['cycle', 'musclecoupe'];
+        const order = vehicleList().map((v) => v.id);
         const unlocked = order.filter(id => !Career || Career.isUnlocked('vehicles', id));
         if (unlocked.length < 2) {
           this.addNotification('🔒 UNLOCK MORE VEHICLES IN THE HUB', 'warning', 2500);
@@ -10173,7 +10248,7 @@
         this.vehicle.setVehicleType(nextId);
         this._refreshMobileToolsDrawer();
         sound.playTone(800, 'sine', 0.1);
-        this.showScorePopup(0, `VEHICLE: ${nextId === 'cycle' ? 'CYCLE' : 'MUSCLE COUPE'}`);
+        this.showScorePopup(0, `VEHICLE: ${vehicleSpec(nextId).name.toUpperCase()}`);
       });
       bindTapButton('touch-btn-autopilot', () => this.toggleAutodrive());
       bindTapButton('touch-btn-cruise', () => this.toggleCruise());
@@ -10337,7 +10412,7 @@
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[this.selectedDifficulty];
       const timeBonus = Math.max(0, Math.round(this.orderTimer * 1.8));
-      const earnedBonus = Math.round((target.order.reward + timeBonus) * diffCfg.payoutMult * (1 + this.streakCount * 0.2) * (missed ? 0.5 : 1));
+      const earnedBonus = this._deliveryPayout(target.order.reward, timeBonus, diffCfg.payoutMult, this.streakCount, missed);
       this.earnings += earnedBonus;
 
       // Bank it into the career wallet the instant it is earned, not at the
@@ -10362,7 +10437,7 @@
         ShiplypAds.happyTime();
       }
       this.spawnConfetti(target.pos, 36);
-      this._showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak: this.streakCount, orderId: target.order?.id, orderName: target.order?.name || 'Delivery', base: target.order?.reward || 0, diffMult: diffCfg.payoutMult, missed });
+      this._showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak: this.streakCount, orderId: target.order?.id, orderName: target.order?.name || 'Delivery', base: target.order?.reward || 0, diffMult: diffCfg.payoutMult, vehId: this.selectedVehicle, missed });
       this.addNotification(`${UI.icon('check')} DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
 
       // Rank-up is the only career event loud enough to interrupt a shift.
@@ -10699,6 +10774,16 @@
         ctx.strokeRect(x(14),y(18),x(50),y(20));
         ctx.beginPath();ctx.moveTo(x(14),y(18)+y(20)*0.28);ctx.lineTo(x(14)+x(50),y(18)+y(20)*0.28);ctx.stroke();
         ctx.beginPath();ctx.arc(bbx,bby,x(4),0,Math.PI*2);ctx.stroke();
+      } else if (vehId === 'motorbike') {
+        ctx.strokeStyle = '#00d4bf';
+        const rw=[46,58], fw=[166,58], r=x(17);
+        for (const [cx, cy] of [rw, fw]) { ctx.beginPath(); ctx.arc(x(cx), y(cy), r, 0, Math.PI*2); ctx.stroke(); }
+        const P = (pts) => { ctx.beginPath(); pts.forEach(([px,py],i) => i ? ctx.lineTo(x(px),y(py)) : ctx.moveTo(x(px),y(py))); ctx.stroke(); };
+        P([[46,58],[92,50],[128,52],[146,24],[166,58]]);          // swingarm, engine, fork
+        P([[70,30],[128,28],[140,20]]);                             // seat to tank to head
+        P([[146,24],[150,14],[160,14]]);                            // bars
+        ctx.strokeRect(x(22), y(10), x(38), y(18));                // delivery box
+        ctx.beginPath(); ctx.arc(x(154), y(26), x(4), 0, Math.PI*2); ctx.stroke(); // headlight
       } else {
         // musclecoupe
         ctx.strokeStyle = '#ff9f1c';
@@ -10717,8 +10802,15 @@
       ctx.restore();
     }
 
+    // Delivery payout: order reward plus time bonus, scaled by difficulty,
+    // streak and the vehicle's pay multiplier (bigger vehicles take bigger orders).
+    _deliveryPayout(reward, timeBonus, diffMult, streak, missed) {
+      const vehMult = vehicleSpec(this.selectedVehicle).payoutMult;
+      return Math.round((reward + timeBonus) * diffMult * (1 + streak * 0.2) * vehMult * (missed ? 0.5 : 1));
+    }
+
     // ── Post-delivery result banner with tachometer arcs ─────────────────
-    _showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak, orderName, base, diffMult, missed }) {
+    _showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak, orderName, base, diffMult, vehId, missed }) {
       if (!this.scorePopupContainer) return;
       const timeFill  = Math.max(0.04, Math.min(1, timeLeftRatio));
       const accFill   = stars === 3 ? 0.9 : (stars === 2 ? 0.65 : 0.3);
@@ -10750,7 +10842,7 @@
           ${arc(accFill, '#ffe600', 'Accuracy')}
           ${arc(strFill, strColor, `${streak}× Streak`)}
         </div>
-        <div style="font-size:10px;font-family:var(--font-telemetry,'Chakra Petch',monospace);color:rgba(232,238,242,0.65);letter-spacing:.08em">₹${(base||0)} base • ×${(diffMult||1).toFixed(1)} diff • +${streak > 1 ? Math.round((streak-1)*20) : 0}% streak${missed ? ' • −50% missed' : ''}</div>
+        <div style="font-size:10px;font-family:var(--font-telemetry,'Chakra Petch',monospace);color:rgba(232,238,242,0.65);letter-spacing:.08em">₹${(base||0)} base • ×${(diffMult||1).toFixed(1)} diff • +${streak > 1 ? Math.round((streak-1)*20) : 0}% streak • ×${vehicleSpec(vehId).payoutMult} ${vehicleSpec(vehId).short.toUpperCase()}${missed ? ' • −50% missed' : ''}</div>
       `;
       this.scorePopupContainer.appendChild(banner);
       this._placeScorePopups();
@@ -10764,11 +10856,12 @@
 
     // ── Unlock confirmation sheet ─────────────────────────────────────────
     _showUnlockSheet(vehId) {
-      const VEH_META_SHEET = {
-        musclecoupe: { name: 'Muscle Coupe', stat: 'Gasoline • Top speed class', price: 6000, topSpeedKmh: 194, accel: 19, brake: 30, tint: '#ffe600' },
+      const spec = CONFIG.VEHICLES[vehId];
+      if (!spec || !spec.price) return;
+      const meta = {
+        name: spec.name, price: spec.price, stat: `${spec.speedLabel} • ×${spec.payoutMult} pay per drop`,
+        topSpeedKmh: Math.round(spec.maxSpeed * 3.6), accel: spec.accel, brake: spec.brake
       };
-      const meta = VEH_META_SHEET[vehId];
-      if (!meta) return;
       const wallet = Career ? Career.wallet() : 0;
       const canAfford = wallet >= meta.price;
       const after = wallet - meta.price;
@@ -10795,7 +10888,7 @@
           </div>
           <div style="display:flex;border:2px solid #000;border-radius:10px;overflow:hidden;margin-bottom:14px;background:#151c2a">
             <div style="flex:1;padding:10px 12px;border-right:2px solid #000"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Top speed</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">${meta.topSpeedKmh} km/h</div></div>
-            <div style="flex:1;padding:10px 12px;border-right:2px solid #000"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Accel</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">${meta.accel} m/s²</div></div>
+            <div style="flex:1;padding:10px 12px;border-right:2px solid #000"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Pay</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">×${spec.payoutMult}</div></div>
             <div style="flex:1;padding:10px 12px"><div style="font-size:9px;letter-spacing:.12em;color:rgba(232,238,242,0.5);font-family:var(--font-telemetry,'Chakra Petch',monospace);text-transform:uppercase">Brake</div><div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:15px;font-weight:800">${meta.brake} m/s²</div></div>
           </div>
           <div style="display:flex;justify-content:space-between;padding:10px 12px;background:rgba(255,255,255,0.06);border:1.5px solid #000;border-radius:8px;margin-bottom:16px;font-size:11px">
@@ -11235,11 +11328,11 @@
         if (isSnow) {
           pill.className = 'climate-pill wind';
           if (icon) icon.innerHTML = UI.icon('cloud');
-          text.textContent = `BLIZZARD SNOW • SLIPPERY GRIP (${this.vehicle && this.vehicle.vehicleType === 'cycle' ? '45%' : '60%'})`;
+          text.textContent = `BLIZZARD SNOW • SLIPPERY GRIP (${this.vehicle && isTwoWheeler(this.vehicle.vehicleType) ? '45%' : '60%'})`;
         } else if (isRain) {
           pill.className = 'climate-pill rain';
           if (icon) icon.innerHTML = UI.icon('cloudRain');
-          text.textContent = `MONSOON RAIN • SLIPPERY GRIP (${this.vehicle && this.vehicle.vehicleType === 'cycle' ? '48%' : '68%'})`;
+          text.textContent = `MONSOON RAIN • SLIPPERY GRIP (${this.vehicle && isTwoWheeler(this.vehicle.vehicleType) ? '48%' : '68%'})`;
         } else if (isWind) {
           pill.className = 'climate-pill wind';
           if (icon) icon.innerHTML = UI.icon('wind');
@@ -11356,7 +11449,7 @@
       const isBlizzard = this.selectedWeather === 'blizzard';
       setText('touch-btn-weather-icon', isBlizzard ? '❄️' : '☀️');
       setText('touch-btn-weather-label', `WEATHER: ${isBlizzard ? 'BLIZZARD' : 'CLEAR'}`);
-      const vName = this.selectedVehicle === 'cycle' ? 'CYCLE' : 'MUSCLE COUPE';
+      const vName = vehicleSpec(this.selectedVehicle).name.toUpperCase();
       setText('touch-btn-vehicle-label', `VEHICLE: ${vName}`);
     }
 
@@ -11750,7 +11843,7 @@
       this.updateWantedHUD();
       window.ShiplypPolice?.reset();
       const gearEl = document.getElementById('telemetry-gear');
-      if (gearEl) gearEl.textContent = this.selectedVehicle === 'cycle' ? 'PEDAL' : 'DRIVE';
+      if (gearEl) gearEl.textContent = isPedalVehicle(this.selectedVehicle) ? 'PEDAL' : 'DRIVE';
 
       if (this.savedProgressCheckpoint === null) {
         this.savedProgressCheckpoint = {
@@ -11776,7 +11869,7 @@
         this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
         this.vehicle.heading = this.vehicle.velocityHeading;
         this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = (this.vehicle.vehicleType === 'cycle') ? 8.89 : 10.0;
+        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 8.89 : 10.0;
         this.updateGPSNavigation();
       }
 
@@ -11793,7 +11886,7 @@
         this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
         this.vehicle.heading = this.vehicle.velocityHeading;
         this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = (this.vehicle.vehicleType === 'cycle') ? 8.89 : 8.0;
+        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 8.89 : 8.0;
         this.updateGPSNavigation();
         this._showOnboardingHint('drive');
       }
@@ -11811,18 +11904,20 @@
 
     reconcileSelectedVehicle() {
       const fallback = 'cycle';
+      // A removed vehicle can still be "owned" in an old save; never select an ID the registry lacks.
+      if (!CONFIG.VEHICLES[this.selectedVehicle]) this.selectedVehicle = fallback;
       if (typeof Career !== 'undefined' && Career && typeof Career.isUnlocked === 'function') {
         if (!Career.isUnlocked('vehicles', this.selectedVehicle)) {
           const validVeh = (typeof Career.selectedVehicle === 'function' ? Career.selectedVehicle() : null)
             || (typeof Career.defaultVehicle === 'function' ? Career.defaultVehicle() : null)
             || fallback;
-          this.selectedVehicle = validVeh;
+          this.selectedVehicle = CONFIG.VEHICLES[validVeh] ? validVeh : fallback;
         }
         if (typeof Career.setSelectedVehicle === 'function') {
           Career.setSelectedVehicle(this.selectedVehicle);
         }
       } else {
-        if (this.selectedVehicle !== 'cycle' && this.selectedVehicle !== 'musclecoupe') {
+        if (!CONFIG.VEHICLES[this.selectedVehicle]) {
           this.selectedVehicle = fallback;
         }
       }
@@ -11866,14 +11961,7 @@
       // undisturbed, so a picker can come back later without rebuilding
       // this from scratch if a second world is ever actually built out.
 
-      const VEH_META = {
-        musclecoupe: { price: 6000, topSpeedKmh: 194, accel: 19, brake: 30, tint: '#ff9f1c' },
-        cycle:       { price: 0,     topSpeedKmh: 52,  accel: 4,  brake: 8,  tint: '#00d4bf' },
-      };
-      const vehList = [
-        { id: 'cycle',       name: 'Delivery Cycle', stat: '32–52 km/h • Pedal Power' },
-        { id: 'musclecoupe', name: 'Muscle Coupe',   stat: '194 km/h • Gasoline'  },
-      ];
+      const vehList = vehicleList();
 
       const styleList = [
         { id: 'crisp',     name: 'Crisp',     stat: 'Sharp Outlines • Lighter',    gif: 'assets/style-previews/crisp.gif' },
@@ -11947,7 +12035,7 @@
               <span class="hub-section-label">SELECT VEHICLE</span>
               <div class="hub-vehicle-grid">
                 ${vehList.map(v => {
-                  const meta = VEH_META[v.id] || {};
+                  const meta = v;
                   const unlocked = Career ? Career.isUnlocked('vehicles', v.id) : true;
                   const wallet = Career ? Career.wallet() : 0;
                   const canAfford = wallet >= (meta.price || 0);
@@ -11957,7 +12045,7 @@
                   return `
                     <button class="vehicle-card-btn ${isSelected ? 'active-veh' : ''} ${unlocked ? '' : 'veh-locked'}" data-veh="${v.id}" data-unlocked="${unlocked}">
                       <span class="vehicle-card-title">${v.name}</span>
-                      <span class="vehicle-card-stat">${v.stat}</span>
+                      <span class="vehicle-card-stat">${v.speedLabel} • ${v.payoutMult === 1 ? 'Base pay' : '×' + v.payoutMult + ' pay'}</span>
                       ${!unlocked ? `<span class="veh-lock-cost">₹${(meta.price||0).toLocaleString('en-IN')}</span><span class="veh-lock-cta">${ctaLabel}</span>` : ''}
                     </button>
                   `;
@@ -12114,16 +12202,16 @@
           };
         });
       } else if (type === 'vehicle') {
-        const isMuscleUnlocked = Career ? Career.isUnlocked('vehicles', 'musclecoupe') : true;
-        const isCycleUnlocked = Career ? Career.isUnlocked('vehicles', 'cycle') : true;
+        const btns = vehicleList().map((v) => {
+          const owned = Career ? Career.isUnlocked('vehicles', v.id) : true;
+          const title = owned ? v.name : `Locked (₹${v.price.toLocaleString('en-IN')} in Career)`;
+          return `<button class="dock-sq-btn ${this.selectedVehicle === v.id ? 'active-sq' : ''} ${owned ? '' : 'veh-dock-locked'}" data-v="${v.id}" title="${title}">${owned ? '' : '🔒 '}${v.short}</button>`;
+        }).join('');
         el.innerHTML = `
           <div class="dock-panel-grid">
             <div class="dock-panel-col">
               <span class="dock-panel-label">VEHICLE</span>
-              <div class="dock-btn-row">
-                <button class="dock-sq-btn ${this.selectedVehicle === 'musclecoupe' ? 'active-sq' : ''} ${!isMuscleUnlocked ? 'veh-dock-locked' : ''}" data-v="musclecoupe" title="${!isMuscleUnlocked ? 'Locked (Requires ₹6,000 in Career)' : 'Muscle Coupe'}">${!isMuscleUnlocked ? '🔒 ' : ''}MUSCLE</button>
-                <button class="dock-sq-btn ${this.selectedVehicle === 'cycle' ? 'active-sq' : ''} ${!isCycleUnlocked ? 'veh-dock-locked' : ''}" data-v="cycle" title="${!isCycleUnlocked ? 'Locked' : 'Delivery Cycle'}">${!isCycleUnlocked ? '🔒 ' : ''}CYCLE</button>
-              </div>
+              <div class="dock-btn-row">${btns}</div>
             </div>
           </div>
         `;
@@ -12472,7 +12560,7 @@
         this.camera.lookAt(this.camLookTarget);
       } else {
         // Slow Roads Default Chase Cam — intimate framing (~7.8m back for cars, ~5.6m back for cycle)
-        const isCycle = (this.vehicle && this.vehicle.vehicleType === 'cycle');
+        const isCycle = !!(this.vehicle && isTwoWheeler(this.vehicle.vehicleType));
         const camDist = isCycle ? -5.6 : -7.8;
         const camHeight = isCycle ? 2.1 : 2.6;
         const targetCamPos = carPos.clone()
@@ -13024,7 +13112,7 @@
 
         const gearEl = document.getElementById('telemetry-gear');
         if (gearEl) {
-          if (this.selectedVehicle === 'cycle') {
+          if (isPedalVehicle(this.selectedVehicle)) {
             gearEl.textContent = speedKmh > 2 ? 'PEDAL' : 'CRUISE';
           } else {
             gearEl.textContent = this.vehicle.speed < -0.1 ? 'REVERSE' : (speedKmh < 0.5 ? 'PARK' : 'DRIVE');

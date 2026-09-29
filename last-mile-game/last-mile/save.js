@@ -128,7 +128,7 @@
       selectedVehicle: 'cycle', // Active vehicle in fleet (defaults to free starter cycle)
 
       unlocks: {
-        vehicles: ['cycle'],  // musclecoupe must be purchased (see purchase('vehicles','musclecoupe',6000))
+        vehicles: ['cycle'],  // other vehicles are bought with Career.purchase('vehicles', id, price); prices live in game.js CONFIG.VEHICLES
         cities: ['mumbai']
       }
     };

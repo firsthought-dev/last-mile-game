@@ -21,8 +21,8 @@ kanban-plugin: board
 	Tracked privately.
 
 ## 🔨 In Progress
-- [ ] 🔴 **Vehicle roster: Cycle → Motorbike → Cargo three-wheeler → Car** · @{2026-09-27}
-	New motorbike and three-wheeler, and the car reworked into an original design with no badges. Waiting on reference images. [[Projects/Last-Mile Game]]
+- [ ] 🔴 **Vehicle roster: Cargo three-wheeler (Rickshaw)** · @{2026-09-27}
+	Cycle, Motorbike and the reworked Muscle Coupe are done, each with its own pay rate; the cargo three-wheeler is still pending its own model. [[Projects/Last-Mile Game]]
 - [ ] 🔴 **Launch blockers**: bundle third-party libraries locally, web portal setup, keep the first download small · @{2026-09-23}
 
 - [ ] 🟡 **Prop upgrade pass: tapri ✅ → houses ✅ → repair shop ✅ → lamps/poles ✅ → fences + guardrails ✅ → signs ✅** · @{2026-09-24}
@@ -31,6 +31,8 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B133 Motorbike joins the roster; each vehicle pays a different rate · @{2026-09-29}
+	[[2026-09-29 - B133 Motorbike and Vehicle Pay Rates]]
 - [x] **Wanted stars, siren and settle-up dialogue (B130), missed-delivery penalty (B131), clearer signals and crossings (B132)** · @{2026-09-28}
 	0 to 5 wanted stars; edge glow and siren; settle with the police by tea money, an excuse duel with a way out, or speeding off (money only). Delivery clock ticks in the last 15 seconds; missed deliveries cost a small fine and half pay. Bigger signals, zebra crossings visible from further away, about 15% more crossings. [[2026-09-28 - B130 Wanted Stars, Siren and Settle-Up Dialogue]] [[2026-09-28 - B132 Clearer Traffic Signals and Zebra Crossings]]
 - [x] B129 Muscle Coupe reworked (badges removed; our own front, rear, hood, wheels and interior); plain cycle box; first-person cockpit fixed · @{2026-09-28}
