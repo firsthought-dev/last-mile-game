@@ -34,7 +34,6 @@
     offence: {
       redLight: 'Jumped a red light',
       hitPedestrian: 'Hit a pedestrian',
-      crash: 'Crashed into the roadside barrier',
       speeding: 'Speeding over the {limit} km/h limit',
       speedOff: 'Sped off from the police',
       honestCop: 'Tried to bribe an honest officer'
@@ -211,12 +210,10 @@
   // --------------------------------------------------------------------------
   const TUNE = {
     maxStars: 5,
-    offenceStars: { redLight: 1, hitPedestrian: 2, crash: 1, speeding: 1, speedOff: 1, honestCop: 1 },
+    offenceStars: { redLight: 1, hitPedestrian: 2, speeding: 1, speedOff: 1, honestCop: 1 },
     repeatWindow: 60,          // s: an offence while an earlier one is still inside this window adds +1 extra (a +1 offence becomes +2)
     postedLimitKmh: 75,        // the posted limit on the speed-camera gantries
     speedingHold: 6,           // s continuously over the limit before it counts
-    crashMinSpeed: 8,          // m/s at barrier contact to count as a crash
-    crashDebounce: 10,
     redLightMemory: 300,       // s: "N red lights in five minutes"
     decayAfter: 30,            // s of clean driving before the first star drops
     decayEvery: 30,            // s per further star
@@ -272,7 +269,7 @@
     driveStart: 0,
     bribes: parseInt(LS.get('shiplyp_police_bribes', '0'), 10) || 0,
     paused: false,
-    speedingT: 0, speedingFlagged: false, lastCrash: -99,
+    speedingT: 0, speedingFlagged: false,
     cooldown: 0,
     signalSides: new Map(),
     lastGain: -99,
@@ -592,22 +589,6 @@
     }
   }
 
-  // Crashing into the roadside barrier: the only solid object the driving
-  // model collides with (props, houses and trees are not solid, and there
-  // are no parked vehicles yet). Contact = pinned at the lateral clamp.
-  function checkBarrierCrash(game) {
-    const w = game.world, v = game.vehicle;
-    if (!w.getLateralClamp || typeof v.lateralOffset !== 'number' || typeof v.splineProgress !== 'number') return;
-    const lat = v.lateralOffset, side = lat >= 0 ? 1 : -1;
-    const bike = v.vehicleType === 'cycle' || v.isBicycle;
-    const clamp = w.getLateralClamp(v.splineProgress, side) + (bike ? 0.65 : 0);
-    const touching = Math.abs(lat) >= clamp - 0.05;
-    if (touching && !S.wasTouching && Math.abs(v.speed || 0) > TUNE.crashMinSpeed && S.time - S.lastCrash > TUNE.crashDebounce) {
-      S.lastCrash = S.time;
-      reportOffence('crash');
-    }
-    S.wasTouching = touching;
-  }
 
   // Order-clock tick: one soft blip per whole second, only in an order's last
   // 15 s, rising gently in pitch and volume, twice a second in the final 8 s. update() only runs while playing and unpaused, so menus, ad pauses
@@ -1058,7 +1039,8 @@
     S.cooldown = Math.max(0, S.cooldown - dt);
     checkRedLights(game);
     checkSpeeding(game, dt);
-    checkBarrierCrash(game);
+    // No barrier/curb offence: scraping the road edge is not a police matter
+    // (it fired on every curb scrape and stacked to 5★ in seconds).
     orderClockTick(game);
 
     // Decay with clean, moving driving.
@@ -1111,7 +1093,7 @@
     if (dlg) { dlg.wrap.remove(); dlg = null; }
     S.paused = false;
     S.stars = 0; S.offences = []; S.cleanTime = 0; S.cooldown = 0; S.signalSides.clear();
-    S.speedingT = 0; S.speedingFlagged = false; S.wasTouching = false;
+    S.speedingT = 0; S.speedingFlagged = false;
     S.driveStart = S.time;
     S.lastOrderTimer = null;
     S.pleaUsed = false;
