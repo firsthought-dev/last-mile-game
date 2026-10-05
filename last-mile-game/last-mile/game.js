@@ -800,6 +800,9 @@
   const CONFIG = (typeof window !== 'undefined' ? (window.CONFIG = window.CONFIG || {}) : {});
   Object.assign(CONFIG, {
     ROAD_WIDTH: 7.4,
+    // Parcel toss reach (B136): ground-plane metres, and how far past abeam a drop still counts.
+    TOSS_RANGE: 35,
+    TOSS_BEHIND_SLACK: 3,
     // Paved verge width either side of the painted road edge. The road
     // ribbon's outer edge therefore sits at ROAD_WIDTH*0.5 + this. The
     // terrain mesh MUST carry a lateral slice at exactly that distance
@@ -5728,12 +5731,14 @@
 
     spawnCurveSign(pt, normal, tangent, curvature) {
       if (Math.abs(curvature) <= 0.015) return;
-      const outerSide = curvature > 0 ? 1 : -1;
-      const lat = outerSide * this._furnitureLat('sign');
+      // curvature > 0 = the road turns toward +normal (the rider's right). The
+      // sign stands on the OUTSIDE of the bend (B137), so opposite that side,
+      // and its chevrons point the way the road turns.
+      const turnDir = curvature > 0 ? 1 : -1;
+      const lat = -turnDir * this._furnitureLat('sign');
       const pos = pt.clone().addScaledVector(normal, lat);
       pos.y = this.surfaceHeightNear(pos, pt, lat);
-      // Chevrons point into the bend as the approaching rider sees them.
-      const g = this.buildChevronSign(outerSide);
+      const g = this.buildChevronSign(turnDir);
       g.position.copy(pos);
       const look = pt.clone().addScaledVector(tangent, -6.0); look.y = pos.y;
       g.lookAt(look);
@@ -10282,22 +10287,34 @@
     // difficulty's tossRadius of the current target's porch ring completes
     // the delivery directly (SPACE), instead of needing a physics toss.
 
+    // Nearest undelivered drop the vehicle can actually reach with a toss: in
+    // front (or just abeam) of it and within CONFIG.TOSS_RANGE metres on the
+    // ground plane. Shared by the toss and the DROP prompt so the two agree.
+    _findTossTarget(carPos, carForward) {
+      if (!this.world) return null;
+      let best = null;
+      let minD = CONFIG.TOSS_RANGE;
+      this.world.deliveryTargets.forEach(t => {
+        if (t.delivered) return;
+        const dx = t.pos.x - carPos.x, dz = t.pos.z - carPos.z;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        const ahead = dx * carForward.x + dz * carForward.z;
+        if (ahead < -CONFIG.TOSS_BEHIND_SLACK) return; // already passed
+        if (d < minD) { minD = d; best = t; }
+      });
+      return best;
+    }
+
     tossParcel3D() {
       if (!this.vehicle || !this.world) return;
       const carPos = this.vehicle.mesh.position.clone();
       const carForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
       const carRight = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.vehicle.mesh.quaternion).normalize();
 
-      // Find nearest delivery target within generous approach range (up to 65m)
-      let nearestTarget = null;
-      let minD = 65.0;
-      this.world.deliveryTargets.forEach(t => {
-        const d = carPos.distanceTo(t.pos);
-        if (d < minD && !t.delivered) {
-          minD = d;
-          nearestTarget = t;
-        }
-      });
+      // Only a drop still ahead and in toss range can be hit (B136): the
+      // parcel used to home onto any undelivered target within 65 m, even one
+      // already passed, so a throw into nowhere still delivered.
+      const nearestTarget = this._findTossTarget(carPos, carForward);
 
       // Differentiated 3D Cargo Models based on active order
       const parcelGroup = new THREE.Group();
@@ -12691,7 +12708,7 @@
         if (sideBadgeEl) sideBadgeEl.textContent = `${aheadText} [${sideText}]`;
 
         // Approach state within 75m
-        const isNearDrop = (distMeters <= 75 && isAhead);
+        const isNearDrop = !!this._findTossTarget(carPos, playerForward);
         const touchDropBtn = document.getElementById('touch-btn-drop');
 
         if (isNearDrop) {

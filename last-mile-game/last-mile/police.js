@@ -29,6 +29,11 @@
     context: { settle: 'settling up', caught: 'you are caught' },
     settleTag: 'SETTLE',
     settleKey: '[B]',
+    caughtCaption: '5★ = CAUGHT',
+    // One-time explainer the first time a save earns a star.
+    firstStar: 'POLICE WATCH: running red lights, hitting pedestrians and speeding over {limit} km/h earn stars. At 5★ you are caught. {settle} to settle up early.',
+    firstStarSettleTouch: 'Tap the stars',
+    firstStarSettleKey: 'Press B or tap the stars',
     settleAria: 'Wanted level {stars} stars. Settle with the police',
     nameTag: '{rank} {name} · {context}',
     offence: {
@@ -38,6 +43,15 @@
       speedOff: 'Sped off from the police',
       honestCop: 'Tried to bribe an honest officer'
     },
+    // Why the officer stopped you: the distinct recent offences, plain words.
+    why: {
+      redLight: 'running a red light',
+      hitPedestrian: 'hitting a pedestrian',
+      speeding: 'speeding',
+      speedOff: 'speeding off from the police',
+      honestCop: 'trying to bribe an honest officer'
+    },
+    whyStopped: 'Why you are here: {list}. At 5★ you are caught.',
     starGained: 'WANTED {stars}★ · {reason}',
     starsCleared: 'Wanted level cleared',
     // Used instead of the star pool when 2+ red lights were run in 5 minutes.
@@ -292,6 +306,8 @@
   body.touch-controls-active #police-wanted .pw-key{display:none}
   #police-wanted:hover .pw-settle,#police-wanted:focus-visible .pw-settle{background:#fff}
   #police-wanted .pw-label{font-size:10px;font-weight:800;letter-spacing:2px;color:#ff5a7a}
+  #police-wanted .pw-mid{display:flex;flex-direction:column;align-items:center;gap:1px}
+  #police-wanted .pw-cap{font-size:8px;font-weight:800;letter-spacing:1px;line-height:1;color:rgba(255,255,255,.6);white-space:nowrap}
   #police-wanted .pw-stars{display:flex;gap:2px}
   #police-wanted .pw-star{font-size:17px;line-height:1;color:rgba(255,255,255,.22);transition:color .2s,transform .2s}
   #police-wanted .pw-star.lit{color:#ffd23f;text-shadow:1px 1px 0 #000}
@@ -316,6 +332,7 @@
   .pd-tag{display:inline-block;background:#1f5fbf;color:#fff;font-weight:800;font-size:12px;letter-spacing:.3px;padding:3px 10px;border-radius:999px;border:2px solid #412402}
   .pd-stars{margin-left:6px;color:#b8860b;font-size:13px;letter-spacing:1px;white-space:nowrap}
   .pd-line{margin:8px 0 0;font-size:16px;line-height:1.35;font-weight:600}
+  .pd-why{margin:6px 0 0;font-size:12px;line-height:1.3;font-weight:700;color:#8a4b00}
   .pd-line.sub{font-style:italic;font-weight:500;opacity:.85;font-size:15px;margin-top:4px}
   .pd-choices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
   .pd-btn{min-height:56px;border-radius:10px;border:3px solid #412402;background:#fff7e8;color:#412402;font-weight:800;font-size:15px;
@@ -384,7 +401,7 @@
     el.hud.tabIndex = -1;
     el.hud.id = 'police-wanted';
     el.hud.setAttribute('aria-live', 'polite');
-    el.hud.innerHTML = `<span class="pw-label">${esc(STRINGS.hudLabel)}</span><span class="pw-stars">${'<span class="pw-star">★</span>'.repeat(TUNE.maxStars)}</span><span class="pw-settle">${esc(STRINGS.settleTag)}<span class="pw-key"> ${esc(STRINGS.settleKey)}</span></span>`;
+    el.hud.innerHTML = `<span class="pw-label">${esc(STRINGS.hudLabel)}</span><span class="pw-mid"><span class="pw-stars">${'<span class="pw-star">★</span>'.repeat(TUNE.maxStars)}</span><span class="pw-cap">${esc(STRINGS.caughtCaption)}</span></span><span class="pw-settle">${esc(STRINGS.settleTag)}<span class="pw-key"> ${esc(STRINGS.settleKey)}</span></span>`;
     el.hud.addEventListener('click', (e) => { e.stopPropagation(); settle(); });
     ['touchstart', 'pointerdown', 'mousedown'].forEach(ev => el.hud.addEventListener(ev, e => e.stopPropagation()));
     document.body.appendChild(el.hud);
@@ -526,9 +543,21 @@
       const g = S.game;
       if (reason && g && typeof g.addNotification === 'function') {
         g.addNotification(esc(fmt(STRINGS.starGained, { stars: S.stars, reason })), 'warning', 3500);
+        explainFirstStar(g);
       }
     }
     renderHUD(S.stars !== prev);
+  }
+
+  // First star ever in this save: say what earns stars and what 5★ means.
+  // The 'seen' flag lives in the career save (ShiplypSave hints).
+  function explainFirstStar(g) {
+    const C = global.ShiplypSave;
+    if (!C || typeof C.hasSeenHint !== 'function' || C.hasSeenHint('policeStars')) return;
+    C.markHintSeen('policeStars');
+    const touch = document.body.classList.contains('touch-controls-active');
+    const settleTxt = touch ? STRINGS.firstStarSettleTouch : STRINGS.firstStarSettleKey;
+    g.addNotification(esc(fmt(STRINGS.firstStar, { limit: TUNE.postedLimitKmh, settle: settleTxt })), 'warning', 10000);
   }
 
   function reportOffence(type) {
@@ -671,6 +700,19 @@
     seq.forEach(([f, d]) => setTimeout(() => snd.playTone(f, 'triangle', 0.22, 0.05), d));
   }
 
+  // Distinct offences from the last few minutes, newest first, in plain words.
+  function whyLine() {
+    const seen = [];
+    for (let i = S.offences.length - 1; i >= 0; i--) {
+      const o = S.offences[i];
+      if (S.time - o.t > TUNE.redLightMemory) break;
+      if (STRINGS.why[o.type] && !seen.includes(o.type)) seen.push(o.type);
+    }
+    if (!seen.length) return '';
+    const list = seen.slice(0, 3).map(t => STRINGS.why[t]).join(', ');
+    return fmt(STRINGS.whyStopped, { list });
+  }
+
   let dlg = null;
   function openEncounter(game, where) {
     const officer = { rank: STRINGS.ranks[Math.min(5, Math.max(1, S.stars))], name: pick(STRINGS.surnames) };
@@ -697,6 +739,7 @@
     const teaSub = w == null ? STRINGS.choices.teaNoWallet
       : (full ? '' : partial ? fmt(STRINGS.choices.teaPartialHint, { cost: money(cost) })
         : fmt(STRINGS.choices.teaNoFunds, { cost: money(cost), wallet: money(w) }));
+    const why = whyLine();
     const tag = fmt(STRINGS.nameTag, { rank: officer.rank, name: officer.name, context: STRINGS.context[where] || where });
 
     document.querySelectorAll('#police-dialog-wrap').forEach(n => n.remove()); // a closing one still fading out
@@ -711,6 +754,7 @@
           <div class="pd-portrait">${portraitSVG(stars)}</div>
           <div class="pd-main">
             <span class="pd-tag">${esc(tag)}</span><span class="pd-stars">${'★'.repeat(stars)}</span>
+            ${why ? `<p class="pd-why">${esc(why)}</p>` : ''}
             <p class="pd-line">${esc(opener)}</p>
             <p class="pd-line sub">${esc(hint)}</p>
           </div>
@@ -735,6 +779,7 @@
     const box = dlg.wrap.querySelector('.pd-box');
     const main = box.querySelector('.pd-line');
     main.textContent = line;
+    box.querySelectorAll('.pd-why').forEach(n => n.remove());
     box.querySelectorAll('.pd-line.sub').forEach(n => n.remove());
     const addLine = (text, where) => {
       const el = document.createElement('p');
@@ -804,6 +849,7 @@
       usedLines: new Set(), usedExcuses: new Set(), phase: 'round', options: [], double: false, offered: false, raf: 0
     };
     const box = dlg.wrap.querySelector('.pd-box');
+    box.querySelectorAll('.pd-why').forEach(n => n.remove());
     const foot = box.querySelector('.pd-foot'); if (foot) foot.remove();
     const panel = box.querySelector('.pd-choices');
     panel.className = 'pd-choices pd-duel';

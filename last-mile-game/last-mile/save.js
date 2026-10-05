@@ -125,6 +125,9 @@
       // distinguishable if a later fail path wants to record one.
       stars: {},
 
+      // One-time explainer/tutorial ids the player has already been shown.
+      hints: {},
+
       selectedVehicle: 'cycle', // Active vehicle in fleet (defaults to free starter cycle)
 
       unlocks: {
@@ -147,6 +150,7 @@
     out.career = Object.assign(base.career, loaded.career || {});
     out.daily = Object.assign(base.daily, loaded.daily || {});
     out.unlocks = Object.assign(base.unlocks, loaded.unlocks || {});
+    out.hints = (loaded.hints && typeof loaded.hints === 'object') ? loaded.hints : {};
     out.stars = (loaded.stars && typeof loaded.stars === 'object') ? loaded.stars : {};
 
     // Numbers arriving as strings or NaN from a corrupted/hand-edited save
@@ -478,6 +482,16 @@
     unlocked(kind) {
       const list = profile.unlocks[kind];
       return Array.isArray(list) ? list.slice() : [];
+    },
+
+    // ---- one-time hints --------------------------------------------------
+    hasSeenHint(id) { return !!(profile.hints && profile.hints[id]); },
+
+    markHintSeen(id) {
+      if (!profile.hints) profile.hints = {};
+      if (profile.hints[id]) return;
+      profile.hints[id] = true;
+      touch();
     },
 
     // ---- unlocks ---------------------------------------------------------
