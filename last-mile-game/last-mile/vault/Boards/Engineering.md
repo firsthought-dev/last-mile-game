@@ -29,6 +29,8 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B140–B143 Spare parcels per shift, barrier hits cost speed, no-assist pay bonus, audio/FPS moved into Settings, shift earnings corrected · @{2026-10-05}
+	[[2026-10-05 - B140-B143 Difficulty, Assist Bonus and HUD Tidy]]
 - [x] Prop upgrade pass: modeled tea stall, three house styles, repair shop, lamps, poles, fences, guardrails and signs · @{2026-10-05}
 	[[Projects/Last-Mile Game]]
 - [x] B133 Motorbike joins the roster; each vehicle pays a different rate · @{2026-09-29}

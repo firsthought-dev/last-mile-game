@@ -803,6 +803,15 @@
     // Parcel toss reach (B136): ground-plane metres, and how far past abeam a drop still counts.
     TOSS_RANGE: 35,
     TOSS_BEHIND_SLACK: 3,
+    // Spare parcels per shift (B140): a throw that can't reach a drop uses
+    // one; missing with none left ends the shift.
+    SPARE_PARCELS: 3,
+    // Barrier hits (B140): a fresh impact keeps this share of speed, and
+    // scraping along the barrier drags off this share per second.
+    BARRIER_HIT_SPEED_KEEP: 0.75,
+    BARRIER_SCRAPE_DRAG: 0.35,
+    // Deliveries made with no assist on at any point during the order (B141).
+    NO_ASSIST_BONUS: 0.10,
     // Paved verge width either side of the painted road edge. The road
     // ribbon's outer edge therefore sits at ROAD_WIDTH*0.5 + this. The
     // terrain mesh MUST carry a lateral slice at exactly that distance
@@ -8883,8 +8892,18 @@
           this.steerAngle *= Math.exp(-6.0 * dt);
         }
 
-        this.speed *= Math.max(0.8, 1.0 - 0.08 * dt);
+        // B140: hitting the barrier costs speed. A fresh impact (not already
+        // scraping, short cooldown) takes a chunk; scraping along drags more.
+        const nowMs = performance.now();
+        if (!this._onBarrier && Math.abs(this.speed) > 4 && nowMs - (this._lastBarrierHitMs || 0) > 600) {
+          this.speed *= CONFIG.BARRIER_HIT_SPEED_KEEP;
+          this._lastBarrierHitMs = nowMs;
+        }
+        this._onBarrier = true;
+        this.speed *= Math.max(0.6, 1.0 - CONFIG.BARRIER_SCRAPE_DRAG * dt);
         if (Math.abs(this.speed) > 4) sound.playBarrierScrape();
+      } else {
+        this._onBarrier = false;
       }
       this.lateralOffset = latDist;
 
@@ -9491,7 +9510,9 @@
       this.activeDockPanel = null;
       this.activeCameraMode = 'chase';
 
-      this.earnings = 280;
+      // B143: per-shift earnings start at zero (was a leftover ₹280 that the
+      // shift summary reported, and its 2x ad paid out, as if earned).
+      this.earnings = 0;
       this.deliveriesMade = 0;
       this.missedCount = 0;
       this.streakCount = 1;
@@ -10011,6 +10032,16 @@
       // Legacy delivery status panel pruned for Slow Roads cruising parity
     }
 
+    // FPS counter is off by default; Settings > Display & Sound turns it on (B142).
+    _fpsCounterOn() {
+      try { return localStorage.getItem('shiplyp_showFps') === '1'; } catch (e) { return false; }
+    }
+
+    _applyFpsCounter() {
+      const pill = document.getElementById('hud-fps-pill');
+      if (pill) pill.hidden = !this._fpsCounterOn();
+    }
+
     refreshStatusPanel() {}
 
     renderStatusPanel() {}
@@ -10392,6 +10423,8 @@
           life: flightTime + 0.4
         });
       } else {
+        // B140: nothing in reach, so this parcel is wasted.
+        this._spendSpareParcel();
         const targetDir = carForward.clone().addScaledVector(carRight, (Math.random() > 0.5 ? 0.6 : -0.6)).normalize();
         this.parcels.push({
           mesh: parcelGroup,
@@ -10410,6 +10443,35 @@
     // walking a car/truck delivery up to the door on foot). Factored out
     // so both paths can't silently drift apart (see BUGFIX_LOG.md
     // Recurring Pattern 1 — duplicated logic that diverges over time).
+    // ── Spare parcels (B140) ──────────────────────────────────────────────
+    // A shift starts with CONFIG.SPARE_PARCELS spares. A throw with no drop
+    // in reach wastes one; a wasted throw with none left ends the shift.
+    _resetSpareParcels() {
+      this.spareParcels = CONFIG.SPARE_PARCELS;
+      this._renderSpareParcels();
+    }
+
+    _renderSpareParcels() {
+      const el = document.getElementById('delivery-spares');
+      if (!el) return;
+      const n = this.spareParcels ?? CONFIG.SPARE_PARCELS;
+      el.innerHTML = `${UI.icon('package', 11)}<span>${n}</span>`;
+      el.classList.toggle('spares-low', n <= 1);
+    }
+
+    _spendSpareParcel() {
+      if (this.spareParcels == null) this.spareParcels = CONFIG.SPARE_PARCELS;
+      if (this.spareParcels <= 0) {
+        this.addNotification(`${UI.icon('package')} OUT OF PARCELS — SHIFT OVER`, 'warning', 4000);
+        setTimeout(() => this.showShiftSummary({ outOfParcels: true }), 900);
+        return;
+      }
+      this.spareParcels--;
+      this._renderSpareParcels();
+      const left = this.spareParcels;
+      this.addNotification(`${UI.icon('package')} MISSED THROW — ${left === 0 ? 'NO SPARE PARCELS LEFT. ONE MORE MISS ENDS THE SHIFT' : `${left} SPARE PARCEL${left === 1 ? '' : 'S'} LEFT`}`, 'warning', 3500);
+    }
+
     fulfillDelivery(target) {
       target.delivered = true;
       target.ring.material.color.setHex(0xff9f1c);
@@ -10429,7 +10491,9 @@
 
       const diffCfg = CONFIG.DIFFICULTY_TIERS[this.selectedDifficulty];
       const timeBonus = Math.max(0, Math.round(this.orderTimer * 1.8));
-      const earnedBonus = this._deliveryPayout(target.order.reward, timeBonus, diffCfg.payoutMult, this.streakCount, missed);
+      // B141: no Auto Steer / Auto Drive at any point during this order.
+      const noAssist = !this._assistUsedThisOrder;
+      const earnedBonus = this._deliveryPayout(target.order.reward, timeBonus, diffCfg.payoutMult, this.streakCount, missed, noAssist);
       this.earnings += earnedBonus;
 
       // Bank it into the career wallet the instant it is earned, not at the
@@ -10448,13 +10512,14 @@
       }
 
       this.orderTimer = this.maxOrderTimer; // Reset clock for next order
+      this._assistUsedThisOrder = !!(this.vehicle && (this.vehicle.isAutodrive || this.vehicle.isCruise));
 
       sound.playCombo();
       if (stars >= 3 && typeof ShiplypAds !== 'undefined' && ShiplypAds) {
         ShiplypAds.happyTime();
       }
       this.spawnConfetti(target.pos, 36);
-      this._showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak: this.streakCount, orderId: target.order?.id, orderName: target.order?.name || 'Delivery', base: target.order?.reward || 0, diffMult: diffCfg.payoutMult, vehId: this.selectedVehicle, missed });
+      this._showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak: this.streakCount, orderId: target.order?.id, orderName: target.order?.name || 'Delivery', base: target.order?.reward || 0, diffMult: diffCfg.payoutMult, vehId: this.selectedVehicle, missed, noAssist });
       this.addNotification(`${UI.icon('check')} DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
 
       // Rank-up is the only career event loud enough to interrupt a shift.
@@ -10821,13 +10886,13 @@
 
     // Delivery payout: order reward plus time bonus, scaled by difficulty,
     // streak and the vehicle's pay multiplier (bigger vehicles take bigger orders).
-    _deliveryPayout(reward, timeBonus, diffMult, streak, missed) {
+    _deliveryPayout(reward, timeBonus, diffMult, streak, missed, noAssist) {
       const vehMult = vehicleSpec(this.selectedVehicle).payoutMult;
-      return Math.round((reward + timeBonus) * diffMult * (1 + streak * 0.2) * vehMult * (missed ? 0.5 : 1));
+      return Math.round((reward + timeBonus) * diffMult * (1 + streak * 0.2) * vehMult * (missed ? 0.5 : 1) * (noAssist ? 1 + CONFIG.NO_ASSIST_BONUS : 1));
     }
 
     // ── Post-delivery result banner with tachometer arcs ─────────────────
-    _showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak, orderName, base, diffMult, vehId, missed }) {
+    _showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak, orderName, base, diffMult, vehId, missed, noAssist }) {
       if (!this.scorePopupContainer) return;
       const timeFill  = Math.max(0.04, Math.min(1, timeLeftRatio));
       const accFill   = stars === 3 ? 0.9 : (stars === 2 ? 0.65 : 0.3);
@@ -10859,7 +10924,7 @@
           ${arc(accFill, '#ffe600', 'Accuracy')}
           ${arc(strFill, strColor, `${streak}× Streak`)}
         </div>
-        <div style="font-size:10px;font-family:var(--font-telemetry,'Chakra Petch',monospace);color:rgba(232,238,242,0.65);letter-spacing:.08em">₹${(base||0)} base • ×${(diffMult||1).toFixed(1)} diff • +${streak > 1 ? Math.round((streak-1)*20) : 0}% streak • ×${vehicleSpec(vehId).payoutMult} ${vehicleSpec(vehId).short.toUpperCase()}${missed ? ' • −50% missed' : ''}</div>
+        <div style="font-size:10px;font-family:var(--font-telemetry,'Chakra Petch',monospace);color:rgba(232,238,242,0.65);letter-spacing:.08em">₹${(base||0)} base • ×${(diffMult||1).toFixed(1)} diff • +${streak > 1 ? Math.round((streak-1)*20) : 0}% streak • ×${vehicleSpec(vehId).payoutMult} ${vehicleSpec(vehId).short.toUpperCase()}${missed ? ' • −50% missed' : ''}${noAssist ? ` • +${Math.round(CONFIG.NO_ASSIST_BONUS * 100)}% no assists` : ''}</div>
       `;
       this.scorePopupContainer.appendChild(banner);
       this._placeScorePopups();
@@ -10958,9 +11023,12 @@
     }
 
     // ── Multi-Drop Shift Milestone Summary ────────────────────────────────
-    showShiftSummary() {
+    showShiftSummary({ outOfParcels = false } = {}) {
       if (this._shiftSummaryActive) return;
       this._shiftSummaryActive = true;
+      // B140: ran out of spare parcels. The streak is lost; money already
+      // earned stays banked.
+      if (outOfParcels) this.streakCount = 0;
 
       const wallet = Career ? Career.wallet() : this.earnings;
       const rank = Career ? Career.rank() : { name: 'Rookie Courier', progress: 0.5 };
@@ -10981,9 +11049,9 @@
 
       modal.innerHTML = `
         <div style="max-width:440px;width:100%;background:#0e131d;border:3px solid #000;border-radius:18px;padding:24px;box-shadow:6px 6px 0px #000;display:flex;flex-direction:column;text-align:center;">
-          <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:11px;letter-spacing:.2em;color:var(--comic-cyan,#00f0ff);font-weight:800;text-transform:uppercase;margin-bottom:8px;">★ SHIFT COMPLETED ★</div>
-          <div style="font-family:var(--font-display,'Russo One',sans-serif);font-size:28px;font-weight:900;color:#fff;text-shadow:3px 3px 0px #000;margin-bottom:4px;">EXCELLENT WORK</div>
-          <div style="font-size:12px;font-family:var(--font-primary,'Barlow',sans-serif);font-weight:600;color:rgba(232,238,242,0.65);margin-bottom:20px;">${this.deliveriesMade} Deliveries Completed This Shift</div>
+          <div style="font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:11px;letter-spacing:.2em;color:var(--comic-cyan,#00f0ff);font-weight:800;text-transform:uppercase;margin-bottom:8px;">${outOfParcels ? 'OUT OF PARCELS' : '★ SHIFT COMPLETED ★'}</div>
+          <div style="font-family:var(--font-display,'Russo One',sans-serif);font-size:28px;font-weight:900;color:#fff;text-shadow:3px 3px 0px #000;margin-bottom:4px;">${outOfParcels ? 'SHIFT OVER' : 'EXCELLENT WORK'}</div>
+          <div style="font-size:12px;font-family:var(--font-primary,'Barlow',sans-serif);font-weight:600;color:rgba(232,238,242,0.65);margin-bottom:20px;">${outOfParcels ? 'Every spare parcel is gone. Your streak resets; the money you earned is safe.' : `${this.deliveriesMade} Deliveries Completed This Shift`}</div>
 
           <div style="background:rgba(255,255,255,0.05);border:2px solid #000;border-radius:12px;padding:16px;margin-bottom:18px;display:flex;justify-content:space-around;box-shadow:2px 2px 0px #000">
             <div>
@@ -11011,7 +11079,7 @@
           </button>
 
           <div style="display:flex;gap:10px;">
-            <button id="shift-next-btn" style="flex:1.2;background:#ffe600;color:#000000;border:2.5px solid #000;border-radius:10px;padding:13px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;letter-spacing:.1em;box-shadow:3px 3px 0px #000;cursor:pointer;">NEXT SHIFT</button>
+            <button id="shift-next-btn" style="flex:1.2;background:#ffe600;color:#000000;border:2.5px solid #000;border-radius:10px;padding:13px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;letter-spacing:.1em;box-shadow:3px 3px 0px #000;cursor:pointer;">${outOfParcels ? 'NEW SHIFT' : 'NEXT SHIFT'}</button>
             <button id="shift-hub-btn" style="flex:1;background:rgba(255,255,255,0.08);color:#fff;border:2px solid #000;border-radius:10px;padding:13px;font-family:var(--font-telemetry,'Chakra Petch',monospace);font-size:12px;font-weight:800;box-shadow:2px 2px 0px #000;cursor:pointer;">DISPATCH HUB</button>
           </div>
         </div>
@@ -11053,6 +11121,8 @@
       modal.querySelector('#shift-next-btn')?.addEventListener('click', () => {
         modal.remove();
         this._shiftSummaryActive = false;
+        this._resetSpareParcels();
+        this.earnings = 0; // B143: a new shift counts from zero, so the 2x ad can't pay a shift twice
         if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
           ShiplypAds.showInterstitial('shift_next');
         }
@@ -11374,6 +11444,7 @@
       // stale lateralVelocity the instant control returns — zero it here
       // so there's no timing window at all, not just a fast one.
       if (!v.isAutodrive) v.lateralVelocity = 0;
+      if (v.isAutodrive) this._assistUsedThisOrder = true;
       this._announceAutoAssist(v.isAutodrive, 'AUTO STEER ON', 'MANUAL STEERING');
     }
 
@@ -11385,6 +11456,7 @@
       if (v.isCruise) {
         if (v.isAutodrive) v.lateralVelocity = 0;
         v.isAutodrive = false;
+        this._assistUsedThisOrder = true;
       }
       this._announceAutoAssist(v.isCruise, 'AUTO DRIVE ON', 'MANUAL SPEED');
     }
@@ -11859,6 +11931,9 @@
       this.isJailed = false;
       this.updateWantedHUD();
       window.ShiplypPolice?.reset();
+      this._resetSpareParcels();
+      this._applyFpsCounter();
+      this._assistUsedThisOrder = !!(this.vehicle && (this.vehicle.isAutodrive || this.vehicle.isCruise));
       const gearEl = document.getElementById('telemetry-gear');
       if (gearEl) gearEl.textContent = isPedalVehicle(this.selectedVehicle) ? 'PEDAL' : 'DRIVE';
 
@@ -12333,6 +12408,21 @@
                 <div class="settings-section-title"><span>TRIP SUMMARY</span></div>
                 <div class="settings-row"><span class="settings-label">Distance Driven</span><span class="slider-val">${(this.vehicle ? this.vehicle.distanceTraveled : 0).toFixed(1)} KM</span></div>
               `}
+              ${tab === 'gameplay' ? `
+                <div class="settings-section-title" style="margin-top: 14px;"><span>DISPLAY &amp; SOUND</span></div>
+                <div class="settings-row">
+                  <span class="settings-label">Sound</span>
+                  <div class="settings-control">
+                    <button type="button" class="slider-val" id="set-sound" aria-pressed="${!sound.muted}" style="cursor:pointer;min-width:56px;min-height:32px">${sound.muted ? 'OFF' : 'ON'}</button>
+                  </div>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-label">Show FPS counter</span>
+                  <div class="settings-control">
+                    <button type="button" class="slider-val" id="set-show-fps" aria-pressed="${this._fpsCounterOn()}" style="cursor:pointer;min-width:56px;min-height:32px">${this._fpsCounterOn() ? 'ON' : 'OFF'}</button>
+                  </div>
+                </div>
+              ` : ''}
               ${tab === 'gameplay' && window.ShiplypPolice ? window.ShiplypPolice.settingsHTML() : ''}
               <p class="settings-legal">${document.getElementById('currency-disclaimer')?.textContent || ''}</p>
             </div>
@@ -12346,6 +12436,25 @@
       `;
 
       window.ShiplypPolice?.bindSettings(this.modalContainer);
+      // B142: Audio and FPS moved off the play screen into Settings.
+      const sndBtn = document.getElementById('set-sound');
+      if (sndBtn) {
+        sndBtn.onclick = () => {
+          this.toggleMute();
+          sndBtn.textContent = sound.muted ? 'OFF' : 'ON';
+          sndBtn.setAttribute('aria-pressed', String(!sound.muted));
+        };
+      }
+      const fpsBtn = document.getElementById('set-show-fps');
+      if (fpsBtn) {
+        fpsBtn.onclick = () => {
+          const on = !this._fpsCounterOn();
+          try { localStorage.setItem('shiplyp_showFps', on ? '1' : '0'); } catch (e) {}
+          this._applyFpsCounter();
+          fpsBtn.textContent = on ? 'ON' : 'OFF';
+          fpsBtn.setAttribute('aria-pressed', String(on));
+        };
+      }
       this.modalContainer.querySelectorAll('.tab-link').forEach(btn => {
         btn.onclick = () => {
           if (btn.dataset.tab === 'home') {
