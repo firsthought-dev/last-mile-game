@@ -8,8 +8,9 @@ kanban-plugin: board
 - [ ] 🟢 **Idea: watch an ad to clear wanted stars** · @{2026-09-28}
 	Future idea only, not planned yet. [[2026-09-28 - B130 Wanted Stars, Siren and Settle-Up Dialogue]]
 
-- [ ] 🟢 **Review Enhanced style fog at dusk and night** · @{2026-09-26}
-	Check it doesn't have the same problem B100 fixed for Classic.
+- [ ] 🟡 **Repository history cleanup of removed assets** (car rework is done, so this is ready; needs a go-ahead) · @{2026-09-27}
+- [ ] 🟢 **Review Crisp style fog at dusk and night** · @{2026-09-26}
+	Crisp was called Enhanced before B116. Check it doesn't have the same problem B100 fixed for the old Classic style.
 - [ ] 🟢 **Google Play Store release assets & signing** · @{2026-09-28}
 	Release signing, store icon/banner, and an AAB build for Google Play. [[Projects/Last-Mile Game]]
 - [ ] 🟢 **Side-project prototype** · @{2026-10-05}
@@ -25,12 +26,11 @@ kanban-plugin: board
 	Cycle, Motorbike and the reworked Muscle Coupe are done, each with its own pay rate; the cargo three-wheeler is still pending its own model. [[Projects/Last-Mile Game]]
 - [ ] 🔴 **Launch blockers**: bundle third-party libraries locally, web portal setup, keep the first download small · @{2026-09-23}
 
-- [ ] 🟡 **Prop upgrade pass: tapri ✅ → houses ✅ → repair shop ✅ → lamps/poles ✅ → fences + guardrails ✅ → signs ✅** · @{2026-09-24}
-	Box-built roadside props replaced with modeled 3D props: tea stall, three house styles, repair shop, lamps, poles, fences, guardrails and signs. [[Projects/Last-Mile Game]]
-
 
 
 ## ✅ Done
+- [x] Prop upgrade pass: modeled tea stall, three house styles, repair shop, lamps, poles, fences, guardrails and signs · @{2026-10-05}
+	[[Projects/Last-Mile Game]]
 - [x] B133 Motorbike joins the roster; each vehicle pays a different rate · @{2026-09-29}
 	[[2026-09-29 - B133 Motorbike and Vehicle Pay Rates]]
 - [x] **Wanted stars, siren and settle-up dialogue (B130), missed-delivery penalty (B131), clearer signals and crossings (B132)** · @{2026-09-28}
