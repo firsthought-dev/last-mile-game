@@ -29,8 +29,6 @@ kanban-plugin: board
 
 
 ## ✅ Done
-- [x] B136-B138 Playtest fixes: parcel throws need a reachable drop, curve signs on the outside of the bend, clearer police wanted stars · @{2026-10-05}
-	[[2026-10-05 - B136-B138 Playtest Fixes]]
 - [x] Prop upgrade pass: modeled tea stall, three house styles, repair shop, lamps, poles, fences, guardrails and signs · @{2026-10-05}
 	[[Projects/Last-Mile Game]]
 - [x] B133 Motorbike joins the roster; each vehicle pays a different rate · @{2026-09-29}
