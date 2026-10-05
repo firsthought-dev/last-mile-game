@@ -31,3 +31,6 @@ last-mile/android/app/src/main/assets/
 
 # Obsidian per-user UI state (the vault's notes themselves ARE tracked)
 last-mile/vault/.obsidian/workspace.json
+
+# Blender auto-backups (the .blend sources are tracked; their .blend1 backups are not)
+*.blend1
