@@ -31,7 +31,7 @@
     settleKey: '[B]',
     caughtCaption: '5★ = CAUGHT',
     // One-time explainer the first time a save earns a star.
-    firstStar: 'POLICE WATCH: running red lights, hitting pedestrians and speeding over {limit} km/h earn stars. At 5★ you are caught. {settle} to settle up early.',
+    firstStar: 'POLICE WATCH: running red lights, hitting pedestrians and speeding over {limit} km/h earn stars. At 5★ you are caught. Keep driving clean and a star drops every {decay} s. {settle} to settle up early.',
     firstStarSettleTouch: 'Tap the stars',
     firstStarSettleKey: 'Press B or tap the stars',
     settleAria: 'Wanted level {stars} stars. Settle with the police',
@@ -557,7 +557,7 @@
     C.markHintSeen('policeStars');
     const touch = document.body.classList.contains('touch-controls-active');
     const settleTxt = touch ? STRINGS.firstStarSettleTouch : STRINGS.firstStarSettleKey;
-    g.addNotification(esc(fmt(STRINGS.firstStar, { limit: TUNE.postedLimitKmh, settle: settleTxt })), 'warning', 10000);
+    g.addNotification(esc(fmt(STRINGS.firstStar, { limit: TUNE.postedLimitKmh, decay: TUNE.decayEvery, settle: settleTxt })), 'warning', 10000);
   }
 
   function reportOffence(type) {
