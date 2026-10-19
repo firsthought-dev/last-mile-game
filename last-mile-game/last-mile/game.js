@@ -2663,7 +2663,7 @@
             const pt = this.curve.getPointAt(pu);
             const tg = this.curve.getTangentAt(pu).setY(0).normalize();
             const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
-            const count = 24 + (hash(sm, side + 40) > 0.5 ? 8 : 0);
+            const count = 58 + (hash(sm, side + 40) > 0.5 ? 14 : 0);
             for (let c = 0; c < count; c++) {
               const r1 = hash(sm * 5 + c, side + 41), r2 = hash(sm * 7 + c, side + 43), r3 = hash(sm * 11 + c, side + 47), r4 = hash(sm * 13 + c, side + 53);
               const absLat = 6.3 + 34 * Math.pow(r1, 2.3);                       // strongly concentrated near the road, thinning outward to the edge of the visible corridor
@@ -2672,7 +2672,7 @@
               if (blocked(pos, absLat, 1.5)) continue;
               pos.y = this.groundHeightAt(pt, pos, side * absLat) - 0.03;
               const grow = 1 + (absLat - 6) * 0.035;                              // far tufts a little bigger so they still read
-              const h = (0.5 + r3 * 0.45) * grow, w = h * (1.0 + r4 * 0.25);
+              const h = (0.45 + r3 * 0.4) * grow, w = h * (1.0 + r4 * 0.25);
               dummy.position.copy(pos); dummy.rotation.set(0, r4 * Math.PI * 2, 0); dummy.scale.set(w, h, w); dummy.updateMatrix();
               const m = dummy.matrix.clone();
               const g = 0.92 + r3 * 0.2;
