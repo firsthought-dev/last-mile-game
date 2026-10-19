@@ -1176,7 +1176,7 @@
       // maxSpeed = end of the ride-time ramp (65 km/h); baseSpeed = start of it (40 km/h).
       cycle: { id: 'cycle', order: 1, name: 'Delivery Cycle', short: 'CYCLE', handling: 'pedal', speedLabel: '40–65 km/h',
         price: 0, payoutMult: 1.0, wheelRadius: 0.365,
-        maxSpeed: 18.06, baseSpeed: 11.11, rampSeconds: 120, accel: 8.5, drag: 0.55, brake: 14.0 },
+        maxSpeed: 18.06, baseSpeed: 11.11, rampSeconds: 45, accel: 8.5, drag: 0.55, brake: 14.0 },
       motorbike: { id: 'motorbike', order: 2, name: 'Motorbike', short: 'BIKE', handling: 'twoWheeler', speedLabel: '90 km/h',
         price: 1500, payoutMult: 1.25, wheelRadius: 0.31,
         maxSpeed: 25.0, accel: 11.0, drag: 0.65, brake: 20.0 },
@@ -9513,7 +9513,14 @@
       const healthFactor = (this.health >= 50) ? 1.0 : Math.max(0.25, 0.4 + 0.6 * (this.health / 50));
       const speedFloor = isBicycle ? 3.0 : 8.0;
       const effectiveMaxSpeed = (this.health <= 0) ? 0.0 : Math.max(speedFloor, (this.maxSpeed - windDrag * (isBicycle ? 0.8 : 3.5)) * healthFactor);
-      const isDrifting = !!keys.space;
+      // B171: Space is also the parcel-drop key, so it must not slam the brakes (or break traction) while a drop is
+      // in range. The handbrake still works everywhere else.
+      let spaceBrake = !!keys.space;
+      if (spaceBrake && typeof window !== 'undefined' && window.game && window.game._findTossTarget && this.mesh) {
+        const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion).normalize();
+        if (window.game._findTossTarget(this.mesh.position, fwd)) spaceBrake = false;
+      }
+      const isDrifting = spaceBrake;
       const driftGripMult = isDrifting ? 0.40 : 1.0; // 60% friction reduction during power-slide drift
 
       // Safety Override: Driver pressing the brake pedal disengages Autopilot.
@@ -9557,8 +9564,8 @@
           // Engine breakdown stall
           this.speed *= Math.exp(-2.5 * dt);
           if (Math.abs(this.speed) < 0.1) this.speed = 0;
-        } else if (keys.space) {
-          // SPACE: EMERGENCY HANDBRAKE — Powerful deceleration and unconditional full halt
+        } else if (spaceBrake) {
+          // SPACE: EMERGENCY HANDBRAKE (not while a drop is in range, see above) — Powerful deceleration and unconditional full halt
           if (Math.abs(this.speed) > 0.08) {
             const hBrake = (this.brake || 30.0) * dt * 2.5;
             if (this.speed > 0) this.speed = Math.max(0, this.speed - hBrake);
@@ -9654,10 +9661,10 @@
           // Steer penalty tracking while coasting as well
           const steerIntensity = Math.min(1.0, Math.abs(rawSteer));
           if (steerIntensity > 0.05) {
-            const targetPenalty = steerIntensity * 0.15;
+            const targetPenalty = steerIntensity * 0.05;                 // B171: was 0.15; a keyboard key counts as full steering
             this.cycleSteerSpeedPenalty = THREE.MathUtils.lerp(this.cycleSteerSpeedPenalty || 0, targetPenalty, 0.20);
           } else {
-            this.cycleSteerSpeedPenalty = Math.max(0, (this.cycleSteerSpeedPenalty || 0) - (dt / 0.5) * 0.15);
+            this.cycleSteerSpeedPenalty = Math.max(0, (this.cycleSteerSpeedPenalty || 0) - (dt / 0.5) * 0.05);
           }
 
           // Bicycle turn rate: nimble and progressive, perfectly balanced for road curves
@@ -10976,14 +10983,19 @@
 
 
     initEvents() {
-      const handleResize = () => {
+      const handleResize = (resolutionOnly) => {
+        resolutionOnly = resolutionOnly === true;
         const aspect = window.innerWidth / window.innerHeight;
         this.camera.aspect = aspect;
-        // Dynamic FOV for portrait phones: widen vertical FOV so the car and road remain spacious
-        if (aspect < 1.0) {
-          this.camera.fov = THREE.MathUtils.clamp(58 / aspect, 58, 75);
-        } else {
-          this.camera.fov = 58;
+        // Dynamic FOV for portrait phones: widen vertical FOV so the car and road remain spacious.
+        // NOT on a resolution-only step (B171): resetting FOV there snapped the camera ~6 deg every time the adaptive
+        // render scale changed, which looked like the view zooming in and out while riding.
+        if (!resolutionOnly) {
+          if (aspect < 1.0) {
+            this.camera.fov = THREE.MathUtils.clamp(58 / aspect, 58, 75);
+          } else {
+            this.camera.fov = 58;
+          }
         }
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -14015,7 +14027,7 @@
       this._pr = next;
       this.renderer.setPixelRatio(next);
       if (this.composer && this.composer.setPixelRatio) this.composer.setPixelRatio(next);
-      if (this._handleResize) this._handleResize();
+      if (this._handleResize) this._handleResize(true);
     }
 
     _animateFrame() {
