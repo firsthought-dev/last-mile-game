@@ -2288,12 +2288,35 @@
           const f = THREE.MathUtils.clamp(u, 0, 1) * (b.length - 1), i = Math.floor(f);
           return THREE.MathUtils.lerp(b[i] || 0, b[Math.min(i + 1, b.length - 1)] || 0, f - i);
         };
-        const paver = new THREE.Color(0xbdb7ab), paver2 = new THREE.Color(0xb1ab9f);
-        const kerbW = new THREE.Color(0xf2f2ee), kerbB = new THREE.Color(0x1a1c20), kerbSide = new THREE.Color(0x9a958b);
+        // Footpath weathering (B155): the top surface is a textured paving-slab ribbon (3 columns so the
+        // kerb side can be grimier than the middle); kerb stripes and faces are toned down so the
+        // footpath no longer glows against the worn asphalt. Kill switch: localStorage.shiplyp_sidewalkWear = '0'.
+        let wear = true; try { wear = localStorage.getItem('shiplyp_sidewalkWear') !== '0'; } catch (e) { /* default on */ }
+        const paver = wear ? new THREE.Color(0xb3ada1) : new THREE.Color(0xbdb7ab), paver2 = wear ? new THREE.Color(0xa7a195) : new THREE.Color(0xb1ab9f);
+        const kerbW = new THREE.Color(wear ? 0xcbc8be : 0xf2f2ee), kerbB = new THREE.Color(wear ? 0x2b2d32 : 0x1a1c20), kerbSide = new THREE.Color(wear ? 0x7d786e : 0x9a958b);
+        const TILE = 1.2, paversTex = wear ? RealTextureFactory._get('sidewalkPavers', 'assets/textures/sidewalk_pavers.webp') : null;
         const up = new THREE.Vector3(0, 1, 0);
         [-1, 1].forEach((side) => {
           const pos = [], col = [];
-          let prev = null;
+          const tpos = [], tcol = [], tuv = [];
+          let prev = null, runS = 0;
+          // Textured top strip between two cross-sections: inner (kerb) -> middle -> outer, with
+          // shading across the width and a slab texture whose v follows distance along the road.
+          const topStrip = (pr, cu, f, tone) => {
+            const pm = new THREE.Vector3().addVectors(pr.inTop, pr.outTop).multiplyScalar(0.5);
+            const cm = new THREE.Vector3().addVectors(cu.inTop, cu.outTop).multiplyScalar(0.5);
+            const uM = (W * 0.5) / TILE, uO = W / TILE, v0 = pr.s / TILE, v1 = cu.s / TILE;
+            const V = (p, u, v, sh) => ({ p, u, v, c: tone.clone().multiplyScalar(sh) });
+            const rows = [
+              [V(pr.inTop, 0, v0, 0.80), V(cu.inTop, 0, v1, 0.80), V(cm, uM, v1, 1.0), V(pm, uM, v0, 1.0)],
+              [V(pm, uM, v0, 1.0), V(cm, uM, v1, 1.0), V(cu.outTop, uO, v1, 0.9), V(pr.outTop, uO, v0, 0.9)]
+            ];
+            for (const [a, b, c, d] of rows) {
+              // f: a=prev.in, b=cur.in, c=cur.out, d=prev.out; otherwise swap b/d so faces still point up
+              const q = f ? [a, c, b, a, d, c] : [a, c, d, a, b, c];
+              for (const v of q) { tpos.push(v.p.x, v.p.y, v.p.z); tcol.push(v.c.r, v.c.g, v.c.b); tuv.push(v.u, v.v); }
+            }
+          };
           const quad = (a, b, c, d, color) => {
             // reversed order: faces must point up / away from the road for lighting and raycasts
             [a, c, b, a, d, c].forEach((v) => { pos.push(v.x, v.y, v.z); col.push(color.r, color.g, color.b); });
@@ -2314,31 +2337,47 @@
               outTop: new THREE.Vector3(pOut.x, edgeY + KERB, pOut.z),
               outBot: new THREE.Vector3(pOut.x, Math.min(groundOut, edgeY) - 0.05, pOut.z)
             };
+            if (prev) runS += prev.inTop.distanceTo(cur.inTop); cur.s = runS;
             if (prev) {
               // winding so faces point away from the road centre / upward
               const f = side > 0;
               const kerbCol = (k % 2) ? kerbW : kerbB;
               if (f) {
                 quad(prev.inBot, cur.inBot, cur.inTop, prev.inTop, kerbCol);
-                quad(prev.inTop, cur.inTop, cur.outTop, prev.outTop, (k % 4 < 2) ? paver : paver2);
+                if (wear) topStrip(prev, cur, true, (k % 4 < 2) ? paver : paver2); else quad(prev.inTop, cur.inTop, cur.outTop, prev.outTop, (k % 4 < 2) ? paver : paver2);
                 quad(prev.outTop, cur.outTop, cur.outBot, prev.outBot, kerbSide);
               } else {
                 quad(prev.inBot, prev.inTop, cur.inTop, cur.inBot, kerbCol);
-                quad(prev.inTop, prev.outTop, cur.outTop, cur.inTop, (k % 4 < 2) ? paver : paver2);
+                if (wear) topStrip(prev, cur, false, (k % 4 < 2) ? paver : paver2); else quad(prev.inTop, prev.outTop, cur.outTop, cur.inTop, (k % 4 < 2) ? paver : paver2);
                 quad(prev.outTop, prev.outBot, cur.outBot, cur.outTop, kerbSide);
               }
             }
             prev = cur;
           }
-          if (!pos.length) return;
-          const geom = new THREE.BufferGeometry();
-          geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-          geom.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-          geom.computeVertexNormals();
-          const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide }));
-          mesh.receiveShadow = true;
-          mesh.frustumCulled = false;
-          group.add(mesh);
+          if (!pos.length && !tpos.length) return;
+          if (pos.length) {
+            const geom = new THREE.BufferGeometry();
+            geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+            geom.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+            geom.computeVertexNormals();
+            const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide }));
+            mesh.receiveShadow = true;
+            mesh.frustumCulled = false;
+            group.add(mesh);
+          }
+          if (tpos.length) {
+            const tg = new THREE.BufferGeometry();
+            tg.setAttribute('position', new THREE.Float32BufferAttribute(tpos, 3));
+            tg.setAttribute('color', new THREE.Float32BufferAttribute(tcol, 3));
+            tg.setAttribute('uv', new THREE.Float32BufferAttribute(tuv, 2));
+            tg.computeVertexNormals();
+            const tm = new THREE.MeshStandardMaterial({ vertexColors: true, map: paversTex, roughness: 0.92, metalness: 0.0, side: THREE.DoubleSide });
+            const top = new THREE.Mesh(tg, tm);
+            top.receiveShadow = true;
+            top.frustumCulled = false;
+            top.userData.sidewalkTop = true;
+            group.add(top);
+          }
         });
       } catch (err) {
         console.error('buildSidewalkRange failed:', err);
