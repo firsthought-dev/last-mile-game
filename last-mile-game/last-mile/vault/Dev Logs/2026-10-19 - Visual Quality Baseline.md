@@ -7,5 +7,6 @@ Started a visual quality overhaul. The goal is a richer stylized look that moves
 - First fix (B145): far-away rocks and roadside barriers are no longer drawn when they are off screen. The game does about 60% less drawing work, looks the same, and now holds a steady 60 FPS on the Android emulator (it was 28 to 35 with stutters).
 - Second fix (B147): on phones the game now draws at a lower internal resolution when it needs to, and goes back to sharper when there is headroom. The look stays soft and clean, and the saved effort goes toward richer visuals next.
 - Third change (B148): the round leafy trees are now real foliage: layered clusters of leaves with branches showing, instead of flat dark blobs. The pines are unchanged. It runs at a steady 60 FPS on the Android emulator.
+- Fourth change (B149): the road's centre line is now clearly visible all the way down the road, including on newly generated stretches, instead of only showing up close to the bike. The edge lines are also placed consistently along the whole route.
 
 Project: [[Projects/Last-Mile Game]]

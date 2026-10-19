@@ -124,6 +124,16 @@
     return meshes;
   }
 
+  // Road paint (B149). One set of numbers and one builder (`_buildLaneRibbon`) for BOTH the
+  // initial road and the streamed extension, so the two can never drift apart again.
+  // Widths are deliberately wider than real paint (10-15 cm): at 12 cm the dashes were
+  // sub-pixel beyond a few metres and only "appeared" as the player rode up to them.
+  const LANE_PAINT = {
+    centreHalfW: 0.17, edgeHalfW: 0.10,        // metres, half-width
+    centre: 0xd6c36e, edge: 0xb4bac2,          // pale, to stay under the bloom threshold
+    dashOn: 3.0, dashPeriod: 8.0               // metres along the road
+  };
+
   function buildBarrierGeometries() {
     const alongX = (shape, halfLen = 0.5) => {
       // extrude a YZ-plane profile (shape x = depth z, shape y = height) along X
@@ -2899,109 +2909,73 @@
     }
 
     createLaneMarkingMeshes() {
-      const points = this.roadSpacedPoints;
-      const bankingAngles = this.roadBankingAngles;
-      const normals = this.roadNormals;
-      const binormals = this.roadBinormals;
-      const bankedUps = this.roadBankedUp;
-      if (!points || !bankingAngles) return new THREE.Group();
-
-      const tubularSegments = points.length - 1;
-      const roadHalf = CONFIG.ROAD_WIDTH * 0.5;
-      // Muted pale colors, not pure white/yellow — those crossed the
-      // 0.94 post-ACES-tonemap bloom threshold (bloomPass, ~line 5691)
-      // and blew out into soft glowing blobs under strong daylight,
-      // which is what got the original stripes removed entirely.
-      const edgeLineColor = new THREE.Color(0x9aa0a8);
-      const centerLineColor = new THREE.Color(0xb9a968);
-      // Real-world lane paint is roughly 10-15cm wide; half-width here.
-      const stripeHalfW = 0.06;
-      // ~4.2m per segment (1200 segments / ~5km route) — getSpacedPoints
-      // is arc-length-uniform so segment index doubles as a distance
-      // proxy. A period of 3 segments gives a ~12.6m on/off cycle, close
-      // to a real dashed-line cadence (dash ~3-4m, gap ~8-9m).
-      const dashPeriod = 3;
-      // Lifted further above the road surface than the old baked-in
-      // paint (0.12) needed to be, since this is now a separate coplanar
-      // mesh riding on top of it — needs its own clearance to win the
-      // depth test cleanly rather than z-fighting with the asphalt.
-      const paintLift = 0.02;
-
-      const buildRibbon = (lateralOffset, color, dashed) => {
-        const positions = [];
-        const colors = [];
-        const normalsOut = [];
-        const indices = [];
-        let vertCount = 0;
-
-        for (let i = 0; i <= tubularSegments; i++) {
-          const pt = points[i];
-          const bankingAngle = bankingAngles[i];
-          const normal = normals[i];
-          const binormal = binormals[i];
-          const bankedUp = bankedUps[i];
-          // Exactly createRoadMesh's bankedNormal, reconstructed from the
-          // same cached normal/binormal rather than a second cos/sin call
-          // on its own — the earlier version of this ribbon builder
-          // wrongly substituted bankedUp for binormal here, which put the
-          // decal at the wrong lateral position (and buried it under the
-          // road, see the lift fix below) instead of tracing the road's
-          // actual surface. Confirmed by rendering nothing visible at all.
-          const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
-
-          const dashOn = !dashed || (Math.floor(i / dashPeriod) % 2 === 0);
-          const rowColor = dashOn ? color : null;
-
-          [-stripeHalfW, stripeHalfW].forEach((edgeOff) => {
-            const off = lateralOffset + edgeOff;
-            // Reuses the exact banked frame the road surface computed at
-            // this same point — see the cached arrays above. The base
-            // tarmac surface itself sits at pt + bankedNormal*off +
-            // bankedUp*0.12 (createRoadMesh's non-verge branch) — this
-            // decal needs that SAME 0.12 base lift plus its own clearance
-            // on top, not just paintLift alone (which by itself sat the
-            // decal ~0.10m below the actual road surface, invisible under it).
-            const p = pt.clone()
-              .addScaledVector(bankedNormal, off)
-              .addScaledVector(bankedUp, 0.12 + paintLift);
-            positions.push(p.x, p.y, p.z);
-            normalsOut.push(bankedUp.x, bankedUp.y, bankedUp.z);
-            const c = rowColor || color;
-            // When a dash is "off", push the road's own tarmac-adjacent
-            // alpha via vertex color alpha isn't available without a
-            // 4th channel — instead this row is simply skipped from the
-            // index buffer below (no triangles emitted for an off dash),
-            // which is a cleaner "gap" than color-fading to tarmac would
-            // be, and can't mismatch the base road's actual tarmac color
-            // per terrain type.
-            colors.push(c.r, c.g, c.b);
-          });
-          vertCount += 2;
-
-          if (dashed && !dashOn) continue; // no triangles for this row — real gap, not a color fade
-          if (i > 0 && (!dashed || (Math.floor((i - 1) / dashPeriod) % 2 === 0))) {
-            const row1 = (i - 1) * 2;
-            const row2 = i * 2;
-            indices.push(row1, row1 + 1, row2);
-            indices.push(row1 + 1, row2 + 1, row2);
-          }
-        }
-
-        const geom = new THREE.BufferGeometry();
-        geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-        geom.setAttribute('normal', new THREE.Float32BufferAttribute(normalsOut, 3));
-        geom.setIndex(indices);
-        const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
-        return new THREE.Mesh(geom, mat);
-      };
-
+      if (!this.roadSpacedPoints || !this.roadBankingAngles) return new THREE.Group();
       const group = new THREE.Group();
-      group.add(buildRibbon(0, centerLineColor, true));
-      group.add(buildRibbon(-roadHalf, edgeLineColor, false));
-      group.add(buildRibbon(roadHalf, edgeLineColor, false));
+      group.add(this._buildLaneRibbons(0, this.roadSpacedPoints.length - 1));
       this.laneMarkingsGroup = group;
       return group;
+    }
+
+    // Centre dashes + both edge lines for road segments startSeg..endSeg.
+    _buildLaneRibbons(startSeg, endSeg) {
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.5, P = LANE_PAINT;
+      const g = new THREE.Group();
+      g.add(this._buildLaneRibbon(startSeg, endSeg, 0, P.centreHalfW, P.centre, true));
+      g.add(this._buildLaneRibbon(startSeg, endSeg, -roadHalf, P.edgeHalfW, P.edge, false));
+      g.add(this._buildLaneRibbon(startSeg, endSeg, roadHalf, P.edgeHalfW, P.edge, false));
+      return g;
+    }
+
+    // Distance along the road to sample i. getSpacedPoints is uniform in arc length and the
+    // streamed extension resamples the WHOLE route, so derive it from the curve rather than
+    // caching it: the dash phase then stays continuous across every extension seam.
+    _laneCum(i) {
+      return i * (this.curve.getLength() / (this.roadSpacedPoints.length - 1));
+    }
+
+    _buildLaneRibbon(startSeg, endSeg, lateral, halfW, colorHex, dashed) {
+      const pts = this.roadSpacedPoints, ba = this.roadBankingAngles, nr = this.roadNormals, bn = this.roadBinormals, bu = this.roadBankedUp;
+      const P = LANE_PAINT;
+      // Same banked frame createRoadMesh uses; 0.12 is the road slab lift, 0.02 the paint clearance.
+      const lift = 0.12 + 0.02;
+      const positions = [], normalsOut = [], indices = [];
+      const frame = (i) => {
+        const angle = ba[i] || 0;
+        const bankedNormal = nr[i].clone().multiplyScalar(Math.cos(angle)).addScaledVector(bn[i], Math.sin(angle)).normalize();
+        return { pt: pts[i], bankedNormal, up: bu[i] };
+      };
+      const A = new THREE.Vector3(), B = new THREE.Vector3(), N = new THREE.Vector3(), U = new THREE.Vector3();
+      const put = (fa, fb, t, off) => {
+        A.lerpVectors(fa.pt, fb.pt, t);
+        N.lerpVectors(fa.bankedNormal, fb.bankedNormal, t).normalize();
+        U.lerpVectors(fa.up, fb.up, t).normalize();
+        B.copy(A).addScaledVector(N, off).addScaledVector(U, lift);
+        positions.push(B.x, B.y, B.z); normalsOut.push(U.x, U.y, U.z);
+      };
+      for (let i = startSeg; i < endSeg; i++) {
+        const fa = frame(i), fb = frame(i + 1);
+        const L = fa.pt.distanceTo(fb.pt);
+        const s0 = dashed ? this._laneCum(i) : 0;
+        // Dashed: ~1 m steps so dash edges land where the metres say. Solid: one quad per segment.
+        const n = dashed ? Math.max(1, Math.round(L)) : 1;
+        for (let k = 0; k < n; k++) {
+          const t0 = k / n, t1 = (k + 1) / n;
+          if (dashed && ((s0 + (t0 + t1) * 0.5 * L) % P.dashPeriod) >= P.dashOn) continue;
+          const base = positions.length / 3;
+          put(fa, fb, t0, lateral - halfW); put(fa, fb, t0, lateral + halfW);
+          put(fa, fb, t1, lateral - halfW); put(fa, fb, t1, lateral + halfW);
+          indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+        }
+      }
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geom.setAttribute('normal', new THREE.Float32BufferAttribute(normalsOut, 3));
+      geom.setIndex(indices);
+      const mat = new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.renderOrder = 1;
+      mesh.userData.lanePaint = dashed ? 'centre' : 'edge';
+      return mesh;
     }
 
     // Scans the finished curve at the SAME sampling rate createTerrainMesh
@@ -7700,66 +7674,8 @@
       roadMesh.receiveShadow = true;
       scene.add(roadMesh);
 
-      // 1b. Lane Markings extension decals (White outer lines & Yellow dashed centerline)
-      const buildExtensionMarking = (lateralOffset, color, dashed) => {
-        const positions = [];
-        const colors = [];
-        const normalsOut = [];
-        const indices = [];
-        const stripeHalfW = 0.06;
-        const dashPeriod = 3;
-        const paintLift = 0.02;
-
-        for (let i = startSeg; i <= endSeg; i++) {
-          const rowIdx = i - startSeg;
-          const pt = points[i];
-          const bankingAngle = this.roadBankingAngles[i] || 0;
-          const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
-          const binormal = this.roadBinormals[i] || new THREE.Vector3(0, 1, 0);
-          const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
-          const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
-
-          const dashOn = !dashed || (Math.floor(i / dashPeriod) % 2 === 0);
-          const rowColor = dashOn ? color : null;
-
-          const pLeft = pt.clone().addScaledVector(bankedNormal, lateralOffset - stripeHalfW).addScaledVector(bankedUp, 0.12 + paintLift);
-          const pRight = pt.clone().addScaledVector(bankedNormal, lateralOffset + stripeHalfW).addScaledVector(bankedUp, 0.12 + paintLift);
-
-          positions.push(pLeft.x, pLeft.y, pLeft.z, pRight.x, pRight.y, pRight.z);
-          normalsOut.push(bankedUp.x, bankedUp.y, bankedUp.z, bankedUp.x, bankedUp.y, bankedUp.z);
-          const c = rowColor || color;
-          colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
-
-          if (dashed && !dashOn) continue;
-          if (rowIdx > 0 && (!dashed || (Math.floor((i - 1) / dashPeriod) % 2 === 0))) {
-            const row1 = (rowIdx - 1) * 2;
-            const row2 = rowIdx * 2;
-            indices.push(row1, row1 + 1, row2);
-            indices.push(row1 + 1, row2 + 1, row2);
-          }
-        }
-
-        if (positions.length > 0) {
-          const geom = new THREE.BufferGeometry();
-          geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-          geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-          geom.setAttribute('normal', new THREE.Float32BufferAttribute(normalsOut, 3));
-          geom.setIndex(indices);
-          const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, depthWrite: false });
-          const mesh = new THREE.Mesh(geom, mat);
-          mesh.renderOrder = 1;
-          scene.add(mesh);
-        }
-      };
-
-      {
-        const edgeLineColor = new THREE.Color(0x9aa0a8);
-        const centerLineColor = new THREE.Color(0xb9a968);
-        const edgeOffset = roadWidth * 0.46;
-        buildExtensionMarking(-edgeOffset, edgeLineColor, false);
-        buildExtensionMarking(edgeOffset, edgeLineColor, false);
-        buildExtensionMarking(0.0, centerLineColor, true);
-      }
+      // 1b. Lane markings for the extension: the same builder and constants as the initial road (B149).
+      scene.add(this._buildLaneRibbons(startSeg, endSeg));
 
       // 2. Terrain ribbon extension mesh (matching createTerrainMesh ±150m landscape skirt)
       // Dense 4m-spaced embankment slices 9–45m match createTerrainMesh exactly, with outer
