@@ -81,6 +81,49 @@
     return out;
   }
 
+  // Splits one big instanced batch into spatial chunks so the renderer can cull
+  // each chunk on its own. A single InstancedMesh is culled as one object, so a
+  // km-long scatter of rocks or guardrail posts was drawn in full every frame,
+  // including the parts behind the camera (B145). Chunks share the source
+  // geometry's GPU buffers; only the bounding sphere differs per chunk.
+  function addChunkedInstances(parent, geom, mat, matrices, { cell = 320, castShadow = false, onChunk = null } = {}) {
+    if (!matrices.length) return [];
+    if (!geom.boundingSphere) geom.computeBoundingSphere();
+    const baseR = geom.boundingSphere.radius, baseC = geom.boundingSphere.center;
+    const cells = new Map();
+    const p = new THREE.Vector3(), sc = new THREE.Vector3(), q = new THREE.Quaternion();
+    matrices.forEach((m) => {
+      m.decompose(p, q, sc);
+      const key = Math.floor(p.x / cell) + ',' + Math.floor(p.z / cell);
+      let c = cells.get(key); if (!c) { c = []; cells.set(key, c); }
+      c.push(m);
+    });
+    const meshes = [];
+    cells.forEach((list) => {
+      const sub = new THREE.BufferGeometry();
+      Object.keys(geom.attributes).forEach((k) => sub.setAttribute(k, geom.attributes[k]));
+      if (geom.index) sub.setIndex(geom.index);
+      sub.groups = geom.groups;
+      sub.userData.sourceType = geom.type;
+      // Bounding sphere around every instance of this chunk.
+      const box = new THREE.Box3(), pt = new THREE.Vector3();
+      let maxScale = 1;
+      list.forEach((m) => { m.decompose(p, q, sc); pt.copy(baseC).applyMatrix4(m); box.expandByPoint(pt); maxScale = Math.max(maxScale, sc.x, sc.y, sc.z); });
+      const sph = new THREE.Sphere(); box.getBoundingSphere(sph);
+      sph.radius += baseR * maxScale;
+      sub.boundingSphere = sph;
+      const mesh = new THREE.InstancedMesh(sub, mat, list.length);
+      list.forEach((m, i) => mesh.setMatrixAt(i, m));
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.castShadow = castShadow;
+      mesh.frustumCulled = true;
+      if (onChunk) onChunk(mesh, list);
+      parent.add(mesh);
+      meshes.push(mesh);
+    });
+    return meshes;
+  }
+
   function buildBarrierGeometries() {
     const alongX = (shape, halfLen = 0.5) => {
       // extrude a YZ-plane profile (shape x = depth z, shape y = height) along X
@@ -5216,20 +5259,17 @@
       for (let k = 0; k < rockGeomPool.length; k++) {
         const groupRocks = pendingRocks.filter(r => r.geomIdx === k);
         if (groupRocks.length > 0) {
-          const instancedMesh = new THREE.InstancedMesh(rockGeomPool[k], rockMat, groupRocks.length);
-          instancedMesh.userData.isRock = true;
-          for (let idx = 0; idx < groupRocks.length; idx++) {
-            const r = groupRocks[idx];
-            instancedMesh.setMatrixAt(idx, r.matrix);
+          groupRocks.forEach((r) => {
             this.obstacles.push({
               pos: r.pos.clone(),
               radius: r.radius,
               type: 'rock',
               mesh: { getWorldPosition: (v) => v.copy(r.pos) }
             });
-          }
-          instancedMesh.instanceMatrix.needsUpdate = true;
-          this.foliageGroup.add(instancedMesh);
+          });
+          addChunkedInstances(this.foliageGroup, rockGeomPool[k], rockMat, groupRocks.map(r => r.matrix), {
+            onChunk: (mesh) => { mesh.userData.isRock = true; }
+          });
         }
       }
 
@@ -5257,13 +5297,7 @@
         });
 
         const buildFenceBatch = (matrices, geom, mat, castShadow) => {
-          if (!matrices.length) return;
-          const mesh = new THREE.InstancedMesh(geom, mat, matrices.length);
-          matrices.forEach((m, idx) => mesh.setMatrixAt(idx, m));
-          mesh.instanceMatrix.needsUpdate = true;
-          mesh.castShadow = castShadow;
-          mesh.frustumCulled = false;
-          this.foliageGroup.add(mesh);
+          addChunkedInstances(this.foliageGroup, geom, mat, matrices, { castShadow });
         };
 
         const fWoodTex = RealTextureFactory.woodColor();

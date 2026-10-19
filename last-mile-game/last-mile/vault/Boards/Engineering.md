@@ -22,6 +22,8 @@ kanban-plugin: board
 	Tracked privately.
 
 ## 🔨 In Progress
+- [ ] 🔴 **Visual quality overhaul**: richer stylized look for web and Android, moving past flat low-poly · @{2026-10-19}
+	Baseline captured. First speed-up (B145) is in: rocks and barriers off screen are no longer drawn, 60 FPS on the Android emulator. Next: richer trees, rocks, hills and buildings. [[2026-10-19 - Visual Quality Baseline]]
 - [ ] 🔴 **Vehicle roster: Cargo three-wheeler (Rickshaw)** · @{2026-09-27}
 	Cycle, Motorbike and the reworked Muscle Coupe are done, each with its own pay rate; the cargo three-wheeler is still pending its own model. [[Projects/Last-Mile Game]]
 - [ ] 🔴 **Launch blockers**: bundle third-party libraries locally, web portal setup, keep the first download small · @{2026-09-23}
