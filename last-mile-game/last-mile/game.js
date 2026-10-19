@@ -1884,6 +1884,56 @@
   };
 
 
+  // Layered ground shader (B156). Slow Roads' ground is NOT one colour texture: it is the terrain colour
+  // multiplied by a greyscale blade-detail map (fine, near), a patch-variation map (warm/cool and light/dark
+  // patches), and a coarser mottling for the distance, blended by camera distance. This does the same with
+  // original maps (assets/textures/ground_blades.webp, ground_variation.webp; scratch/asset-options/atlas/
+  // build_ground.py). World-space mapping, so the terrain's custom UVs are not involved. Kill switch:
+  // localStorage.shiplyp_groundDetail = '0'.
+  const GroundDetail = {
+    _tex: null,
+    enabled() { try { return localStorage.getItem('shiplyp_groundDetail') !== '0'; } catch (e) { return true; } },
+    textures() {
+      if (this._tex) return this._tex;
+      const loader = new THREE.TextureLoader();
+      const wrap = (t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; return t; };
+      this._tex = { blades: wrap(loader.load('assets/textures/ground_blades.webp')), vari: wrap(loader.load('assets/textures/ground_variation.webp')) };
+      return this._tex;
+    },
+    apply(mat) {
+      if (!this.enabled()) return mat;
+      const T = this.textures();
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uBlades = { value: T.blades };
+        shader.uniforms.uVari = { value: T.vari };
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vShpWorld;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvShpWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vShpWorld;\nuniform sampler2D uBlades;\nuniform sampler2D uVari;')
+          .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            float shpDist = length(vViewPosition);
+            vec2 w = vShpWorld.xz;
+            vec3 vA = texture2D(uVari, w / 61.0).rgb;
+            vec3 vB = texture2D(uVari, w / 11.0 + 0.37).rgb;
+            float bl = texture2D(uBlades, w / 1.15).r;
+            float bl2 = texture2D(uBlades, w / 4.3 + 0.5).r;
+            float nearF = 1.0 - smoothstep(10.0, 55.0, shpDist);
+            float midF = 1.0 - smoothstep(35.0, 170.0, shpDist);
+            float detail = mix(1.0, bl * 1.55 + 0.22, 0.60 * nearF) * mix(1.0, bl2 * 1.35 + 0.32, 0.30 * midF);
+            // warm olive-yellow <-> deeper green patches, plus light/dark patches and rare dry/clover specks
+            vec3 tint = mix(vec3(1.10, 1.02, 0.70), vec3(0.76, 0.96, 0.70), vA.g);
+            float lum = 0.74 + 0.52 * mix(vA.r, vB.r, 0.45);
+            float speck = (vB.b - 0.5) * 0.30;
+            diffuseColor.rgb *= detail * tint * lum * (1.0 + speck);
+          }`);
+      };
+      mat.needsUpdate = true;
+      return mat;
+    }
+  };
+
   // Real sourced CC0 photo textures (ambientcg.com — Grass005, Rock064,
   // Asphalt033, WoodSiding013) replacing the flat-color / canvas-noise
   // materials for the ground/rock/road/fence, per
@@ -2432,27 +2482,27 @@
             const pt = this.curve.getPointAt(pu);
             const tg = this.curve.getTangentAt(pu).setY(0).normalize();
             const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
-            const count = 8 + (hash(sm, side + 40) > 0.5 ? 3 : 0);
+            const count = 15 + (hash(sm, side + 40) > 0.5 ? 6 : 0);
             for (let c = 0; c < count; c++) {
               const r1 = hash(sm * 5 + c, side + 41), r2 = hash(sm * 7 + c, side + 43), r3 = hash(sm * 11 + c, side + 47), r4 = hash(sm * 13 + c, side + 53);
-              const absLat = 6.3 + 34 * Math.pow(r1, 1.5);                       // dense near the road, thinning outward
+              const absLat = 6.3 + 30 * Math.pow(r1, 1.7);                       // dense near the road, thinning outward
               const along = (r2 - 0.5) * STEP * 1.6;
               const pos = pt.clone().addScaledVector(nrm, side * absLat).addScaledVector(tg, along);
               if (blocked(pos, absLat, 1.5)) continue;
               pos.y = this.groundHeightAt(pt, pos, side * absLat) - 0.03;
               const grow = 1 + (absLat - 6) * 0.035;                              // far tufts a little bigger so they still read
-              const h = (0.32 + r3 * 0.4) * grow, w = h * (1.6 + r4 * 0.8);
+              const h = (0.42 + r3 * 0.5) * grow, w = h * (1.9 + r4 * 0.9);
               dummy.position.copy(pos); dummy.rotation.set(0, r4 * Math.PI * 2, 0); dummy.scale.set(w, h, w); dummy.updateMatrix();
               const m = dummy.matrix.clone();
-              const g = 0.9 + r3 * 0.22;
-              m._tint = grassBase.clone().multiplyScalar(g);
+              const g = 0.92 + r3 * 0.2;
+              m._tint = new THREE.Color(0.84 * g, 0.92 * g, 0.66 * g);               // olive green, matches the ground shader
               const flower = r2 < 0.14;                                       // ~14% flowering
               const variant = flower ? 4 + (r4 > 0.5 ? 1 : 0) : Math.floor(r4 * 4) % 4;
               if (flower) { const f = 0.95 + r3 * 0.1; m._tint.setRGB(f, f, f); }
               tufts[variant].push(m);
             }
             // a low shrub every so often, set back from the road
-            if (hash(sm, side + 60) < 0.26) {
+            if (hash(sm, side + 60) < 0.07) {
               const r1 = hash(sm, side + 61), r2 = hash(sm, side + 62), r3 = hash(sm, side + 63);
               const absLat = 8.5 + 17 * r1;
               const pos = pt.clone().addScaledVector(nrm, side * absLat).addScaledVector(tg, (r2 - 0.5) * STEP);
@@ -3725,6 +3775,7 @@
         envMapIntensity: 0.35
       });
 
+      GroundDetail.apply(terrainMat);
       this.terrainMesh = new THREE.Mesh(geom, terrainMat);
       this.terrainMesh.receiveShadow = true;
       if (!this.terrainMeshes) this.terrainMeshes = [];
@@ -4410,6 +4461,7 @@
         map: floorGrassTex
       });
 
+      GroundDetail.apply(floorMat);
       this.floorMesh = new THREE.Mesh(geom, floorMat);
       // Floor mesh spans kilometers outside the 32m car shadow frustum; disabling receiveShadow eliminates massive PCF shadow overhead
       this.floorMesh.receiveShadow = false;
