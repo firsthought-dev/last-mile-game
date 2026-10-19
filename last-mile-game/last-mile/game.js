@@ -234,7 +234,7 @@
   // models each time, most painfully on the Android WebView's cold start.
   // Bump this by hand whenever a file under assets/models/ changes; that
   // invalidates the old copy exactly when it should and never otherwise.
-  const ASSET_VERSION = '7';
+  const ASSET_VERSION = '8';
 
   // 0f. MUSCLE COUPE — reworked in Blender (B129) from a user-supplied model:
   // all badges and lettering removed; our own grille, lamps, hood and tail;
@@ -1855,7 +1855,8 @@
   class NearGrassLayer {
     constructor(world, scene) {
       this.world = world; this.scene = scene; this.cells = new Map(); this._acc = 1; this._on = true;
-      try { this._on = localStorage.getItem('shiplyp_nearGrass') !== '0'; } catch (e) { /* default on */ }
+      this._on = false;                                              // OFF by default: user rejected the procedural grass; real assets pending
+      try { this._on = localStorage.getItem('shiplyp_nearGrass') === '1'; } catch (e) { /* stay off */ }
       this.group = new THREE.Group(); this.group.name = 'NearGrass'; scene.add(this.group);
       NearGrassLayer.RADIUS = 58; NearGrassLayer.FADE0 = 38; NearGrassLayer.CELL = 9;
       this.geom = NearGrassLayer.geometry(); this.mat = NearGrassLayer.material();
@@ -2680,18 +2681,17 @@
             const tg = this.curve.getTangentAt(pu).setY(0).normalize();
             const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
             const r1 = hash(sm * 7, side + 5), r2 = hash(sm * 13, side + 9), r3 = hash(sm * 17, side + 21), r4 = hash(sm * 19, side + 31);
-            const absLat = outerEdge - 0.12 + r1 * 0.55;                // tight band along the edge
+            const absLat = roadHalf + 0.05 + r1 * 0.5;                  // tight band along the KERB (road-side) edge of the footpath
             const lat = side * absLat;
             const pos = pt.clone().addScaledVector(nrm, lat);
             if (this.isFenceGap && this.isFenceGap(pos)) continue;
             const topY = pt.y + 0.12 + side * roadHalf * Math.sin(bankAtU(u)) + KERB;
-            const onPath = absLat <= outerEdge;
-            const y = onPath ? topY : this.groundHeightAt(pt, pos, lat);
-            pos.y = Math.min(y, topY + 0.02);
+            const onPath = true;                                         // the kerb edge is always on the footpath surface
+            pos.y = topY;
             const rise = Math.max(0, topY - pos.y);
             const h = 0.46 + r2 * 0.14 + rise * 0.8;                     // narrow height range
             const width = h * (1.55 + r3 * 0.2);
-            const leanA = THREE.MathUtils.degToRad(onPath ? 20 : 30 + r3 * 6);   // consistent lean over the footpath
+            const leanA = THREE.MathUtils.degToRad(16 + r3 * 4);                 // gentle, consistent lean over the kerb toward the road
             lean.copy(nrm).multiplyScalar(-side);
             tilted.copy(up).multiplyScalar(Math.cos(leanA)).addScaledVector(lean, Math.sin(leanA)).normalize();
             q1.setFromUnitVectors(up, tilted);
