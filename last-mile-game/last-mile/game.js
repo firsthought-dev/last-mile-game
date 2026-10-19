@@ -2346,6 +2346,19 @@
       return group;
     }
 
+    // Roadside variety (B154): the barrier style changes by stretch of road. A deterministic hash of
+    // the 400 m map cell the barrier stands in (never the world prng), so the initial build and the
+    // streamed extensions always agree. 0 = steel guardrail (most common), 1 = dry-stone wall,
+    // 2 = timber split-rail, 3 = concrete Jersey barrier. Kill switch: localStorage.shiplyp_barrierVariety = '0'.
+    _barrierStyleAt(pos) {
+      try { if (localStorage.getItem('shiplyp_barrierVariety') === '0') return CONFIG.BARRIER_STYLE; } catch (e) { /* default on */ }
+      const cx = Math.floor(pos.x / 400), cz = Math.floor(pos.z / 400);
+      let h = (Math.imul(cx | 0, 374761393) + Math.imul(cz | 0, 668265263)) | 0;
+      h = Math.imul(h ^ (h >>> 13), 1274126177);
+      const r = ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+      return r < 0.5 ? 0 : (r < 0.72 ? 1 : (r < 0.95 ? 2 : 3));
+    }
+
     // Ground cover (B153): grass tufts, flowering tufts and low shrubs scattered across the verge
     // and hillside, dense near the road and thinning with distance. Built AFTER the props so it
     // can keep clear of buildings; never lands on another stretch of road (the route loops).
@@ -5453,7 +5466,7 @@
               const groupMatrix = _fenceDummy.matrix;
 
               // Barrier Styles: 0: Galvanized Steel W-Beam Armco Guardrail, 1: Dry-stone wall, 2: Wood split-rail, 3: Concrete Jersey barrier
-              const barrierStyle = CONFIG.BARRIER_STYLE;
+              const barrierStyle = this._barrierStyleAt(fencePos);
               const matrices = { posts: [], rails: [], stoneRows: [], concreteRows: [], armcoRails: [], armcoPosts: [], armcoReflectors: [] };
 
               if (barrierStyle === 0) {
@@ -5845,7 +5858,7 @@
         buildFenceBatch(
           acceptedStoneRows,
           BG.stone,
-          new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
+          new THREE.MeshStandardMaterial({ color: 0x7a756c, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
           true
         );
         // Modern Highway Concrete Barrier (Jersey barrier variant)
@@ -5885,7 +5898,7 @@
           railGeom: BG.woodRail,
           railMat: new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
           stoneGeom: BG.stone,
-          stoneMat: new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
+          stoneMat: new THREE.MeshStandardMaterial({ color: 0x7a756c, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
           concreteGeom: BG.concrete,
           concreteMat: new THREE.MeshStandardMaterial({ color: 0xc9c5bc, roughness: 0.9, metalness: 0.02 }),
           armcoRailGeom: BG.armcoRail,
@@ -8402,7 +8415,7 @@
             _fdummy.updateMatrix();
             const groupMatrix = _fdummy.matrix;
 
-            const barrierStyle = CONFIG.BARRIER_STYLE;
+            const barrierStyle = this._barrierStyleAt(fencePosBar);
             const emit = (geom, mat, localM) => {
               const m = new THREE.Mesh(geom, mat);
               m.applyMatrix4(groupMatrix.clone().multiply(localM));
