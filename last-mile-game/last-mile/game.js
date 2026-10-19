@@ -1855,8 +1855,8 @@
   class NearGrassLayer {
     constructor(world, scene) {
       this.world = world; this.scene = scene; this.cells = new Map(); this._acc = 1; this._on = true;
-      this._on = true;                                               // placement was always wanted; only the PROCEDURAL ART was rejected (now real Poly Haven sprites)
-      try { this._on = localStorage.getItem('shiplyp_nearGrass') !== '0'; } catch (e) { /* stay on */ }
+      this._on = false;                                              // superseded by buildGroundCover, which covers the WHOLE route at load; this streamed layer left bare ground far from the player
+      try { this._on = localStorage.getItem('shiplyp_nearGrass') === '1'; } catch (e) { /* stay off */ }
       this.group = new THREE.Group(); this.group.name = 'NearGrass'; scene.add(this.group);
       NearGrassLayer.RADIUS = 58; NearGrassLayer.FADE0 = 38; NearGrassLayer.CELL = 9;
       this.geom = NearGrassLayer.geometry(); this.mat = NearGrassLayer.material();
@@ -2586,12 +2586,34 @@
       sc.sort((x, y) => x - y);
       return (this._pineThr = sc[Math.floor(0.65 * (sc.length - 1))]);
     }
+    // Zone label per 25 m bin: above the threshold = hill. Short runs are merged into their neighbours until every
+    // run is at least PINE_MIN_RUN long, so a stretch is wholly pine or wholly broadleaf, never a patchwork.
+    _pineLabels() {
+      if (this._pineLab) return this._pineLab;
+      const maxK = Math.floor(this.curve.getLength() / 25), thr = this._pineThreshold(), MIN = 24;        // 24 bins = 600 m
+      const lab = []; for (let k = 0; k <= maxK; k++) lab.push(this._pineScore(k) > thr);
+      for (let pass = 0; pass < 12; pass++) {
+        let changed = false, i = 0;
+        while (i <= maxK) {
+          let j = i; while (j + 1 <= maxK && lab[j + 1] === lab[i]) j++;
+          if (j - i + 1 < MIN) {                                          // flip a short run to match its longer neighbour
+            const left = i > 0 ? lab[i - 1] : null, right = j < maxK ? lab[j + 1] : null;
+            const to = left === null ? right : (right === null ? left : left);
+            if (to !== null && to !== lab[i]) { for (let k = i; k <= j; k++) lab[k] = to; changed = true; }
+          }
+          i = j + 1;
+        }
+        if (!changed) break;
+      }
+      return (this._pineLab = lab);
+    }
     _pineZoneAt(pt, normal, side) {
       const grid = this.roadSpatialGrid, pts = this.roadSpacedPoints;
       if (!grid || !pts || !pts.length) return false;
       const near = grid.getNearestRoadPoint(pt.x, pt.z, 12);
       const idx = near ? near.index : 0, segLen = this.curve.getLength() / (pts.length - 1);
-      return this._pineScore(Math.round(idx * segLen / 25)) > this._pineThreshold();
+      const k = Math.round(idx * segLen / 25), lab = this._pineLabels();
+      return k < lab.length ? lab[k] : this._pineScore(k) > this._pineThreshold();
     }
 
     // Roadside variety (B154): the barrier style changes by stretch of road. A deterministic hash of
@@ -2617,7 +2639,7 @@
       const group = new THREE.Group();
       group.name = 'GroundCover';
       try {
-        try { if (localStorage.getItem('shiplyp_groundCover') !== '1') return group; } catch (e) { return group; }   // opt-in: superseded by NearGrassLayer
+        try { if (localStorage.getItem('shiplyp_groundCover') === '0') return group; } catch (e) { /* default on */ }
         if (!this.curve || this.seasonKey === 'winter') return group;
         const len = this.curve.getLength(), STEP = 4.0;
         const n = Math.max(2, Math.ceil(((u1 - u0) * len) / STEP));
@@ -2641,23 +2663,23 @@
             const pt = this.curve.getPointAt(pu);
             const tg = this.curve.getTangentAt(pu).setY(0).normalize();
             const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
-            const count = 15 + (hash(sm, side + 40) > 0.5 ? 6 : 0);
+            const count = 13 + (hash(sm, side + 40) > 0.5 ? 5 : 0);
             for (let c = 0; c < count; c++) {
               const r1 = hash(sm * 5 + c, side + 41), r2 = hash(sm * 7 + c, side + 43), r3 = hash(sm * 11 + c, side + 47), r4 = hash(sm * 13 + c, side + 53);
-              const absLat = 6.3 + 30 * Math.pow(r1, 1.7);                       // dense near the road, thinning outward
+              const absLat = 6.3 + 34 * Math.pow(r1, 1.55);                      // dense near the road, thinning outward, reaching the whole visible corridor
               const along = (r2 - 0.5) * STEP * 1.6;
               const pos = pt.clone().addScaledVector(nrm, side * absLat).addScaledVector(tg, along);
               if (blocked(pos, absLat, 1.5)) continue;
               pos.y = this.groundHeightAt(pt, pos, side * absLat) - 0.03;
               const grow = 1 + (absLat - 6) * 0.035;                              // far tufts a little bigger so they still read
-              const h = (0.42 + r3 * 0.5) * grow, w = h * (1.9 + r4 * 0.9);
+              const h = (0.5 + r3 * 0.45) * grow, w = h * (1.0 + r4 * 0.25);
               dummy.position.copy(pos); dummy.rotation.set(0, r4 * Math.PI * 2, 0); dummy.scale.set(w, h, w); dummy.updateMatrix();
               const m = dummy.matrix.clone();
               const g = 0.92 + r3 * 0.2;
-              m._tint = new THREE.Color(0.84 * g, 0.92 * g, 0.66 * g);               // olive green, matches the ground shader
+              m._tint = new THREE.Color(1.25 * g, 1.3 * g, 1.08 * g);                  // the real plant photos are dull; lift them to sit with the lit scene
               const flower = r2 < 0.14;                                       // ~14% flowering
-              const variant = flower ? 4 + (r4 > 0.5 ? 1 : 0) : Math.floor(r4 * 4) % 4;
-              if (flower) { const f = 0.95 + r3 * 0.1; m._tint.setRGB(f, f, f); }
+              const variant = (r2 < 0.10) ? 4 + (r4 > 0.5 ? 1 : 0) : Math.floor(r4 * 4) % 4;
+              m._tint.setRGB(1.25 * g, 1.3 * g, 1.08 * g);
               tufts[variant].push(m);
             }
             // a low shrub every so often, set back from the road
