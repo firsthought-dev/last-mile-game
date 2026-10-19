@@ -234,7 +234,7 @@
   // models each time, most painfully on the Android WebView's cold start.
   // Bump this by hand whenever a file under assets/models/ changes; that
   // invalidates the old copy exactly when it should and never otherwise.
-  const ASSET_VERSION = '10';
+  const ASSET_VERSION = '11';
 
   // 0f. MUSCLE COUPE — reworked in Blender (B129) from a user-supplied model:
   // all badges and lettering removed; our own grille, lamps, hood and tail;
@@ -256,6 +256,11 @@
   // seated on it, baked as static geometry. Wheel_Front/Wheel_Rear spin about
   // their axle origins. Source: assets/models/motorbike-source.blend.
   const MotorbikeAsset = makeVehicleAsset('assets/models/motorbike.glb?v=' + ASSET_VERSION, () => {}, 'MotorbikeAsset');
+
+  // 0g1b. CARGO RICKSHAW — built in Blender (B172): blue cab, orange cargo bed
+  // with boxes, courier at the handlebar (same rider mesh as the cycle).
+  // Wheel_Front / Wheel_Rear_L / Wheel_Rear_R spin about their axle origins.
+  const RickshawAsset = makeVehicleAsset('assets/models/rickshaw.glb?v=' + ASSET_VERSION, () => {}, 'RickshawAsset');
 
   // 0g2. CHAI TAPRI — static roadside tea-stall prop. Origin at ground centre,
   // counter facing +Z (the road, once buildViewpointOrChai's lookAt runs).
@@ -1180,6 +1185,12 @@
       motorbike: { id: 'motorbike', order: 2, name: 'Motorbike', short: 'BIKE', handling: 'twoWheeler', speedLabel: '90 km/h',
         price: 1500, payoutMult: 1.25, wheelRadius: 0.31,
         maxSpeed: 25.0, accel: 11.0, drag: 0.65, brake: 20.0 },
+      // Cargo rickshaw (B172): top speed close to the motorbike, but a slow pick-up
+      // (accel 6.0 vs the bike's 11.0) and heavier drag; wheelbase/track feed the
+      // ground-contact probe instead of the coupe's.
+      rickshaw: { id: 'rickshaw', order: 3, name: 'Cargo Rickshaw', short: 'RICKSHAW', handling: 'threeWheeler', speedLabel: '86 km/h',
+        price: 3500, payoutMult: 1.6, wheelRadius: 0.28, bodyRoll: 0.19, halfWheelbase: 1.1, halfTrack: 0.64,
+        maxSpeed: 24.0, accel: 6.0, drag: 0.85, brake: 14.0 },
       musclecoupe: { id: 'musclecoupe', order: 4, name: 'Muscle Coupe', short: 'COUPE', handling: 'car', speedLabel: '194 km/h',
         price: 6000, payoutMult: 2.0, wheelRadius: 0.315, bodyRoll: 0.12,
         maxSpeed: 54.0, accel: 19.0, drag: 0.82, brake: 30.0 }
@@ -9288,6 +9299,33 @@
         tank.position.set(0, 0.8, 0.1);
         this.mesh.add(tank);
 
+      } else if (this.vehicleType === 'rickshaw' && RickshawAsset.template) {
+        // CARGO RICKSHAW (B172): courier baked in; cab roof is part of the model.
+        const rickModel = RickshawAsset.clone();
+        this.mesh.add(rickModel);
+        rickModel.traverse((child) => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
+        this._bindLensMaterials(rickModel);
+        this._collectWheels(rickModel, /^Wheel_(Front|Rear)/, null);
+        this.trolleyParcels = [];
+
+      } else if (this.vehicleType === 'rickshaw') {
+        // Procedural stand-in until RickshawAsset loads, then auto-rebuilt.
+        if (RickshawAsset.pendingControllers.indexOf(this) === -1) {
+          RickshawAsset.pendingControllers.push(this);
+        }
+        const rwGeom = new THREE.CylinderGeometry(0.28, 0.28, 0.12, 14);
+        rwGeom.rotateZ(Math.PI / 2);
+        const rwMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+        [[0, 0.28, -1.25], [-0.64, 0.28, 0.95], [0.64, 0.28, 0.95]].forEach(p => {
+          const w = new THREE.Mesh(rwGeom, rwMat);
+          w.position.set(...p);
+          this.mesh.add(w);
+          this.wheels.push(w);
+        });
+        const rbody = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 1.9), new THREE.MeshLambertMaterial({ color: 0x1062a0 }));
+        rbody.position.set(0, 0.9, 0.1);
+        this.mesh.add(rbody);
+
       } else if (this.vehicleType === 'musclecoupe' && MuscleCoupeAsset.template) {
         // ====================================================================
         // 4. MUSCLE COUPE: reworked in Blender (B129) with our own grille,
@@ -9814,8 +9852,9 @@
       const roadRight = proj.normal;
 
       // 4-Wheel Contact Ground Plane Evaluation
-      const halfWheelbase = isBicycle ? 0.95 : 1.45;
-      const halfTrack = isBicycle ? 0.25 : 0.82;
+      const _vSpec = vehicleSpec(this.vehicleType);
+      const halfWheelbase = _vSpec.halfWheelbase || (isBicycle ? 0.95 : 1.45);
+      const halfTrack = _vSpec.halfTrack || (isBicycle ? 0.25 : 0.82);
       const carHeading = this.heading;
       const carFwd = new THREE.Vector3(Math.sin(carHeading), 0, Math.cos(carHeading));
       const carRight = new THREE.Vector3(Math.cos(carHeading), 0, -Math.sin(carHeading));
@@ -11807,6 +11846,13 @@
         P([[146,24],[150,14],[160,14]]);                            // bars
         ctx.strokeRect(x(22), y(10), x(38), y(18));                // delivery box
         ctx.beginPath(); ctx.arc(x(154), y(26), x(4), 0, Math.PI*2); ctx.stroke(); // headlight
+      } else if (vehId === 'rickshaw') {
+        ctx.strokeStyle = '#2f9bff';
+        const fw=[168,60], rw1=[110,60], rr=x(15);
+        for (const [cx, cy] of [fw, rw1, [128,60]]) { ctx.beginPath(); ctx.arc(x(cx), y(cy), rr, 0, Math.PI*2); ctx.stroke(); }
+        ctx.strokeRect(x(40), y(34), x(70), y(22));                // cargo bed
+        ctx.strokeRect(x(48), y(20), x(26), y(14));                // boxes
+        ctx.beginPath(); ctx.moveTo(x(120),y(56)); ctx.lineTo(x(124),y(18)); ctx.lineTo(x(168),y(18)); ctx.lineTo(x(166),y(56)); ctx.stroke(); // cab + roof
       } else {
         // musclecoupe
         ctx.strokeStyle = '#ff9f1c';

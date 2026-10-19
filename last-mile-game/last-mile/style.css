@@ -4204,8 +4204,8 @@ body.vehicle-cycle .touch-drag-steer {
   /* Three vehicle cards no longer fit two-per-row without wrapping to an
      extra grid row (B126 broke at 1000x514 once motorbike joined cycle and
      musclecoupe) — go three-across here so the vehicle grid stays one row. */
-  .hub-vehicle-grid { grid-template-columns: repeat(3, 1fr); }
-  .hub-vehicle-grid .vehicle-card-btn { padding: 4px 8px; gap: 0; }
+  .hub-vehicle-grid { grid-template-columns: repeat(4, 1fr); }
+  .hub-vehicle-grid .vehicle-card-btn { padding: 4px 6px; gap: 0; }
   .hub-vehicle-grid .vehicle-card-stat { display: none; }
   .hub-tagline { display: none; }
   .hub-onboarding-banner { padding: 6px 10px; margin-bottom: 0; gap: 2px; }
