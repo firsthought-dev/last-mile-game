@@ -1513,6 +1513,11 @@
     // of trees, instead of 2 draw calls per tree.
     buildInstancedBatches(descriptors) {
       const group = new THREE.Group();
+      if (ClumpTreeFactory.enabled()) {
+        const leafy = descriptors.filter(d => d.kind === 'broadleaf');
+        descriptors = descriptors.filter(d => d.kind !== 'broadleaf');
+        group.add(ClumpTreeFactory.build(leafy));
+      }
       const buckets = new Map();
       for (const d of descriptors) {
         const key = `${d.kind}:${d.worldHeight}:${d.tintHex}`;
@@ -1545,6 +1550,149 @@
         }
       }
       group.userData.isTreeBatch = true;
+      return group;
+    }
+  };
+
+  // Leaf-clump broadleaf trees (B148). A tree is a tapering trunk, a few branches and
+  // ~14 clumps; each clump is two crossed quads showing a leaf-ball from a small atlas
+  // (tree_clumps_d diffuse + alpha, tree_clumps_n normal map with a domed normal baked in
+  // so a flat card lights like a round ball of leaves). ~120 triangles per tree, against
+  // 4 for the old crossed billboards, but it reads as foliage instead of a flat sprite.
+  // Geometry is generated here from a seed; the atlases were authored for this project.
+  // Trees are chunked (addChunkedInstances) so only the ones near the camera are drawn.
+  const ClumpTreeFactory = {
+    VARIANTS: 4,
+    _geoms: null,
+    _tex: null,
+    _mats: null,
+    enabled() {
+      try { return localStorage.getItem('shiplyp_clumpTrees') !== '0'; } catch (e) { return true; }
+    },
+    _textures() {
+      if (this._tex) return this._tex;
+      const loader = new THREE.TextureLoader();
+      const mats = () => { if (this._mats) this._mats.leaf.needsUpdate = true; };
+      const d = loader.load('assets/textures/tree_clumps_d.webp', () => { d.encoding = THREE.sRGBEncoding; d.needsUpdate = true; mats(); });
+      const n = loader.load('assets/textures/tree_clumps_n.webp');
+      d.anisotropy = n.anisotropy = 4;
+      this._tex = { d, n };
+      return this._tex;
+    },
+    _material() {
+      if (this._mats) return this._mats;
+      const t = this._textures();
+      this._mats = {
+        leaf: new THREE.MeshStandardMaterial({
+          map: t.d, normalMap: t.n, normalScale: new THREE.Vector2(0.9, 0.9),
+          color: 0x9aa88a, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.9, metalness: 0
+        }),
+        wood: new THREE.MeshLambertMaterial({ vertexColors: true })
+      };
+      return this._mats;
+    },
+    _rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; },
+    _buildVariant(seed) {
+      const rnd = this._rng(seed), V = THREE.Vector3;
+      const wp = [], wn = [], wc = [], wi = [];
+      const tube = (p0, p1, r0, r1, seg) => {
+        const d = new V().subVectors(p1, p0), len = d.length(); d.normalize();
+        const ref = Math.abs(d.z) < 0.9 ? new V(0, 0, 1) : new V(1, 0, 0);
+        const u = new V().crossVectors(d, ref).normalize(), v = new V().crossVectors(d, u);
+        const base = wp.length / 3;
+        for (let ring = 0; ring < 2; ring++) {
+          const c = ring ? p1 : p0, r = ring ? r1 : r0;
+          for (let i = 0; i < seg; i++) {
+            const a = (i / seg) * Math.PI * 2, nx = Math.cos(a), ny = Math.sin(a);
+            const n = new V().addScaledVector(u, nx).addScaledVector(v, ny);
+            wp.push(c.x + n.x * r, c.y + n.y * r, c.z + n.z * r); wn.push(n.x, n.y, n.z);
+            const sh = 0.82 + 0.18 * (nx * 0.5 + 0.5) + (rnd() - 0.5) * 0.05;
+            wc.push(0.15 * sh, 0.12 * sh, 0.095 * sh);
+          }
+        }
+        for (let i = 0; i < seg; i++) {
+          const a = base + i, b = base + (i + 1) % seg, c2 = base + seg + i, d2 = base + seg + (i + 1) % seg;
+          wi.push(a, c2, b, b, c2, d2);
+        }
+      };
+      const H = 4.2 + rnd() * 0.6;
+      const lean = new V((rnd() - 0.5) * 0.5, (rnd() - 0.5) * 0.5, 0);
+      const top = new V(lean.x, lean.y, H);
+      tube(new V(0, 0, 0), top, 0.32, 0.12, 7);
+      const ends = [];
+      const nb = 5;
+      for (let i = 0; i < nb; i++) {
+        const az = i * (Math.PI * 2 / nb) + (rnd() - 0.5) * 0.8, z0 = H * (0.55 + rnd() * 0.35);
+        const base = new V(lean.x * z0 / H, lean.y * z0 / H, z0), Lb = 1.3 + rnd() * 1.0;
+        const end = new V(base.x + Math.cos(az) * Lb, base.y + Math.sin(az) * Lb, base.z + 0.9 + rnd() * 1.3);
+        tube(base, end, 0.11, 0.04, 5); ends.push(end);
+      }
+      const centres = ends.map(e => [e, 1.5 + rnd() * 0.4]);
+      centres.push([new V(top.x, top.y, H + 1.7), 1.9]);
+      for (let i = 0; i < 8; i++) {
+        const a = rnd() * Math.PI * 2, rr = 0.5 + rnd() * 1.7;
+        centres.push([new V(Math.cos(a) * rr, Math.sin(a) * rr, H + 0.3 + rnd() * 2.6), 1.25 + rnd() * 0.4]);
+      }
+      const lp = [], lu = [];
+      const m4 = new THREE.Matrix4(), rz = new THREE.Matrix4(), rx = new THREE.Matrix4();
+      for (const [c, r] of centres) {
+        const tile = Math.floor(rnd() * 6), row = Math.floor(tile / 3), colIdx = tile % 3;
+        const u0 = colIdx / 3, u1 = (colIdx + 1) / 3, v1 = 1 - row / 2, v0 = 1 - (row + 1) / 2;
+        const yaw = rnd() * Math.PI;
+        for (let k = 0; k < 2; k++) {
+          rz.makeRotationZ(yaw + k * Math.PI / 2 + (rnd() - 0.5) * 0.4);
+          rx.makeRotationX((rnd() - 0.5) * 0.7);
+          m4.multiplyMatrices(rz, rx);
+          const q = [[-r, 0, -r], [r, 0, -r], [r, 0, r], [-r, 0, r]].map(a => new V(a[0], a[1], a[2]).applyMatrix4(m4).add(c));
+          const uvq = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+          for (const i of [0, 1, 2, 0, 2, 3]) { lp.push(q[i].x, q[i].y, q[i].z); lu.push(uvq[i][0], uvq[i][1]); }
+        }
+      }
+      const wood = new THREE.BufferGeometry();
+      wood.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3));
+      wood.setAttribute('normal', new THREE.Float32BufferAttribute(wn, 3));
+      wood.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
+      wood.setIndex(wi);
+      const leaves = new THREE.BufferGeometry();
+      leaves.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+      leaves.setAttribute('uv', new THREE.Float32BufferAttribute(lu, 2));
+      leaves.computeVertexNormals();
+      // three is Y-up, the generator above is Z-up: rotate both into place and measure height.
+      const rot = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+      wood.applyMatrix4(rot); leaves.applyMatrix4(rot);
+      leaves.computeBoundingBox(); wood.computeBoundingSphere(); leaves.computeBoundingSphere();
+      return { wood, leaves, height: leaves.boundingBox.max.y };
+    },
+    _variants() {
+      if (!this._geoms) { this._geoms = []; for (let i = 0; i < this.VARIANTS; i++) this._geoms.push(this._buildVariant(1013 + i * 7919)); }
+      return this._geoms;
+    },
+    // descriptors: the broadleaf entries of TreeBillboardFactory.buildInstancedBatches
+    build(descriptors) {
+      const group = new THREE.Group();
+      if (!descriptors.length) return group;
+      const mats = this._material(), variants = this._variants();
+      const dummy = new THREE.Object3D(), col = new THREE.Color();
+      const byVariant = variants.map(() => []);
+      for (const d of descriptors) {
+        const vi = Math.abs(Math.floor(d.pos.x * 12.9898 + d.pos.z * 78.233)) % variants.length;
+        const v = variants[vi];
+        dummy.position.copy(d.pos); dummy.rotation.set(0, d.rotY, 0);
+        dummy.scale.setScalar((d.worldHeight * (d.scale || 1)) / v.height);
+        dummy.updateMatrix();
+        const m = dummy.matrix.clone();
+        // seasonal tint, pulled toward white so the painted greens are not greyed out
+        m._tint = col.setHex(d.tintHex != null ? d.tintHex : 0xffffff).lerp(new THREE.Color(0xffffff), 0.55).clone();
+        byVariant[vi].push(m);
+      }
+      byVariant.forEach((mats4, vi) => {
+        const v = variants[vi];
+        addChunkedInstances(group, v.leaves, mats.leaf, mats4, {
+          cell: 260,
+          onChunk: (mesh, list) => { list.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; }
+        });
+        addChunkedInstances(group, v.wood, mats.wood, mats4, { cell: 260 });
+      });
       return group;
     }
   };
