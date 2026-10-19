@@ -2388,9 +2388,11 @@
     // Roadside variety (B154): the barrier style changes by stretch of road. A deterministic hash of
     // the 400 m map cell the barrier stands in (never the world prng), so the initial build and the
     // streamed extensions always agree. 0 = steel guardrail (most common), 1 = dry-stone wall,
-    // 2 = timber split-rail, 3 = concrete Jersey barrier. Kill switch: localStorage.shiplyp_barrierVariety = '0'.
+    // 2 = timber split-rail, 3 = concrete Jersey barrier. OPT-IN (user did not ask for the barrier itself to
+    // change): off by default, so the route keeps CONFIG.BARRIER_STYLE everywhere. Enable for A/B with
+    // localStorage.shiplyp_barrierVariety = '1'.
     _barrierStyleAt(pos) {
-      try { if (localStorage.getItem('shiplyp_barrierVariety') === '0') return CONFIG.BARRIER_STYLE; } catch (e) { /* default on */ }
+      try { if (localStorage.getItem('shiplyp_barrierVariety') !== '1') return CONFIG.BARRIER_STYLE; } catch (e) { return CONFIG.BARRIER_STYLE; }
       const cx = Math.floor(pos.x / 400), cz = Math.floor(pos.z / 400);
       let h = (Math.imul(cx | 0, 374761393) + Math.imul(cz | 0, 668265263)) | 0;
       h = Math.imul(h ^ (h >>> 13), 1274126177);
