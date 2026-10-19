@@ -67,6 +67,7 @@
           <span class="delivery-order-seq" id="delivery-count">0/12</span>
           <span class="delivery-sep">/</span>
           <span class="delivery-payout" id="delivery-payout-text">₹85</span>
+          <span class="delivery-spares" id="delivery-spares" title="Spare parcels left this shift"></span>
         </div>
         <div class="delivery-capsule-body">
           <div class="delivery-dest-row">
@@ -83,13 +84,12 @@
       <!-- Top-Right: Slowroads System Controls -->
       <div class="slowroads-top-bar">
         <div class="slowroads-sys-btns">
-          <button id="btn-hud-audio" class="slowroads-status-pill" title="Mute / Unmute Audio [M]" tabindex="-1"><span class="status-dot" id="dot-audio"></span><span id="label-audio">AUDIO: ON</span></button>
           <button id="btn-hud-camera" class="slowroads-status-pill" title="Camera Mode [C]" tabindex="-1"><span id="label-cam">CAM: CHASE</span></button>
           <button id="btn-hud-sound" class="slowroads-icon-btn" title="Toggle All Audio" style="display:none;" tabindex="-1">MUTE</button>
         </div>
         <div class="slowroads-sys-btns">
           <button id="btn-hud-tod" class="slowroads-status-pill" title="Cycle Time of Day [T]" tabindex="-1"><span id="label-tod">DAY</span></button>
-          <div class="slowroads-status-pill" id="hud-fps-pill"><span id="hud-fps-value">60</span> FPS</div>
+          <div class="slowroads-status-pill" id="hud-fps-pill" hidden><span id="hud-fps-value">60</span> FPS</div>
         </div>
       </div>
 

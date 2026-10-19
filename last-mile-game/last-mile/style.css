@@ -4213,3 +4213,23 @@ body.vehicle-cycle .touch-drag-steer {
   .hub-career-strip { padding: 8px 10px; margin-bottom: 0; gap: 6px; }
   .career-daily-row { display: none; }
 }
+
+/* B140: spare parcels left this shift, in the delivery capsule header. */
+.delivery-spares {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  font-family: var(--font-telemetry);
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--comic-yellow, #ffe600);
+  text-shadow: 1px 1px 0px #000000;
+  white-space: nowrap;
+}
+.delivery-spares:empty { display: none; }
+.delivery-spares.spares-low { color: var(--comic-red, #ff2d4e); }
+.delivery-spares svg { width: 11px; height: 11px; }
+
+/* B142: the FPS counter is opt-in from Settings. */
+#hud-fps-pill[hidden] { display: none !important; }
