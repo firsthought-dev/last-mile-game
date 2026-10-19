@@ -1980,6 +1980,34 @@
       this._mat = new THREE.MeshLambertMaterial({ map: t, alphaTest: 0.45, side: THREE.DoubleSide });
       return this._mat;
     },
+    // Dense plant PATCHES (B165): each card is a packed cluster of ~40 real Poly Haven plants baked in Blender
+    // (assets/textures/grass_patches.webp, 3x2 tiles of 512x256). 2 crossed upright quads, 1 x 0.5 per unit scale.
+    patchGeoms() {
+      if (this._patchGeoms) return this._patchGeoms;
+      this._patchGeoms = [];
+      for (let t = 0; t < 6; t++) {
+        const col = t % 3, row = Math.floor(t / 3), u0 = col / 3, u1 = (col + 1) / 3, v1 = 1 - row / 2, v0 = 1 - (row + 1) / 2;
+        const pos = [], uv = [];
+        for (let k = 0; k < 2; k++) {
+          const a = k * Math.PI / 2, cx = Math.cos(a) * 0.5, cz = Math.sin(a) * 0.5;
+          const q = [[-cx, 0, -cz], [cx, 0, cz], [cx, 0.5, cz], [-cx, 0.5, -cz]], uvq = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+          for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(q[i][0], q[i][1], q[i][2]); uv.push(uvq[i][0], uvq[i][1]); }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+        g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(pos.length / 3).fill(0).flatMap(() => [0, 1, 0]), 3));
+        g.computeBoundingSphere();
+        this._patchGeoms.push(g);
+      }
+      return this._patchGeoms;
+    },
+    patchMaterial() {
+      if (this._patchMat) return this._patchMat;
+      const t = new THREE.TextureLoader().load('assets/textures/grass_patches.webp', () => { t.encoding = THREE.sRGBEncoding; t.needsUpdate = true; if (this._patchMat) this._patchMat.needsUpdate = true; });
+      t.anisotropy = 4;
+      return (this._patchMat = new THREE.MeshLambertMaterial({ map: t, alphaTest: 0.5, side: THREE.DoubleSide }));
+    },
     geoms() {
       if (this._geoms) return this._geoms;
       this._geoms = [];
@@ -2635,11 +2663,12 @@
     // other fence-gap sites. Cached; extended when new props appear (streamed chunks).
     _structures() {
       const obs = this.obstacles || [], gaps = this.fenceGapSites || [];
-      if (this._structCache && this._structCache.o === obs.length && this._structCache.g === gaps.length) return this._structCache.list;
+      if (this._structCache && this._structCache.o === obs.length && this._structCache.g === gaps.length && this._structCache.d === (this.deliveryTargets || []).length) return this._structCache.list;
       const list = [];
       for (const o of obs) if (o.type === 'building' && o.radius < 14) list.push({ pos: o.pos, r: o.radius });
       for (const g of gaps) list.push({ pos: g.pos, r: Math.min(g.r, 12) });
-      this._structCache = { o: obs.length, g: gaps.length, list };
+      for (const t of (this.deliveryTargets || [])) { const tp = t.pos || t.position || t.housePos; if (tp) list.push({ pos: tp, r: 5.5 }); }   // house frontage: gate, plinth, steps
+      this._structCache = { o: obs.length, g: gaps.length, d: (this.deliveryTargets || []).length, list };
       return list;
     }
     _nearStructure(pos, margin) {
@@ -2706,9 +2735,9 @@
       try {
         try { if (localStorage.getItem('shiplyp_groundCover') === '0') return group; } catch (e) { /* default on */ }
         if (!this.curve || this.seasonKey === 'winter') return group;
-        const len = this.curve.getLength(), STEP = 4.0;
+        const len = this.curve.getLength(), STEP = 2.0;
         const n = Math.max(2, Math.ceil(((u1 - u0) * len) / STEP));
-        const tuftGeoms = RoadGrassFactory.geoms(), tuftMat = RoadGrassFactory.material();
+        const tuftGeoms = RoadGrassFactory.patchGeoms(), tuftMat = RoadGrassFactory.patchMaterial();
         const shrubGeoms = ClumpTreeFactory.shrubGeoms(), shrubMat = ClumpTreeFactory.shrubMaterial();
         const tufts = tuftGeoms.map(() => []), shrubs = shrubGeoms.map(() => []);
         const up = new THREE.Vector3(0, 1, 0), dummy = new THREE.Object3D();
@@ -2728,27 +2757,24 @@
             const pt = this.curve.getPointAt(pu);
             const tg = this.curve.getTangentAt(pu).setY(0).normalize();
             const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
-            const count = 58 + (hash(sm, side + 40) > 0.5 ? 14 : 0);
-            for (let c = 0; c < count; c++) {
-              const r1 = hash(sm * 5 + c, side + 41), r2 = hash(sm * 7 + c, side + 43), r3 = hash(sm * 11 + c, side + 47), r4 = hash(sm * 13 + c, side + 53);
-              const absLat = 6.3 + 34 * Math.pow(r1, 2.3);                       // strongly concentrated near the road, thinning outward to the edge of the visible corridor
-              const along = (r2 - 0.5) * STEP * 1.6;
-              const pos = pt.clone().addScaledVector(nrm, side * absLat).addScaledVector(tg, along);
+            // Dense PATCHES, not single plants (B165): rows every ~1.1 m out to 14 m, then every ~2.4 m out to 34 m;
+            // each card is a packed cluster of real plants, so the cover is continuous. Thins (never bare) with distance.
+            const LAT = [6.7, 7.8, 8.9, 10.0, 11.1, 12.2, 13.3, 14.4, 16.8, 19.2, 21.6, 24.0, 26.4, 28.8, 31.2, 33.6];
+            for (let rI = 0; rI < LAT.length; rI++) {
+              const r1 = hash(sm * 5 + rI, side + 41), r2 = hash(sm * 7 + rI, side + 43), r3 = hash(sm * 11 + rI, side + 47), r4 = hash(sm * 13 + rI, side + 53);
+              if (rI >= 8 && r1 > 0.78 - rI * 0.012) continue;                   // outer rows thin out a little
+              const absLat = LAT[rI] + (r2 - 0.5) * (rI < 8 ? 0.9 : 1.8);
+              const pos = pt.clone().addScaledVector(nrm, side * absLat).addScaledVector(tg, (r3 - 0.5) * STEP * 0.8);
               if (blocked(pos, absLat, 1.5)) continue;
-              pos.y = this.groundHeightAt(pt, pos, side * absLat) - 0.03;
-              const grow = 1 + (absLat - 6) * 0.035;                              // far tufts a little bigger so they still read
-              const h = (0.45 + r3 * 0.4) * grow, w = h * (1.0 + r4 * 0.25);
-              dummy.position.copy(pos); dummy.rotation.set(0, r4 * Math.PI * 2, 0); dummy.scale.set(w, h, w); dummy.updateMatrix();
-              const m = dummy.matrix.clone();
-              const g = 0.92 + r3 * 0.2;
-              m._tint = new THREE.Color(1.25 * g, 1.3 * g, 1.08 * g);                  // the real plant photos are dull; lift them to sit with the lit scene
-              const flower = r2 < 0.14;                                       // ~14% flowering
-              const variant = (r2 < 0.10) ? 4 + (r4 > 0.5 ? 1 : 0) : Math.floor(r4 * 4) % 4;
-              m._tint.setRGB(1.25 * g, 1.3 * g, 1.08 * g);
-              tufts[variant].push(m);
+              pos.y = this.groundHeightAt(pt, pos, side * absLat) - 0.04;
+              const sc = (1.7 + r4 * 0.5) * (1 + (absLat - 6) * 0.018);               // wider cards further out so the cover keeps up
+              dummy.position.copy(pos); dummy.rotation.set(0, r3 * Math.PI * 2, 0); dummy.scale.set(sc, sc * (0.9 + r2 * 0.25), sc); dummy.updateMatrix();
+              const m = dummy.matrix.clone(); const g = 0.93 + r4 * 0.16;
+              m._tint = new THREE.Color(g, g, g * 0.97);
+              tufts[Math.floor(r2 * 6 + r4 * 3) % 6].push(m);
             }
             // a low shrub every so often, set back from the road
-            if (hash(sm, side + 60) < 0.07) {
+            if (hash(sm, side + 60) < 0.035) {
               const r1 = hash(sm, side + 61), r2 = hash(sm, side + 62), r3 = hash(sm, side + 63);
               const absLat = 8.5 + 17 * r1;
               const pos = pt.clone().addScaledVector(nrm, side * absLat).addScaledVector(tg, (r2 - 0.5) * STEP);
@@ -2815,7 +2841,7 @@
             const absLat = outerEdge + S * 0.47 + 0.08 + r1 * 0.3;
             const lat = side * absLat;
             const pos = pt.clone().addScaledVector(nrm, lat);
-            if (this._nearStructure(pos, 2.5)) continue;                     // no tufts outside garages, homes, tea stalls (B164)
+            if (this._nearStructure(pos, 6.0)) continue;                     // no footpath tufts along the whole frontage of garages, homes, tea stalls (B164/B166)
             pos.y = Math.min(this.groundHeightAt(pt, pos, lat), topY);
             const leanA = THREE.MathUtils.degToRad(5 + r3 * 4);             // barely leaning toward the footpath, no overhang onto it
             lean.copy(nrm).multiplyScalar(-side);
