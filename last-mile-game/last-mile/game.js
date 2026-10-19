@@ -234,7 +234,7 @@
   // models each time, most painfully on the Android WebView's cold start.
   // Bump this by hand whenever a file under assets/models/ changes; that
   // invalidates the old copy exactly when it should and never otherwise.
-  const ASSET_VERSION = '8';
+  const ASSET_VERSION = '9';
 
   // 0f. MUSCLE COUPE — reworked in Blender (B129) from a user-supplied model:
   // all badges and lettering removed; our own grille, lamps, hood and tail;
@@ -2668,8 +2668,22 @@
       for (const o of obs) if (o.type === 'building' && o.radius < 14) list.push({ pos: o.pos, r: o.radius });
       for (const g of gaps) list.push({ pos: g.pos, r: Math.min(g.r, 12) });
       for (const t of (this.deliveryTargets || [])) { const tp = t.pos || t.position || t.housePos; if (tp) list.push({ pos: tp, r: 5.5 }); }   // house frontage: gate, plinth, steps
+      // Access path (B167): a clear walkway from the road to the structure, so plants go AROUND the way in, not across it.
+      const grid = this.roadSpatialGrid;
+      if (grid) for (const st of list) { const n = grid.getNearestRoadPoint(st.pos.x, st.pos.z, 24); st.b = n ? n.point : null; }
       this._structCache = { o: obs.length, g: gaps.length, d: (this.deliveryTargets || []).length, list };
       return list;
+    }
+    // True when `pos` lies within `halfW` of the walkway line from any structure to the road in front of it.
+    _onAccessPath(pos, halfW) {
+      const l = this._structures();
+      for (let i = 0; i < l.length; i++) {
+        const s = l[i]; if (!s.b) continue;
+        const ax = s.pos.x, az = s.pos.z, dx = s.b.x - ax, dz = s.b.z - az, len2 = dx * dx + dz * dz; if (len2 < 1e-6) continue;
+        const t = Math.max(0, Math.min(1, ((pos.x - ax) * dx + (pos.z - az) * dz) / len2));
+        const px = ax + dx * t - pos.x, pz = az + dz * t - pos.z; if (px * px + pz * pz < halfW * halfW) return true;
+      }
+      return false;
     }
     _nearStructure(pos, margin) {
       const l = this._structures();
@@ -2697,7 +2711,7 @@
           if (u < u0 - 0.002 || u > u1) continue;
           if (this._inTunnelAtU && this._inTunnelAtU(u, 3)) continue;
           const sx = Math.round(st.pos.x * 3), sz = Math.round(st.pos.z * 3);
-          const rIn = st.r + 0.5, rOut = st.r + 4.2, area = Math.PI * (rOut * rOut - rIn * rIn);
+          const rIn = st.r + 1.4, rOut = st.r + 5.0, area = Math.PI * (rOut * rOut - rIn * rIn);
           const n = Math.min(900, Math.round(area * 2.4));
           const p0 = pts[near.index], p1 = pts[Math.min(near.index + 1, pts.length - 1)];
           const side = Math.sign((p1.x - p0.x) * (st.pos.z - p0.z) - (p1.z - p0.z) * (st.pos.x - p0.x)) || 1;
@@ -2706,7 +2720,8 @@
             const pos = new THREE.Vector3(st.pos.x + Math.cos(a) * rad, 0, st.pos.z + Math.sin(a) * rad);
             const nr = grid.getNearestRoadPoint(pos.x, pos.z, 7.0);
             if (nr) continue;                                           // never on the footpath or road
-            let hit = false; for (const o of structs) { if (o.pos === st.pos) continue; const dx = o.pos.x - pos.x, dz = o.pos.z - pos.z, rr = o.r + 0.4; if (dx * dx + dz * dz < rr * rr) { hit = true; break; } }
+            if (this._onAccessPath(pos, 2.4)) continue;                  // keep the walkway to the door clear (B167)
+            let hit = false; for (const o of structs) { if (o.pos === st.pos) continue; const dx = o.pos.x - pos.x, dz = o.pos.z - pos.z, rr = o.r + 1.0; if (dx * dx + dz * dz < rr * rr) { hit = true; break; } }
             if (hit) continue;
             const lat = Math.hypot(pos.x - near.point.x, pos.z - near.point.z);
             pos.y = this.groundHeightAt(near.point, pos, side * lat) - 0.02;
@@ -2745,6 +2760,7 @@
         const buildings = (this.obstacles || []).filter(o => o.type === 'building');
         const hash = (a, b) => { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
         const blocked = (pos, absLat, margin) => {
+          if (this._onAccessPath(pos, 3.4) || this._nearStructure(pos, 1.3)) return true;   // walkway + the paved frontage of every house/stall/garage stay clear (B167)
           if (this.roadSpatialGrid && absLat > 4 && this.roadSpatialGrid.getNearestRoadPoint(pos.x, pos.z, absLat - 3.0)) return true;
           for (const o of buildings) if (o.pos.distanceTo(pos) < o.radius + margin) return true;
           return false;
