@@ -29,6 +29,8 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B144 Riding along the kerb no longer gives wanted stars for people on the sidewalk · @{2026-10-19}
+	[[2026-10-19 - B144 Sidewalk Pedestrians No Longer Count as Hits]]
 - [x] Prop upgrade pass: modeled tea stall, three house styles, repair shop, lamps, poles, fences, guardrails and signs · @{2026-10-05}
 	[[Projects/Last-Mile Game]]
 - [x] B133 Motorbike joins the roster; each vehicle pays a different rate · @{2026-09-29}

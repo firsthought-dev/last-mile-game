@@ -11166,20 +11166,37 @@
     // escalates into a fine/arrest modal, which was delivery-specific.
     checkCrosserCollisions() {
       if (!this.vehicle || !this.world || !this.world.crossers) return;
-      const carPos = this.vehicle.mesh.position;
+      const v = this.vehicle;
+      const carPos = v.mesh.position;
+      if (Math.abs(v.speed) <= 1.5) return;
+
+      // B144: contact is judged on the ground plane from real body sizes
+      // (was a 3D sphere of hitRadius + 1 m, which reached onto the sidewalk
+      // from a bike riding along the kerb).
+      const handling = vehicleSpec(this.selectedVehicle).handling;
+      const vehHalf = handling === 'car' ? 1.05 : (handling === 'threeWheeler' ? 0.8 : 0.45);
+      // Someone on the sidewalk can only be hit by a vehicle whose body has
+      // actually crossed the kerb (e.g. at a driveway gap).
+      const kerbLat = (CONFIG.SIDEWALK && CONFIG.SIDEWALK.enabled) ? CONFIG.ROAD_WIDTH * 0.52 : Infinity;
+      const onRoadOnly = Math.abs(v.lateralOffset || 0) + vehHalf < kerbLat;
+      const grid = this.world.roadSpatialGrid;
 
       for (let i = this.world.crossers.length - 1; i >= 0; i--) {
         const c = this.world.crossers[i];
         if (c.struck) continue;
-        const d = carPos.distanceTo(c.mesh.position);
-        if (d < (c.hitRadius + 1.0) && Math.abs(this.vehicle.speed) > 1.5) {
-          c.struck = true;
-          if (c.kind === 'pedestrian') window.ShiplypPolice?.reportOffence('hitPedestrian');
-          this.world.foliageGroup.remove(c.mesh);
-          this.world.crossers.splice(i, 1);
-          sound.playCrash();
-          break; // one hit per frame is plenty
+        const p = c.mesh.position;
+        const d = Math.hypot(p.x - carPos.x, p.z - carPos.z);
+        if (d >= Math.min(c.hitRadius, 0.6) + vehHalf) continue;
+        if (onRoadOnly && grid) {
+          const near = grid.getNearestRoadPoint(p.x, p.z, 12.0);
+          if (near && near.dist > kerbLat) continue;
         }
+        c.struck = true;
+        if (c.kind === 'pedestrian') window.ShiplypPolice?.reportOffence('hitPedestrian');
+        this.world.foliageGroup.remove(c.mesh);
+        this.world.crossers.splice(i, 1);
+        sound.playCrash();
+        break; // one hit per frame is plenty
       }
     }
 
