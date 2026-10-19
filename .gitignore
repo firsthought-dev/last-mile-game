@@ -10,6 +10,7 @@ Thumbs.db
 # Build outputs & caches
 dist/
 build/
+_site/
 .cache/
 .parcel-cache/
 .chrome_temp/

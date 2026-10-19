@@ -279,6 +279,12 @@
     <p class="loader-disclaimer" id="currency-disclaimer">₹ in Shiplyp is a fictional in-game currency with no real-world value. It cannot be bought, sold, withdrawn or exchanged for real money.</p>
   </div>
 
+  <!-- Vercel Web Analytics -->
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
+
   <!-- Save layer + ads SDK + main game engine bundle, with absolute cache busting.
        async=false is load-bearing: dynamically inserted scripts default to
        async, which would let game.js run before save.js/ads.js and leave
