@@ -1678,6 +1678,27 @@
       leaves.computeBoundingBox(); wood.computeBoundingSphere(); leaves.computeBoundingSphere();
       return { wood, leaves, height: leaves.boundingBox.max.y };
     },
+    // Low shrubs for the ground cover (B153): two crossed clump cards per shrub, one per atlas tile.
+    shrubGeoms() {
+      if (this._shrub) return this._shrub;
+      this._shrub = [];
+      for (let tile = 0; tile < 6; tile++) {
+        const row = Math.floor(tile / 3), col = tile % 3, u0 = col / 3, u1 = (col + 1) / 3, v1 = 1 - row / 2, v0 = 1 - (row + 1) / 2;
+        const pos = [], uv = [];
+        for (let k = 0; k < 2; k++) {
+          const a = k * Math.PI / 2, cx = Math.cos(a) * 0.5, cz = Math.sin(a) * 0.5;
+          const q = [[-cx, 0, -cz], [cx, 0, cz], [cx, 1, cz], [-cx, 1, -cz]], uvq = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+          for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(q[i][0], q[i][1], q[i][2]); uv.push(uvq[i][0], uvq[i][1]); }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+        g.computeVertexNormals(); g.computeBoundingSphere();
+        this._shrub.push(g);
+      }
+      return this._shrub;
+    },
+    shrubMaterial() { return this._material().leaf; },
     _variants() {
       if (!this._geoms) { this._geoms = []; for (let i = 0; i < this.VARIANTS; i++) this._geoms.push(this._buildVariant(1013 + i * 7919)); }
       return this._geoms;
@@ -1843,8 +1864,8 @@
     geoms() {
       if (this._geoms) return this._geoms;
       this._geoms = [];
-      for (let v = 0; v < 4; v++) {
-        const pos = [], uv = [], u0 = v / 4, u1 = (v + 1) / 4;
+      for (let v = 0; v < 6; v++) {                                   // 0-3 grass, 4 white flowers, 5 yellow flowers
+        const pos = [], uv = [], u0 = v / 6, u1 = (v + 1) / 6;
         for (let k = 0; k < 3; k++) {
           const a = k * Math.PI / 3, cx = Math.cos(a) * 0.5, cz = Math.sin(a) * 0.5;
           const q = [[-cx, 0, -cz], [cx, 0, cz], [cx, 1, cz], [-cx, 1, -cz]], uvq = [[u0, 0], [u1, 0], [u1, 1], [u0, 1]];
@@ -2321,6 +2342,82 @@
         });
       } catch (err) {
         console.error('buildSidewalkRange failed:', err);
+      }
+      return group;
+    }
+
+    // Ground cover (B153): grass tufts, flowering tufts and low shrubs scattered across the verge
+    // and hillside, dense near the road and thinning with distance. Built AFTER the props so it
+    // can keep clear of buildings; never lands on another stretch of road (the route loops).
+    // Own hash RNG (never the world prng). Kill switch: localStorage.shiplyp_groundCover = '0'.
+    buildGroundCover(u0, u1, season) {
+      const group = new THREE.Group();
+      group.name = 'GroundCover';
+      try {
+        try { if (localStorage.getItem('shiplyp_groundCover') === '0') return group; } catch (e) { /* default on */ }
+        if (!this.curve || this.seasonKey === 'winter') return group;
+        const len = this.curve.getLength(), STEP = 4.0;
+        const n = Math.max(2, Math.ceil(((u1 - u0) * len) / STEP));
+        const tuftGeoms = RoadGrassFactory.geoms(), tuftMat = RoadGrassFactory.material();
+        const shrubGeoms = ClumpTreeFactory.shrubGeoms(), shrubMat = ClumpTreeFactory.shrubMaterial();
+        const tufts = tuftGeoms.map(() => []), shrubs = shrubGeoms.map(() => []);
+        const up = new THREE.Vector3(0, 1, 0), dummy = new THREE.Object3D();
+        const grassBase = new THREE.Color(season && season.grassLight != null ? season.grassLight : 0x3a874d).lerp(new THREE.Color(0xffffff), 0.5);
+        const buildings = (this.obstacles || []).filter(o => o.type === 'building');
+        const hash = (a, b) => { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+        const blocked = (pos, absLat, margin) => {
+          if (this.roadSpatialGrid && absLat > 4 && this.roadSpatialGrid.getNearestRoadPoint(pos.x, pos.z, absLat - 3.0)) return true;
+          for (const o of buildings) if (o.pos.distanceTo(pos) < o.radius + margin) return true;
+          return false;
+        };
+        [-1, 1].forEach((side) => {
+          for (let k = 0; k <= n; k++) {
+            const u = u0 + (u1 - u0) * (k / n), sm = Math.round(u * len);
+            if (this._inTunnelAtU(u, 3)) continue;
+            const pu = THREE.MathUtils.clamp(u, 0, 1);
+            const pt = this.curve.getPointAt(pu);
+            const tg = this.curve.getTangentAt(pu).setY(0).normalize();
+            const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
+            const count = 8 + (hash(sm, side + 40) > 0.5 ? 3 : 0);
+            for (let c = 0; c < count; c++) {
+              const r1 = hash(sm * 5 + c, side + 41), r2 = hash(sm * 7 + c, side + 43), r3 = hash(sm * 11 + c, side + 47), r4 = hash(sm * 13 + c, side + 53);
+              const absLat = 6.3 + 34 * Math.pow(r1, 1.5);                       // dense near the road, thinning outward
+              const along = (r2 - 0.5) * STEP * 1.6;
+              const pos = pt.clone().addScaledVector(nrm, side * absLat).addScaledVector(tg, along);
+              if (blocked(pos, absLat, 1.5)) continue;
+              pos.y = this.groundHeightAt(pt, pos, side * absLat) - 0.03;
+              const grow = 1 + (absLat - 6) * 0.035;                              // far tufts a little bigger so they still read
+              const h = (0.32 + r3 * 0.4) * grow, w = h * (1.6 + r4 * 0.8);
+              dummy.position.copy(pos); dummy.rotation.set(0, r4 * Math.PI * 2, 0); dummy.scale.set(w, h, w); dummy.updateMatrix();
+              const m = dummy.matrix.clone();
+              const g = 0.9 + r3 * 0.22;
+              m._tint = grassBase.clone().multiplyScalar(g);
+              const flower = r2 < 0.14;                                       // ~14% flowering
+              const variant = flower ? 4 + (r4 > 0.5 ? 1 : 0) : Math.floor(r4 * 4) % 4;
+              if (flower) { const f = 0.95 + r3 * 0.1; m._tint.setRGB(f, f, f); }
+              tufts[variant].push(m);
+            }
+            // a low shrub every so often, set back from the road
+            if (hash(sm, side + 60) < 0.26) {
+              const r1 = hash(sm, side + 61), r2 = hash(sm, side + 62), r3 = hash(sm, side + 63);
+              const absLat = 8.5 + 17 * r1;
+              const pos = pt.clone().addScaledVector(nrm, side * absLat).addScaledVector(tg, (r2 - 0.5) * STEP);
+              if (!blocked(pos, absLat, 2.5)) {
+                pos.y = this.groundHeightAt(pt, pos, side * absLat) - 0.05;
+                const w = 1.3 + r3 * 1.3, h = w * (0.65 + r2 * 0.3);
+                dummy.position.copy(pos); dummy.rotation.set(0, r3 * Math.PI * 2, 0); dummy.scale.set(w, h, w); dummy.updateMatrix();
+                const m = dummy.matrix.clone();
+                m._tint = new THREE.Color(0.8 + r2 * 0.2, 0.85 + r3 * 0.15, 0.78 + r1 * 0.1);
+                shrubs[Math.floor(r3 * 6) % 6].push(m);
+              }
+            }
+          }
+        });
+        const colour = (mesh, list) => { list.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; };
+        tufts.forEach((list, v) => addChunkedInstances(group, tuftGeoms[v], tuftMat, list, { cell: 200, onChunk: colour }));
+        shrubs.forEach((list, v) => addChunkedInstances(group, shrubGeoms[v], shrubMat, list, { cell: 240, onChunk: colour }));
+      } catch (err) {
+        console.error('buildGroundCover failed:', err);
       }
       return group;
     }
@@ -7518,6 +7615,7 @@
       yield* this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, prevEndPos);
       scene.add(this.buildSidewalkRange(Math.max(0, oldLength / newLength), 1));
       scene.add(this.buildRoadsideGrass(Math.max(0, oldLength / newLength), 1));
+      scene.add(this.buildGroundCover(Math.max(0, oldLength / newLength), 1, season));
       yield* this.sweepTerrainBelowRoad();
       yield* this.sweepFloorBelowRoad();
     }
@@ -10059,6 +10157,9 @@
       // First-run: force easy so the first house spawns close and the timer is generous.
       if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
+      if (this._groundCover) this.scene.remove(this._groundCover);
+      this._groundCover = this.world.buildGroundCover(0, 1, season);
+      this.scene.add(this._groundCover);
 
       setProgress(82, 'Seeding subtropical forests & Sahyadri rockfaces...');
       await frame();
@@ -10402,6 +10503,9 @@
       this.world.createMountainArches(this.scene, season);
       if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
+      if (this._groundCover) this.scene.remove(this._groundCover);
+      this._groundCover = this.world.buildGroundCover(0, 1, season);
+      this.scene.add(this._groundCover);
 
       this.reconcileSelectedVehicle();
       if (!this.vehicle) {
