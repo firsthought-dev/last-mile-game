@@ -2631,6 +2631,71 @@
       return r < 0.5 ? 0 : (r < 0.72 ? 1 : (r < 0.95 ? 2 : 3));
     }
 
+    // Structures that need clear footpath edges and a flower border: buildings plus tea stalls, repair shops, garages and
+    // other fence-gap sites. Cached; extended when new props appear (streamed chunks).
+    _structures() {
+      const obs = this.obstacles || [], gaps = this.fenceGapSites || [];
+      if (this._structCache && this._structCache.o === obs.length && this._structCache.g === gaps.length) return this._structCache.list;
+      const list = [];
+      for (const o of obs) if (o.type === 'building' && o.radius < 14) list.push({ pos: o.pos, r: o.radius });
+      for (const g of gaps) list.push({ pos: g.pos, r: Math.min(g.r, 12) });
+      this._structCache = { o: obs.length, g: gaps.length, list };
+      return list;
+    }
+    _nearStructure(pos, margin) {
+      const l = this._structures();
+      for (let i = 0; i < l.length; i++) { const s = l[i]; const dx = s.pos.x - pos.x, dz = s.pos.z - pos.z, rr = s.r + margin; if (dx * dx + dz * dz < rr * rr) return true; }
+      return false;
+    }
+
+    // Densely packed flower tufts in a ring around every house, garage and stall near the road (B164).
+    buildHouseFlowers(u0, u1) {
+      const group = new THREE.Group();
+      group.name = 'HouseFlowers';
+      try {
+        try { if (localStorage.getItem('shiplyp_houseFlowers') === '0') return group; } catch (e) { /* default on */ }
+        const grid = this.roadSpatialGrid, pts = this.roadSpacedPoints;
+        if (!grid || !pts || !this.curve) return group;
+        const geoms = RoadGrassFactory.geoms(), mat = RoadGrassFactory.material();
+        const buckets = geoms.map(() => []);
+        const dummy = new THREE.Object3D();
+        const hash = (a, b, c) => { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2246822519)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+        const structs = this._structures(), L = this.curve.getLength(), segLen = L / (pts.length - 1);
+        for (const st of structs) {
+          const near = grid.getNearestRoadPoint(st.pos.x, st.pos.z, 46);
+          if (!near) continue;
+          const u = near.index * segLen / L;
+          if (u < u0 - 0.002 || u > u1) continue;
+          if (this._inTunnelAtU && this._inTunnelAtU(u, 3)) continue;
+          const sx = Math.round(st.pos.x * 3), sz = Math.round(st.pos.z * 3);
+          const rIn = st.r + 0.5, rOut = st.r + 4.2, area = Math.PI * (rOut * rOut - rIn * rIn);
+          const n = Math.min(900, Math.round(area * 2.4));
+          const p0 = pts[near.index], p1 = pts[Math.min(near.index + 1, pts.length - 1)];
+          const side = Math.sign((p1.x - p0.x) * (st.pos.z - p0.z) - (p1.z - p0.z) * (st.pos.x - p0.x)) || 1;
+          for (let i = 0; i < n; i++) {
+            const a = hash(sx, sz, i * 3) * Math.PI * 2, rad = rIn + (rOut - rIn) * Math.sqrt(hash(sx, sz, i * 3 + 1));
+            const pos = new THREE.Vector3(st.pos.x + Math.cos(a) * rad, 0, st.pos.z + Math.sin(a) * rad);
+            const nr = grid.getNearestRoadPoint(pos.x, pos.z, 7.0);
+            if (nr) continue;                                           // never on the footpath or road
+            let hit = false; for (const o of structs) { if (o.pos === st.pos) continue; const dx = o.pos.x - pos.x, dz = o.pos.z - pos.z, rr = o.r + 0.4; if (dx * dx + dz * dz < rr * rr) { hit = true; break; } }
+            if (hit) continue;
+            const lat = Math.hypot(pos.x - near.point.x, pos.z - near.point.z);
+            pos.y = this.groundHeightAt(near.point, pos, side * lat) - 0.02;
+            const r1 = hash(sx, sz, i * 5 + 11), r2 = hash(sx, sz, i * 5 + 12), r3 = hash(sx, sz, i * 5 + 13);
+            const h = 0.42 + r1 * 0.4, w = h * (1.0 + r2 * 0.2);
+            dummy.position.copy(pos); dummy.rotation.set(0, r3 * Math.PI * 2, 0); dummy.scale.set(w, h, w); dummy.updateMatrix();
+            const m = dummy.matrix.clone(); const g = 0.95 + r2 * 0.2;
+            m._tint = new THREE.Color(1.3 * g, 1.34 * g, 1.12 * g);
+            buckets[r3 < 0.82 ? 4 + (r2 > 0.5 ? 1 : 0) : Math.floor(r1 * 4) % 4].push(m);       // ~82% flowering sorrel, the rest leafy filler
+          }
+        }
+        buckets.forEach((list, v) => addChunkedInstances(group, geoms[v], mat, list, { cell: 200, onChunk: (mesh, l) => { l.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; } }));
+      } catch (err) {
+        console.error('buildHouseFlowers failed:', err);
+      }
+      return group;
+    }
+
     // Ground cover (B153): grass tufts, flowering tufts and low shrubs scattered across the verge
     // and hillside, dense near the road and thinning with distance. Built AFTER the props so it
     // can keep clear of buildings; never lands on another stretch of road (the route loops).
@@ -2750,7 +2815,7 @@
             const absLat = outerEdge + S * 0.47 + 0.08 + r1 * 0.3;
             const lat = side * absLat;
             const pos = pt.clone().addScaledVector(nrm, lat);
-            if (this.isFenceGap && this.isFenceGap(pos)) continue;
+            if (this._nearStructure(pos, 2.5)) continue;                     // no tufts outside garages, homes, tea stalls (B164)
             pos.y = Math.min(this.groundHeightAt(pt, pos, lat), topY);
             const leanA = THREE.MathUtils.degToRad(5 + r3 * 4);             // barely leaning toward the footpath, no overhang onto it
             lean.copy(nrm).multiplyScalar(-side);
@@ -7905,6 +7970,7 @@
       scene.add(this.buildSidewalkRange(Math.max(0, oldLength / newLength), 1));
       scene.add(this.buildRoadsideGrass(Math.max(0, oldLength / newLength), 1));
       scene.add(this.buildGroundCover(Math.max(0, oldLength / newLength), 1, season));
+      scene.add(this.buildHouseFlowers(Math.max(0, oldLength / newLength), 1));
       yield* this.sweepTerrainBelowRoad();
       yield* this.sweepFloorBelowRoad();
     }
@@ -10427,9 +10493,6 @@
       if (this._sidewalks) this.scene.remove(this._sidewalks);
       this._sidewalks = this.world.buildSidewalkRange(0, 1);
       this.scene.add(this._sidewalks);
-      if (this._roadsideGrass) this.scene.remove(this._roadsideGrass);
-      this._roadsideGrass = this.world.buildRoadsideGrass(0, 1);
-      this.scene.add(this._roadsideGrass);
       this.scene.add(this.world.createLaneMarkingMeshes());
 
       setProgress(45, 'Sculpting mountain valley terrain & road verges...');
@@ -10450,9 +10513,16 @@
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
       if (this.nearGrass) this.nearGrass.dispose();
       this.nearGrass = new NearGrassLayer(this.world, this.scene);
+      // Built AFTER the props so they can see the buildings, tea stalls and garages (B164).
+      if (this._roadsideGrass) this.scene.remove(this._roadsideGrass);
+      this._roadsideGrass = this.world.buildRoadsideGrass(0, 1);
+      this.scene.add(this._roadsideGrass);
       if (this._groundCover) this.scene.remove(this._groundCover);
       this._groundCover = this.world.buildGroundCover(0, 1, season);
       this.scene.add(this._groundCover);
+      if (this._houseFlowers) this.scene.remove(this._houseFlowers);
+      this._houseFlowers = this.world.buildHouseFlowers(0, 1);
+      this.scene.add(this._houseFlowers);
 
       setProgress(82, 'Seeding subtropical forests & Sahyadri rockfaces...');
       await frame();
@@ -10786,9 +10856,6 @@
       if (this._sidewalks) this.scene.remove(this._sidewalks);
       this._sidewalks = this.world.buildSidewalkRange(0, 1);
       this.scene.add(this._sidewalks);
-      if (this._roadsideGrass) this.scene.remove(this._roadsideGrass);
-      this._roadsideGrass = this.world.buildRoadsideGrass(0, 1);
-      this.scene.add(this._roadsideGrass);
       this.scene.add(this.world.createLaneMarkingMeshes());
       this.scene.add(this.world.createWorldFloor(season));
       this.scene.add(this.world.createTerrainMesh(season));
@@ -10798,9 +10865,16 @@
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
       if (this.nearGrass) this.nearGrass.dispose();
       this.nearGrass = new NearGrassLayer(this.world, this.scene);
+      // Built AFTER the props so they can see the buildings, tea stalls and garages (B164).
+      if (this._roadsideGrass) this.scene.remove(this._roadsideGrass);
+      this._roadsideGrass = this.world.buildRoadsideGrass(0, 1);
+      this.scene.add(this._roadsideGrass);
       if (this._groundCover) this.scene.remove(this._groundCover);
       this._groundCover = this.world.buildGroundCover(0, 1, season);
       this.scene.add(this._groundCover);
+      if (this._houseFlowers) this.scene.remove(this._houseFlowers);
+      this._houseFlowers = this.world.buildHouseFlowers(0, 1);
+      this.scene.add(this._houseFlowers);
 
       this.reconcileSelectedVehicle();
       if (!this.vehicle) {
