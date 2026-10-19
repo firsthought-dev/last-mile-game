@@ -3137,6 +3137,7 @@
     createLaneMarkingMeshes() {
       if (!this.roadSpacedPoints || !this.roadBankingAngles) return new THREE.Group();
       const group = new THREE.Group();
+      group.add(this._buildRoadWear(0, this.roadSpacedPoints.length - 1));
       group.add(this._buildLaneRibbons(0, this.roadSpacedPoints.length - 1));
       this.laneMarkingsGroup = group;
       return group;
@@ -3202,6 +3203,78 @@
       mesh.renderOrder = 1;
       mesh.userData.lanePaint = dashed ? 'centre' : 'edge';
       return mesh;
+    }
+
+    // Asphalt wear overlay (B152): wheel tracks, oil strip, edge grit, repair patches and hairline
+    // cracks from a 4-tile atlas (assets/textures/road_wear.webp, scratch/asset-options/atlas/
+    // build_roadwear.py), laid as a transparent ribbon under the lane paint. Positioned by global
+    // arc length in WEAR_STEP quads so it is identical across the streamed extension.
+    // Kill switch for A/B: localStorage.shiplyp_roadWear = '0'.
+    _buildRoadWear(startSeg, endSeg) {
+      const group = new THREE.Group();
+      group.name = 'RoadWear';
+      try {
+        try { if (localStorage.getItem('shiplyp_roadWear') === '0') return group; } catch (e) { /* default on */ }
+        const pts = this.roadSpacedPoints, ba = this.roadBankingAngles, nr = this.roadNormals, bn = this.roadBinormals, bu = this.roadBankedUp;
+        const segLen = this.curve.getLength() / (pts.length - 1);
+        const STEP = 4.0, BLOCK = 32.0, PER_BLOCK = BLOCK / STEP;
+        const half = CONFIG.ROAD_WIDTH * 0.5, lift = 0.12 + 0.012;
+        const kA = Math.floor(startSeg * segLen / STEP), kB = Math.floor(endSeg * segLen / STEP);
+        const hash = (a) => { let h = Math.imul(a | 0, 374761393) ^ 0x9e3779b1; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0); };
+        const frameAt = (s) => {
+          const f = THREE.MathUtils.clamp(s / segLen, 0, pts.length - 1.0001), i = Math.floor(f), t = f - i;
+          const angA = ba[i] || 0, angB = ba[i + 1] || 0;
+          const nA = nr[i].clone().multiplyScalar(Math.cos(angA)).addScaledVector(bn[i], Math.sin(angA));
+          const nB = nr[i + 1].clone().multiplyScalar(Math.cos(angB)).addScaledVector(bn[i + 1], Math.sin(angB));
+          return { p: new THREE.Vector3().lerpVectors(pts[i], pts[i + 1], t), n: nA.lerp(nB, t).normalize(), u: new THREE.Vector3().lerpVectors(bu[i], bu[i + 1], t).normalize() };
+        };
+        const positions = [], normalsOut = [], uvs = [], indices = [];
+        let prev = null, prevBlock = -1, prevU = null;
+        for (let k = kA; k <= kB; k++) {
+          const s = k * STEP, block = Math.floor(k / PER_BLOCK), within = k - block * PER_BLOCK;
+          const hsh = hash(block), variant = hsh & 3, flip = (hsh >>> 2) & 1;
+          const fr = frameAt(s);
+          const vv = within / PER_BLOCK;
+          const L = fr.p.clone().addScaledVector(fr.n, -half).addScaledVector(fr.u, lift), R = fr.p.clone().addScaledVector(fr.n, half).addScaledVector(fr.u, lift);
+          const u0 = variant / 4 + 0.004, u1 = (variant + 1) / 4 - 0.004;
+          const uL = flip ? u1 : u0, uR = flip ? u0 : u1;
+          // block boundary: restart the strip so each block samples its own tile
+          if (prev && block !== prevBlock) {
+            // close the previous block at v = 1 using this step's frame
+            const base = positions.length / 3;
+            const pu0 = prevU.uL, pu1 = prevU.uR;
+            positions.push(prev.L.x, prev.L.y, prev.L.z, prev.R.x, prev.R.y, prev.R.z, L.x, L.y, L.z, R.x, R.y, R.z);
+            for (let q = 0; q < 4; q++) normalsOut.push(fr.u.x, fr.u.y, fr.u.z);
+            uvs.push(pu0, prev.v, pu1, prev.v, pu0, 1, pu1, 1);
+            indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+          }
+          if (prev && block === prevBlock) {
+            const base = positions.length / 3;
+            positions.push(prev.L.x, prev.L.y, prev.L.z, prev.R.x, prev.R.y, prev.R.z, L.x, L.y, L.z, R.x, R.y, R.z);
+            for (let q = 0; q < 4; q++) normalsOut.push(fr.u.x, fr.u.y, fr.u.z);
+            uvs.push(uL, prev.v, uR, prev.v, uL, vv, uR, vv);
+            indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+          }
+          prev = { L, R, v: vv }; prevBlock = block; prevU = { uL, uR };
+        }
+        if (!positions.length) return group;
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geom.setAttribute('normal', new THREE.Float32BufferAttribute(normalsOut, 3));
+        geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geom.setIndex(indices);
+        const tex = new THREE.TextureLoader().load('assets/textures/road_wear.webp');
+        tex.anisotropy = 4;
+        const mat = new THREE.MeshLambertMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.renderOrder = 0.5;
+        mesh.frustumCulled = false;
+        mesh.userData.roadWear = true;
+        group.add(mesh);
+      } catch (err) {
+        console.error('_buildRoadWear failed:', err);
+      }
+      return group;
     }
 
     // Scans the finished curve at the SAME sampling rate createTerrainMesh
@@ -7902,6 +7975,7 @@
       scene.add(roadMesh);
 
       // 1b. Lane markings for the extension: the same builder and constants as the initial road (B149).
+      scene.add(this._buildRoadWear(startSeg, endSeg));
       scene.add(this._buildLaneRibbons(startSeg, endSeg));
 
       // 2. Terrain ribbon extension mesh (matching createTerrainMesh ±150m landscape skirt)
