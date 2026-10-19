@@ -1707,6 +1707,45 @@
     }
   };
 
+  // Roadside grass overhang (B150). Tufts grow at the outer footpath edge and the barrier
+  // base and lean in over the footpath. Each tuft is 3 crossed quads (6 tris) using one of
+  // 4 tufts in an original atlas (assets/textures/grass_tufts.webp, built by
+  // scratch/asset-options/atlas/build_grass.py). Instanced and chunk-culled like the trees.
+  // Kill switch for A/B: localStorage.shiplyp_roadGrass = '0'.
+  const RoadGrassFactory = {
+    _geoms: null, _mat: null,
+    enabled() { try { return localStorage.getItem('shiplyp_roadGrass') !== '0'; } catch (e) { return true; } },
+    material() {
+      if (this._mat) return this._mat;
+      const loader = new THREE.TextureLoader();
+      const t = loader.load('assets/textures/grass_tufts.webp', () => { t.encoding = THREE.sRGBEncoding; t.needsUpdate = true; if (this._mat) this._mat.needsUpdate = true; });
+      t.anisotropy = 4;
+      this._mat = new THREE.MeshLambertMaterial({ map: t, alphaTest: 0.45, side: THREE.DoubleSide });
+      return this._mat;
+    },
+    geoms() {
+      if (this._geoms) return this._geoms;
+      this._geoms = [];
+      for (let v = 0; v < 4; v++) {
+        const pos = [], uv = [], u0 = v / 4, u1 = (v + 1) / 4;
+        for (let k = 0; k < 3; k++) {
+          const a = k * Math.PI / 3, cx = Math.cos(a) * 0.5, cz = Math.sin(a) * 0.5;
+          const q = [[-cx, 0, -cz], [cx, 0, cz], [cx, 1, cz], [-cx, 1, -cz]], uvq = [[u0, 0], [u1, 0], [u1, 1], [u0, 1]];
+          for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(q[i][0], q[i][1], q[i][2]); uv.push(uvq[i][0], uvq[i][1]); }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+        // Normals point up so tufts take the sun like the ground they grow from.
+        g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(pos.length / 3).fill(0).flatMap(() => [0, 1, 0]), 3));
+        g.computeBoundingSphere();
+        this._geoms.push(g);
+      }
+      return this._geoms;
+    }
+  };
+
+
   // Real sourced CC0 photo textures (ambientcg.com — Grass005, Rock064,
   // Asphalt033, WoodSiding013) replacing the flat-color / canvas-noise
   // materials for the ground/rock/road/fence, per
@@ -2165,6 +2204,81 @@
         });
       } catch (err) {
         console.error('buildSidewalkRange failed:', err);
+      }
+      return group;
+    }
+
+    // Grass tufts along both sides of the footpath for u0..u1, leaning in over its outer edge.
+    // Uses its own hash RNG so it never disturbs the world's seeded prng sequence.
+    buildRoadsideGrass(u0, u1) {
+      const group = new THREE.Group();
+      group.name = 'RoadsideGrass';
+      try {
+        if (!RoadGrassFactory.enabled() || !this.curve || !CONFIG.SIDEWALK || !CONFIG.SIDEWALK.enabled) return group;
+        const W = CONFIG.SIDEWALK.width, KERB = CONFIG.SIDEWALK.kerb;
+        const roadHalf = CONFIG.ROAD_WIDTH * 0.52, outerEdge = roadHalf + W;
+        const len = this.curve.getLength();
+        const STEP = 1.0;
+        const n = Math.max(2, Math.ceil(((u1 - u0) * len) / STEP));
+        const geoms = RoadGrassFactory.geoms(), mat = RoadGrassFactory.material();
+        const buckets = geoms.map(() => []);
+        const up = new THREE.Vector3(0, 1, 0), dummy = new THREE.Object3D();
+        const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion(), tilted = new THREE.Vector3(), lean = new THREE.Vector3();
+        const bankAtU = (u) => {
+          const b = this.roadBankingAngles; if (!b || !b.length) return 0;
+          const f = THREE.MathUtils.clamp(u, 0, 1) * (b.length - 1), i = Math.floor(f);
+          return THREE.MathUtils.lerp(b[i] || 0, b[Math.min(i + 1, b.length - 1)] || 0, f - i);
+        };
+        const hash = (a, b) => { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+        [-1, 1].forEach((side) => {
+          for (let k = 0; k <= n; k++) {
+            const u = u0 + (u1 - u0) * (k / n), sm = Math.round(u * len);
+            // patchy: long thick stretches, thin stretches, the odd bare gap
+            const patch = 0.5 + 0.5 * Math.sin(sm / 41 + side * 2.1) * Math.sin(sm / 97 + 0.7);
+            if (hash(sm, side + 11) > 0.30 + 0.70 * patch) continue;
+            if (this._inTunnelAtU(u, 2)) continue;
+            const pu = THREE.MathUtils.clamp(u, 0, 1);
+            const pt = this.curve.getPointAt(pu);
+            const tg = this.curve.getTangentAt(pu).setY(0).normalize();
+            const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
+            const count = hash(sm, side + 3) > 0.6 ? 3 : (hash(sm, side + 4) > 0.35 ? 2 : 1);
+            for (let c = 0; c < count; c++) {
+              const r1 = hash(sm * 7 + c, side + 5), r2 = hash(sm * 13 + c, side + 9), r3 = hash(sm * 17 + c, side + 21), r4 = hash(sm * 19 + c, side + 31);
+              const absLat = outerEdge - 0.35 + r1 * 1.55;               // from just inside the footpath edge to ~1.2 m beyond it
+              const lat = side * absLat;
+              const pos = pt.clone().addScaledVector(nrm, lat);
+              if (this.isFenceGap && this.isFenceGap(pos)) continue;
+              const topY = pt.y + 0.12 + side * roadHalf * Math.sin(bankAtU(u)) + KERB;
+              const onPath = absLat <= outerEdge;
+              const y = onPath ? topY : this.groundHeightAt(pt, pos, lat);
+              pos.y = Math.min(y, topY + 0.02);
+              // reach back up to the footpath height when the ground below its edge is lower
+              const rise = Math.max(0, topY - pos.y);
+              const h = 0.42 + r2 * 0.5 + rise * 0.8;
+              const width = h * (1.5 + r3 * 0.6);
+              // lean in over the footpath: more for tufts beyond the edge, a little for those on it
+              const leanA = THREE.MathUtils.degToRad(onPath ? 6 + r3 * 14 : 22 + r3 * 26);
+              lean.copy(nrm).multiplyScalar(-side);
+              tilted.copy(up).multiplyScalar(Math.cos(leanA)).addScaledVector(lean, Math.sin(leanA)).normalize();
+              q1.setFromUnitVectors(up, tilted);
+              q2.setFromAxisAngle(tilted, r4 * Math.PI * 2);
+              dummy.position.copy(pos);
+              dummy.quaternion.copy(q2).multiply(q1);
+              dummy.scale.set(width, h, width);
+              dummy.updateMatrix();
+              const m = dummy.matrix.clone();
+              const g = 0.95 + r4 * 0.3;                                  // brightness/hue variation per tuft
+              m._tint = new THREE.Color(g * (0.95 + r1 * 0.1), g, g * (0.85 + r2 * 0.2));
+              buckets[Math.floor(r2 * 4) % 4].push(m);
+            }
+          }
+        });
+        buckets.forEach((mats, v) => addChunkedInstances(group, geoms[v], mat, mats, {
+          cell: 220,
+          onChunk: (mesh, list) => { list.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; }
+        }));
+      } catch (err) {
+        console.error('buildRoadsideGrass failed:', err);
       }
       return group;
     }
@@ -7218,6 +7332,7 @@
       // Generate forward extension meshes for road, lane markings, terrain, and roadside props
       yield* this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, prevEndPos);
       scene.add(this.buildSidewalkRange(Math.max(0, oldLength / newLength), 1));
+      scene.add(this.buildRoadsideGrass(Math.max(0, oldLength / newLength), 1));
       yield* this.sweepTerrainBelowRoad();
       yield* this.sweepFloorBelowRoad();
     }
@@ -9737,6 +9852,9 @@
       if (this._sidewalks) this.scene.remove(this._sidewalks);
       this._sidewalks = this.world.buildSidewalkRange(0, 1);
       this.scene.add(this._sidewalks);
+      if (this._roadsideGrass) this.scene.remove(this._roadsideGrass);
+      this._roadsideGrass = this.world.buildRoadsideGrass(0, 1);
+      this.scene.add(this._roadsideGrass);
       this.scene.add(this.world.createLaneMarkingMeshes());
 
       setProgress(45, 'Sculpting mountain valley terrain & road verges...');
@@ -10088,6 +10206,9 @@
       if (this._sidewalks) this.scene.remove(this._sidewalks);
       this._sidewalks = this.world.buildSidewalkRange(0, 1);
       this.scene.add(this._sidewalks);
+      if (this._roadsideGrass) this.scene.remove(this._roadsideGrass);
+      this._roadsideGrass = this.world.buildRoadsideGrass(0, 1);
+      this.scene.add(this._roadsideGrass);
       this.scene.add(this.world.createLaneMarkingMeshes());
       this.scene.add(this.world.createWorldFloor(season));
       this.scene.add(this.world.createTerrainMesh(season));
