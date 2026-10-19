@@ -9766,7 +9766,15 @@
         }
       }
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      // Render scale. Phones report device pixel ratios of 2.6-3.5, which at the old
+      // cap of 2 meant ~4x the pixels of a 1x render for a look that is soft by design.
+      // Start touch devices at 1.5 and let `_adaptRenderScale` move within [1, cap]
+      // from the measured frame rate (B147).
+      this._prCap = Math.min(window.devicePixelRatio || 1, 2);
+      if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) this._prCap = Math.min(this._prCap, 1.5);
+      this._pr = this._prCap;
+      this._prSlow = 0; this._prFast = 0; this._prLastRaiseAt = -1e9; this._prLastDropAt = -1e9;
+      this.renderer.setPixelRatio(this._pr);
       this.renderer.outputEncoding = THREE.sRGBEncoding;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.1;
@@ -10102,6 +10110,7 @@
         if (this.visualStyle) this.visualStyle.resize(window.innerWidth, window.innerHeight);
       };
 
+      this._handleResize = handleResize;
       window.addEventListener('resize', handleResize);
       window.addEventListener('orientationchange', () => setTimeout(handleResize, 150));
       handleResize();
@@ -13095,6 +13104,34 @@
       }
     }
 
+    // Adaptive render scale (B147). Called once per ~0.5 s FPS window.
+    // Steps down fast (3 slow windows), steps up slowly (10 good windows) and
+    // never back above a level that just caused a drop, so it cannot oscillate.
+    _adaptRenderScale(fps) {
+      if (!this._worldBuilt || this._adPaused || document.hidden) { this._prSlow = this._prFast = 0; return; }
+      const now = performance.now();
+      if (fps < 45) { this._prSlow++; this._prFast = 0; }
+      else if (fps >= 57) { this._prFast++; this._prSlow = 0; }
+      else { this._prSlow = 0; this._prFast = 0; }
+
+      let next = this._pr;
+      if (this._prSlow >= 3 && this._pr > 1) {
+        next = Math.max(1, this._pr - 0.25);
+        // A drop soon after a raise means the raised level is too expensive here.
+        if (now - this._prLastRaiseAt < 15000) this._prCap = Math.min(this._prCap, next);
+        this._prLastDropAt = now;
+      } else if (this._prFast >= 10 && this._pr < this._prCap) {
+        next = Math.min(this._prCap, this._pr + 0.25);
+        this._prLastRaiseAt = now;
+      }
+      if (next === this._pr) return;
+      this._prSlow = this._prFast = 0;
+      this._pr = next;
+      this.renderer.setPixelRatio(next);
+      if (this.composer && this.composer.setPixelRatio) this.composer.setPixelRatio(next);
+      if (this._handleResize) this._handleResize();
+    }
+
     _animateFrame() {
       const dt = Math.min(this.clock.getDelta(), 0.1);
 
@@ -13106,6 +13143,7 @@
         const fps = Math.round(this._fpsAccumFrames / this._fpsAccumTime);
         const fpsEl = document.getElementById('hud-fps-value');
         if (fpsEl) fpsEl.textContent = String(fps);
+        this._adaptRenderScale(fps);
         this._fpsAccumTime = 0;
         this._fpsAccumFrames = 0;
       }
