@@ -1855,8 +1855,8 @@
   class NearGrassLayer {
     constructor(world, scene) {
       this.world = world; this.scene = scene; this.cells = new Map(); this._acc = 1; this._on = true;
-      this._on = false;                                              // OFF by default: user rejected the procedural grass; real assets pending
-      try { this._on = localStorage.getItem('shiplyp_nearGrass') === '1'; } catch (e) { /* stay off */ }
+      this._on = true;                                               // placement was always wanted; only the PROCEDURAL ART was rejected (now real Poly Haven sprites)
+      try { this._on = localStorage.getItem('shiplyp_nearGrass') !== '0'; } catch (e) { /* stay on */ }
       this.group = new THREE.Group(); this.group.name = 'NearGrass'; scene.add(this.group);
       NearGrassLayer.RADIUS = 58; NearGrassLayer.FADE0 = 38; NearGrassLayer.CELL = 9;
       this.geom = NearGrassLayer.geometry(); this.mat = NearGrassLayer.material();
@@ -1916,14 +1916,14 @@
         if (w._inTunnelAtU && w._inTunnelAtU(idx / (pts.length - 1), 3)) continue;
         pos.y = w.groundHeightAt(near.point, pos, side * lat) - 0.02;
         const r1 = this._hash(cx, cz, i * 7 + 11), r2 = this._hash(cx, cz, i * 7 + 12), r3 = this._hash(cx, cz, i * 7 + 13);
-        const h = 0.5 + r1 * 0.5, wd = h * (2.0 + r2 * 0.9);
+        const h = 0.55 + r1 * 0.45, wd = h * (1.0 + r2 * 0.25);
         dummy.position.copy(pos); dummy.rotation.set((r3 - 0.5) * 0.35, r2 * Math.PI * 2, (r1 - 0.5) * 0.35); dummy.scale.set(wd, h, wd); dummy.updateMatrix();
-        out.push({ m: dummy.matrix.clone(), v: this._hash(cx, cz, i * 7 + 14) < 0.07 ? 4 + (r3 > 0.5 ? 1 : 0) : Math.floor(r2 * 4) % 4, g: 0.9 + r3 * 0.2 });
+        out.push({ m: dummy.matrix.clone(), v: this._hash(cx, cz, i * 7 + 14) < 0.10 ? 4 + (r3 > 0.5 ? 1 : 0) : Math.floor(r2 * 4) % 4, g: 0.9 + r3 * 0.2 });
       }
       if (!out.length) return null;
       const mesh = new THREE.InstancedMesh(this.geom, this.mat, out.length);
       const off = new Float32Array(out.length * 2), col = new THREE.Color();
-      out.forEach((o, i) => { mesh.setMatrixAt(i, o.m); off[i * 2] = o.v / 6; off[i * 2 + 1] = 0; mesh.setColorAt(i, col.setRGB(0.86 * o.g, 0.93 * o.g, 0.68 * o.g)); });
+      out.forEach((o, i) => { mesh.setMatrixAt(i, o.m); off[i * 2] = o.v / 6; off[i * 2 + 1] = 0; mesh.setColorAt(i, col.setRGB(1.25 * o.g, 1.3 * o.g, 1.08 * o.g)); });
       mesh.geometry = this.geom.clone(); mesh.geometry.boundingSphere = null;
       mesh.geometry.setAttribute('aUvOff', new THREE.InstancedBufferAttribute(off, 2));
       mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true; mesh.frustumCulled = false;
@@ -2723,7 +2723,7 @@
             // by half the card width, so the whole plant clears the walkway instead of overlapping it.
             // Cards are square (real plant sprites from the Poly Haven atlas); SIZES are real-world-ish plant widths.
             const vi = k % 4;                                              // ferns and broadleaf weeds only along the footpath
-            const S = [0.95, 0.95, 0.75, 0.75][vi] * (0.85 + r3 * 0.3);
+            const S = [1.45, 1.45, 1.15, 1.15][vi] * (0.85 + r3 * 0.3);
             const topY = pt.y + 0.12 + side * roadHalf * Math.sin(bankAtU(u)) + KERB;
             const absLat = outerEdge + S * 0.47 + 0.08 + r1 * 0.3;
             const lat = side * absLat;
