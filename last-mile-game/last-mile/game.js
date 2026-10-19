@@ -234,7 +234,7 @@
   // models each time, most painfully on the Android WebView's cold start.
   // Bump this by hand whenever a file under assets/models/ changes; that
   // invalidates the old copy exactly when it should and never otherwise.
-  const ASSET_VERSION = '9';
+  const ASSET_VERSION = '10';
 
   // 0f. MUSCLE COUPE — reworked in Blender (B129) from a user-supplied model:
   // all badges and lettering removed; our own grille, lamps, hood and tail;
@@ -1101,10 +1101,10 @@
         id: 'foothills',
         name: 'Neelgiri Foothills',
         tagline: 'Lush Mountain Pass & Cedar Forest',
-        grassColor: 0x276638,
-        grassLight: 0x3a874d,
+        grassColor: 0x4a6a2c,
+        grassLight: 0x7a9640,
         cliffColor: 0x5d3c29,
-        shoulderSoil: 0x3a874d,
+        shoulderSoil: 0x7a9640,
         treeLeaves: [0x366247, 0x3c7652, 0x5baa78, 0x30553f],
         rockColor: 0x6b5c48,
         treeDensity: 0.85
@@ -1173,10 +1173,10 @@
     // behaviour: 'pedal' (cycle only), 'twoWheeler' (lean, small-vehicle
     // camera), 'threeWheeler' / 'car' (four-wheel style body roll). Speeds m/s.
     VEHICLES: {
-      // maxSpeed = end of the ride-time ramp (52 km/h); baseSpeed = start of it (32 km/h).
-      cycle: { id: 'cycle', order: 1, name: 'Delivery Cycle', short: 'CYCLE', handling: 'pedal', speedLabel: '32–52 km/h',
+      // maxSpeed = end of the ride-time ramp (65 km/h); baseSpeed = start of it (40 km/h).
+      cycle: { id: 'cycle', order: 1, name: 'Delivery Cycle', short: 'CYCLE', handling: 'pedal', speedLabel: '40–65 km/h',
         price: 0, payoutMult: 1.0, wheelRadius: 0.365,
-        maxSpeed: 14.44, baseSpeed: 8.89, rampSeconds: 120, accel: 6.5, drag: 0.55, brake: 14.0 },
+        maxSpeed: 18.06, baseSpeed: 11.11, rampSeconds: 120, accel: 8.5, drag: 0.55, brake: 14.0 },
       motorbike: { id: 'motorbike', order: 2, name: 'Motorbike', short: 'BIKE', handling: 'twoWheeler', speedLabel: '90 km/h',
         price: 1500, payoutMult: 1.25, wheelRadius: 0.31,
         maxSpeed: 25.0, accel: 11.0, drag: 0.65, brake: 20.0 },
@@ -2748,7 +2748,7 @@
       const group = new THREE.Group();
       group.name = 'GroundCover';
       try {
-        try { if (localStorage.getItem('shiplyp_groundCover') === '0') return group; } catch (e) { /* default on */ }
+        try { if (localStorage.getItem('shiplyp_groundCover') !== '1') return group; } catch (e) { return group; }   // OFF by default: plants only on the footpath and around houses (user, B168)
         if (!this.curve || this.seasonKey === 'winter') return group;
         const len = this.curve.getLength(), STEP = 2.0;
         const n = Math.max(2, Math.ceil(((u1 - u0) * len) / STEP));
@@ -9915,7 +9915,7 @@
         const time = performance.now() * 0.001;
 
         // Realistic human pedaling cadence: ~65-85 RPM (1.1 - 1.45 Hz)
-        const pedalFreq = isPedaling ? THREE.MathUtils.lerp(1.1, 1.45, Math.min(absSpeed / 14.44, 1.0)) : 0;
+        const pedalFreq = isPedaling ? THREE.MathUtils.lerp(1.1, 1.45, Math.min(absSpeed / 18.06, 1.0)) : 0;
 
         // 1. Pedaling pitch rock: subtle organic forward-back nod during pedal strokes
         if (isPedaling) {
@@ -12907,7 +12907,7 @@
         this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
         this.vehicle.heading = this.vehicle.velocityHeading;
         this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 8.89 : 10.0;
+        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 11.11 : 10.0;
         this.updateGPSNavigation();
       }
 
@@ -12924,7 +12924,7 @@
         this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
         this.vehicle.heading = this.vehicle.velocityHeading;
         this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 8.89 : 8.0;
+        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 11.11 : 8.0;
         this.updateGPSNavigation();
         this._showOnboardingHint('drive');
       }
