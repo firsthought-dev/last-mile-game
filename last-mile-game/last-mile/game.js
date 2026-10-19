@@ -2016,38 +2016,42 @@
       if (this._tex) return this._tex;
       const loader = new THREE.TextureLoader();
       const wrap = (t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; return t; };
-      this._tex = { blades: wrap(loader.load('assets/textures/ground_blades.webp')), vari: wrap(loader.load('assets/textures/ground_variation.webp')) };
+      this._tex = { grass: wrap(loader.load('assets/textures/ground_grass004.webp')), vari: wrap(loader.load('assets/textures/ground_variation.webp')) };
       return this._tex;
     },
     apply(mat) {
       if (!this.enabled()) return mat;
       const T = this.textures();
       mat.onBeforeCompile = (shader) => {
-        shader.uniforms.uBlades = { value: T.blades };
+        shader.uniforms.uGrass = { value: T.grass };
         shader.uniforms.uVari = { value: T.vari };
         shader.vertexShader = shader.vertexShader
           .replace('#include <common>', '#include <common>\nvarying vec3 vShpWorld;')
           .replace('#include <begin_vertex>', '#include <begin_vertex>\nvShpWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
         shader.fragmentShader = shader.fragmentShader
-          .replace('#include <common>', '#include <common>\nvarying vec3 vShpWorld;\nuniform sampler2D uBlades;\nuniform sampler2D uVari;')
+          .replace('#include <common>', '#include <common>\nvarying vec3 vShpWorld;\nuniform sampler2D uGrass;\nuniform sampler2D uVari;')
           .replace('#include <color_fragment>', `#include <color_fragment>
           {
             float shpDist = length(vViewPosition);
             vec2 w = vShpWorld.xz;
             vec3 vA = texture2D(uVari, w / 61.0).rgb;
             vec3 vB = texture2D(uVari, w / 11.0 + 0.37).rgb;
-            // Scale matters: a 1 m tile of ~1 mm texels averages to flat grey beyond ~3 m (mip blur), so the
-            // strands must be BIG to read at the 8-60 m where the verge and hillside are actually seen.
-            float bl = texture2D(uBlades, w / 6.5).r;                              // 6-28 cm strands, readable 6-70 m
-            float bl2 = texture2D(uBlades, vec2(w.y, -w.x) / 1.9 + 0.5).r;         // finer layer for the near field
-            float nearF = 1.0 - smoothstep(4.0, 30.0, shpDist);
-            float farF = 1.0 - smoothstep(55.0, 260.0, shpDist);
-            float detail = mix(1.0, bl * 1.9 + 0.05, 0.85 * farF) * mix(1.0, bl2 * 1.7 + 0.1, 0.6 * nearF);
+            // Real photographic lawn (ambientCG Grass004, CC0) in three scales so it covers the WHOLE landscape:
+            // near (blades readable close), mid, and a far layer that never fades out. The texture is divided by its
+            // own mean colour, so the terrain's season/biome colours still drive the overall tint and the photo only
+            // adds the real grass detail (yellow flecks, blade structure).
+            const vec3 GM = vec3(0.378, 0.426, 0.190);
+            vec3 g1 = texture2D(uGrass, w / 2.6).rgb / GM;
+            vec3 g2 = texture2D(uGrass, vec2(w.y, -w.x) / 10.5 + 0.3).rgb / GM;
+            vec3 g3 = texture2D(uGrass, w / 47.0 + 0.7).rgb / GM;
+            float nearF = 1.0 - smoothstep(25.0, 90.0, shpDist);
+            float midF = 1.0 - smoothstep(70.0, 320.0, shpDist);
+            vec3 detail = mix(vec3(1.0), g1, 0.95 * nearF) * mix(vec3(1.0), g2, 0.75 * midF) * mix(vec3(1.0), g3, 0.65);
             // warm olive-yellow <-> deeper green patches, plus light/dark patches and rare dry/clover specks
             vec3 tint = mix(vec3(1.10, 1.02, 0.70), vec3(0.76, 0.96, 0.70), vA.g);
             float lum = 0.74 + 0.52 * mix(vA.r, vB.r, 0.45);
             float speck = (vB.b - 0.5) * 0.30;
-            diffuseColor.rgb *= detail * tint * lum * (1.0 + speck);
+            diffuseColor.rgb *= detail * mix(vec3(1.0), tint, 0.85) * lum * (1.0 + speck);
           }`);
       };
       mat.needsUpdate = true;
@@ -2556,6 +2560,40 @@
       return group;
     }
 
+    // Pine zones (B159): conifers only on hills, broadleaf everywhere else, and never mixed along one stretch.
+    // The road itself is cut into flat ground, so hilliness is read from the terrain 55 m out: per 25 m bin the
+    // higher of the two sides' height above the road, averaged over +/-150 m (so a whole stretch reads as hill or
+    // lowland, not side by side), then the top ~35% of the route is "hills". Threshold = 65th percentile of the
+    // initial route, kept for streamed extensions. `side` is accepted but unused: both sides share the zone.
+    _pineBin(k) {
+      const bins = this._pineBins || (this._pineBins = []);
+      if (bins[k] !== undefined) return bins[k];
+      const L = this.curve.getLength(), u = Math.min(1, (k * 25) / L), up = new THREE.Vector3(0, 1, 0);
+      const pt = this.curve.getPointAt(u), tg = this.curve.getTangentAt(u).setY(0).normalize(), n = new THREE.Vector3().crossVectors(tg, up).normalize();
+      let best = -1e9;
+      for (const sd of [-1, 1]) { const far = pt.clone().addScaledVector(n, sd * 55); best = Math.max(best, this.groundHeightAt(pt, far, sd * 55) - pt.y); }
+      return (bins[k] = best);
+    }
+    _pineScore(k) {
+      const maxK = Math.floor(this.curve.getLength() / 25); let sum = 0, cnt = 0;
+      for (let j = k - 6; j <= k + 6; j++) { if (j < 0 || j > maxK) continue; sum += this._pineBin(j); cnt++; }
+      return cnt ? sum / cnt : 0;
+    }
+    _pineThreshold() {
+      if (this._pineThr !== undefined) return this._pineThr;
+      const maxK = Math.floor(this.curve.getLength() / 25), sc = [];
+      for (let k = 0; k <= maxK; k++) sc.push(this._pineScore(k));
+      sc.sort((x, y) => x - y);
+      return (this._pineThr = sc[Math.floor(0.65 * (sc.length - 1))]);
+    }
+    _pineZoneAt(pt, normal, side) {
+      const grid = this.roadSpatialGrid, pts = this.roadSpacedPoints;
+      if (!grid || !pts || !pts.length) return false;
+      const near = grid.getNearestRoadPoint(pt.x, pt.z, 12);
+      const idx = near ? near.index : 0, segLen = this.curve.getLength() / (pts.length - 1);
+      return this._pineScore(Math.round(idx * segLen / 25)) > this._pineThreshold();
+    }
+
     // Roadside variety (B154): the barrier style changes by stretch of road. A deterministic hash of
     // the 400 m map cell the barrier stands in (never the world prng), so the initial build and the
     // streamed extensions always agree. 0 = steel guardrail (most common), 1 = dry-stone wall,
@@ -2681,29 +2719,30 @@
             const tg = this.curve.getTangentAt(pu).setY(0).normalize();
             const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
             const r1 = hash(sm * 7, side + 5), r2 = hash(sm * 13, side + 9), r3 = hash(sm * 17, side + 21), r4 = hash(sm * 19, side + 31);
-            const absLat = roadHalf + 0.05 + r1 * 0.5;                  // tight band along the KERB (road-side) edge of the footpath
+            // OUTER edge of the footpath (barrier side), standing on the ground just OUTSIDE it: the base is set back
+            // by half the card width, so the whole plant clears the walkway instead of overlapping it.
+            // Cards are square (real plant sprites from the Poly Haven atlas); SIZES are real-world-ish plant widths.
+            const vi = k % 4;                                              // ferns and broadleaf weeds only along the footpath
+            const S = [0.95, 0.95, 0.75, 0.75][vi] * (0.85 + r3 * 0.3);
+            const topY = pt.y + 0.12 + side * roadHalf * Math.sin(bankAtU(u)) + KERB;
+            const absLat = outerEdge + S * 0.47 + 0.08 + r1 * 0.3;
             const lat = side * absLat;
             const pos = pt.clone().addScaledVector(nrm, lat);
             if (this.isFenceGap && this.isFenceGap(pos)) continue;
-            const topY = pt.y + 0.12 + side * roadHalf * Math.sin(bankAtU(u)) + KERB;
-            const onPath = true;                                         // the kerb edge is always on the footpath surface
-            pos.y = topY;
-            const rise = Math.max(0, topY - pos.y);
-            const h = 0.46 + r2 * 0.14 + rise * 0.8;                     // narrow height range
-            const width = h * (1.55 + r3 * 0.2);
-            const leanA = THREE.MathUtils.degToRad(16 + r3 * 4);                 // gentle, consistent lean over the kerb toward the road
+            pos.y = Math.min(this.groundHeightAt(pt, pos, lat), topY);
+            const leanA = THREE.MathUtils.degToRad(5 + r3 * 4);             // barely leaning toward the footpath, no overhang onto it
             lean.copy(nrm).multiplyScalar(-side);
             tilted.copy(up).multiplyScalar(Math.cos(leanA)).addScaledVector(lean, Math.sin(leanA)).normalize();
             q1.setFromUnitVectors(up, tilted);
             q2.setFromAxisAngle(tilted, r4 * Math.PI * 2);
             dummy.position.copy(pos);
             dummy.quaternion.copy(q2).multiply(q1);
-            dummy.scale.set(width, h, width);
+            dummy.scale.set(S, S, S);
             dummy.updateMatrix();
             const m = dummy.matrix.clone();
-            const g = 1.0 + (r4 - 0.5) * 0.14;                           // very light brightness variation
-            m._tint = new THREE.Color(g, g, g * 0.97);
-            buckets[k % 4].push(m);                                      // variants cycle evenly, no random runs
+            const g = 1.0 + (r4 - 0.5) * 0.12;                           // very light brightness variation
+            m._tint = new THREE.Color(1.3 * g, 1.34 * g, 1.1 * g);       // the real leaf photos are dull; lift them to sit with the lit scene
+            buckets[vi].push(m);                                      // variants cycle evenly, no random runs
           }
         });
         buckets.forEach((mats, v) => addChunkedInstances(group, geoms[v], mat, mats, {
@@ -5518,7 +5557,8 @@
           nearPos.y = calcTerrainY(nearPos, side * nearDist);
 
           if (spawnTree) {
-            const isPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
+            this.prng.next();                                              // keep the seeded sequence unchanged
+            const isPine = season.id === 'winter' ? true : this._pineZoneAt(pt, normal, side);
             const clusterCount = Math.floor(this.prng.range(3, 7));
             for (let ci = 0; ci < clusterCount; ci++) {
               const leafColHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
@@ -5540,7 +5580,8 @@
             const bgDist = side * this.prng.range(24.0, 90.0);
             const bgPos = pt.clone().addScaledVector(normal, bgDist);
             bgPos.y = calcTerrainY(bgPos, bgDist);
-            const bgIsPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
+            this.prng.next();
+            const bgIsPine = season.id === 'winter' ? true : this._pineZoneAt(pt, normal, Math.sign(bgDist));
 
             const bgClusterCount = Math.floor(this.prng.range(4, 9));
             for (let ci = 0; ci < bgClusterCount; ci++) {
@@ -8799,7 +8840,8 @@
             const nearDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 8.0 + rng() * 10.0);
             const nearPos = pt.clone().addScaledVector(normal, nearDist);
             const clusterCount = Math.floor(2 + rng() * 3); // 2 to 4 trees
-            const isPine = isWinter ? true : (rng() > 0.4);
+            rng();
+            const isPine = isWinter ? true : this._pineZoneAt(pt, normal, side);
 
             for (let ci = 0; ci < clusterCount; ci++) {
               const leafColHex = treeLeaves[Math.floor(rng() * treeLeaves.length)];
@@ -8830,7 +8872,8 @@
             const bgDist = side * (24.0 + rng() * 60.0);
             const bgPos = pt.clone().addScaledVector(normal, bgDist);
             const bgClusterCount = Math.floor(3 + rng() * 4); // 3 to 6 trees
-            const bgIsPine = isWinter ? true : (rng() > 0.35);
+            rng();
+            const bgIsPine = isWinter ? true : this._pineZoneAt(pt, normal, side);
 
             for (let ci = 0; ci < bgClusterCount; ci++) {
               const bgLeafHex = treeLeaves[Math.floor(rng() * treeLeaves.length)];
