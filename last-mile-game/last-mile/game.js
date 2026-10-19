@@ -1528,6 +1528,11 @@
         descriptors = descriptors.filter(d => d.kind !== 'broadleaf');
         group.add(ClumpTreeFactory.build(leafy));
       }
+      if (ConiferFactory.enabled()) {
+        const pines = descriptors.filter(d => d.kind === 'pine');
+        descriptors = descriptors.filter(d => d.kind !== 'pine');
+        group.add(ConiferFactory.build(pines));
+      }
       const buckets = new Map();
       for (const d of descriptors) {
         const key = `${d.kind}:${d.worldHeight}:${d.tintHex}`;
@@ -1706,6 +1711,118 @@
       return group;
     }
   };
+
+  // Tiered conifers (B151). A trunk plus ~10 tiers of drooping branch cards; each card is a
+  // feathery needle spray from an original atlas (tree_conifer_d diffuse + alpha,
+  // tree_conifer_n normal map). ~150 triangles per tree, against 4 for the old crossed
+  // billboard, but it has real layered silhouettes and lights like a fir. Same instancing,
+  // chunk culling and per-instance seasonal tint as ClumpTreeFactory.
+  // Kill switch for A/B: localStorage.shiplyp_conifers = '0'.
+  const ConiferFactory = {
+    VARIANTS: 4, _geoms: null, _tex: null, _mats: null,
+    enabled() { try { return localStorage.getItem('shiplyp_conifers') !== '0'; } catch (e) { return true; } },
+    _material() {
+      if (this._mats) return this._mats;
+      const loader = new THREE.TextureLoader();
+      const d = loader.load('assets/textures/tree_conifer_d.webp', () => { d.encoding = THREE.sRGBEncoding; d.needsUpdate = true; if (this._mats) this._mats.leaf.needsUpdate = true; });
+      const n = loader.load('assets/textures/tree_conifer_n.webp');
+      d.anisotropy = n.anisotropy = 4;
+      this._mats = {
+        leaf: new THREE.MeshStandardMaterial({ map: d, normalMap: n, normalScale: new THREE.Vector2(0.8, 0.8), color: 0x8fa38f, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9, metalness: 0 }),
+        wood: new THREE.MeshLambertMaterial({ vertexColors: true })
+      };
+      return this._mats;
+    },
+    _rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; },
+    _buildVariant(seed) {
+      const rnd = this._rng(seed), V = THREE.Vector3;
+      const H = 14, lean = new V((rnd() - 0.5) * 0.7, (rnd() - 0.5) * 0.7, 0);
+      const trunkTop = H - 0.4;
+      // trunk: 6-sided tapering tube (Z-up here, rotated to Y-up at the end)
+      const wp = [], wn = [], wc = [], wi = [], seg = 6;
+      for (let ring = 0; ring < 2; ring++) {
+        const z = ring ? trunkTop : 0, r = ring ? 0.05 : 0.34, ox = ring ? lean.x : 0, oy = ring ? lean.y : 0;
+        for (let i = 0; i < seg; i++) {
+          const a = (i / seg) * Math.PI * 2, nx = Math.cos(a), ny = Math.sin(a);
+          wp.push(ox + nx * r, oy + ny * r, z); wn.push(nx, ny, 0);
+          const sh = 0.8 + 0.2 * (nx * 0.5 + 0.5); wc.push(0.15 * sh, 0.11 * sh, 0.085 * sh);
+        }
+      }
+      for (let i = 0; i < seg; i++) { const a = i, b = (i + 1) % seg, c = seg + i, d = seg + (i + 1) % seg; wi.push(a, c, b, b, c, d); }
+      const lp = [], lu = [];
+      const tiers = 10;
+      const addCard = (p0, dir, side, len, wid, tile) => {
+        const u0 = tile / 4, u1 = (tile + 1) / 4;
+        const hw = wid / 2;
+        const q = [
+          new V().copy(p0).addScaledVector(side, -hw), new V().copy(p0).addScaledVector(side, hw),
+          new V().copy(p0).addScaledVector(dir, len).addScaledVector(side, hw * 0.92), new V().copy(p0).addScaledVector(dir, len).addScaledVector(side, -hw * 0.92)
+        ];
+        const uvq = [[u0, 0], [u1, 0], [u1, 1], [u0, 1]];
+        for (const i of [0, 1, 2, 0, 2, 3]) { lp.push(q[i].x, q[i].y, q[i].z); lu.push(uvq[i][0], uvq[i][1]); }
+      };
+      for (let i = 0; i < tiers; i++) {
+        const t = i / (tiers - 1), zt = 2.0 + t * (H - 2.0 - 1.0);
+        const L = 4.2 * Math.pow(1 - t, 0.85) + 0.7;
+        const K = 5 + Math.round(5 * (1 - t)), off = rnd() * Math.PI * 2;
+        const p0 = new V(lean.x * zt / trunkTop, lean.y * zt / trunkTop, zt);
+        for (let j = 0; j < K; j++) {
+          const az = off + (j / K) * Math.PI * 2 + (rnd() - 0.5) * 0.35;
+          const droop = THREE.MathUtils.degToRad(30 - 13 * t + (rnd() - 0.5) * 12);
+          const dir = new V(Math.cos(droop) * Math.cos(az), Math.cos(droop) * Math.sin(az), -Math.sin(droop));
+          const side = new V(-Math.sin(az), Math.cos(az), 0);
+          const len = L * (0.85 + rnd() * 0.3), wid = len * (0.95 + rnd() * 0.25);
+          addCard(p0.clone().add(new V(0, 0, (rnd() - 0.5) * 0.3)), dir, side, len, wid, Math.floor(rnd() * 4));
+        }
+      }
+      // leader: two crossed upright sprays at the top
+      for (let k = 0; k < 2; k++) {
+        const az = k * Math.PI / 2 + rnd() * 0.4, side = new V(-Math.sin(az), Math.cos(az), 0);
+        addCard(new V(lean.x, lean.y, H - 2.6), new V(0, 0, 1), side, 2.9, 1.4, Math.floor(rnd() * 4));
+      }
+      const wood = new THREE.BufferGeometry();
+      wood.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3));
+      wood.setAttribute('normal', new THREE.Float32BufferAttribute(wn, 3));
+      wood.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
+      wood.setIndex(wi);
+      const leaves = new THREE.BufferGeometry();
+      leaves.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+      leaves.setAttribute('uv', new THREE.Float32BufferAttribute(lu, 2));
+      leaves.computeVertexNormals();
+      const rot = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+      wood.applyMatrix4(rot); leaves.applyMatrix4(rot);
+      leaves.computeBoundingBox(); wood.computeBoundingSphere(); leaves.computeBoundingSphere();
+      return { wood, leaves, height: leaves.boundingBox.max.y };
+    },
+    _variants() {
+      if (!this._geoms) { this._geoms = []; for (let i = 0; i < this.VARIANTS; i++) this._geoms.push(this._buildVariant(2203 + i * 6271)); }
+      return this._geoms;
+    },
+    build(descriptors) {
+      const group = new THREE.Group();
+      if (!descriptors.length) return group;
+      const mats = this._material(), variants = this._variants();
+      const dummy = new THREE.Object3D(), col = new THREE.Color(), white = new THREE.Color(0xffffff);
+      const byVariant = variants.map(() => []);
+      for (const d of descriptors) {
+        const vi = Math.abs(Math.floor(d.pos.x * 12.9898 + d.pos.z * 78.233)) % variants.length;
+        const v = variants[vi];
+        dummy.position.copy(d.pos); dummy.rotation.set(0, d.rotY, 0);
+        dummy.scale.setScalar((d.worldHeight * (d.scale || 1)) / v.height);
+        dummy.updateMatrix();
+        const m = dummy.matrix.clone();
+        m._tint = col.setHex(d.tintHex != null ? d.tintHex : 0xffffff).lerp(white, 0.62).clone();
+        byVariant[vi].push(m);
+      }
+      byVariant.forEach((list, vi) => {
+        const v = variants[vi];
+        addChunkedInstances(group, v.leaves, mats.leaf, list, { cell: 260, onChunk: (mesh, l) => { l.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; } });
+        addChunkedInstances(group, v.wood, mats.wood, list, { cell: 260 });
+      });
+      return group;
+    }
+  };
+
 
   // Roadside grass overhang (B150). Tufts grow at the outer footpath edge and the barrier
   // base and lean in over the footpath. Each tuft is 3 crossed quads (6 tris) using one of
@@ -2218,7 +2335,7 @@
         const W = CONFIG.SIDEWALK.width, KERB = CONFIG.SIDEWALK.kerb;
         const roadHalf = CONFIG.ROAD_WIDTH * 0.52, outerEdge = roadHalf + W;
         const len = this.curve.getLength();
-        const STEP = 1.0;
+        const STEP = 0.9;
         const n = Math.max(2, Math.ceil(((u1 - u0) * len) / STEP));
         const geoms = RoadGrassFactory.geoms(), mat = RoadGrassFactory.material();
         const buckets = geoms.map(() => []);
@@ -2233,44 +2350,39 @@
         [-1, 1].forEach((side) => {
           for (let k = 0; k <= n; k++) {
             const u = u0 + (u1 - u0) * (k / n), sm = Math.round(u * len);
-            // patchy: long thick stretches, thin stretches, the odd bare gap
-            const patch = 0.5 + 0.5 * Math.sin(sm / 41 + side * 2.1) * Math.sin(sm / 97 + 0.7);
-            if (hash(sm, side + 11) > 0.30 + 0.70 * patch) continue;
+            // Even, continuous fringe: only a very gentle thinning so it never reads as random clumps.
+            const thin = 0.5 + 0.5 * Math.sin(sm / 120 + side * 1.7);
+            if (hash(sm, side + 11) > 0.86 + 0.14 * thin) continue;
             if (this._inTunnelAtU(u, 2)) continue;
             const pu = THREE.MathUtils.clamp(u, 0, 1);
             const pt = this.curve.getPointAt(pu);
             const tg = this.curve.getTangentAt(pu).setY(0).normalize();
             const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
-            const count = hash(sm, side + 3) > 0.6 ? 3 : (hash(sm, side + 4) > 0.35 ? 2 : 1);
-            for (let c = 0; c < count; c++) {
-              const r1 = hash(sm * 7 + c, side + 5), r2 = hash(sm * 13 + c, side + 9), r3 = hash(sm * 17 + c, side + 21), r4 = hash(sm * 19 + c, side + 31);
-              const absLat = outerEdge - 0.35 + r1 * 1.55;               // from just inside the footpath edge to ~1.2 m beyond it
-              const lat = side * absLat;
-              const pos = pt.clone().addScaledVector(nrm, lat);
-              if (this.isFenceGap && this.isFenceGap(pos)) continue;
-              const topY = pt.y + 0.12 + side * roadHalf * Math.sin(bankAtU(u)) + KERB;
-              const onPath = absLat <= outerEdge;
-              const y = onPath ? topY : this.groundHeightAt(pt, pos, lat);
-              pos.y = Math.min(y, topY + 0.02);
-              // reach back up to the footpath height when the ground below its edge is lower
-              const rise = Math.max(0, topY - pos.y);
-              const h = 0.42 + r2 * 0.5 + rise * 0.8;
-              const width = h * (1.5 + r3 * 0.6);
-              // lean in over the footpath: more for tufts beyond the edge, a little for those on it
-              const leanA = THREE.MathUtils.degToRad(onPath ? 6 + r3 * 14 : 22 + r3 * 26);
-              lean.copy(nrm).multiplyScalar(-side);
-              tilted.copy(up).multiplyScalar(Math.cos(leanA)).addScaledVector(lean, Math.sin(leanA)).normalize();
-              q1.setFromUnitVectors(up, tilted);
-              q2.setFromAxisAngle(tilted, r4 * Math.PI * 2);
-              dummy.position.copy(pos);
-              dummy.quaternion.copy(q2).multiply(q1);
-              dummy.scale.set(width, h, width);
-              dummy.updateMatrix();
-              const m = dummy.matrix.clone();
-              const g = 0.95 + r4 * 0.3;                                  // brightness/hue variation per tuft
-              m._tint = new THREE.Color(g * (0.95 + r1 * 0.1), g, g * (0.85 + r2 * 0.2));
-              buckets[Math.floor(r2 * 4) % 4].push(m);
-            }
+            const r1 = hash(sm * 7, side + 5), r2 = hash(sm * 13, side + 9), r3 = hash(sm * 17, side + 21), r4 = hash(sm * 19, side + 31);
+            const absLat = outerEdge - 0.12 + r1 * 0.55;                // tight band along the edge
+            const lat = side * absLat;
+            const pos = pt.clone().addScaledVector(nrm, lat);
+            if (this.isFenceGap && this.isFenceGap(pos)) continue;
+            const topY = pt.y + 0.12 + side * roadHalf * Math.sin(bankAtU(u)) + KERB;
+            const onPath = absLat <= outerEdge;
+            const y = onPath ? topY : this.groundHeightAt(pt, pos, lat);
+            pos.y = Math.min(y, topY + 0.02);
+            const rise = Math.max(0, topY - pos.y);
+            const h = 0.46 + r2 * 0.14 + rise * 0.8;                     // narrow height range
+            const width = h * (1.55 + r3 * 0.2);
+            const leanA = THREE.MathUtils.degToRad(onPath ? 20 : 30 + r3 * 6);   // consistent lean over the footpath
+            lean.copy(nrm).multiplyScalar(-side);
+            tilted.copy(up).multiplyScalar(Math.cos(leanA)).addScaledVector(lean, Math.sin(leanA)).normalize();
+            q1.setFromUnitVectors(up, tilted);
+            q2.setFromAxisAngle(tilted, r4 * Math.PI * 2);
+            dummy.position.copy(pos);
+            dummy.quaternion.copy(q2).multiply(q1);
+            dummy.scale.set(width, h, width);
+            dummy.updateMatrix();
+            const m = dummy.matrix.clone();
+            const g = 1.0 + (r4 - 0.5) * 0.14;                           // very light brightness variation
+            m._tint = new THREE.Color(g, g, g * 0.97);
+            buckets[k % 4].push(m);                                      // variants cycle evenly, no random runs
           }
         });
         buckets.forEach((mats, v) => addChunkedInstances(group, geoms[v], mat, mats, {
