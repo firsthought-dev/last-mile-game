@@ -2663,10 +2663,10 @@
             const pt = this.curve.getPointAt(pu);
             const tg = this.curve.getTangentAt(pu).setY(0).normalize();
             const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
-            const count = 13 + (hash(sm, side + 40) > 0.5 ? 5 : 0);
+            const count = 24 + (hash(sm, side + 40) > 0.5 ? 8 : 0);
             for (let c = 0; c < count; c++) {
               const r1 = hash(sm * 5 + c, side + 41), r2 = hash(sm * 7 + c, side + 43), r3 = hash(sm * 11 + c, side + 47), r4 = hash(sm * 13 + c, side + 53);
-              const absLat = 6.3 + 34 * Math.pow(r1, 1.55);                      // dense near the road, thinning outward, reaching the whole visible corridor
+              const absLat = 6.3 + 34 * Math.pow(r1, 2.3);                       // strongly concentrated near the road, thinning outward to the edge of the visible corridor
               const along = (r2 - 0.5) * STEP * 1.6;
               const pos = pt.clone().addScaledVector(nrm, side * absLat).addScaledVector(tg, along);
               if (blocked(pos, absLat, 1.5)) continue;
