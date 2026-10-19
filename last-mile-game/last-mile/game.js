@@ -81,6 +81,59 @@
     return out;
   }
 
+  // Splits one big instanced batch into spatial chunks so the renderer can cull
+  // each chunk on its own. A single InstancedMesh is culled as one object, so a
+  // km-long scatter of rocks or guardrail posts was drawn in full every frame,
+  // including the parts behind the camera (B145). Chunks share the source
+  // geometry's GPU buffers; only the bounding sphere differs per chunk.
+  function addChunkedInstances(parent, geom, mat, matrices, { cell = 320, castShadow = false, onChunk = null } = {}) {
+    if (!matrices.length) return [];
+    if (!geom.boundingSphere) geom.computeBoundingSphere();
+    const baseR = geom.boundingSphere.radius, baseC = geom.boundingSphere.center;
+    const cells = new Map();
+    const p = new THREE.Vector3(), sc = new THREE.Vector3(), q = new THREE.Quaternion();
+    matrices.forEach((m) => {
+      m.decompose(p, q, sc);
+      const key = Math.floor(p.x / cell) + ',' + Math.floor(p.z / cell);
+      let c = cells.get(key); if (!c) { c = []; cells.set(key, c); }
+      c.push(m);
+    });
+    const meshes = [];
+    cells.forEach((list) => {
+      const sub = new THREE.BufferGeometry();
+      Object.keys(geom.attributes).forEach((k) => sub.setAttribute(k, geom.attributes[k]));
+      if (geom.index) sub.setIndex(geom.index);
+      sub.groups = geom.groups;
+      sub.userData.sourceType = geom.type;
+      // Bounding sphere around every instance of this chunk.
+      const box = new THREE.Box3(), pt = new THREE.Vector3();
+      let maxScale = 1;
+      list.forEach((m) => { m.decompose(p, q, sc); pt.copy(baseC).applyMatrix4(m); box.expandByPoint(pt); maxScale = Math.max(maxScale, sc.x, sc.y, sc.z); });
+      const sph = new THREE.Sphere(); box.getBoundingSphere(sph);
+      sph.radius += baseR * maxScale;
+      sub.boundingSphere = sph;
+      const mesh = new THREE.InstancedMesh(sub, mat, list.length);
+      list.forEach((m, i) => mesh.setMatrixAt(i, m));
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.castShadow = castShadow;
+      mesh.frustumCulled = true;
+      if (onChunk) onChunk(mesh, list);
+      parent.add(mesh);
+      meshes.push(mesh);
+    });
+    return meshes;
+  }
+
+  // Road paint (B149). One set of numbers and one builder (`_buildLaneRibbon`) for BOTH the
+  // initial road and the streamed extension, so the two can never drift apart again.
+  // Widths are deliberately wider than real paint (10-15 cm): at 12 cm the dashes were
+  // sub-pixel beyond a few metres and only "appeared" as the player rode up to them.
+  const LANE_PAINT = {
+    centreHalfW: 0.17, edgeHalfW: 0.10,        // metres, half-width
+    centre: 0xd6c36e, edge: 0xb4bac2,          // pale, to stay under the bloom threshold
+    dashOn: 3.0, dashPeriod: 8.0               // metres along the road
+  };
+
   function buildBarrierGeometries() {
     const alongX = (shape, halfLen = 0.5) => {
       // extrude a YZ-plane profile (shape x = depth z, shape y = height) along X
@@ -181,7 +234,7 @@
   // models each time, most painfully on the Android WebView's cold start.
   // Bump this by hand whenever a file under assets/models/ changes; that
   // invalidates the old copy exactly when it should and never otherwise.
-  const ASSET_VERSION = '7';
+  const ASSET_VERSION = '10';
 
   // 0f. MUSCLE COUPE — reworked in Blender (B129) from a user-supplied model:
   // all badges and lettering removed; our own grille, lamps, hood and tail;
@@ -1048,10 +1101,10 @@
         id: 'foothills',
         name: 'Neelgiri Foothills',
         tagline: 'Lush Mountain Pass & Cedar Forest',
-        grassColor: 0x276638,
-        grassLight: 0x3a874d,
+        grassColor: 0x4a6a2c,
+        grassLight: 0x7a9640,
         cliffColor: 0x5d3c29,
-        shoulderSoil: 0x3a874d,
+        shoulderSoil: 0x7a9640,
         treeLeaves: [0x366247, 0x3c7652, 0x5baa78, 0x30553f],
         rockColor: 0x6b5c48,
         treeDensity: 0.85
@@ -1120,10 +1173,10 @@
     // behaviour: 'pedal' (cycle only), 'twoWheeler' (lean, small-vehicle
     // camera), 'threeWheeler' / 'car' (four-wheel style body roll). Speeds m/s.
     VEHICLES: {
-      // maxSpeed = end of the ride-time ramp (52 km/h); baseSpeed = start of it (32 km/h).
-      cycle: { id: 'cycle', order: 1, name: 'Delivery Cycle', short: 'CYCLE', handling: 'pedal', speedLabel: '32–52 km/h',
+      // maxSpeed = end of the ride-time ramp (65 km/h); baseSpeed = start of it (40 km/h).
+      cycle: { id: 'cycle', order: 1, name: 'Delivery Cycle', short: 'CYCLE', handling: 'pedal', speedLabel: '40–65 km/h',
         price: 0, payoutMult: 1.0, wheelRadius: 0.365,
-        maxSpeed: 14.44, baseSpeed: 8.89, rampSeconds: 120, accel: 6.5, drag: 0.55, brake: 14.0 },
+        maxSpeed: 18.06, baseSpeed: 11.11, rampSeconds: 120, accel: 8.5, drag: 0.55, brake: 14.0 },
       motorbike: { id: 'motorbike', order: 2, name: 'Motorbike', short: 'BIKE', handling: 'twoWheeler', speedLabel: '90 km/h',
         price: 1500, payoutMult: 1.25, wheelRadius: 0.31,
         maxSpeed: 25.0, accel: 11.0, drag: 0.65, brake: 20.0 },
@@ -1470,6 +1523,16 @@
     // of trees, instead of 2 draw calls per tree.
     buildInstancedBatches(descriptors) {
       const group = new THREE.Group();
+      if (ClumpTreeFactory.enabled()) {
+        const leafy = descriptors.filter(d => d.kind === 'broadleaf');
+        descriptors = descriptors.filter(d => d.kind !== 'broadleaf');
+        group.add(ClumpTreeFactory.build(leafy));
+      }
+      if (ConiferFactory.enabled()) {
+        const pines = descriptors.filter(d => d.kind === 'pine');
+        descriptors = descriptors.filter(d => d.kind !== 'pine');
+        group.add(ConiferFactory.build(pines));
+      }
       const buckets = new Map();
       for (const d of descriptors) {
         const key = `${d.kind}:${d.worldHeight}:${d.tintHex}`;
@@ -1503,6 +1566,524 @@
       }
       group.userData.isTreeBatch = true;
       return group;
+    }
+  };
+
+  // Leaf-clump broadleaf trees (B148). A tree is a tapering trunk, a few branches and
+  // ~14 clumps; each clump is two crossed quads showing a leaf-ball from a small atlas
+  // (tree_clumps_d diffuse + alpha, tree_clumps_n normal map with a domed normal baked in
+  // so a flat card lights like a round ball of leaves). ~120 triangles per tree, against
+  // 4 for the old crossed billboards, but it reads as foliage instead of a flat sprite.
+  // Geometry is generated here from a seed; the atlases were authored for this project.
+  // Trees are chunked (addChunkedInstances) so only the ones near the camera are drawn.
+  const ClumpTreeFactory = {
+    VARIANTS: 4,
+    _geoms: null,
+    _tex: null,
+    _mats: null,
+    enabled() {
+      try { return localStorage.getItem('shiplyp_clumpTrees') !== '0'; } catch (e) { return true; }
+    },
+    _textures() {
+      if (this._tex) return this._tex;
+      const loader = new THREE.TextureLoader();
+      const mats = () => { if (this._mats) this._mats.leaf.needsUpdate = true; };
+      const d = loader.load('assets/textures/tree_clumps_d.webp', () => { d.encoding = THREE.sRGBEncoding; d.needsUpdate = true; mats(); });
+      const n = loader.load('assets/textures/tree_clumps_n.webp');
+      d.anisotropy = n.anisotropy = 4;
+      this._tex = { d, n };
+      return this._tex;
+    },
+    _material() {
+      if (this._mats) return this._mats;
+      const t = this._textures();
+      this._mats = {
+        leaf: new THREE.MeshStandardMaterial({
+          map: t.d, normalMap: t.n, normalScale: new THREE.Vector2(0.9, 0.9),
+          color: 0x9aa88a, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.9, metalness: 0
+        }),
+        wood: new THREE.MeshLambertMaterial({ vertexColors: true })
+      };
+      return this._mats;
+    },
+    _rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; },
+    _buildVariant(seed) {
+      const rnd = this._rng(seed), V = THREE.Vector3;
+      const wp = [], wn = [], wc = [], wi = [];
+      const tube = (p0, p1, r0, r1, seg) => {
+        const d = new V().subVectors(p1, p0), len = d.length(); d.normalize();
+        const ref = Math.abs(d.z) < 0.9 ? new V(0, 0, 1) : new V(1, 0, 0);
+        const u = new V().crossVectors(d, ref).normalize(), v = new V().crossVectors(d, u);
+        const base = wp.length / 3;
+        for (let ring = 0; ring < 2; ring++) {
+          const c = ring ? p1 : p0, r = ring ? r1 : r0;
+          for (let i = 0; i < seg; i++) {
+            const a = (i / seg) * Math.PI * 2, nx = Math.cos(a), ny = Math.sin(a);
+            const n = new V().addScaledVector(u, nx).addScaledVector(v, ny);
+            wp.push(c.x + n.x * r, c.y + n.y * r, c.z + n.z * r); wn.push(n.x, n.y, n.z);
+            const sh = 0.82 + 0.18 * (nx * 0.5 + 0.5) + (rnd() - 0.5) * 0.05;
+            wc.push(0.15 * sh, 0.12 * sh, 0.095 * sh);
+          }
+        }
+        for (let i = 0; i < seg; i++) {
+          const a = base + i, b = base + (i + 1) % seg, c2 = base + seg + i, d2 = base + seg + (i + 1) % seg;
+          wi.push(a, c2, b, b, c2, d2);
+        }
+      };
+      const H = 4.2 + rnd() * 0.6;
+      const lean = new V((rnd() - 0.5) * 0.5, (rnd() - 0.5) * 0.5, 0);
+      const top = new V(lean.x, lean.y, H);
+      tube(new V(0, 0, 0), top, 0.32, 0.12, 7);
+      const ends = [];
+      const nb = 5;
+      for (let i = 0; i < nb; i++) {
+        const az = i * (Math.PI * 2 / nb) + (rnd() - 0.5) * 0.8, z0 = H * (0.55 + rnd() * 0.35);
+        const base = new V(lean.x * z0 / H, lean.y * z0 / H, z0), Lb = 1.3 + rnd() * 1.0;
+        const end = new V(base.x + Math.cos(az) * Lb, base.y + Math.sin(az) * Lb, base.z + 0.9 + rnd() * 1.3);
+        tube(base, end, 0.11, 0.04, 5); ends.push(end);
+      }
+      const centres = ends.map(e => [e, 1.5 + rnd() * 0.4]);
+      centres.push([new V(top.x, top.y, H + 1.7), 1.9]);
+      for (let i = 0; i < 8; i++) {
+        const a = rnd() * Math.PI * 2, rr = 0.5 + rnd() * 1.7;
+        centres.push([new V(Math.cos(a) * rr, Math.sin(a) * rr, H + 0.3 + rnd() * 2.6), 1.25 + rnd() * 0.4]);
+      }
+      const lp = [], lu = [];
+      const m4 = new THREE.Matrix4(), rz = new THREE.Matrix4(), rx = new THREE.Matrix4();
+      for (const [c, r] of centres) {
+        const tile = Math.floor(rnd() * 6), row = Math.floor(tile / 3), colIdx = tile % 3;
+        const u0 = colIdx / 3, u1 = (colIdx + 1) / 3, v1 = 1 - row / 2, v0 = 1 - (row + 1) / 2;
+        const yaw = rnd() * Math.PI;
+        for (let k = 0; k < 2; k++) {
+          rz.makeRotationZ(yaw + k * Math.PI / 2 + (rnd() - 0.5) * 0.4);
+          rx.makeRotationX((rnd() - 0.5) * 0.7);
+          m4.multiplyMatrices(rz, rx);
+          const q = [[-r, 0, -r], [r, 0, -r], [r, 0, r], [-r, 0, r]].map(a => new V(a[0], a[1], a[2]).applyMatrix4(m4).add(c));
+          const uvq = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+          for (const i of [0, 1, 2, 0, 2, 3]) { lp.push(q[i].x, q[i].y, q[i].z); lu.push(uvq[i][0], uvq[i][1]); }
+        }
+      }
+      const wood = new THREE.BufferGeometry();
+      wood.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3));
+      wood.setAttribute('normal', new THREE.Float32BufferAttribute(wn, 3));
+      wood.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
+      wood.setIndex(wi);
+      const leaves = new THREE.BufferGeometry();
+      leaves.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+      leaves.setAttribute('uv', new THREE.Float32BufferAttribute(lu, 2));
+      leaves.computeVertexNormals();
+      // three is Y-up, the generator above is Z-up: rotate both into place and measure height.
+      const rot = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+      wood.applyMatrix4(rot); leaves.applyMatrix4(rot);
+      leaves.computeBoundingBox(); wood.computeBoundingSphere(); leaves.computeBoundingSphere();
+      return { wood, leaves, height: leaves.boundingBox.max.y };
+    },
+    // Low shrubs for the ground cover (B153): two crossed clump cards per shrub, one per atlas tile.
+    shrubGeoms() {
+      if (this._shrub) return this._shrub;
+      this._shrub = [];
+      for (let tile = 0; tile < 6; tile++) {
+        const row = Math.floor(tile / 3), col = tile % 3, u0 = col / 3, u1 = (col + 1) / 3, v1 = 1 - row / 2, v0 = 1 - (row + 1) / 2;
+        const pos = [], uv = [];
+        for (let k = 0; k < 2; k++) {
+          const a = k * Math.PI / 2, cx = Math.cos(a) * 0.5, cz = Math.sin(a) * 0.5;
+          const q = [[-cx, 0, -cz], [cx, 0, cz], [cx, 1, cz], [-cx, 1, -cz]], uvq = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+          for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(q[i][0], q[i][1], q[i][2]); uv.push(uvq[i][0], uvq[i][1]); }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+        g.computeVertexNormals(); g.computeBoundingSphere();
+        this._shrub.push(g);
+      }
+      return this._shrub;
+    },
+    shrubMaterial() { return this._material().leaf; },
+    _variants() {
+      if (!this._geoms) { this._geoms = []; for (let i = 0; i < this.VARIANTS; i++) this._geoms.push(this._buildVariant(1013 + i * 7919)); }
+      return this._geoms;
+    },
+    // descriptors: the broadleaf entries of TreeBillboardFactory.buildInstancedBatches
+    build(descriptors) {
+      const group = new THREE.Group();
+      if (!descriptors.length) return group;
+      const mats = this._material(), variants = this._variants();
+      const dummy = new THREE.Object3D(), col = new THREE.Color();
+      const byVariant = variants.map(() => []);
+      for (const d of descriptors) {
+        const vi = Math.abs(Math.floor(d.pos.x * 12.9898 + d.pos.z * 78.233)) % variants.length;
+        const v = variants[vi];
+        dummy.position.copy(d.pos); dummy.rotation.set(0, d.rotY, 0);
+        dummy.scale.setScalar((d.worldHeight * (d.scale || 1)) / v.height);
+        dummy.updateMatrix();
+        const m = dummy.matrix.clone();
+        // seasonal tint, pulled toward white so the painted greens are not greyed out
+        m._tint = col.setHex(d.tintHex != null ? d.tintHex : 0xffffff).lerp(new THREE.Color(0xffffff), 0.55).clone();
+        byVariant[vi].push(m);
+      }
+      byVariant.forEach((mats4, vi) => {
+        const v = variants[vi];
+        addChunkedInstances(group, v.leaves, mats.leaf, mats4, {
+          cell: 260,
+          onChunk: (mesh, list) => { list.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; }
+        });
+        addChunkedInstances(group, v.wood, mats.wood, mats4, { cell: 260 });
+      });
+      return group;
+    }
+  };
+
+  // Tiered conifers (B151). A trunk plus ~10 tiers of drooping branch cards; each card is a
+  // feathery needle spray from an original atlas (tree_conifer_d diffuse + alpha,
+  // tree_conifer_n normal map). ~150 triangles per tree, against 4 for the old crossed
+  // billboard, but it has real layered silhouettes and lights like a fir. Same instancing,
+  // chunk culling and per-instance seasonal tint as ClumpTreeFactory.
+  // Kill switch for A/B: localStorage.shiplyp_conifers = '0'.
+  const ConiferFactory = {
+    VARIANTS: 4, _geoms: null, _tex: null, _mats: null,
+    enabled() { try { return localStorage.getItem('shiplyp_conifers') !== '0'; } catch (e) { return true; } },
+    _material() {
+      if (this._mats) return this._mats;
+      const loader = new THREE.TextureLoader();
+      const d = loader.load('assets/textures/tree_conifer_d.webp', () => { d.encoding = THREE.sRGBEncoding; d.needsUpdate = true; if (this._mats) this._mats.leaf.needsUpdate = true; });
+      const n = loader.load('assets/textures/tree_conifer_n.webp');
+      d.anisotropy = n.anisotropy = 4;
+      this._mats = {
+        leaf: new THREE.MeshStandardMaterial({ map: d, normalMap: n, normalScale: new THREE.Vector2(0.8, 0.8), color: 0x8fa38f, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9, metalness: 0 }),
+        wood: new THREE.MeshLambertMaterial({ vertexColors: true })
+      };
+      return this._mats;
+    },
+    _rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; },
+    _buildVariant(seed) {
+      const rnd = this._rng(seed), V = THREE.Vector3;
+      const H = 14, lean = new V((rnd() - 0.5) * 0.7, (rnd() - 0.5) * 0.7, 0);
+      const trunkTop = H - 0.4;
+      // trunk: 6-sided tapering tube (Z-up here, rotated to Y-up at the end)
+      const wp = [], wn = [], wc = [], wi = [], seg = 6;
+      for (let ring = 0; ring < 2; ring++) {
+        const z = ring ? trunkTop : 0, r = ring ? 0.05 : 0.34, ox = ring ? lean.x : 0, oy = ring ? lean.y : 0;
+        for (let i = 0; i < seg; i++) {
+          const a = (i / seg) * Math.PI * 2, nx = Math.cos(a), ny = Math.sin(a);
+          wp.push(ox + nx * r, oy + ny * r, z); wn.push(nx, ny, 0);
+          const sh = 0.8 + 0.2 * (nx * 0.5 + 0.5); wc.push(0.15 * sh, 0.11 * sh, 0.085 * sh);
+        }
+      }
+      for (let i = 0; i < seg; i++) { const a = i, b = (i + 1) % seg, c = seg + i, d = seg + (i + 1) % seg; wi.push(a, c, b, b, c, d); }
+      const lp = [], lu = [];
+      const tiers = 10;
+      const addCard = (p0, dir, side, len, wid, tile) => {
+        const u0 = tile / 4, u1 = (tile + 1) / 4;
+        const hw = wid / 2;
+        const q = [
+          new V().copy(p0).addScaledVector(side, -hw), new V().copy(p0).addScaledVector(side, hw),
+          new V().copy(p0).addScaledVector(dir, len).addScaledVector(side, hw * 0.92), new V().copy(p0).addScaledVector(dir, len).addScaledVector(side, -hw * 0.92)
+        ];
+        const uvq = [[u0, 0], [u1, 0], [u1, 1], [u0, 1]];
+        for (const i of [0, 1, 2, 0, 2, 3]) { lp.push(q[i].x, q[i].y, q[i].z); lu.push(uvq[i][0], uvq[i][1]); }
+      };
+      for (let i = 0; i < tiers; i++) {
+        const t = i / (tiers - 1), zt = 2.0 + t * (H - 2.0 - 1.0);
+        const L = 4.2 * Math.pow(1 - t, 0.85) + 0.7;
+        const K = 5 + Math.round(5 * (1 - t)), off = rnd() * Math.PI * 2;
+        const p0 = new V(lean.x * zt / trunkTop, lean.y * zt / trunkTop, zt);
+        for (let j = 0; j < K; j++) {
+          const az = off + (j / K) * Math.PI * 2 + (rnd() - 0.5) * 0.35;
+          const droop = THREE.MathUtils.degToRad(30 - 13 * t + (rnd() - 0.5) * 12);
+          const dir = new V(Math.cos(droop) * Math.cos(az), Math.cos(droop) * Math.sin(az), -Math.sin(droop));
+          const side = new V(-Math.sin(az), Math.cos(az), 0);
+          const len = L * (0.85 + rnd() * 0.3), wid = len * (0.95 + rnd() * 0.25);
+          addCard(p0.clone().add(new V(0, 0, (rnd() - 0.5) * 0.3)), dir, side, len, wid, Math.floor(rnd() * 4));
+        }
+      }
+      // leader: two crossed upright sprays at the top
+      for (let k = 0; k < 2; k++) {
+        const az = k * Math.PI / 2 + rnd() * 0.4, side = new V(-Math.sin(az), Math.cos(az), 0);
+        addCard(new V(lean.x, lean.y, H - 2.6), new V(0, 0, 1), side, 2.9, 1.4, Math.floor(rnd() * 4));
+      }
+      const wood = new THREE.BufferGeometry();
+      wood.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3));
+      wood.setAttribute('normal', new THREE.Float32BufferAttribute(wn, 3));
+      wood.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
+      wood.setIndex(wi);
+      const leaves = new THREE.BufferGeometry();
+      leaves.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+      leaves.setAttribute('uv', new THREE.Float32BufferAttribute(lu, 2));
+      leaves.computeVertexNormals();
+      const rot = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+      wood.applyMatrix4(rot); leaves.applyMatrix4(rot);
+      leaves.computeBoundingBox(); wood.computeBoundingSphere(); leaves.computeBoundingSphere();
+      return { wood, leaves, height: leaves.boundingBox.max.y };
+    },
+    _variants() {
+      if (!this._geoms) { this._geoms = []; for (let i = 0; i < this.VARIANTS; i++) this._geoms.push(this._buildVariant(2203 + i * 6271)); }
+      return this._geoms;
+    },
+    build(descriptors) {
+      const group = new THREE.Group();
+      if (!descriptors.length) return group;
+      const mats = this._material(), variants = this._variants();
+      const dummy = new THREE.Object3D(), col = new THREE.Color(), white = new THREE.Color(0xffffff);
+      const byVariant = variants.map(() => []);
+      for (const d of descriptors) {
+        const vi = Math.abs(Math.floor(d.pos.x * 12.9898 + d.pos.z * 78.233)) % variants.length;
+        const v = variants[vi];
+        dummy.position.copy(d.pos); dummy.rotation.set(0, d.rotY, 0);
+        dummy.scale.setScalar((d.worldHeight * (d.scale || 1)) / v.height);
+        dummy.updateMatrix();
+        const m = dummy.matrix.clone();
+        m._tint = col.setHex(d.tintHex != null ? d.tintHex : 0xffffff).lerp(white, 0.62).clone();
+        byVariant[vi].push(m);
+      }
+      byVariant.forEach((list, vi) => {
+        const v = variants[vi];
+        addChunkedInstances(group, v.leaves, mats.leaf, list, { cell: 260, onChunk: (mesh, l) => { l.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; } });
+        addChunkedInstances(group, v.wood, mats.wood, list, { cell: 260 });
+      });
+      return group;
+    }
+  };
+
+
+  // Near-field grass layer (B157). Slow Roads' grassy ground is a carpet of large, soft, overlapping tufts close
+  // to the camera. Static placement cannot do that over an 8 km corridor (~1.4 tufts/m2 is hundreds of
+  // thousands of instances), so this builds dense clumps in 8 m cells around the camera on demand (a few
+  // per tick), one InstancedMesh per cell, and drops cells that fall behind. Tufts shrink to nothing between
+  // FADE0 and RADIUS in the vertex shader, so cells never pop. The 6 atlas variants are selected per instance
+  // with an instanced UV offset, so there is no per-variant draw call. Placement is a pure hash of the cell
+  // and index (never the world prng), so a cell rebuilds identically. Kill switch: localStorage.shiplyp_nearGrass = '0'.
+  class NearGrassLayer {
+    constructor(world, scene) {
+      this.world = world; this.scene = scene; this.cells = new Map(); this._acc = 1; this._on = true;
+      this._on = false;                                              // superseded by buildGroundCover, which covers the WHOLE route at load; this streamed layer left bare ground far from the player
+      try { this._on = localStorage.getItem('shiplyp_nearGrass') === '1'; } catch (e) { /* stay off */ }
+      this.group = new THREE.Group(); this.group.name = 'NearGrass'; scene.add(this.group);
+      NearGrassLayer.RADIUS = 58; NearGrassLayer.FADE0 = 38; NearGrassLayer.CELL = 9;
+      this.geom = NearGrassLayer.geometry(); this.mat = NearGrassLayer.material();
+    }
+    static geometry() {
+      if (NearGrassLayer._geom) return NearGrassLayer._geom;
+      const pos = [], uv = [];
+      for (let k = 0; k < 3; k++) {                                   // 3 crossed quads, tile 0 UVs (offset per instance)
+        const a = k * Math.PI / 3, cx = Math.cos(a) * 0.5, cz = Math.sin(a) * 0.5;
+        const q = [[-cx, 0, -cz], [cx, 0, cz], [cx, 1, cz], [-cx, 1, -cz]], uvq = [[0, 0], [1 / 6, 0], [1 / 6, 1], [0, 1]];
+        for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(q[i][0], q[i][1], q[i][2]); uv.push(uvq[i][0], uvq[i][1]); }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(pos.length / 3).fill(0).flatMap(() => [0, 1, 0]), 3));
+      g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.5, 0), 1.2);
+      return (NearGrassLayer._geom = g);
+    }
+    static material() {
+      if (NearGrassLayer._mat) return NearGrassLayer._mat;
+      const base = RoadGrassFactory.material();
+      const m = new THREE.MeshLambertMaterial({ map: base.map, alphaTest: 0.5, side: THREE.DoubleSide });
+      m.onBeforeCompile = (shader) => {
+        shader.uniforms.uFade = { value: new THREE.Vector2(NearGrassLayer.FADE0, NearGrassLayer.RADIUS) };
+        shader.uniforms.uCam = { value: new THREE.Vector3(1e6, 0, 1e6) };       // fed every frame by the layer; cameraPosition is not reliable here
+        m.userData.shader = shader;
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nattribute vec2 aUvOff;\nuniform vec2 uFade;\nuniform vec3 uCam;')
+          .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_UV\nvUv += aUvOff;\n#endif')
+          .replace('#include <begin_vertex>', `#include <begin_vertex>
+            vec3 shpOrg = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+            float shpD = distance(uCam, shpOrg);
+            transformed *= (1.0 + 0.45 * smoothstep(8.0, uFade.x, shpD)) * (1.0 - smoothstep(uFade.x, uFade.y, shpD));   // a little bigger with distance so the carpet still reads, then shrink away`);
+      };
+      return (NearGrassLayer._mat = m);
+    }
+    _hash(a, b, c) { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2246822519)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+    _buildCell(cx, cz) {
+      const w = this.world, C = NearGrassLayer.CELL, grid = w.roadSpatialGrid, pts = w.roadSpacedPoints;
+      const out = [], up = new THREE.Vector3(0, 1, 0), dummy = new THREE.Object3D();
+      const buildings = (w.obstacles || []).filter(o => o.type === 'building');
+      const COUNT = 260;
+      for (let i = 0; i < COUNT; i++) {
+        const x = (cx + this._hash(cx, cz, i * 3)) * C, z = (cz + this._hash(cx, cz, i * 3 + 1)) * C;
+        const near = grid.getNearestRoadPoint(x, z, 34);
+        if (!near) continue;
+        const lat = near.dist;
+        if (lat < 6.1 || lat > 31) continue;                          // past the footpath/barrier, inside the corridor
+        // density falls off with distance from the road
+        if (this._hash(cx, cz, i * 3 + 2) > 1.0 - Math.max(0, (lat - 6.1) / 30) * 0.7) continue;
+        const pos = new THREE.Vector3(x, 0, z);
+        let blocked = false; for (const o of buildings) { if (o.pos.distanceTo(pos) < o.radius + 1.6) { blocked = true; break; } }
+        if (blocked) continue;
+        const idx = near.index, p0 = pts[idx], p1 = pts[Math.min(idx + 1, pts.length - 1)];
+        const tx = p1.x - p0.x, tz = p1.z - p0.z, side = Math.sign(tx * (z - p0.z) - tz * (x - p0.x)) || 1;
+        if (w._inTunnelAtU && w._inTunnelAtU(idx / (pts.length - 1), 3)) continue;
+        pos.y = w.groundHeightAt(near.point, pos, side * lat) - 0.02;
+        const r1 = this._hash(cx, cz, i * 7 + 11), r2 = this._hash(cx, cz, i * 7 + 12), r3 = this._hash(cx, cz, i * 7 + 13);
+        const h = 0.55 + r1 * 0.45, wd = h * (1.0 + r2 * 0.25);
+        dummy.position.copy(pos); dummy.rotation.set((r3 - 0.5) * 0.35, r2 * Math.PI * 2, (r1 - 0.5) * 0.35); dummy.scale.set(wd, h, wd); dummy.updateMatrix();
+        out.push({ m: dummy.matrix.clone(), v: this._hash(cx, cz, i * 7 + 14) < 0.10 ? 4 + (r3 > 0.5 ? 1 : 0) : Math.floor(r2 * 4) % 4, g: 0.9 + r3 * 0.2 });
+      }
+      if (!out.length) return null;
+      const mesh = new THREE.InstancedMesh(this.geom, this.mat, out.length);
+      const off = new Float32Array(out.length * 2), col = new THREE.Color();
+      out.forEach((o, i) => { mesh.setMatrixAt(i, o.m); off[i * 2] = o.v / 6; off[i * 2 + 1] = 0; mesh.setColorAt(i, col.setRGB(1.25 * o.g, 1.3 * o.g, 1.08 * o.g)); });
+      mesh.geometry = this.geom.clone(); mesh.geometry.boundingSphere = null;
+      mesh.geometry.setAttribute('aUvOff', new THREE.InstancedBufferAttribute(off, 2));
+      mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true; mesh.frustumCulled = false;
+      // cell-sized culling sphere so whole far cells are skipped by the renderer
+      mesh.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1); mesh.frustumCulled = false;
+      mesh.userData.cellCentre = new THREE.Vector3((cx + 0.5) * C, 0, (cz + 0.5) * C);
+      return mesh;
+    }
+    update(camPos, dt) {
+      if (!this._on || !this.world || !this.world.roadSpatialGrid || !this.world.roadSpacedPoints) return;
+      const sh = this.mat.userData.shader; if (sh) sh.uniforms.uCam.value.copy(camPos);   // every frame, so the shrink tracks the camera
+      this._acc += dt; if (this._acc < 0.2) return; this._acc = 0;
+      if (this.world.seasonKey === 'winter') return;
+      const C = NearGrassLayer.CELL, R = NearGrassLayer.RADIUS;
+      const c0x = Math.floor((camPos.x - R) / C), c1x = Math.floor((camPos.x + R) / C), c0z = Math.floor((camPos.z - R) / C), c1z = Math.floor((camPos.z + R) / C);
+      // drop cells that are well out of range
+      this.cells.forEach((mesh, key) => {
+        if (!mesh) return;
+        if (mesh.userData.cellCentre.distanceTo(camPos) > R + C * 2.5) { this.group.remove(mesh); mesh.geometry.dispose(); mesh.dispose(); this.cells.delete(key); }
+      });
+      this.cells.forEach((mesh, key) => { if (!mesh && this._far(key, camPos, R + C * 2.5)) this.cells.delete(key); });
+      // build the nearest missing cells, at most 3 per tick
+      const want = [];
+      for (let cx = c0x; cx <= c1x; cx++) for (let cz = c0z; cz <= c1z; cz++) {
+        const key = cx + ',' + cz; if (this.cells.has(key)) continue;
+        const dx = (cx + 0.5) * C - camPos.x, dz = (cz + 0.5) * C - camPos.z, d = Math.hypot(dx, dz);
+        if (d <= R + C) want.push([d, cx, cz, key]);
+      }
+      want.sort((a, b) => a[0] - b[0]);
+      const budget = this.cells.size < 14 ? 8 : 3;                     // fill quickly after a spawn/teleport, trickle while driving
+      for (let i = 0; i < Math.min(budget, want.length); i++) {
+        const [, cx, cz, key] = want[i]; const mesh = this._buildCell(cx, cz);
+        this.cells.set(key, mesh);                                     // null = empty cell, remembered so it is not retried
+        if (mesh) this.group.add(mesh);
+      }
+    }
+    _far(key, camPos, lim) { const [cx, cz] = key.split(',').map(Number), C = NearGrassLayer.CELL; return Math.hypot((cx + 0.5) * C - camPos.x, (cz + 0.5) * C - camPos.z) > lim; }
+    dispose() { this.cells.forEach(m => { if (m) { this.group.remove(m); m.geometry.dispose(); m.dispose(); } }); this.cells.clear(); this.scene.remove(this.group); }
+  }
+
+  // Roadside grass overhang (B150). Tufts grow at the outer footpath edge and the barrier
+  // base and lean in over the footpath. Each tuft is 3 crossed quads (6 tris) using one of
+  // 4 tufts in an original atlas (assets/textures/grass_tufts.webp, built by
+  // scratch/asset-options/atlas/build_grass.py). Instanced and chunk-culled like the trees.
+  // Kill switch for A/B: localStorage.shiplyp_roadGrass = '0'.
+  const RoadGrassFactory = {
+    _geoms: null, _mat: null,
+    enabled() { try { return localStorage.getItem('shiplyp_roadGrass') !== '0'; } catch (e) { return true; } },
+    material() {
+      if (this._mat) return this._mat;
+      const loader = new THREE.TextureLoader();
+      const t = loader.load('assets/textures/grass_tufts.webp', () => { t.encoding = THREE.sRGBEncoding; t.needsUpdate = true; if (this._mat) this._mat.needsUpdate = true; });
+      t.anisotropy = 4;
+      this._mat = new THREE.MeshLambertMaterial({ map: t, alphaTest: 0.45, side: THREE.DoubleSide });
+      return this._mat;
+    },
+    // Dense plant PATCHES (B165): each card is a packed cluster of ~40 real Poly Haven plants baked in Blender
+    // (assets/textures/grass_patches.webp, 3x2 tiles of 512x256). 2 crossed upright quads, 1 x 0.5 per unit scale.
+    patchGeoms() {
+      if (this._patchGeoms) return this._patchGeoms;
+      this._patchGeoms = [];
+      for (let t = 0; t < 6; t++) {
+        const col = t % 3, row = Math.floor(t / 3), u0 = col / 3, u1 = (col + 1) / 3, v1 = 1 - row / 2, v0 = 1 - (row + 1) / 2;
+        const pos = [], uv = [];
+        for (let k = 0; k < 2; k++) {
+          const a = k * Math.PI / 2, cx = Math.cos(a) * 0.5, cz = Math.sin(a) * 0.5;
+          const q = [[-cx, 0, -cz], [cx, 0, cz], [cx, 0.5, cz], [-cx, 0.5, -cz]], uvq = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+          for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(q[i][0], q[i][1], q[i][2]); uv.push(uvq[i][0], uvq[i][1]); }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+        g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(pos.length / 3).fill(0).flatMap(() => [0, 1, 0]), 3));
+        g.computeBoundingSphere();
+        this._patchGeoms.push(g);
+      }
+      return this._patchGeoms;
+    },
+    patchMaterial() {
+      if (this._patchMat) return this._patchMat;
+      const t = new THREE.TextureLoader().load('assets/textures/grass_patches.webp', () => { t.encoding = THREE.sRGBEncoding; t.needsUpdate = true; if (this._patchMat) this._patchMat.needsUpdate = true; });
+      t.anisotropy = 4;
+      return (this._patchMat = new THREE.MeshLambertMaterial({ map: t, alphaTest: 0.5, side: THREE.DoubleSide }));
+    },
+    geoms() {
+      if (this._geoms) return this._geoms;
+      this._geoms = [];
+      for (let v = 0; v < 6; v++) {                                   // 0-3 grass, 4 white flowers, 5 yellow flowers
+        const pos = [], uv = [], u0 = v / 6, u1 = (v + 1) / 6;
+        for (let k = 0; k < 3; k++) {
+          const a = k * Math.PI / 3, cx = Math.cos(a) * 0.5, cz = Math.sin(a) * 0.5;
+          const q = [[-cx, 0, -cz], [cx, 0, cz], [cx, 1, cz], [-cx, 1, -cz]], uvq = [[u0, 0], [u1, 0], [u1, 1], [u0, 1]];
+          for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(q[i][0], q[i][1], q[i][2]); uv.push(uvq[i][0], uvq[i][1]); }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+        // Normals point up so tufts take the sun like the ground they grow from.
+        g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(pos.length / 3).fill(0).flatMap(() => [0, 1, 0]), 3));
+        g.computeBoundingSphere();
+        this._geoms.push(g);
+      }
+      return this._geoms;
+    }
+  };
+
+
+  // Layered ground shader (B156). Slow Roads' ground is NOT one colour texture: it is the terrain colour
+  // multiplied by a greyscale blade-detail map (fine, near), a patch-variation map (warm/cool and light/dark
+  // patches), and a coarser mottling for the distance, blended by camera distance. This does the same with
+  // original maps (assets/textures/ground_blades.webp, ground_variation.webp; scratch/asset-options/atlas/
+  // build_ground.py). World-space mapping, so the terrain's custom UVs are not involved. Kill switch:
+  // localStorage.shiplyp_groundDetail = '0'.
+  const GroundDetail = {
+    _tex: null,
+    enabled() { try { return localStorage.getItem('shiplyp_groundDetail') !== '0'; } catch (e) { return true; } },
+    textures() {
+      if (this._tex) return this._tex;
+      const loader = new THREE.TextureLoader();
+      const wrap = (t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; return t; };
+      this._tex = { grass: wrap(loader.load('assets/textures/ground_grass004.webp')), vari: wrap(loader.load('assets/textures/ground_variation.webp')) };
+      return this._tex;
+    },
+    apply(mat) {
+      if (!this.enabled()) return mat;
+      const T = this.textures();
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uGrass = { value: T.grass };
+        shader.uniforms.uVari = { value: T.vari };
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vShpWorld;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvShpWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vShpWorld;\nuniform sampler2D uGrass;\nuniform sampler2D uVari;')
+          .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            float shpDist = length(vViewPosition);
+            vec2 w = vShpWorld.xz;
+            vec3 vA = texture2D(uVari, w / 61.0).rgb;
+            vec3 vB = texture2D(uVari, w / 11.0 + 0.37).rgb;
+            // Real photographic lawn (ambientCG Grass004, CC0) in three scales so it covers the WHOLE landscape:
+            // near (blades readable close), mid, and a far layer that never fades out. The texture is divided by its
+            // own mean colour, so the terrain's season/biome colours still drive the overall tint and the photo only
+            // adds the real grass detail (yellow flecks, blade structure).
+            const vec3 GM = vec3(0.378, 0.426, 0.190);
+            vec3 g1 = texture2D(uGrass, w / 2.6).rgb / GM;
+            vec3 g2 = texture2D(uGrass, vec2(w.y, -w.x) / 10.5 + 0.3).rgb / GM;
+            vec3 g3 = texture2D(uGrass, w / 47.0 + 0.7).rgb / GM;
+            float nearF = 1.0 - smoothstep(25.0, 90.0, shpDist);
+            float midF = 1.0 - smoothstep(70.0, 320.0, shpDist);
+            vec3 detail = mix(vec3(1.0), g1, 0.95 * nearF) * mix(vec3(1.0), g2, 0.75 * midF) * mix(vec3(1.0), g3, 0.65);
+            // warm olive-yellow <-> deeper green patches, plus light/dark patches and rare dry/clover specks
+            vec3 tint = mix(vec3(1.10, 1.02, 0.70), vec3(0.76, 0.96, 0.70), vA.g);
+            float lum = 0.74 + 0.52 * mix(vA.r, vB.r, 0.45);
+            float speck = (vB.b - 0.5) * 0.30;
+            diffuseColor.rgb *= detail * mix(vec3(1.0), tint, 0.85) * lum * (1.0 + speck);
+          }`);
+      };
+      mat.needsUpdate = true;
+      return mat;
     }
   };
 
@@ -1910,12 +2491,35 @@
           const f = THREE.MathUtils.clamp(u, 0, 1) * (b.length - 1), i = Math.floor(f);
           return THREE.MathUtils.lerp(b[i] || 0, b[Math.min(i + 1, b.length - 1)] || 0, f - i);
         };
-        const paver = new THREE.Color(0xbdb7ab), paver2 = new THREE.Color(0xb1ab9f);
-        const kerbW = new THREE.Color(0xf2f2ee), kerbB = new THREE.Color(0x1a1c20), kerbSide = new THREE.Color(0x9a958b);
+        // Footpath weathering (B155): the top surface is a textured paving-slab ribbon (3 columns so the
+        // kerb side can be grimier than the middle); kerb stripes and faces are toned down so the
+        // footpath no longer glows against the worn asphalt. Kill switch: localStorage.shiplyp_sidewalkWear = '0'.
+        let wear = true; try { wear = localStorage.getItem('shiplyp_sidewalkWear') !== '0'; } catch (e) { /* default on */ }
+        const paver = wear ? new THREE.Color(0xb3ada1) : new THREE.Color(0xbdb7ab), paver2 = wear ? new THREE.Color(0xa7a195) : new THREE.Color(0xb1ab9f);
+        const kerbW = new THREE.Color(wear ? 0xcbc8be : 0xf2f2ee), kerbB = new THREE.Color(wear ? 0x2b2d32 : 0x1a1c20), kerbSide = new THREE.Color(wear ? 0x7d786e : 0x9a958b);
+        const TILE = 1.2, paversTex = wear ? RealTextureFactory._get('sidewalkPavers', 'assets/textures/sidewalk_pavers.webp') : null;
         const up = new THREE.Vector3(0, 1, 0);
         [-1, 1].forEach((side) => {
           const pos = [], col = [];
-          let prev = null;
+          const tpos = [], tcol = [], tuv = [];
+          let prev = null, runS = 0;
+          // Textured top strip between two cross-sections: inner (kerb) -> middle -> outer, with
+          // shading across the width and a slab texture whose v follows distance along the road.
+          const topStrip = (pr, cu, f, tone) => {
+            const pm = new THREE.Vector3().addVectors(pr.inTop, pr.outTop).multiplyScalar(0.5);
+            const cm = new THREE.Vector3().addVectors(cu.inTop, cu.outTop).multiplyScalar(0.5);
+            const uM = (W * 0.5) / TILE, uO = W / TILE, v0 = pr.s / TILE, v1 = cu.s / TILE;
+            const V = (p, u, v, sh) => ({ p, u, v, c: tone.clone().multiplyScalar(sh) });
+            const rows = [
+              [V(pr.inTop, 0, v0, 0.80), V(cu.inTop, 0, v1, 0.80), V(cm, uM, v1, 1.0), V(pm, uM, v0, 1.0)],
+              [V(pm, uM, v0, 1.0), V(cm, uM, v1, 1.0), V(cu.outTop, uO, v1, 0.9), V(pr.outTop, uO, v0, 0.9)]
+            ];
+            for (const [a, b, c, d] of rows) {
+              // f: a=prev.in, b=cur.in, c=cur.out, d=prev.out; otherwise swap b/d so faces still point up
+              const q = f ? [a, c, b, a, d, c] : [a, c, d, a, b, c];
+              for (const v of q) { tpos.push(v.p.x, v.p.y, v.p.z); tcol.push(v.c.r, v.c.g, v.c.b); tuv.push(v.u, v.v); }
+            }
+          };
           const quad = (a, b, c, d, color) => {
             // reversed order: faces must point up / away from the road for lighting and raycasts
             [a, c, b, a, d, c].forEach((v) => { pos.push(v.x, v.y, v.z); col.push(color.r, color.g, color.b); });
@@ -1936,34 +2540,346 @@
               outTop: new THREE.Vector3(pOut.x, edgeY + KERB, pOut.z),
               outBot: new THREE.Vector3(pOut.x, Math.min(groundOut, edgeY) - 0.05, pOut.z)
             };
+            if (prev) runS += prev.inTop.distanceTo(cur.inTop); cur.s = runS;
             if (prev) {
               // winding so faces point away from the road centre / upward
               const f = side > 0;
               const kerbCol = (k % 2) ? kerbW : kerbB;
               if (f) {
                 quad(prev.inBot, cur.inBot, cur.inTop, prev.inTop, kerbCol);
-                quad(prev.inTop, cur.inTop, cur.outTop, prev.outTop, (k % 4 < 2) ? paver : paver2);
+                if (wear) topStrip(prev, cur, true, (k % 4 < 2) ? paver : paver2); else quad(prev.inTop, cur.inTop, cur.outTop, prev.outTop, (k % 4 < 2) ? paver : paver2);
                 quad(prev.outTop, cur.outTop, cur.outBot, prev.outBot, kerbSide);
               } else {
                 quad(prev.inBot, prev.inTop, cur.inTop, cur.inBot, kerbCol);
-                quad(prev.inTop, prev.outTop, cur.outTop, cur.inTop, (k % 4 < 2) ? paver : paver2);
+                if (wear) topStrip(prev, cur, false, (k % 4 < 2) ? paver : paver2); else quad(prev.inTop, prev.outTop, cur.outTop, cur.inTop, (k % 4 < 2) ? paver : paver2);
                 quad(prev.outTop, prev.outBot, cur.outBot, cur.outTop, kerbSide);
               }
             }
             prev = cur;
           }
-          if (!pos.length) return;
-          const geom = new THREE.BufferGeometry();
-          geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-          geom.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-          geom.computeVertexNormals();
-          const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide }));
-          mesh.receiveShadow = true;
-          mesh.frustumCulled = false;
-          group.add(mesh);
+          if (!pos.length && !tpos.length) return;
+          if (pos.length) {
+            const geom = new THREE.BufferGeometry();
+            geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+            geom.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+            geom.computeVertexNormals();
+            const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide }));
+            mesh.receiveShadow = true;
+            mesh.frustumCulled = false;
+            group.add(mesh);
+          }
+          if (tpos.length) {
+            const tg = new THREE.BufferGeometry();
+            tg.setAttribute('position', new THREE.Float32BufferAttribute(tpos, 3));
+            tg.setAttribute('color', new THREE.Float32BufferAttribute(tcol, 3));
+            tg.setAttribute('uv', new THREE.Float32BufferAttribute(tuv, 2));
+            tg.computeVertexNormals();
+            const tm = new THREE.MeshStandardMaterial({ vertexColors: true, map: paversTex, roughness: 0.92, metalness: 0.0, side: THREE.DoubleSide });
+            const top = new THREE.Mesh(tg, tm);
+            top.receiveShadow = true;
+            top.frustumCulled = false;
+            top.userData.sidewalkTop = true;
+            group.add(top);
+          }
         });
       } catch (err) {
         console.error('buildSidewalkRange failed:', err);
+      }
+      return group;
+    }
+
+    // Pine zones (B159): conifers only on hills, broadleaf everywhere else, and never mixed along one stretch.
+    // The road itself is cut into flat ground, so hilliness is read from the terrain 55 m out: per 25 m bin the
+    // higher of the two sides' height above the road, averaged over +/-150 m (so a whole stretch reads as hill or
+    // lowland, not side by side), then the top ~35% of the route is "hills". Threshold = 65th percentile of the
+    // initial route, kept for streamed extensions. `side` is accepted but unused: both sides share the zone.
+    _pineBin(k) {
+      const bins = this._pineBins || (this._pineBins = []);
+      if (bins[k] !== undefined) return bins[k];
+      const L = this.curve.getLength(), u = Math.min(1, (k * 25) / L), up = new THREE.Vector3(0, 1, 0);
+      const pt = this.curve.getPointAt(u), tg = this.curve.getTangentAt(u).setY(0).normalize(), n = new THREE.Vector3().crossVectors(tg, up).normalize();
+      let best = -1e9;
+      for (const sd of [-1, 1]) { const far = pt.clone().addScaledVector(n, sd * 55); best = Math.max(best, this.groundHeightAt(pt, far, sd * 55) - pt.y); }
+      return (bins[k] = best);
+    }
+    _pineScore(k) {
+      const maxK = Math.floor(this.curve.getLength() / 25); let sum = 0, cnt = 0;
+      for (let j = k - 6; j <= k + 6; j++) { if (j < 0 || j > maxK) continue; sum += this._pineBin(j); cnt++; }
+      return cnt ? sum / cnt : 0;
+    }
+    _pineThreshold() {
+      if (this._pineThr !== undefined) return this._pineThr;
+      const maxK = Math.floor(this.curve.getLength() / 25), sc = [];
+      for (let k = 0; k <= maxK; k++) sc.push(this._pineScore(k));
+      sc.sort((x, y) => x - y);
+      return (this._pineThr = sc[Math.floor(0.65 * (sc.length - 1))]);
+    }
+    // Zone label per 25 m bin: above the threshold = hill. Short runs are merged into their neighbours until every
+    // run is at least PINE_MIN_RUN long, so a stretch is wholly pine or wholly broadleaf, never a patchwork.
+    _pineLabels() {
+      if (this._pineLab) return this._pineLab;
+      const maxK = Math.floor(this.curve.getLength() / 25), thr = this._pineThreshold(), MIN = 24;        // 24 bins = 600 m
+      const lab = []; for (let k = 0; k <= maxK; k++) lab.push(this._pineScore(k) > thr);
+      for (let pass = 0; pass < 12; pass++) {
+        let changed = false, i = 0;
+        while (i <= maxK) {
+          let j = i; while (j + 1 <= maxK && lab[j + 1] === lab[i]) j++;
+          if (j - i + 1 < MIN) {                                          // flip a short run to match its longer neighbour
+            const left = i > 0 ? lab[i - 1] : null, right = j < maxK ? lab[j + 1] : null;
+            const to = left === null ? right : (right === null ? left : left);
+            if (to !== null && to !== lab[i]) { for (let k = i; k <= j; k++) lab[k] = to; changed = true; }
+          }
+          i = j + 1;
+        }
+        if (!changed) break;
+      }
+      return (this._pineLab = lab);
+    }
+    _pineZoneAt(pt, normal, side) {
+      const grid = this.roadSpatialGrid, pts = this.roadSpacedPoints;
+      if (!grid || !pts || !pts.length) return false;
+      const near = grid.getNearestRoadPoint(pt.x, pt.z, 12);
+      const idx = near ? near.index : 0, segLen = this.curve.getLength() / (pts.length - 1);
+      const k = Math.round(idx * segLen / 25), lab = this._pineLabels();
+      return k < lab.length ? lab[k] : this._pineScore(k) > this._pineThreshold();
+    }
+
+    // Roadside variety (B154): the barrier style changes by stretch of road. A deterministic hash of
+    // the 400 m map cell the barrier stands in (never the world prng), so the initial build and the
+    // streamed extensions always agree. 0 = steel guardrail (most common), 1 = dry-stone wall,
+    // 2 = timber split-rail, 3 = concrete Jersey barrier. OPT-IN (user did not ask for the barrier itself to
+    // change): off by default, so the route keeps CONFIG.BARRIER_STYLE everywhere. Enable for A/B with
+    // localStorage.shiplyp_barrierVariety = '1'.
+    _barrierStyleAt(pos) {
+      try { if (localStorage.getItem('shiplyp_barrierVariety') !== '1') return CONFIG.BARRIER_STYLE; } catch (e) { return CONFIG.BARRIER_STYLE; }
+      const cx = Math.floor(pos.x / 400), cz = Math.floor(pos.z / 400);
+      let h = (Math.imul(cx | 0, 374761393) + Math.imul(cz | 0, 668265263)) | 0;
+      h = Math.imul(h ^ (h >>> 13), 1274126177);
+      const r = ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+      return r < 0.5 ? 0 : (r < 0.72 ? 1 : (r < 0.95 ? 2 : 3));
+    }
+
+    // Structures that need clear footpath edges and a flower border: buildings plus tea stalls, repair shops, garages and
+    // other fence-gap sites. Cached; extended when new props appear (streamed chunks).
+    _structures() {
+      const obs = this.obstacles || [], gaps = this.fenceGapSites || [];
+      if (this._structCache && this._structCache.o === obs.length && this._structCache.g === gaps.length && this._structCache.d === (this.deliveryTargets || []).length) return this._structCache.list;
+      const list = [];
+      for (const o of obs) if (o.type === 'building' && o.radius < 14) list.push({ pos: o.pos, r: o.radius });
+      for (const g of gaps) list.push({ pos: g.pos, r: Math.min(g.r, 12) });
+      for (const t of (this.deliveryTargets || [])) { const tp = t.pos || t.position || t.housePos; if (tp) list.push({ pos: tp, r: 5.5 }); }   // house frontage: gate, plinth, steps
+      // Access path (B167): a clear walkway from the road to the structure, so plants go AROUND the way in, not across it.
+      const grid = this.roadSpatialGrid;
+      if (grid) for (const st of list) { const n = grid.getNearestRoadPoint(st.pos.x, st.pos.z, 24); st.b = n ? n.point : null; }
+      this._structCache = { o: obs.length, g: gaps.length, d: (this.deliveryTargets || []).length, list };
+      return list;
+    }
+    // True when `pos` lies within `halfW` of the walkway line from any structure to the road in front of it.
+    _onAccessPath(pos, halfW) {
+      const l = this._structures();
+      for (let i = 0; i < l.length; i++) {
+        const s = l[i]; if (!s.b) continue;
+        const ax = s.pos.x, az = s.pos.z, dx = s.b.x - ax, dz = s.b.z - az, len2 = dx * dx + dz * dz; if (len2 < 1e-6) continue;
+        const t = Math.max(0, Math.min(1, ((pos.x - ax) * dx + (pos.z - az) * dz) / len2));
+        const px = ax + dx * t - pos.x, pz = az + dz * t - pos.z; if (px * px + pz * pz < halfW * halfW) return true;
+      }
+      return false;
+    }
+    _nearStructure(pos, margin) {
+      const l = this._structures();
+      for (let i = 0; i < l.length; i++) { const s = l[i]; const dx = s.pos.x - pos.x, dz = s.pos.z - pos.z, rr = s.r + margin; if (dx * dx + dz * dz < rr * rr) return true; }
+      return false;
+    }
+
+    // Densely packed flower tufts in a ring around every house, garage and stall near the road (B164).
+    buildHouseFlowers(u0, u1) {
+      const group = new THREE.Group();
+      group.name = 'HouseFlowers';
+      try {
+        try { if (localStorage.getItem('shiplyp_houseFlowers') === '0') return group; } catch (e) { /* default on */ }
+        const grid = this.roadSpatialGrid, pts = this.roadSpacedPoints;
+        if (!grid || !pts || !this.curve) return group;
+        const geoms = RoadGrassFactory.geoms(), mat = RoadGrassFactory.material();
+        const buckets = geoms.map(() => []);
+        const dummy = new THREE.Object3D();
+        const hash = (a, b, c) => { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2246822519)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+        const structs = this._structures(), L = this.curve.getLength(), segLen = L / (pts.length - 1);
+        for (const st of structs) {
+          const near = grid.getNearestRoadPoint(st.pos.x, st.pos.z, 46);
+          if (!near) continue;
+          const u = near.index * segLen / L;
+          if (u < u0 - 0.002 || u > u1) continue;
+          if (this._inTunnelAtU && this._inTunnelAtU(u, 3)) continue;
+          const sx = Math.round(st.pos.x * 3), sz = Math.round(st.pos.z * 3);
+          const rIn = st.r + 1.4, rOut = st.r + 5.0, area = Math.PI * (rOut * rOut - rIn * rIn);
+          const n = Math.min(900, Math.round(area * 2.4));
+          const p0 = pts[near.index], p1 = pts[Math.min(near.index + 1, pts.length - 1)];
+          const side = Math.sign((p1.x - p0.x) * (st.pos.z - p0.z) - (p1.z - p0.z) * (st.pos.x - p0.x)) || 1;
+          for (let i = 0; i < n; i++) {
+            const a = hash(sx, sz, i * 3) * Math.PI * 2, rad = rIn + (rOut - rIn) * Math.sqrt(hash(sx, sz, i * 3 + 1));
+            const pos = new THREE.Vector3(st.pos.x + Math.cos(a) * rad, 0, st.pos.z + Math.sin(a) * rad);
+            const nr = grid.getNearestRoadPoint(pos.x, pos.z, 7.0);
+            if (nr) continue;                                           // never on the footpath or road
+            if (this._onAccessPath(pos, 2.4)) continue;                  // keep the walkway to the door clear (B167)
+            let hit = false; for (const o of structs) { if (o.pos === st.pos) continue; const dx = o.pos.x - pos.x, dz = o.pos.z - pos.z, rr = o.r + 1.0; if (dx * dx + dz * dz < rr * rr) { hit = true; break; } }
+            if (hit) continue;
+            const lat = Math.hypot(pos.x - near.point.x, pos.z - near.point.z);
+            pos.y = this.groundHeightAt(near.point, pos, side * lat) - 0.02;
+            const r1 = hash(sx, sz, i * 5 + 11), r2 = hash(sx, sz, i * 5 + 12), r3 = hash(sx, sz, i * 5 + 13);
+            const h = 0.42 + r1 * 0.4, w = h * (1.0 + r2 * 0.2);
+            dummy.position.copy(pos); dummy.rotation.set(0, r3 * Math.PI * 2, 0); dummy.scale.set(w, h, w); dummy.updateMatrix();
+            const m = dummy.matrix.clone(); const g = 0.95 + r2 * 0.2;
+            m._tint = new THREE.Color(1.3 * g, 1.34 * g, 1.12 * g);
+            buckets[r3 < 0.82 ? 4 + (r2 > 0.5 ? 1 : 0) : Math.floor(r1 * 4) % 4].push(m);       // ~82% flowering sorrel, the rest leafy filler
+          }
+        }
+        buckets.forEach((list, v) => addChunkedInstances(group, geoms[v], mat, list, { cell: 200, onChunk: (mesh, l) => { l.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; } }));
+      } catch (err) {
+        console.error('buildHouseFlowers failed:', err);
+      }
+      return group;
+    }
+
+    // Ground cover (B153): grass tufts, flowering tufts and low shrubs scattered across the verge
+    // and hillside, dense near the road and thinning with distance. Built AFTER the props so it
+    // can keep clear of buildings; never lands on another stretch of road (the route loops).
+    // Own hash RNG (never the world prng). Kill switch: localStorage.shiplyp_groundCover = '0'.
+    buildGroundCover(u0, u1, season) {
+      const group = new THREE.Group();
+      group.name = 'GroundCover';
+      try {
+        try { if (localStorage.getItem('shiplyp_groundCover') !== '1') return group; } catch (e) { return group; }   // OFF by default: plants only on the footpath and around houses (user, B168)
+        if (!this.curve || this.seasonKey === 'winter') return group;
+        const len = this.curve.getLength(), STEP = 2.0;
+        const n = Math.max(2, Math.ceil(((u1 - u0) * len) / STEP));
+        const tuftGeoms = RoadGrassFactory.patchGeoms(), tuftMat = RoadGrassFactory.patchMaterial();
+        const shrubGeoms = ClumpTreeFactory.shrubGeoms(), shrubMat = ClumpTreeFactory.shrubMaterial();
+        const tufts = tuftGeoms.map(() => []), shrubs = shrubGeoms.map(() => []);
+        const up = new THREE.Vector3(0, 1, 0), dummy = new THREE.Object3D();
+        const grassBase = new THREE.Color(season && season.grassLight != null ? season.grassLight : 0x3a874d).lerp(new THREE.Color(0xffffff), 0.5);
+        const buildings = (this.obstacles || []).filter(o => o.type === 'building');
+        const hash = (a, b) => { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+        const blocked = (pos, absLat, margin) => {
+          if (this._onAccessPath(pos, 3.4) || this._nearStructure(pos, 1.3)) return true;   // walkway + the paved frontage of every house/stall/garage stay clear (B167)
+          if (this.roadSpatialGrid && absLat > 4 && this.roadSpatialGrid.getNearestRoadPoint(pos.x, pos.z, absLat - 3.0)) return true;
+          for (const o of buildings) if (o.pos.distanceTo(pos) < o.radius + margin) return true;
+          return false;
+        };
+        [-1, 1].forEach((side) => {
+          for (let k = 0; k <= n; k++) {
+            const u = u0 + (u1 - u0) * (k / n), sm = Math.round(u * len);
+            if (this._inTunnelAtU(u, 3)) continue;
+            const pu = THREE.MathUtils.clamp(u, 0, 1);
+            const pt = this.curve.getPointAt(pu);
+            const tg = this.curve.getTangentAt(pu).setY(0).normalize();
+            const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
+            // Dense PATCHES, not single plants (B165): rows every ~1.1 m out to 14 m, then every ~2.4 m out to 34 m;
+            // each card is a packed cluster of real plants, so the cover is continuous. Thins (never bare) with distance.
+            const LAT = [6.7, 7.8, 8.9, 10.0, 11.1, 12.2, 13.3, 14.4, 16.8, 19.2, 21.6, 24.0, 26.4, 28.8, 31.2, 33.6];
+            for (let rI = 0; rI < LAT.length; rI++) {
+              const r1 = hash(sm * 5 + rI, side + 41), r2 = hash(sm * 7 + rI, side + 43), r3 = hash(sm * 11 + rI, side + 47), r4 = hash(sm * 13 + rI, side + 53);
+              if (rI >= 8 && r1 > 0.78 - rI * 0.012) continue;                   // outer rows thin out a little
+              const absLat = LAT[rI] + (r2 - 0.5) * (rI < 8 ? 0.9 : 1.8);
+              const pos = pt.clone().addScaledVector(nrm, side * absLat).addScaledVector(tg, (r3 - 0.5) * STEP * 0.8);
+              if (blocked(pos, absLat, 1.5)) continue;
+              pos.y = this.groundHeightAt(pt, pos, side * absLat) - 0.04;
+              const sc = (1.7 + r4 * 0.5) * (1 + (absLat - 6) * 0.018);               // wider cards further out so the cover keeps up
+              dummy.position.copy(pos); dummy.rotation.set(0, r3 * Math.PI * 2, 0); dummy.scale.set(sc, sc * (0.9 + r2 * 0.25), sc); dummy.updateMatrix();
+              const m = dummy.matrix.clone(); const g = 0.93 + r4 * 0.16;
+              m._tint = new THREE.Color(g, g, g * 0.97);
+              tufts[Math.floor(r2 * 6 + r4 * 3) % 6].push(m);
+            }
+            // a low shrub every so often, set back from the road
+            if (hash(sm, side + 60) < 0.035) {
+              const r1 = hash(sm, side + 61), r2 = hash(sm, side + 62), r3 = hash(sm, side + 63);
+              const absLat = 8.5 + 17 * r1;
+              const pos = pt.clone().addScaledVector(nrm, side * absLat).addScaledVector(tg, (r2 - 0.5) * STEP);
+              if (!blocked(pos, absLat, 2.5)) {
+                pos.y = this.groundHeightAt(pt, pos, side * absLat) - 0.05;
+                const w = 1.3 + r3 * 1.3, h = w * (0.65 + r2 * 0.3);
+                dummy.position.copy(pos); dummy.rotation.set(0, r3 * Math.PI * 2, 0); dummy.scale.set(w, h, w); dummy.updateMatrix();
+                const m = dummy.matrix.clone();
+                m._tint = new THREE.Color(0.8 + r2 * 0.2, 0.85 + r3 * 0.15, 0.78 + r1 * 0.1);
+                shrubs[Math.floor(r3 * 6) % 6].push(m);
+              }
+            }
+          }
+        });
+        const colour = (mesh, list) => { list.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; };
+        tufts.forEach((list, v) => addChunkedInstances(group, tuftGeoms[v], tuftMat, list, { cell: 200, onChunk: colour }));
+        shrubs.forEach((list, v) => addChunkedInstances(group, shrubGeoms[v], shrubMat, list, { cell: 240, onChunk: colour }));
+      } catch (err) {
+        console.error('buildGroundCover failed:', err);
+      }
+      return group;
+    }
+
+    // Grass tufts along both sides of the footpath for u0..u1, leaning in over its outer edge.
+    // Uses its own hash RNG so it never disturbs the world's seeded prng sequence.
+    buildRoadsideGrass(u0, u1) {
+      const group = new THREE.Group();
+      group.name = 'RoadsideGrass';
+      try {
+        if (!RoadGrassFactory.enabled() || !this.curve || !CONFIG.SIDEWALK || !CONFIG.SIDEWALK.enabled) return group;
+        const W = CONFIG.SIDEWALK.width, KERB = CONFIG.SIDEWALK.kerb;
+        const roadHalf = CONFIG.ROAD_WIDTH * 0.52, outerEdge = roadHalf + W;
+        const len = this.curve.getLength();
+        const STEP = 0.9;
+        const n = Math.max(2, Math.ceil(((u1 - u0) * len) / STEP));
+        const geoms = RoadGrassFactory.geoms(), mat = RoadGrassFactory.material();
+        const buckets = geoms.map(() => []);
+        const up = new THREE.Vector3(0, 1, 0), dummy = new THREE.Object3D();
+        const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion(), tilted = new THREE.Vector3(), lean = new THREE.Vector3();
+        const bankAtU = (u) => {
+          const b = this.roadBankingAngles; if (!b || !b.length) return 0;
+          const f = THREE.MathUtils.clamp(u, 0, 1) * (b.length - 1), i = Math.floor(f);
+          return THREE.MathUtils.lerp(b[i] || 0, b[Math.min(i + 1, b.length - 1)] || 0, f - i);
+        };
+        const hash = (a, b) => { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+        [-1, 1].forEach((side) => {
+          for (let k = 0; k <= n; k++) {
+            const u = u0 + (u1 - u0) * (k / n), sm = Math.round(u * len);
+            // Even, continuous fringe: only a very gentle thinning so it never reads as random clumps.
+            const thin = 0.5 + 0.5 * Math.sin(sm / 120 + side * 1.7);
+            if (hash(sm, side + 11) > 0.86 + 0.14 * thin) continue;
+            if (this._inTunnelAtU(u, 2)) continue;
+            const pu = THREE.MathUtils.clamp(u, 0, 1);
+            const pt = this.curve.getPointAt(pu);
+            const tg = this.curve.getTangentAt(pu).setY(0).normalize();
+            const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
+            const r1 = hash(sm * 7, side + 5), r2 = hash(sm * 13, side + 9), r3 = hash(sm * 17, side + 21), r4 = hash(sm * 19, side + 31);
+            // OUTER edge of the footpath (barrier side), standing on the ground just OUTSIDE it: the base is set back
+            // by half the card width, so the whole plant clears the walkway instead of overlapping it.
+            // Cards are square (real plant sprites from the Poly Haven atlas); SIZES are real-world-ish plant widths.
+            const vi = k % 4;                                              // ferns and broadleaf weeds only along the footpath
+            const S = [1.45, 1.45, 1.15, 1.15][vi] * (0.85 + r3 * 0.3);
+            const topY = pt.y + 0.12 + side * roadHalf * Math.sin(bankAtU(u)) + KERB;
+            const absLat = outerEdge + S * 0.47 + 0.08 + r1 * 0.3;
+            const lat = side * absLat;
+            const pos = pt.clone().addScaledVector(nrm, lat);
+            if (this._nearStructure(pos, 6.0)) continue;                     // no footpath tufts along the whole frontage of garages, homes, tea stalls (B164/B166)
+            pos.y = Math.min(this.groundHeightAt(pt, pos, lat), topY);
+            const leanA = THREE.MathUtils.degToRad(5 + r3 * 4);             // barely leaning toward the footpath, no overhang onto it
+            lean.copy(nrm).multiplyScalar(-side);
+            tilted.copy(up).multiplyScalar(Math.cos(leanA)).addScaledVector(lean, Math.sin(leanA)).normalize();
+            q1.setFromUnitVectors(up, tilted);
+            q2.setFromAxisAngle(tilted, r4 * Math.PI * 2);
+            dummy.position.copy(pos);
+            dummy.quaternion.copy(q2).multiply(q1);
+            dummy.scale.set(S, S, S);
+            dummy.updateMatrix();
+            const m = dummy.matrix.clone();
+            const g = 1.0 + (r4 - 0.5) * 0.12;                           // very light brightness variation
+            m._tint = new THREE.Color(1.3 * g, 1.34 * g, 1.1 * g);       // the real leaf photos are dull; lift them to sit with the lit scene
+            buckets[vi].push(m);                                      // variants cycle evenly, no random runs
+          }
+        });
+        buckets.forEach((mats, v) => addChunkedInstances(group, geoms[v], mat, mats, {
+          cell: 220,
+          onChunk: (mesh, list) => { list.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; }
+        }));
+      } catch (err) {
+        console.error('buildRoadsideGrass failed:', err);
       }
       return group;
     }
@@ -2708,108 +3624,145 @@
     }
 
     createLaneMarkingMeshes() {
-      const points = this.roadSpacedPoints;
-      const bankingAngles = this.roadBankingAngles;
-      const normals = this.roadNormals;
-      const binormals = this.roadBinormals;
-      const bankedUps = this.roadBankedUp;
-      if (!points || !bankingAngles) return new THREE.Group();
+      if (!this.roadSpacedPoints || !this.roadBankingAngles) return new THREE.Group();
+      const group = new THREE.Group();
+      group.add(this._buildRoadWear(0, this.roadSpacedPoints.length - 1));
+      group.add(this._buildLaneRibbons(0, this.roadSpacedPoints.length - 1));
+      this.laneMarkingsGroup = group;
+      return group;
+    }
 
-      const tubularSegments = points.length - 1;
-      const roadHalf = CONFIG.ROAD_WIDTH * 0.5;
-      // Muted pale colors, not pure white/yellow — those crossed the
-      // 0.94 post-ACES-tonemap bloom threshold (bloomPass, ~line 5691)
-      // and blew out into soft glowing blobs under strong daylight,
-      // which is what got the original stripes removed entirely.
-      const edgeLineColor = new THREE.Color(0x9aa0a8);
-      const centerLineColor = new THREE.Color(0xb9a968);
-      // Real-world lane paint is roughly 10-15cm wide; half-width here.
-      const stripeHalfW = 0.06;
-      // ~4.2m per segment (1200 segments / ~5km route) — getSpacedPoints
-      // is arc-length-uniform so segment index doubles as a distance
-      // proxy. A period of 3 segments gives a ~12.6m on/off cycle, close
-      // to a real dashed-line cadence (dash ~3-4m, gap ~8-9m).
-      const dashPeriod = 3;
-      // Lifted further above the road surface than the old baked-in
-      // paint (0.12) needed to be, since this is now a separate coplanar
-      // mesh riding on top of it — needs its own clearance to win the
-      // depth test cleanly rather than z-fighting with the asphalt.
-      const paintLift = 0.02;
+    // Centre dashes + both edge lines for road segments startSeg..endSeg.
+    _buildLaneRibbons(startSeg, endSeg) {
+      const roadHalf = CONFIG.ROAD_WIDTH * 0.5, P = LANE_PAINT;
+      const g = new THREE.Group();
+      g.add(this._buildLaneRibbon(startSeg, endSeg, 0, P.centreHalfW, P.centre, true));
+      g.add(this._buildLaneRibbon(startSeg, endSeg, -roadHalf, P.edgeHalfW, P.edge, false));
+      g.add(this._buildLaneRibbon(startSeg, endSeg, roadHalf, P.edgeHalfW, P.edge, false));
+      return g;
+    }
 
-      const buildRibbon = (lateralOffset, color, dashed) => {
-        const positions = [];
-        const colors = [];
-        const normalsOut = [];
-        const indices = [];
-        let vertCount = 0;
+    // Distance along the road to sample i. getSpacedPoints is uniform in arc length and the
+    // streamed extension resamples the WHOLE route, so derive it from the curve rather than
+    // caching it: the dash phase then stays continuous across every extension seam.
+    _laneCum(i) {
+      return i * (this.curve.getLength() / (this.roadSpacedPoints.length - 1));
+    }
 
-        for (let i = 0; i <= tubularSegments; i++) {
-          const pt = points[i];
-          const bankingAngle = bankingAngles[i];
-          const normal = normals[i];
-          const binormal = binormals[i];
-          const bankedUp = bankedUps[i];
-          // Exactly createRoadMesh's bankedNormal, reconstructed from the
-          // same cached normal/binormal rather than a second cos/sin call
-          // on its own — the earlier version of this ribbon builder
-          // wrongly substituted bankedUp for binormal here, which put the
-          // decal at the wrong lateral position (and buried it under the
-          // road, see the lift fix below) instead of tracing the road's
-          // actual surface. Confirmed by rendering nothing visible at all.
-          const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
-
-          const dashOn = !dashed || (Math.floor(i / dashPeriod) % 2 === 0);
-          const rowColor = dashOn ? color : null;
-
-          [-stripeHalfW, stripeHalfW].forEach((edgeOff) => {
-            const off = lateralOffset + edgeOff;
-            // Reuses the exact banked frame the road surface computed at
-            // this same point — see the cached arrays above. The base
-            // tarmac surface itself sits at pt + bankedNormal*off +
-            // bankedUp*0.12 (createRoadMesh's non-verge branch) — this
-            // decal needs that SAME 0.12 base lift plus its own clearance
-            // on top, not just paintLift alone (which by itself sat the
-            // decal ~0.10m below the actual road surface, invisible under it).
-            const p = pt.clone()
-              .addScaledVector(bankedNormal, off)
-              .addScaledVector(bankedUp, 0.12 + paintLift);
-            positions.push(p.x, p.y, p.z);
-            normalsOut.push(bankedUp.x, bankedUp.y, bankedUp.z);
-            const c = rowColor || color;
-            // When a dash is "off", push the road's own tarmac-adjacent
-            // alpha via vertex color alpha isn't available without a
-            // 4th channel — instead this row is simply skipped from the
-            // index buffer below (no triangles emitted for an off dash),
-            // which is a cleaner "gap" than color-fading to tarmac would
-            // be, and can't mismatch the base road's actual tarmac color
-            // per terrain type.
-            colors.push(c.r, c.g, c.b);
-          });
-          vertCount += 2;
-
-          if (dashed && !dashOn) continue; // no triangles for this row — real gap, not a color fade
-          if (i > 0 && (!dashed || (Math.floor((i - 1) / dashPeriod) % 2 === 0))) {
-            const row1 = (i - 1) * 2;
-            const row2 = i * 2;
-            indices.push(row1, row1 + 1, row2);
-            indices.push(row1 + 1, row2 + 1, row2);
-          }
+    _buildLaneRibbon(startSeg, endSeg, lateral, halfW, colorHex, dashed) {
+      const pts = this.roadSpacedPoints, ba = this.roadBankingAngles, nr = this.roadNormals, bn = this.roadBinormals, bu = this.roadBankedUp;
+      const P = LANE_PAINT;
+      // Same banked frame createRoadMesh uses; 0.12 is the road slab lift, 0.02 the paint clearance.
+      const lift = 0.12 + 0.02;
+      const positions = [], normalsOut = [], indices = [];
+      const frame = (i) => {
+        const angle = ba[i] || 0;
+        const bankedNormal = nr[i].clone().multiplyScalar(Math.cos(angle)).addScaledVector(bn[i], Math.sin(angle)).normalize();
+        return { pt: pts[i], bankedNormal, up: bu[i] };
+      };
+      const A = new THREE.Vector3(), B = new THREE.Vector3(), N = new THREE.Vector3(), U = new THREE.Vector3();
+      const put = (fa, fb, t, off) => {
+        A.lerpVectors(fa.pt, fb.pt, t);
+        N.lerpVectors(fa.bankedNormal, fb.bankedNormal, t).normalize();
+        U.lerpVectors(fa.up, fb.up, t).normalize();
+        B.copy(A).addScaledVector(N, off).addScaledVector(U, lift);
+        positions.push(B.x, B.y, B.z); normalsOut.push(U.x, U.y, U.z);
+      };
+      for (let i = startSeg; i < endSeg; i++) {
+        const fa = frame(i), fb = frame(i + 1);
+        const L = fa.pt.distanceTo(fb.pt);
+        const s0 = dashed ? this._laneCum(i) : 0;
+        // Dashed: ~1 m steps so dash edges land where the metres say. Solid: one quad per segment.
+        const n = dashed ? Math.max(1, Math.round(L)) : 1;
+        for (let k = 0; k < n; k++) {
+          const t0 = k / n, t1 = (k + 1) / n;
+          if (dashed && ((s0 + (t0 + t1) * 0.5 * L) % P.dashPeriod) >= P.dashOn) continue;
+          const base = positions.length / 3;
+          put(fa, fb, t0, lateral - halfW); put(fa, fb, t0, lateral + halfW);
+          put(fa, fb, t1, lateral - halfW); put(fa, fb, t1, lateral + halfW);
+          indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
         }
+      }
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geom.setAttribute('normal', new THREE.Float32BufferAttribute(normalsOut, 3));
+      geom.setIndex(indices);
+      const mat = new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.renderOrder = 1;
+      mesh.userData.lanePaint = dashed ? 'centre' : 'edge';
+      return mesh;
+    }
 
+    // Asphalt wear overlay (B152): wheel tracks, oil strip, edge grit, repair patches and hairline
+    // cracks from a 4-tile atlas (assets/textures/road_wear.webp, scratch/asset-options/atlas/
+    // build_roadwear.py), laid as a transparent ribbon under the lane paint. Positioned by global
+    // arc length in WEAR_STEP quads so it is identical across the streamed extension.
+    // Kill switch for A/B: localStorage.shiplyp_roadWear = '0'.
+    _buildRoadWear(startSeg, endSeg) {
+      const group = new THREE.Group();
+      group.name = 'RoadWear';
+      try {
+        try { if (localStorage.getItem('shiplyp_roadWear') === '0') return group; } catch (e) { /* default on */ }
+        const pts = this.roadSpacedPoints, ba = this.roadBankingAngles, nr = this.roadNormals, bn = this.roadBinormals, bu = this.roadBankedUp;
+        const segLen = this.curve.getLength() / (pts.length - 1);
+        const STEP = 4.0, BLOCK = 32.0, PER_BLOCK = BLOCK / STEP;
+        const half = CONFIG.ROAD_WIDTH * 0.5, lift = 0.12 + 0.012;
+        const kA = Math.floor(startSeg * segLen / STEP), kB = Math.floor(endSeg * segLen / STEP);
+        const hash = (a) => { let h = Math.imul(a | 0, 374761393) ^ 0x9e3779b1; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0); };
+        const frameAt = (s) => {
+          const f = THREE.MathUtils.clamp(s / segLen, 0, pts.length - 1.0001), i = Math.floor(f), t = f - i;
+          const angA = ba[i] || 0, angB = ba[i + 1] || 0;
+          const nA = nr[i].clone().multiplyScalar(Math.cos(angA)).addScaledVector(bn[i], Math.sin(angA));
+          const nB = nr[i + 1].clone().multiplyScalar(Math.cos(angB)).addScaledVector(bn[i + 1], Math.sin(angB));
+          return { p: new THREE.Vector3().lerpVectors(pts[i], pts[i + 1], t), n: nA.lerp(nB, t).normalize(), u: new THREE.Vector3().lerpVectors(bu[i], bu[i + 1], t).normalize() };
+        };
+        const positions = [], normalsOut = [], uvs = [], indices = [];
+        let prev = null, prevBlock = -1, prevU = null;
+        for (let k = kA; k <= kB; k++) {
+          const s = k * STEP, block = Math.floor(k / PER_BLOCK), within = k - block * PER_BLOCK;
+          const hsh = hash(block), variant = hsh & 3, flip = (hsh >>> 2) & 1;
+          const fr = frameAt(s);
+          const vv = within / PER_BLOCK;
+          const L = fr.p.clone().addScaledVector(fr.n, -half).addScaledVector(fr.u, lift), R = fr.p.clone().addScaledVector(fr.n, half).addScaledVector(fr.u, lift);
+          const u0 = variant / 4 + 0.004, u1 = (variant + 1) / 4 - 0.004;
+          const uL = flip ? u1 : u0, uR = flip ? u0 : u1;
+          // block boundary: restart the strip so each block samples its own tile
+          if (prev && block !== prevBlock) {
+            // close the previous block at v = 1 using this step's frame
+            const base = positions.length / 3;
+            const pu0 = prevU.uL, pu1 = prevU.uR;
+            positions.push(prev.L.x, prev.L.y, prev.L.z, prev.R.x, prev.R.y, prev.R.z, L.x, L.y, L.z, R.x, R.y, R.z);
+            for (let q = 0; q < 4; q++) normalsOut.push(fr.u.x, fr.u.y, fr.u.z);
+            uvs.push(pu0, prev.v, pu1, prev.v, pu0, 1, pu1, 1);
+            indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+          }
+          if (prev && block === prevBlock) {
+            const base = positions.length / 3;
+            positions.push(prev.L.x, prev.L.y, prev.L.z, prev.R.x, prev.R.y, prev.R.z, L.x, L.y, L.z, R.x, R.y, R.z);
+            for (let q = 0; q < 4; q++) normalsOut.push(fr.u.x, fr.u.y, fr.u.z);
+            uvs.push(uL, prev.v, uR, prev.v, uL, vv, uR, vv);
+            indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+          }
+          prev = { L, R, v: vv }; prevBlock = block; prevU = { uL, uR };
+        }
+        if (!positions.length) return group;
         const geom = new THREE.BufferGeometry();
         geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
         geom.setAttribute('normal', new THREE.Float32BufferAttribute(normalsOut, 3));
+        geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
         geom.setIndex(indices);
-        const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
-        return new THREE.Mesh(geom, mat);
-      };
-
-      const group = new THREE.Group();
-      group.add(buildRibbon(0, centerLineColor, true));
-      group.add(buildRibbon(-roadHalf, edgeLineColor, false));
-      group.add(buildRibbon(roadHalf, edgeLineColor, false));
-      this.laneMarkingsGroup = group;
+        const tex = new THREE.TextureLoader().load('assets/textures/road_wear.webp');
+        tex.anisotropy = 4;
+        const mat = new THREE.MeshLambertMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.renderOrder = 0.5;
+        mesh.frustumCulled = false;
+        mesh.userData.roadWear = true;
+        group.add(mesh);
+      } catch (err) {
+        console.error('_buildRoadWear failed:', err);
+      }
       return group;
     }
 
@@ -3110,6 +4063,7 @@
         envMapIntensity: 0.35
       });
 
+      GroundDetail.apply(terrainMat);
       this.terrainMesh = new THREE.Mesh(geom, terrainMat);
       this.terrainMesh.receiveShadow = true;
       if (!this.terrainMeshes) this.terrainMeshes = [];
@@ -3795,6 +4749,7 @@
         map: floorGrassTex
       });
 
+      GroundDetail.apply(floorMat);
       this.floorMesh = new THREE.Mesh(geom, floorMat);
       // Floor mesh spans kilometers outside the 32m car shadow frustum; disabling receiveShadow eliminates massive PCF shadow overhead
       this.floorMesh.receiveShadow = false;
@@ -4731,7 +5686,8 @@
           nearPos.y = calcTerrainY(nearPos, side * nearDist);
 
           if (spawnTree) {
-            const isPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
+            this.prng.next();                                              // keep the seeded sequence unchanged
+            const isPine = season.id === 'winter' ? true : this._pineZoneAt(pt, normal, side);
             const clusterCount = Math.floor(this.prng.range(3, 7));
             for (let ci = 0; ci < clusterCount; ci++) {
               const leafColHex = season.treeLeaves[Math.floor(this.prng.range(0, season.treeLeaves.length))];
@@ -4753,7 +5709,8 @@
             const bgDist = side * this.prng.range(24.0, 90.0);
             const bgPos = pt.clone().addScaledVector(normal, bgDist);
             bgPos.y = calcTerrainY(bgPos, bgDist);
-            const bgIsPine = season.id === 'winter' ? true : (this.prng.next() > 0.35);
+            this.prng.next();
+            const bgIsPine = season.id === 'winter' ? true : this._pineZoneAt(pt, normal, Math.sign(bgDist));
 
             const bgClusterCount = Math.floor(this.prng.range(4, 9));
             for (let ci = 0; ci < bgClusterCount; ci++) {
@@ -4892,7 +5849,7 @@
               const groupMatrix = _fenceDummy.matrix;
 
               // Barrier Styles: 0: Galvanized Steel W-Beam Armco Guardrail, 1: Dry-stone wall, 2: Wood split-rail, 3: Concrete Jersey barrier
-              const barrierStyle = CONFIG.BARRIER_STYLE;
+              const barrierStyle = this._barrierStyleAt(fencePos);
               const matrices = { posts: [], rails: [], stoneRows: [], concreteRows: [], armcoRails: [], armcoPosts: [], armcoReflectors: [] };
 
               if (barrierStyle === 0) {
@@ -5216,20 +6173,17 @@
       for (let k = 0; k < rockGeomPool.length; k++) {
         const groupRocks = pendingRocks.filter(r => r.geomIdx === k);
         if (groupRocks.length > 0) {
-          const instancedMesh = new THREE.InstancedMesh(rockGeomPool[k], rockMat, groupRocks.length);
-          instancedMesh.userData.isRock = true;
-          for (let idx = 0; idx < groupRocks.length; idx++) {
-            const r = groupRocks[idx];
-            instancedMesh.setMatrixAt(idx, r.matrix);
+          groupRocks.forEach((r) => {
             this.obstacles.push({
               pos: r.pos.clone(),
               radius: r.radius,
               type: 'rock',
               mesh: { getWorldPosition: (v) => v.copy(r.pos) }
             });
-          }
-          instancedMesh.instanceMatrix.needsUpdate = true;
-          this.foliageGroup.add(instancedMesh);
+          });
+          addChunkedInstances(this.foliageGroup, rockGeomPool[k], rockMat, groupRocks.map(r => r.matrix), {
+            onChunk: (mesh) => { mesh.userData.isRock = true; }
+          });
         }
       }
 
@@ -5257,13 +6211,7 @@
         });
 
         const buildFenceBatch = (matrices, geom, mat, castShadow) => {
-          if (!matrices.length) return;
-          const mesh = new THREE.InstancedMesh(geom, mat, matrices.length);
-          matrices.forEach((m, idx) => mesh.setMatrixAt(idx, m));
-          mesh.instanceMatrix.needsUpdate = true;
-          mesh.castShadow = castShadow;
-          mesh.frustumCulled = false;
-          this.foliageGroup.add(mesh);
+          addChunkedInstances(this.foliageGroup, geom, mat, matrices, { castShadow });
         };
 
         const fWoodTex = RealTextureFactory.woodColor();
@@ -5293,7 +6241,7 @@
         buildFenceBatch(
           acceptedStoneRows,
           BG.stone,
-          new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
+          new THREE.MeshStandardMaterial({ color: 0x7a756c, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
           true
         );
         // Modern Highway Concrete Barrier (Jersey barrier variant)
@@ -5333,7 +6281,7 @@
           railGeom: BG.woodRail,
           railMat: new THREE.MeshStandardMaterial({ color: 0x9a8a76, map: fWoodTex, normalMap: fWoodNormal, roughness: 0.85 }),
           stoneGeom: BG.stone,
-          stoneMat: new THREE.MeshStandardMaterial({ color: 0x404046, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
+          stoneMat: new THREE.MeshStandardMaterial({ color: 0x7a756c, map: stoneTex, normalMap: stoneNormal, roughness: 0.95, flatShading: true }),
           concreteGeom: BG.concrete,
           concreteMat: new THREE.MeshStandardMaterial({ color: 0xc9c5bc, roughness: 0.9, metalness: 0.02 }),
           armcoRailGeom: BG.armcoRail,
@@ -7062,6 +8010,9 @@
       // Generate forward extension meshes for road, lane markings, terrain, and roadside props
       yield* this.buildExtensionMeshes(scene, oldLength, newLength, season, difficulty, prevEndPos);
       scene.add(this.buildSidewalkRange(Math.max(0, oldLength / newLength), 1));
+      scene.add(this.buildRoadsideGrass(Math.max(0, oldLength / newLength), 1));
+      scene.add(this.buildGroundCover(Math.max(0, oldLength / newLength), 1, season));
+      scene.add(this.buildHouseFlowers(Math.max(0, oldLength / newLength), 1));
       yield* this.sweepTerrainBelowRoad();
       yield* this.sweepFloorBelowRoad();
     }
@@ -7518,66 +8469,9 @@
       roadMesh.receiveShadow = true;
       scene.add(roadMesh);
 
-      // 1b. Lane Markings extension decals (White outer lines & Yellow dashed centerline)
-      const buildExtensionMarking = (lateralOffset, color, dashed) => {
-        const positions = [];
-        const colors = [];
-        const normalsOut = [];
-        const indices = [];
-        const stripeHalfW = 0.06;
-        const dashPeriod = 3;
-        const paintLift = 0.02;
-
-        for (let i = startSeg; i <= endSeg; i++) {
-          const rowIdx = i - startSeg;
-          const pt = points[i];
-          const bankingAngle = this.roadBankingAngles[i] || 0;
-          const normal = this.roadNormals[i] || new THREE.Vector3(1, 0, 0);
-          const binormal = this.roadBinormals[i] || new THREE.Vector3(0, 1, 0);
-          const bankedNormal = normal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(binormal, Math.sin(bankingAngle)).normalize();
-          const bankedUp = binormal.clone().multiplyScalar(Math.cos(bankingAngle)).addScaledVector(normal, -Math.sin(bankingAngle)).normalize();
-
-          const dashOn = !dashed || (Math.floor(i / dashPeriod) % 2 === 0);
-          const rowColor = dashOn ? color : null;
-
-          const pLeft = pt.clone().addScaledVector(bankedNormal, lateralOffset - stripeHalfW).addScaledVector(bankedUp, 0.12 + paintLift);
-          const pRight = pt.clone().addScaledVector(bankedNormal, lateralOffset + stripeHalfW).addScaledVector(bankedUp, 0.12 + paintLift);
-
-          positions.push(pLeft.x, pLeft.y, pLeft.z, pRight.x, pRight.y, pRight.z);
-          normalsOut.push(bankedUp.x, bankedUp.y, bankedUp.z, bankedUp.x, bankedUp.y, bankedUp.z);
-          const c = rowColor || color;
-          colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
-
-          if (dashed && !dashOn) continue;
-          if (rowIdx > 0 && (!dashed || (Math.floor((i - 1) / dashPeriod) % 2 === 0))) {
-            const row1 = (rowIdx - 1) * 2;
-            const row2 = rowIdx * 2;
-            indices.push(row1, row1 + 1, row2);
-            indices.push(row1 + 1, row2 + 1, row2);
-          }
-        }
-
-        if (positions.length > 0) {
-          const geom = new THREE.BufferGeometry();
-          geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-          geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-          geom.setAttribute('normal', new THREE.Float32BufferAttribute(normalsOut, 3));
-          geom.setIndex(indices);
-          const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, depthWrite: false });
-          const mesh = new THREE.Mesh(geom, mat);
-          mesh.renderOrder = 1;
-          scene.add(mesh);
-        }
-      };
-
-      {
-        const edgeLineColor = new THREE.Color(0x9aa0a8);
-        const centerLineColor = new THREE.Color(0xb9a968);
-        const edgeOffset = roadWidth * 0.46;
-        buildExtensionMarking(-edgeOffset, edgeLineColor, false);
-        buildExtensionMarking(edgeOffset, edgeLineColor, false);
-        buildExtensionMarking(0.0, centerLineColor, true);
-      }
+      // 1b. Lane markings for the extension: the same builder and constants as the initial road (B149).
+      scene.add(this._buildRoadWear(startSeg, endSeg));
+      scene.add(this._buildLaneRibbons(startSeg, endSeg));
 
       // 2. Terrain ribbon extension mesh (matching createTerrainMesh ±150m landscape skirt)
       // Dense 4m-spaced embankment slices 9–45m match createTerrainMesh exactly, with outer
@@ -7905,7 +8799,7 @@
             _fdummy.updateMatrix();
             const groupMatrix = _fdummy.matrix;
 
-            const barrierStyle = CONFIG.BARRIER_STYLE;
+            const barrierStyle = this._barrierStyleAt(fencePosBar);
             const emit = (geom, mat, localM) => {
               const m = new THREE.Mesh(geom, mat);
               m.applyMatrix4(groupMatrix.clone().multiply(localM));
@@ -8076,7 +8970,8 @@
             const nearDist = side * (CONFIG.ROAD_WIDTH * 0.5 + 8.0 + rng() * 10.0);
             const nearPos = pt.clone().addScaledVector(normal, nearDist);
             const clusterCount = Math.floor(2 + rng() * 3); // 2 to 4 trees
-            const isPine = isWinter ? true : (rng() > 0.4);
+            rng();
+            const isPine = isWinter ? true : this._pineZoneAt(pt, normal, side);
 
             for (let ci = 0; ci < clusterCount; ci++) {
               const leafColHex = treeLeaves[Math.floor(rng() * treeLeaves.length)];
@@ -8107,7 +9002,8 @@
             const bgDist = side * (24.0 + rng() * 60.0);
             const bgPos = pt.clone().addScaledVector(normal, bgDist);
             const bgClusterCount = Math.floor(3 + rng() * 4); // 3 to 6 trees
-            const bgIsPine = isWinter ? true : (rng() > 0.35);
+            rng();
+            const bgIsPine = isWinter ? true : this._pineZoneAt(pt, normal, side);
 
             for (let ci = 0; ci < bgClusterCount; ci++) {
               const bgLeafHex = treeLeaves[Math.floor(rng() * treeLeaves.length)];
@@ -9019,7 +9915,7 @@
         const time = performance.now() * 0.001;
 
         // Realistic human pedaling cadence: ~65-85 RPM (1.1 - 1.45 Hz)
-        const pedalFreq = isPedaling ? THREE.MathUtils.lerp(1.1, 1.45, Math.min(absSpeed / 14.44, 1.0)) : 0;
+        const pedalFreq = isPedaling ? THREE.MathUtils.lerp(1.1, 1.45, Math.min(absSpeed / 18.06, 1.0)) : 0;
 
         // 1. Pedaling pitch rock: subtle organic forward-back nod during pedal strokes
         if (isPedaling) {
@@ -9657,6 +10553,18 @@
       // First-run: force easy so the first house spawns close and the timer is generous.
       if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
+      if (this.nearGrass) this.nearGrass.dispose();
+      this.nearGrass = new NearGrassLayer(this.world, this.scene);
+      // Built AFTER the props so they can see the buildings, tea stalls and garages (B164).
+      if (this._roadsideGrass) this.scene.remove(this._roadsideGrass);
+      this._roadsideGrass = this.world.buildRoadsideGrass(0, 1);
+      this.scene.add(this._roadsideGrass);
+      if (this._groundCover) this.scene.remove(this._groundCover);
+      this._groundCover = this.world.buildGroundCover(0, 1, season);
+      this.scene.add(this._groundCover);
+      if (this._houseFlowers) this.scene.remove(this._houseFlowers);
+      this._houseFlowers = this.world.buildHouseFlowers(0, 1);
+      this.scene.add(this._houseFlowers);
 
       setProgress(82, 'Seeding subtropical forests & Sahyadri rockfaces...');
       await frame();
@@ -9732,7 +10640,15 @@
         }
       }
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      // Render scale. Phones report device pixel ratios of 2.6-3.5, which at the old
+      // cap of 2 meant ~4x the pixels of a 1x render for a look that is soft by design.
+      // Start touch devices at 1.5 and let `_adaptRenderScale` move within [1, cap]
+      // from the measured frame rate (B147).
+      this._prCap = Math.min(window.devicePixelRatio || 1, 2);
+      if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) this._prCap = Math.min(this._prCap, 1.5);
+      this._pr = this._prCap;
+      this._prSlow = 0; this._prFast = 0; this._prLastRaiseAt = -1e9; this._prLastDropAt = -1e9;
+      this.renderer.setPixelRatio(this._pr);
       this.renderer.outputEncoding = THREE.sRGBEncoding;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.1;
@@ -9989,6 +10905,18 @@
       this.world.createMountainArches(this.scene, season);
       if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
+      if (this.nearGrass) this.nearGrass.dispose();
+      this.nearGrass = new NearGrassLayer(this.world, this.scene);
+      // Built AFTER the props so they can see the buildings, tea stalls and garages (B164).
+      if (this._roadsideGrass) this.scene.remove(this._roadsideGrass);
+      this._roadsideGrass = this.world.buildRoadsideGrass(0, 1);
+      this.scene.add(this._roadsideGrass);
+      if (this._groundCover) this.scene.remove(this._groundCover);
+      this._groundCover = this.world.buildGroundCover(0, 1, season);
+      this.scene.add(this._groundCover);
+      if (this._houseFlowers) this.scene.remove(this._houseFlowers);
+      this._houseFlowers = this.world.buildHouseFlowers(0, 1);
+      this.scene.add(this._houseFlowers);
 
       this.reconcileSelectedVehicle();
       if (!this.vehicle) {
@@ -10068,6 +10996,7 @@
         if (this.visualStyle) this.visualStyle.resize(window.innerWidth, window.innerHeight);
       };
 
+      this._handleResize = handleResize;
       window.addEventListener('resize', handleResize);
       window.addEventListener('orientationchange', () => setTimeout(handleResize, 150));
       handleResize();
@@ -11978,7 +12907,7 @@
         this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
         this.vehicle.heading = this.vehicle.velocityHeading;
         this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 8.89 : 10.0;
+        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 11.11 : 10.0;
         this.updateGPSNavigation();
       }
 
@@ -11995,7 +12924,7 @@
         this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
         this.vehicle.heading = this.vehicle.velocityHeading;
         this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 8.89 : 8.0;
+        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 11.11 : 8.0;
         this.updateGPSNavigation();
         this._showOnboardingHint('drive');
       }
@@ -13061,6 +13990,34 @@
       }
     }
 
+    // Adaptive render scale (B147). Called once per ~0.5 s FPS window.
+    // Steps down fast (3 slow windows), steps up slowly (10 good windows) and
+    // never back above a level that just caused a drop, so it cannot oscillate.
+    _adaptRenderScale(fps) {
+      if (!this._worldBuilt || this._adPaused || document.hidden) { this._prSlow = this._prFast = 0; return; }
+      const now = performance.now();
+      if (fps < 45) { this._prSlow++; this._prFast = 0; }
+      else if (fps >= 57) { this._prFast++; this._prSlow = 0; }
+      else { this._prSlow = 0; this._prFast = 0; }
+
+      let next = this._pr;
+      if (this._prSlow >= 3 && this._pr > 1) {
+        next = Math.max(1, this._pr - 0.25);
+        // A drop soon after a raise means the raised level is too expensive here.
+        if (now - this._prLastRaiseAt < 15000) this._prCap = Math.min(this._prCap, next);
+        this._prLastDropAt = now;
+      } else if (this._prFast >= 10 && this._pr < this._prCap) {
+        next = Math.min(this._prCap, this._pr + 0.25);
+        this._prLastRaiseAt = now;
+      }
+      if (next === this._pr) return;
+      this._prSlow = this._prFast = 0;
+      this._pr = next;
+      this.renderer.setPixelRatio(next);
+      if (this.composer && this.composer.setPixelRatio) this.composer.setPixelRatio(next);
+      if (this._handleResize) this._handleResize();
+    }
+
     _animateFrame() {
       const dt = Math.min(this.clock.getDelta(), 0.1);
 
@@ -13072,6 +14029,7 @@
         const fps = Math.round(this._fpsAccumFrames / this._fpsAccumTime);
         const fpsEl = document.getElementById('hud-fps-value');
         if (fpsEl) fpsEl.textContent = String(fps);
+        this._adaptRenderScale(fps);
         this._fpsAccumTime = 0;
         this._fpsAccumFrames = 0;
       }
@@ -13155,6 +14113,9 @@
             }
           }
         }
+
+        // Near-field grass carpet follows the camera (B157)
+        if (this.nearGrass && this.camera) this.nearGrass.update(this.camera.position, dt);
 
         // Continuous Diurnal Cycle, Atmosphere, Auto-Headlights & Lighting
         this.updateDayNightCycle(dt);
