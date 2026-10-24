@@ -22,6 +22,8 @@ kanban-plugin: board
 	Tracked privately.
 
 ## 🔨 In Progress
+- [ ] 🔴 **Mumbai-Pune city direction: Phase 0** · @{2026-10-25}
+	Planning, baseline measurements and groundwork, on its own branch. Gameplay unchanged so far. [[2026-10-25 - Mumbai-Pune Direction Phase 0]]
 - [ ] 🔴 **Visual quality overhaul**: richer stylized look for web and Android, moving past flat low-poly · @{2026-10-19}
 	Done on a branch, not merged: faster drawing, richer trees and pines, worn road, textured footpath, real grass ground, warmer grass colour, plants around footpath and houses. Waiting on a real-phone performance check before merging. [[2026-10-19 - Visual Quality Baseline]]
 - [ ] 🔴 **Vehicle roster: Cargo three-wheeler (Rickshaw)** · @{2026-09-27}
