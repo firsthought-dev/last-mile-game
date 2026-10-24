@@ -12976,8 +12976,8 @@
       const vehList = vehicleList();
 
       const styleList = [
-        { id: 'crisp',     name: 'Crisp',     stat: 'Sharp Outlines • Lighter',    gif: 'assets/style-previews/crisp.gif' },
-        { id: 'cinematic', name: 'Cinematic', stat: 'Bloom + Grade • Heavier',     gif: 'assets/style-previews/cinematic.gif' },
+        { id: 'crisp',     name: 'Crisp',     stat: 'Sharp Outlines • Lighter',    gif: 'assets/style-previews/crisp.webp' },
+        { id: 'cinematic', name: 'Cinematic', stat: 'Bloom + Grade • Heavier',     gif: 'assets/style-previews/cinematic.webp' },
       ];
       const currentStyle = this.visualStyle?.selectedStyle || VisualStyleManager.DEFAULT_STYLE;
 
