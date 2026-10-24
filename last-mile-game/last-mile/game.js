@@ -584,11 +584,23 @@
           this.masterFilter.connect(this.ctx.destination);
         }
       }
-      if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+      if (this.ctx && this.ctx.state === 'suspended' && !this._silenced) this.ctx.resume();
       return this.ctx;
     }
 
     get muted() { return this.sfxMuted; }
+
+    // Hard silence for ads and hidden tabs. Separate from the player's own mute
+    // setting (sfxMuted), so ending an ad never un-mutes a muted player.
+    mute() {
+      this._silenced = true;
+      try { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); } catch (e) {}
+    }
+
+    unmute() {
+      this._silenced = false;
+      try { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); } catch (e) {}
+    }
 
     toggleMute() {
       this.sfxMuted = !this.sfxMuted;
@@ -10732,6 +10744,7 @@
 
       this.initThree();
       this.initEvents();
+      this.initVisibilityPause();
       this.initHUD();
       this.clock = new THREE.Clock();
       this._worldBuilt = false;
@@ -10754,6 +10767,27 @@
       this._firstOpenTime = this._onboardingActive ? Date.now() : null;
 
       this.renderDispatchHub();
+    }
+
+    // Portals expect the game to stop and go quiet when the tab is hidden.
+    // Browsers already throttle rAF in hidden tabs; this also silences audio and
+    // tells the portal SDK that gameplay stopped. _hiddenPaused freezes the frame
+    // so nothing moves if the page is hidden in a way that keeps rAF running.
+    initVisibilityPause() {
+      this._hiddenPaused = false;
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          if (this.gameState !== 'playing' || this._hiddenPaused) return;
+          this._hiddenPaused = true;
+          sound.mute();
+          if (typeof ShiplypAds !== 'undefined' && ShiplypAds) ShiplypAds.gameplayStop();
+        } else if (this._hiddenPaused) {
+          this._hiddenPaused = false;
+          sound.unmute();
+          this.clock.getDelta(); // drop the time spent hidden so the next frame does not jump
+          if (this.gameState === 'playing' && typeof ShiplypAds !== 'undefined' && ShiplypAds) ShiplypAds.gameplayStart();
+        }
+      });
     }
 
     async _bootWithLoader() {
@@ -14311,7 +14345,7 @@
         this._fpsAccumFrames = 0;
       }
 
-      if (this._adPaused || window.ShiplypPolice?.isPaused()) {
+      if (this._adPaused || this._hiddenPaused || window.ShiplypPolice?.isPaused()) {
         if (this.composer) {
           this.visualStyle?.preRender();
           this.composer.render();

@@ -80,6 +80,27 @@ for (const p of PROFILES) {
     fs.mkdirSync(outDir, { recursive: true });
     await page.screenshot({ path: path.join(outDir, `smoke-${p.name}${noStorage ? '-nostorage' : ''}.png`) });
   }
+  // Hidden tab: the game must freeze (and go quiet) while hidden, and move again after.
+  const pos = () => page.evaluate(() => { const q = window.game.vehicle.mesh.position; return [q.x, q.z]; });
+  const dist = (u, v) => Math.hypot(u[0] - v[0], u[1] - v[1]);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const frozenFrom = await pos();
+  await page.waitForTimeout(2000);
+  const frozenTo = await pos();
+  const hiddenPaused = await page.evaluate(() => window.game._hiddenPaused);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForTimeout(1500);
+  const resumedTo = await pos();
+  if (!hiddenPaused) fail(p.name, 'game did not pause when the tab was hidden');
+  if (dist(frozenFrom, frozenTo) > 0.01) fail(p.name, `vehicle moved ${dist(frozenFrom, frozenTo).toFixed(2)} m while hidden`);
+  if (!(dist(frozenTo, resumedTo) > 0.5)) fail(p.name, 'vehicle did not move again after the tab became visible');
+
   await page.keyboard.up('ArrowUp');
 
   if (external.length) fail(p.name, `${external.length} external request(s), e.g. ${external[0]}`);
