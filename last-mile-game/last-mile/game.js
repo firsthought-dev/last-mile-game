@@ -14140,31 +14140,43 @@
       }
     }
 
-    // B179: make the designated house easy to spot. A tall additive light beam (fades out toward the top, ignores fog so it
-    // reads from far away and above the trees) plus a pulsing, brightened ring at the porch of the NEAREST undelivered target,
-    // which is the one the GPS arrow and the DROP prompt already follow. One shared beacon object is moved between targets.
-    _updateTargetBeacon(target) {
-      let b = this._targetBeacon;
-      if (!b) {
-        const H = 30, geo = new THREE.CylinderGeometry(0.55, 0.9, H, 20, 6, true); geo.translate(0, H / 2, 0);
-        const pos = geo.attributes.position, cols = [];
-        for (let i = 0; i < pos.count; i++) { const y = pos.getY(i) / H, a = 0.36 * Math.pow(1 - y, 1.5) * Math.min(1, 0.45 + y * 7); cols.push(0.35, 1.0, 0.72, a); }
-        geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 4));
-        const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false });
-        b = this._targetBeacon = new THREE.Mesh(geo, mat); b.frustumCulled = false; b.renderOrder = 5; b.visible = false;
+    // B191: delivery halo. A flat teal-to-amber-to-red ring floats just above the roof of the ACTIVE delivery house (the nearest
+    // undelivered target, the one the GPS arrow follows), with a soft additive glow ring. Colour is three stages by the fraction
+    // of the delivery timer left (green > 50%, amber 20-50%, red < 20%, short cross-fades); glow strength and pulse rate rise as
+    // time runs out. The glow is held low in daylight (it washed out against the bright sky) and opens up at dusk and night.
+    _updateDeliveryHalo(target) {
+      let h = this._halo;
+      if (!h) {
+        const cv = document.createElement('canvas'); cv.width = cv.height = 256; const cx = cv.getContext('2d'), gr = cx.createRadialGradient(128, 128, 0, 128, 128, 128);
+        gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.38, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, 'rgba(255,255,255,1)'); gr.addColorStop(0.62, 'rgba(255,255,255,0.45)'); gr.addColorStop(0.8, 'rgba(255,255,255,0.12)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+        cx.fillStyle = gr; cx.fillRect(0, 0, 256, 256);
+        const rg = new THREE.RingGeometry(2.7, 3.4, 64); rg.rotateX(-Math.PI / 2);
+        const pg = new THREE.PlaneGeometry(13, 13); pg.rotateX(-Math.PI / 2);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x35e08a, transparent: true, opacity: 0.95, depthWrite: false, fog: false, side: THREE.DoubleSide });
+        const glowMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), color: 0x35e08a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
+        const group = new THREE.Group(), ring = new THREE.Mesh(rg, ringMat), glow = new THREE.Mesh(pg, glowMat); glow.position.y = 0.02; glow.renderOrder = 4; ring.renderOrder = 5;
+        group.add(glow); group.add(ring); group.visible = false;
+        h = this._halo = { group, ring, glow, ringMat, glowMat, phase: 0, last: performance.now(), target: null, nextBox: 0,
+          cols: [new THREE.Color(0x35e08a), new THREE.Color(0xffb41f), new THREE.Color(0xff3a2e)], tmp: new THREE.Color(), box: new THREE.Box3() };
       }
-      if (b.parent !== this.scene) this.scene.add(b);
-      const prev = this._beaconTarget;
-      if (prev && prev !== target && prev.ring) { prev.ring.scale.set(1, 1, 1); if (!prev.delivered) prev.ring.material.color.setHex(0x10b981); }
-      this._beaconTarget = target || null;
-      if (!target || target.delivered || !target.ring) { b.visible = false; return; }
-      const t = performance.now() / 1000, pulse = 0.5 + 0.5 * Math.sin(t * 3.2);
-      const dark = this.dayProgress >= 0.64 || this.dayProgress <= 0.08;               // same dusk/night window the window glow uses
-      b.material.blending = dark ? THREE.AdditiveBlending : THREE.NormalBlending; b.material.color.setScalar(dark ? 2.4 : 1.0);
-      b.visible = true; b.position.copy(target.pos); b.position.y = target.pos.y + 0.1;
-      b.scale.set(1 + 0.08 * pulse, 1, 1 + 0.08 * pulse);
-      target.ring.scale.set(1 + 0.12 * pulse, 1, 1 + 0.12 * pulse);
-      target.ring.material.color.setRGB(0.18 + 0.2 * pulse, 0.95 + 0.6 * pulse, 0.62 + 0.35 * pulse);
+      if (h.group.parent !== this.scene) this.scene.add(h.group);
+      if (!target || target.delivered || !target.ring || !target.ring.parent || this.orderTimer == null || !this.maxOrderTimer) { h.group.visible = false; h.target = null; return; }
+      const now = performance.now(), dt = Math.min(0.1, (now - h.last) / 1000); h.last = now;
+      if (h.target !== target || now > h.nextBox) {              // house top: re-measured about once a second (the model loads a moment after the stand-in)
+        const hg = target.ring.parent; hg.updateMatrixWorld(true); h.box.setFromObject(hg);
+        const top = Number.isFinite(h.box.max.y) ? h.box.max.y : target.pos.y + 6; h.group.position.set(hg.position.x, top + 1.6, hg.position.z);
+        h.target = target; h.nextBox = now + 1000;
+      }
+      h.group.visible = true;
+      const f = THREE.MathUtils.clamp(this.orderTimer / this.maxOrderTimer, 0, 1), sm = (a, b, x) => { const k = Math.min(1, Math.max(0, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
+      h.tmp.copy(h.cols[0]).lerp(h.cols[1], sm(0.55, 0.45, f)).lerp(h.cols[2], sm(0.25, 0.15, f));
+      const u = 1 - f, I = 0.6 + 1.9 * Math.pow(u, 1.3), freq = 1.0 + 2.8 * Math.pow(u, 1.5);
+      h.phase += freq * dt; const p = 0.5 + 0.5 * Math.sin(h.phase * Math.PI * 2);
+      const x = this.dayProgress, dark = (x >= 0.72 || x <= 0.05) ? 1 : (x > 0.55 ? sm(0.55, 0.72, x) : (x < 0.14 ? 1 - sm(0.05, 0.14, x) : 0));
+      const dayK = 0.14 + 0.86 * dark;                             // daylight glow is only ~14% of the night glow
+      h.ringMat.color.copy(h.tmp).multiplyScalar(0.82 + 0.3 * dark); h.ringMat.opacity = 0.82 + 0.13 * p;
+      h.glowMat.color.copy(h.tmp); h.glowMat.opacity = Math.min(1, (0.24 + 0.26 * I) * (0.7 + 0.3 * p) * dayK);
+      h.glow.scale.setScalar(1 + (0.05 * I * p + 0.15 * u) * (0.4 + 0.6 * dark)); h.ring.scale.setScalar(1 + 0.02 * p);
     }
 
     updateGPSNavigation() {
@@ -14185,7 +14197,7 @@
           }
         }
       });
-      this._updateTargetBeacon(nextTarget);
+      this._updateDeliveryHalo(nextTarget);
 
       // Update Waypoint HUD Arrow & Modern Delivery Mission Capsule
       const capsule = document.getElementById('delivery-mission-capsule');
