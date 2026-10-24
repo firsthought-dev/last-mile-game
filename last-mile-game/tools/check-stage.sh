@@ -4,7 +4,7 @@
 set -e
 D="${1:?usage: check-stage.sh <staged-dir>}"
 fail() { echo "check-stage FAIL: $1"; exit 1; }
-for f in index.html game.js save.js ads.js police.js style.css assets/models/rickshaw.glb; do
+for f in index.html save.js ads.js police.js style.css js/core.js js/boot.js assets/models/rickshaw.glb; do
   [ -f "$D/$f" ] || fail "missing $f"
 done
 grep -q "__BUILD = '__BUILD__'" "$D/index.html" && fail "index.html still has the __BUILD__ placeholder"
