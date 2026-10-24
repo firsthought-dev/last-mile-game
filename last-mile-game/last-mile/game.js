@@ -860,7 +860,6 @@
   if (!Career && typeof console !== 'undefined') {
     console.warn('[Shiplyp] save.js not loaded — career progress will not persist this session.');
   }
-  const Ads = (typeof window !== 'undefined' && window.ShiplypAds) ? window.ShiplypAds : null;
   // B132: chance a pedestrian cluster also gets a signalled crossing (tuned for ~+15%).
   const CROSSING_AT_CLUSTER_CHANCE = 0.85;
   window.sound = sound;
@@ -2638,7 +2637,6 @@
         const shrubGeoms = ClumpTreeFactory.shrubGeoms(), shrubMat = ClumpTreeFactory.shrubMaterial();
         const tufts = tuftGeoms.map(() => []), shrubs = shrubGeoms.map(() => []);
         const up = new THREE.Vector3(0, 1, 0), dummy = new THREE.Object3D();
-        const grassBase = new THREE.Color(season && season.grassLight != null ? season.grassLight : 0x3a874d).lerp(new THREE.Color(0xffffff), 0.5);
         const buildings = (this.obstacles || []).filter(o => o.type === 'building');
         const hash = (a, b) => { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
         const blocked = (pos, absLat, margin) => {
@@ -5252,7 +5250,6 @@
       this.foliageGroup.clear();
       this.deliveryTargets = [];
       this.trafficVehicles = [];
-      this.speedCameras = [];
       this.repairBays = [];
       this.obstacles = [];
       this.crossers = [];
@@ -5270,17 +5267,10 @@
       const isOpenRoad = !!cityCfg.openRoad;
 
       // Reusable Low-Poly Foliage & Prop Geometries
-      // Pine/broadleaf tree canopy geometry retired — trees are now
-      // TreeBillboardFactory sprites (see SLOWROADS_PARITY_LOG.md item 5),
-      // trunk baked into the sprite art, so trunkGeom/trunkMat/
-      // pineLeavesGeom/decLeavesGeom no longer have any callers.
-      const bushGeom = new THREE.DodecahedronGeometry(1.2, 0);
+      // Trees are TreeBillboardFactory sprites (see SLOWROADS_PARITY_LOG.md item 5).
       // Pool of 6 distinct rock shapes (different seeds → different silhouettes)
       // so clusters never look like copies of the same stamp.
       const rockGeomPool = [2, 11, 23, 37, 53, 71].map(s => RockGeometryFactory.createFacetedRockGeometry(s));
-      const rockGeom = rockGeomPool[0]; // fallback for legacy references
-      const poleGeom = new THREE.CylinderGeometry(0.1, 0.12, 6.5, 6);
-      const crossbarGeom = new THREE.BoxGeometry(1.8, 0.12, 0.12);
       const isWinter = (season.id === 'winter');
       // Rock color: frost-grey for winter, warm sandy for everything else
       const rockBaseColor = isWinter ? (season.snowRockColor || 0xbec4cc) : 0x7a5c3a;
@@ -5662,18 +5652,11 @@
           // both shoulders, broken only right where a delivery house sits
           // so the gap itself reads as "turn in here" (houses always spawn
           // at i % 24 === 0, alternating sides via i % 48 — see the cabin
-          // block below).
+          // block below). Gaps are cut in the deferred pass from this.fenceGapSites
+          // (tea stalls, houses, repair shops, zebra crossings), not guessed here.
           if (i % FENCE_STEP === 0 && !inTunnel) {
-            const nearestHouseCheckpoint = Math.round(i / 24) * 24;
-            const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
-            const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
-            const FENCE_GAP_RADIUS = 18.0; // meters either side of a house's checkpoint
-            const houseInTunnel = this.isInTunnelZone && this.isInTunnelZone(nearestHouseCheckpoint, 35);
-            // Gaps are cut in the deferred pass from this.fenceGapSites (tea
-            // stalls, houses, repair shops, zebra crossings), not guessed here.
-            const blockedByHouse = false;
 
-            if (!blockedByHouse) {
+            {
               // Continuous roadside barrier: placed via getBarrierLateralDistance()
               // flush along the outer edge of the raised sidewalk paver slab (or natural verge).
               const fenceDist = side * this.getBarrierLateralDistance();
@@ -6703,13 +6686,6 @@
       gantryGroup.position.copy(pt);
       gantryGroup.lookAt(pt.clone().add(tangent));
       this.foliageGroup.add(gantryGroup);
-
-      this.speedCameras.push({
-        pos: pt.clone(),
-        speedLimit: 20.8, // 75 km/h in m/s
-        speedLimitKmh: 75,
-        triggeredRecently: false
-      });
 
       this.obstacles.push({ pos: pt.clone().addScaledVector(normal, -gantrySpan / 2), radius: 0.8, type: 'gantry' });
       this.obstacles.push({ pos: pt.clone().addScaledVector(normal, gantrySpan / 2), radius: 0.8, type: 'gantry' });
@@ -9701,9 +9677,7 @@
         const cycleConverge = this.isAutodrive ? 14.0 : THREE.MathUtils.lerp(18.0, 8.0, speedRatio) * climateGrip;
         this.velocityHeading += headingDelta * (1 - Math.exp(-cycleConverge * dt));
       } else {
-        // Car: Pacejka-style progressive tire slip with drift capability
-        const B = 4.0, C = 1.35, D = 1.0;
-        const slipTireForce = D * Math.sin(C * Math.atan(B * Math.abs(headingDelta)));
+        // Car: heading convergence slows with heading error, allowing drift
         const lateralEfficiency = THREE.MathUtils.clamp(1.0 - Math.abs(headingDelta) * 0.45, 0.25, 1.0);
         const carConvergeRate = this.isAutodrive
           ? 14.0
@@ -9791,7 +9765,6 @@
       this.lateralOffset = latDist;
 
       const tangent = proj.tangent;
-      const roadRight = proj.normal;
 
       // 4-Wheel Contact Ground Plane Evaluation
       const _vSpec = vehicleSpec(this.vehicleType);
@@ -9941,7 +9914,7 @@
       // verification driving at 114 km/h (a normal speed for this game, not
       // a punishable one): fired a "-₹150 E-CHALLAN" notification, which is
       // courier-fine framing the slowroads-style pivot doesn't want. The
-      // gantry props/`world.speedCameras` spawn logic is left in place
+      // gantry props are left in place
       // (still a visible roadside structure — decorative overhead gantry),
       // only the speed-triggered fine/flash/notification behavior is gone.
 
@@ -10405,7 +10378,6 @@
       this.orderTimer = 36.0;
       this.maxOrderTimer = 36.0;
       this.deliveryHistory = [];
-      this.isStatusPanelOpen = false;
 
       this.resumeCount = 0;
       this.maxResumes = 3;
@@ -10972,10 +10944,6 @@
       if (cargoEl) cargoEl.textContent = order.cargo;
     }
 
-    toggleStatusPanel() {
-      // Legacy delivery status panel pruned for Slow Roads cruising parity
-    }
-
     // FPS counter is off by default; Settings > Display & Sound turns it on (B142).
     _fpsCounterOn() {
       try { return localStorage.getItem('shiplyp_showFps') === '1'; } catch (e) { return false; }
@@ -10985,10 +10953,6 @@
       const pill = document.getElementById('hud-fps-pill');
       if (pill) pill.hidden = !this._fpsCounterOn();
     }
-
-    refreshStatusPanel() {}
-
-    renderStatusPanel() {}
 
 
     initEvents() {
@@ -11492,7 +11456,6 @@
       }
       this.updateActiveOrderCard();
       this.updateHUDStats();
-      this.refreshStatusPanel();
 
       // First-run: clear onboarding after the first successful delivery.
       if (this._onboardingActive && this.deliveriesMade === 1) {
@@ -12263,8 +12226,6 @@
       document.getElementById('btn-hud-sound')?.addEventListener('click', () => this.toggleMute());
       document.getElementById('btn-dock-sound')?.addEventListener('click', () => this.toggleMute());
       document.getElementById('btn-hud-audio')?.addEventListener('click', () => this.toggleMute());
-      document.getElementById('btn-hud-status')?.addEventListener('click', () => this.toggleStatusPanel());
-      document.getElementById('btn-dock-status')?.addEventListener('click', () => this.toggleStatusPanel());
       document.getElementById('btn-dock-settings')?.addEventListener('click', () => this.openSettingsModal('gameplay'));
       document.getElementById('btn-dock-home')?.addEventListener('click', () => this.renderDispatchHub());
 
