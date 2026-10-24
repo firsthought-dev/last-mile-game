@@ -14,5 +14,8 @@
     "@playwright/test": "^1.63.0",
     "playwright": "^1.63.0",
     "three": "0.128.0"
+  },
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
   }
 }

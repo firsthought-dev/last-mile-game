@@ -19,6 +19,13 @@ cp -r "$DIR/assets" "$OUT/assets"
 [ -d "$DIR/vendor" ] && cp -r "$DIR/vendor" "$OUT/vendor"
 find "$OUT" -name .DS_Store -delete
 
+# The Vercel analytics snippet only works on Vercel (root-absolute path), so
+# every other target (APK, portal ZIPs) drops it. vercel.json sets the target.
+if [ "$STAGE_TARGET" != "vercel" ]; then
+  sed '/vercel-analytics:start/,/vercel-analytics:end/d' "$OUT/index.html" > "$OUT/index.html.tmp"
+  mv "$OUT/index.html.tmp" "$OUT/index.html"
+fi
+
 # Stamp the build so scripts are cached between visits but refresh per release.
 BUILD="$(git -C "$DIR" rev-parse --short HEAD 2>/dev/null || echo dev)"
 sed "s/__BUILD__/$BUILD/" "$OUT/index.html" > "$OUT/index.html.tmp"

@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "echo 'no install needed'",
-  "buildCommand": "bash last-mile-game/last-mile/stage_web.sh _site",
+  "buildCommand": "STAGE_TARGET=vercel bash last-mile-game/last-mile/stage_web.sh _site",
   "outputDirectory": "_site",
   "cleanUrls": false,
   "headers": [

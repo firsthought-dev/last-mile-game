@@ -5556,7 +5556,24 @@
       // cohesive sandstone/cream set (was 7 widely varied vivid hues —
       // same "random blob through the trees" problem as the skyscrapers).
       const LOWRISE_PALETTE = [0xd9c9a8, 0xe8b04b, 0xc9a876];
-      this._skylineKit = { tex: skyscraperWindowTex, glass: SKYSCRAPER_GLASS_COLOR, lowrise: LOWRISE_PALETTE };
+      // Daytime facade map (B174): the emissive map above is black in daylight, so towers read as blank boxes. Same 4x10 window grid,
+      // but EVERY cell is a recessed window (cells that glow at night are a touch darker); no prng, so world generation is unchanged.
+      const skyscraperDayTex = (() => {
+        const src = skyscraperWindowTex.image, canvas = document.createElement('canvas');
+        canvas.width = 32; canvas.height = 64;
+        const ctx = canvas.getContext('2d'), sctx = src.getContext('2d');
+        ctx.fillStyle = '#f4f1ea'; ctx.fillRect(0, 0, 32, 64);
+        const cols = 4, rows = 10, cw = 32 / cols, rh = 64 / rows;
+        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+          const lit = sctx.getImageData(c * cw + cw / 2, r * rh + rh / 2, 1, 1).data[0] > 40;
+          ctx.fillStyle = lit ? '#46586a' : '#6c7f90'; ctx.fillRect(c * cw + 1, r * rh + 1.5, cw - 2, rh - 3);
+          ctx.fillStyle = '#d8d3c8'; ctx.fillRect(c * cw + 1, r * rh + rh - 1.5, cw - 2, 1);        // sill
+        }
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace;
+        return tex;
+      })();
+      this._skylineKit = { tex: skyscraperWindowTex, dayTex: skyscraperDayTex, glass: SKYSCRAPER_GLASS_COLOR, lowrise: LOWRISE_PALETTE };
 
       const sampledPoints = this.curve.getSpacedPoints(800);
       // getSpacedPoints divides the curve into equal-arc-length segments,
@@ -7048,6 +7065,7 @@
         const tex = kit.tex.clone();
         tex.repeat.set(Math.max(1, Math.round(w / 3.2)), Math.max(1, Math.round(h / 4.0)));
         tex.needsUpdate = true;
+        const dayTex = kit.dayTex.clone(); dayTex.repeat.copy(tex.repeat); dayTex.needsUpdate = true;
         // Window glow only reads as lit windows once ambient light is
         // low enough to need it (dusk/night) — left on at a fixed
         // 0.85 intensity through daylight hours, every building in
@@ -7062,6 +7080,7 @@
           // specular highlight, slight transparency, cool blue tint.
           mat = new THREE.MeshStandardMaterial({
             color,
+            map: dayTex,
             flatShading: true,
             emissiveMap: tex,
             emissive: 0xffffff,
@@ -7074,6 +7093,7 @@
         } else {
           mat = new THREE.MeshStandardMaterial({
             color,
+            map: dayTex,
             flatShading: true,
             emissiveMap: tex,
             emissive: 0xffffff,
@@ -7088,12 +7108,14 @@
       // repeated box at different sizes — stepped-tier and podium
       // towers are common in dense Indian commercial districts.
       const archetype = isLowRise ? 0 : Math.floor(this.prng.range(0, 4));
+      const parts = [];   // {w,h,d,x,y,z,accent} of each massing block, for the architectural detail pass below (B174)
 
       if (archetype === 0) {
         // Plain slab tower
         const body = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), makeFacadeMat(width, height, bodyColor));
         body.position.y = height / 2;
         bldgGroup.add(body);
+        parts.push({ w: width, h: height, d: depth, x: 0, y: height / 2, z: 0 });
       } else if (archetype === 1) {
         // Stepped-tier tower: wide base, narrower upper block set back
         const baseH = height * 0.55;
@@ -7104,6 +7126,7 @@
         const top = new THREE.Mesh(new THREE.BoxGeometry(width * 0.62, topH, depth * 0.62), makeFacadeMat(width * 0.62, topH, accentColor));
         top.position.y = baseH + topH / 2;
         bldgGroup.add(top);
+        parts.push({ w: width, h: baseH, d: depth, x: 0, y: baseH / 2, z: 0 }, { w: width * 0.62, h: topH, d: depth * 0.62, x: 0, y: baseH + topH / 2, z: 0 });
       } else if (archetype === 2) {
         // Podium + tower: squat wide podium floors, slender tower rising off it
         const podiumH = Math.min(10.0, height * 0.18);
@@ -7114,6 +7137,7 @@
         const tower = new THREE.Mesh(new THREE.BoxGeometry(width * 0.68, towerH, depth * 0.68), makeFacadeMat(width * 0.68, towerH, bodyColor));
         tower.position.y = podiumH + towerH / 2;
         bldgGroup.add(tower);
+        parts.push({ w: width * 1.35, h: podiumH, d: depth * 1.35, x: 0, y: podiumH / 2, z: 0 }, { w: width * 0.68, h: towerH, d: depth * 0.68, x: 0, y: podiumH + towerH / 2, z: 0 });
       } else {
         // Twin-block tower: two slim offset blocks of differing height
         const hA = height;
@@ -7124,6 +7148,72 @@
         const blockB = new THREE.Mesh(new THREE.BoxGeometry(width * 0.55, hB, depth * 0.9), makeFacadeMat(width * 0.55, hB, accentColor));
         blockB.position.set(width * 0.28, hB / 2, -depth * 0.05);
         bldgGroup.add(blockB);
+        parts.push({ w: width * 0.55, h: hA, d: depth, x: -width * 0.24, y: hA / 2, z: 0 }, { w: width * 0.55, h: hB, d: depth * 0.9, x: width * 0.28, y: hB / 2, z: -depth * 0.05 });
+      }
+
+      // Architectural detail pass (B174): corner pilasters, floor bands, parapet rims, shopfront + awning, crown and spire,
+      // merged into ONE vertex-coloured mesh per building so the skyline costs a single extra draw call each. Uses a
+      // position-hashed rng, never this.prng, so world generation stays byte-identical.
+      {
+        const hs = (k) => { let h = (Math.imul(Math.round(bldgPos.x * 7) | 0, 374761393) + Math.imul(Math.round(bldgPos.z * 7) | 0, 668265263) + Math.imul(k, 2246822519)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+        const boxes = [];
+        const add = (w, h, d, x, y, z, hex) => boxes.push({ w, h, d, x, y, z, c: new THREE.Color(hex) });
+        const roadDir = new THREE.Vector3(-normal.x * side, 0, -normal.z * side);
+        const faceX = Math.abs(roadDir.x) > Math.abs(roadDir.z);
+        const awningHex = [0xc2442e, 0x2f7d6d, 0xd9a21b, 0x3d5a98][Math.floor(hs(1) * 4)];
+        const stone = isGlass ? 0x56626e : 0xcfc6b6, dark = 0x3b4148;
+        parts.forEach((pt2, pi) => {
+          const top = pt2.y + pt2.h / 2, bot = pt2.y - pt2.h / 2, hw = pt2.w / 2, hd = pt2.d / 2;
+          // parapet rim around the roof edge
+          add(pt2.w + 0.3, 0.7, 0.35, pt2.x, top + 0.35, pt2.z + hd, stone); add(pt2.w + 0.3, 0.7, 0.35, pt2.x, top + 0.35, pt2.z - hd, stone);
+          add(0.35, 0.7, pt2.d, pt2.x + hw, top + 0.35, pt2.z, stone); add(0.35, 0.7, pt2.d, pt2.x - hw, top + 0.35, pt2.z, stone);
+          // corner pilasters
+          const pil = isGlass ? 0.45 : 0.7;
+          for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(pil, pt2.h, pil, pt2.x + sx * hw, pt2.y, pt2.z + sz * hd, isGlass ? dark : stone);
+          // floor bands every ~3 storeys (concrete buildings only)
+          if (!isGlass) for (let y = bot + 9.6; y < top - 2; y += 9.6) add(pt2.w + 0.35, 0.4, pt2.d + 0.35, pt2.x, y, pt2.z, stone);
+          else for (let y = bot + 16; y < top - 4; y += 16) add(pt2.w + 0.2, 0.5, pt2.d + 0.2, pt2.x, y, pt2.z, dark);
+        });
+        const base = parts[0];
+        if (isLowRise && base) {
+          // shopfront band and awning on the street side
+          const sw = faceX ? 0.5 : base.w * 0.96, sd = faceX ? base.d * 0.96 : 0.5;
+          const sgn = faceX ? Math.sign(roadDir.x) || 1 : Math.sign(roadDir.z) || 1;
+          const sx = faceX ? base.x + sgn * (base.w / 2 + 0.05) : base.x, sz = faceX ? base.z : base.z + sgn * (base.d / 2 + 0.05);
+          add(sw, 3.0, sd, sx, 1.5, sz, dark);
+          const aw = faceX ? 1.3 : base.w * 0.9, ad = faceX ? base.d * 0.9 : 1.3;
+          add(aw, 0.18, ad, faceX ? sx + sgn * 0.65 : sx, 3.2, faceX ? sz : sz + sgn * 0.65, awningHex);
+          // first-floor balcony strip
+          if (hs(2) > 0.4 && base.h > 9) add(faceX ? 1.1 : base.w * 0.8, 0.22, faceX ? base.d * 0.8 : 1.1, faceX ? sx + sgn * 0.55 : sx, 6.4, faceX ? sz : sz + sgn * 0.55, stone);
+          // stair-head box on the roof
+          add(2.6, 2.4, 2.6, base.x - base.w * 0.25, base.h + 1.2 + 0.7, base.z - base.d * 0.2, stone);
+        } else if (parts.length) {
+          const tp = parts.reduce((a, b) => (b.y + b.h / 2 > a.y + a.h / 2 ? b : a));
+          const topY = tp.y + tp.h / 2;
+          // crown: a setback plant room, then a slender spire on the tallest towers
+          add(tp.w * 0.45, 3.2, tp.d * 0.45, tp.x, topY + 0.7 + 1.6, tp.z, dark);
+          if (height > 55 || hs(3) > 0.6) add(0.35, 11, 0.35, tp.x, topY + 0.7 + 3.2 + 5.5, tp.z, 0x8a939c);
+        }
+        // merge every box into one vertex-coloured BufferGeometry
+        const pos = [], nor = [], col = [], idx = [];
+        const tmp = new THREE.BoxGeometry(1, 1, 1);
+        const tp0 = tmp.attributes.position, tn0 = tmp.attributes.normal, ti0 = tmp.index.array;
+        boxes.forEach((b) => {
+          const o = pos.length / 3;
+          for (let i = 0; i < tp0.count; i++) {
+            pos.push(tp0.getX(i) * b.w + b.x, tp0.getY(i) * b.h + b.y, tp0.getZ(i) * b.d + b.z);
+            nor.push(tn0.getX(i), tn0.getY(i), tn0.getZ(i)); col.push(b.c.r, b.c.g, b.c.b);
+          }
+          for (let i = 0; i < ti0.length; i++) idx.push(ti0[i] + o);
+        });
+        tmp.dispose();
+        const dg = new THREE.BufferGeometry();
+        dg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        dg.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+        dg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+        dg.setIndex(idx);
+        if (!kit.detailMat) kit.detailMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
+        bldgGroup.add(new THREE.Mesh(dg, kit.detailMat));
       }
 
       // Parapet / rooftop cap
