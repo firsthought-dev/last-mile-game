@@ -7,41 +7,25 @@
   <meta name="description" content="Action-packed 3D last-mile courier delivery driving game across scenic winding highways, misty ridges, and bustling fictional districts.">
   
   <!-- Game Typography: Pack 4 Comic & Arcade Dispatch -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,500;0,600;0,700;0,800;0,900;1,700&family=Bebas+Neue&family=Bungee&family=Chakra+Petch:ital,wght@0,600;0,700;1,700&family=Russo+One&display=swap" rel="stylesheet">
+  <!-- Fonts self-hosted in vendor/fonts (tools/vendor.sh); no Google Fonts request. -->
+  <link rel="stylesheet" href="vendor/fonts/fonts.css">
   
-  <!-- Three.js 3D Library with Multi-CDN Fallback -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script>
-    if (typeof THREE === 'undefined') {
-      document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js"><\/script>');
-    }
-  </script>
-  <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script>
-    if (typeof THREE === 'undefined' || typeof THREE.GLTFLoader === 'undefined') {
-      document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"><\/script>');
-    }
-  </script>
+  <!-- Three.js r128, bundled in vendor/three (tools/vendor.sh) so the game needs no CDN. -->
+  <script src="vendor/three/three.min.js"></script>
+  <script src="vendor/three/GLTFLoader.js"></script>
   <!-- SkeletonUtils.clone — required for correctly cloning a SkinnedMesh (the courier
        character); a plain Object3D.clone() shares skeleton bone references across
        instances and breaks per-instance animation/deformation. -->
-  <script src="https://unpkg.com/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
-  <script>
-    if (typeof THREE === 'undefined' || typeof THREE.SkeletonUtils === 'undefined') {
-      document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"><\/script>');
-    }
-  </script>
+  <script src="vendor/three/SkeletonUtils.js"></script>
 
   <!-- Post-processing pipeline: bloom + SSAO for cinematic look -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/FXAAShader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+  <script src="vendor/three/CopyShader.js"></script>
+  <script src="vendor/three/LuminosityHighPassShader.js"></script>
+  <script src="vendor/three/FXAAShader.js"></script>
+  <script src="vendor/three/EffectComposer.js"></script>
+  <script src="vendor/three/RenderPass.js"></script>
+  <script src="vendor/three/ShaderPass.js"></script>
+  <script src="vendor/three/UnrealBloomPass.js"></script>
 
   <script>
     // stage_web.sh swaps the placeholder for the git commit, so staged builds

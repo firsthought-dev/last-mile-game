@@ -19,3 +19,6 @@ for f in loaders/GLTFLoader utils/SkeletonUtils shaders/CopyShader \
 done
 cp "$NM/three/LICENSE" "$T/LICENSE"
 echo "Vendored Three.js $(node -p "require('$NM/three/package.json').version") -> $T"
+
+# --- Fonts (latin + latin-ext; latin-ext is the subset that carries the rupee sign) ---
+node "$ROOT/tools/vendor-fonts.mjs"
