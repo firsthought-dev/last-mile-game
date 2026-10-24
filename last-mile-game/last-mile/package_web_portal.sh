@@ -28,24 +28,11 @@ echo "=================================================="
 # 1. Ensure clean dist directory
 mkdir -p "$DIST_DIR"
 rm -rf "$STAGE_DIR"
-mkdir -p "$STAGE_DIR"
 rm -f "$OUTPUT_ZIP"
 
-# 2. Stage core runtime files
-echo "--> Staging runtime scripts and markup..."
-cp "$DIR/index.html" "$STAGE_DIR/"
-cp "$DIR/game.js" "$STAGE_DIR/"
-cp "$DIR/save.js" "$STAGE_DIR/"
-cp "$DIR/police.js" "$STAGE_DIR/"
-cp "$DIR/ads.js" "$STAGE_DIR/"
-cp "$DIR/style.css" "$STAGE_DIR/"
-
-# 3. Stage assets directory
-echo "--> Staging 3D models, textures, and previews..."
-if [ -d "$DIR/assets" ]; then
-  mkdir -p "$STAGE_DIR/assets"
-  rsync -a --exclude=".DS_Store" "$DIR/assets/" "$STAGE_DIR/assets/"
-fi
+# 2-3. Stage runtime files, assets and vendored libraries (single source of truth)
+echo "--> Staging build via stage_web.sh..."
+bash "$DIR/stage_web.sh" "$STAGE_DIR" >/dev/null
 
 # 4. Invariant checks
 echo "--> Validating portal compliance..."
