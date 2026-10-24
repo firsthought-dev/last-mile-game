@@ -1425,28 +1425,41 @@
   // flat face normals, zero blurry smooth-shaded spheres).
   // --------------------------------------------------------------------------
   const RockGeometryFactory = {
+    // B178: rocks were 144-triangle dodecahedra with one sine of displacement and pinched spherical UVs, which read as smooth lumps.
+    // Now ~320 triangles with three octaves of ridged noise (so they have real edges and planes), a flat-ish bed, per-face box
+    // UVs for the photo rock + normal map (no pole pinching), and baked vertex colour: darker underside / contact AO, faint
+    // strata bands, and a moss tint on up-facing faces. Materials must set vertexColors.
     createFacetedRockGeometry(seed = 1) {
-      const geom = new THREE.DodecahedronGeometry(1.3, 1);
+      const geom = new THREE.DodecahedronGeometry(1.3, 2);
       const pos = geom.attributes.position;
       const v = new THREE.Vector3();
+      const n3 = (x, y, z, k) => Math.sin(x * k + seed) * Math.cos(y * k + seed * 1.7) * Math.sin(z * k + seed * 0.6);
       for (let i = 0; i < pos.count; i++) {
         v.fromBufferAttribute(pos, i);
-        const noise = Math.sin(v.x * 3.5 + seed) * Math.cos(v.y * 3.5 + seed) * Math.sin(v.z * 3.5 + seed);
-        v.multiplyScalar(0.85 + 0.35 * Math.abs(noise));
-        if (v.y < 0) v.y *= 0.65;
+        const r = 1 - 0.55 * Math.abs(n3(v.x, v.y, v.z, 2.3)) - 0.22 * Math.abs(n3(v.x, v.y, v.z, 5.1)) - 0.08 * Math.abs(n3(v.x, v.y, v.z, 11.0));
+        v.multiplyScalar(0.62 + 0.55 * r);
+        if (v.y < 0) v.y *= 0.55;
+        v.y -= 0.0;
         pos.setXYZ(i, v.x, v.y, v.z);
       }
       geom.computeVertexNormals();
-
-      // Spherical UV mapping for photo-rock color and normal maps
-      const uvs = [];
-      for (let i = 0; i < pos.count; i++) {
-        v.fromBufferAttribute(pos, i).normalize();
-        const u = 0.5 + Math.atan2(v.z, v.x) / (2 * Math.PI);
-        const vCoord = 0.5 - Math.asin(Math.max(-1, Math.min(1, v.y))) / Math.PI;
-        uvs.push(u * 2.0, vCoord * 2.0);
+      const uvs = [], cols = [], nrm = geom.attributes.normal, a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), fn = new THREE.Vector3();
+      for (let t = 0; t < pos.count; t += 3) {
+        a.fromBufferAttribute(pos, t); b.fromBufferAttribute(pos, t + 1); c.fromBufferAttribute(pos, t + 2);
+        fn.crossVectors(b.clone().sub(a), c.clone().sub(a)).normalize();
+        const ax = Math.abs(fn.x), ay = Math.abs(fn.y), az = Math.abs(fn.z);
+        const mid = a.clone().add(b).add(c).multiplyScalar(1 / 3);
+        const moss = THREE.MathUtils.clamp((fn.y - 0.45) * 2.2, 0, 1) * (0.5 + 0.5 * Math.sin(mid.x * 4.0 + mid.z * 3.0 + seed));
+        for (const p of [a, b, c]) {
+          if (ay >= ax && ay >= az) uvs.push(p.x * 0.55, p.z * 0.55); else if (ax >= az) uvs.push(p.z * 0.55, p.y * 0.55); else uvs.push(p.x * 0.55, p.y * 0.55);
+          const ao = THREE.MathUtils.clamp(0.62 + 0.38 * THREE.MathUtils.smoothstep(p.y, -1.0, 0.55), 0.55, 1.0);
+          const strata = 0.93 + 0.07 * Math.sin(p.y * 8.0 + 1.3 * Math.sin(p.x * 3.0 + seed));
+          const k = ao * strata;
+          cols.push(k * (1 - 0.18 * moss), k * (1 - 0.02 * moss + 0.04 * moss), k * (1 - 0.30 * moss));
+        }
       }
       geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      geom.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
       return geom;
     }
   };
@@ -1807,13 +1820,13 @@
         for (const i of [0, 1, 2, 0, 2, 3]) { lp.push(q[i].x, q[i].y, q[i].z); lu.push(uvq[i][0], uvq[i][1]); }
       };
       for (let i = 0; i < tiers; i++) {
-        const t = i / (tiers - 1), zt = 2.0 + t * (H - 2.0 - 1.0);
+        const t = i / (tiers - 1), zt = 3.4 + t * (H - 3.4 - 1.0);                // B177: lowest tier at 3.4 (was 2.0) so the skirt clears the ground on slopes
         const L = 4.2 * Math.pow(1 - t, 0.85) + 0.7;
         const K = 5 + Math.round(5 * (1 - t)), off = rnd() * Math.PI * 2;
         const p0 = new V(lean.x * zt / trunkTop, lean.y * zt / trunkTop, zt);
         for (let j = 0; j < K; j++) {
           const az = off + (j / K) * Math.PI * 2 + (rnd() - 0.5) * 0.35;
-          const droop = THREE.MathUtils.degToRad(30 - 13 * t + (rnd() - 0.5) * 12);
+          const droop = THREE.MathUtils.degToRad(24 - 10 * t + (rnd() - 0.5) * 10);
           const dir = new V(Math.cos(droop) * Math.cos(az), Math.cos(droop) * Math.sin(az), -Math.sin(droop));
           const side = new V(-Math.sin(az), Math.cos(az), 0);
           const len = L * (0.85 + rnd() * 0.3), wid = len * (0.95 + rnd() * 0.25);
@@ -2713,6 +2726,24 @@
       }
       return false;
     }
+    // Is (x,z) inside any house compound (boundary-wall rectangle), grown by `margin`? Used to keep trees and rocks off the lawn and the walls.
+    _inCompound(x, z, margin = 0) {
+      const l = this.houseCompounds; if (!l) return false;
+      for (let i = 0; i < l.length; i++) {
+        const c = l[i], dx = x - c.pt.x, dz = z - c.pt.z, n = dx * c.normal.x + dz * c.normal.z, t = dx * c.tangent.x + dz * c.tangent.z;
+        if (n > c.t0 - margin && n < c.t1 + margin && Math.abs(t) < c.W + margin) return true;
+      }
+      return false;
+    }
+    // True when (x,z) is on or within `band` of the boundary wall line itself (not the open lawn inside, not far outside).
+    _onCompoundWall(x, z, band = 0.6) {
+      const l = this.houseCompounds; if (!l) return false;
+      for (let i = 0; i < l.length; i++) {
+        const c = l[i], dx = x - c.pt.x, dz = z - c.pt.z, n = dx * c.normal.x + dz * c.normal.z, t = dx * c.tangent.x + dz * c.tangent.z;
+        if (n > c.t0 - band && n < c.t1 + band && Math.abs(t) < c.W + band && !(n > c.t0 + band && n < c.t1 - band && Math.abs(t) < c.W - band)) return true;
+      }
+      return false;
+    }
     _nearStructure(pos, margin) {
       const l = this._structures();
       for (let i = 0; i < l.length; i++) { const s = l[i]; const dx = s.pos.x - pos.x, dz = s.pos.z - pos.z, rr = s.r + margin; if (dx * dx + dz * dz < rr * rr) return true; }
@@ -2749,6 +2780,7 @@
             const nr = grid.getNearestRoadPoint(pos.x, pos.z, 7.0);
             if (nr) continue;                                           // never on the footpath or road
             if (this._onAccessPath(pos, 2.4)) continue;                  // keep the walkway to the door clear (B167)
+            if (this._onCompoundWall(pos.x, pos.z, 0.55)) continue;      // no tufts through the boundary wall (B180)
             let hit = false; for (const o of structs) { if (o.pos === st.pos) continue; const dx = o.pos.x - pos.x, dz = o.pos.z - pos.z, rr = o.r + 1.0; if (dx * dx + dz * dz < rr * rr) { hit = true; break; } }
             if (hit) continue;
             const lat = Math.hypot(pos.x - near.point.x, pos.z - near.point.z);
@@ -2761,6 +2793,70 @@
             buckets[r3 < 0.82 ? 4 + (r2 > 0.5 ? 1 : 0) : Math.floor(r1 * 4) % 4].push(m);       // ~82% flowering sorrel, the rest leafy filler
           }
         }
+        // Road furniture (poles, signs, beacons) is scattered along the road with no knowledge of the entrance gates, and about half
+        // the gates ended up with a pole right on their axis (B176). Slide such small prop groups sideways, clear of the gate walls.
+        for (const tg of (this.deliveryTargets || [])) {
+          const pi = tg.pathInfo; if (!pi || tg.splineU < u0 - 0.002 || tg.splineU > u1 || pi._furnitureMoved) continue;
+          pi._furnitureMoved = true;
+          const gp = pi.pt.clone().addScaledVector(pi.normal, pi.startT + 0.7 * (Math.sign(pi.endT - pi.startT) || 1));
+          for (const o of this.foliageGroup.children) {
+            if (!o.isGroup || !o.children || o.children.length < 1 || o.children.length > 12 || o.userData.isCrosser || o.userData.isDriveway || o.userData.housePos) continue;
+            const dx = o.position.x - gp.x, dz = o.position.z - gp.z, dT = dx * pi.tangent.x + dz * pi.tangent.z, dN = dx * pi.normal.x + dz * pi.normal.z;
+            if (Math.abs(dT) > 2.4 || Math.abs(dN) > 2.2) continue;
+            const move = (dT >= 0 ? 1 : -1) * 4.4 - dT;
+            o.position.addScaledVector(pi.tangent, move);
+            const ob = this.obstacles.find((x) => x.mesh === o); if (ob) ob.pos.addScaledVector(pi.tangent, move);
+          }
+        }
+        // Lawn tufts inside each boundary wall (B180): a band of the game's own flowering/leafy tufts hugging the inside of the wall
+        // all round, plus the front corners. Own group name so 'house-frontage-clear' does not count them, but still keeps 6.3 m clear
+        // of the drop ring and off the path.
+        const lawnGroup = new THREE.Group(); lawnGroup.name = 'CompoundFlowers'; group.add(lawnGroup);
+        const lbuckets = geoms.map(() => []);
+        for (const tg of (this.deliveryTargets || [])) {
+          const pi = tg.pathInfo, c = pi && pi.compound; if (!c || tg.splineU < u0 - 0.002 || tg.splineU > u1) continue;
+          const sx = Math.round(pi.pt.x * 3), sz = Math.round(pi.pt.z * 3), tLo = Math.min(c.tF, c.tB), tHi = Math.max(c.tF, c.tB);
+          const bands = [   // [tMin, tMax, latMin, latMax]
+            [tLo + 0.45, tHi - 0.45, c.W - 1.35, c.W - 0.5], [tLo + 0.45, tHi - 0.45, -c.W + 0.5, -c.W + 1.35],     // side walls
+            [tHi - 1.35, tHi - 0.5, -c.W + 0.5, c.W - 0.5],                                                         // back wall
+            [tLo + 0.45, tLo + 1.4, 2.5, c.W - 0.5], [tLo + 0.45, tLo + 1.4, -c.W + 0.5, -2.5]];                    // front wall, either side of the gate
+          let k = 0;
+          for (const [t0b, t1b, l0, l1] of bands) {
+            const n = Math.round((t1b - t0b) * (l1 - l0) * 5.5);
+            for (let i = 0; i < n; i++, k++) {
+              const t = t0b + hash(sx, sz, 2000 + k * 3) * (t1b - t0b), lat = l0 + hash(sx, sz, 2001 + k * 3) * (l1 - l0);
+              const pos = pi.pt.clone().addScaledVector(pi.normal, t).addScaledVector(pi.tangent, lat);
+              if (Math.hypot(pos.x - tg.pos.x, pos.z - tg.pos.z) < 6.3) continue;
+              pos.y = this.groundHeightAt(pi.pt, pos, t) - 0.02;
+              const r1 = hash(sx, sz, 2002 + k * 3), r2 = hash(sx, sz, 5000 + k), r3 = hash(sx, sz, 7000 + k);
+              const h = 0.4 + r1 * 0.38, w = h * (1.0 + r2 * 0.2);
+              dummy.position.copy(pos); dummy.rotation.set(0, r3 * Math.PI * 2, 0); dummy.scale.set(w, h, w); dummy.updateMatrix();
+              const m = dummy.matrix.clone(), g = 0.95 + r2 * 0.2; m._tint = new THREE.Color(1.3 * g, 1.34 * g, 1.12 * g);
+              lbuckets[r3 < 0.82 ? 4 + (r2 > 0.5 ? 1 : 0) : Math.floor(r1 * 4) % 4].push(m);
+            }
+          }
+        }
+        lbuckets.forEach((list, v) => addChunkedInstances(lawnGroup, geoms[v], mat, list, { cell: 200, onChunk: (mesh, l) => { l.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; } }));
+        // Planter plants (B176): the SAME flowering/leafy tufts as the rest of the world, standing in the entrance pots. Own group name so
+        // the 'house-frontage-clear' rule (no wild plants on the drop frontage) does not count them.
+        const planterGroup = new THREE.Group(); planterGroup.name = 'PlanterPlants'; group.add(planterGroup);
+        const pbuckets = geoms.map(() => []);
+        for (const tg of (this.deliveryTargets || [])) {
+          const pi = tg.pathInfo; if (!pi || tg.splineU < u0 - 0.002 || tg.splineU > u1) continue;
+          const dirS = Math.sign(pi.endT - pi.startT) || 1, sx = Math.round(pi.pt.x * 3), sz = Math.round(pi.pt.z * 3);
+          for (const sd of [-1, 1]) {
+            const t = pi.endT - dirS * 0.7, base = pi.pt.clone().addScaledVector(pi.normal, t).addScaledVector(pi.tangent, sd * 1.95);
+            base.y = this.groundHeightAt(pi.pt, base, t) + 0.6;
+            for (let i = 0; i < 7; i++) {
+              const r1 = hash(sx, sz, 900 + sd * 20 + i), r2 = hash(sx, sz, 940 + sd * 20 + i), r3 = hash(sx, sz, 980 + sd * 20 + i), a = r1 * Math.PI * 2, rad = Math.sqrt(r2) * 0.2;
+              const h = 0.36 + r3 * 0.22, w = h * 1.05;
+              dummy.position.set(base.x + Math.cos(a) * rad, base.y, base.z + Math.sin(a) * rad); dummy.rotation.set(0, r1 * 6.28, 0); dummy.scale.set(w, h, w); dummy.updateMatrix();
+              const m = dummy.matrix.clone(), g = 0.95 + r2 * 0.2; m._tint = new THREE.Color(1.3 * g, 1.34 * g, 1.12 * g);
+              pbuckets[r3 < 0.8 ? 4 + (r2 > 0.5 ? 1 : 0) : Math.floor(r1 * 4) % 4].push(m);
+            }
+          }
+        }
+        pbuckets.forEach((list, v) => addChunkedInstances(planterGroup, geoms[v], mat, list, { cell: 200, onChunk: (mesh, l) => { l.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; } }));
         // Flower beds along both kerbs of every entrance path (B173): two dense strips, never on the slabs themselves.
         for (const tg of (this.deliveryTargets || [])) {
           const pi = tg.pathInfo; if (!pi || tg.splineU < u0 - 0.002 || tg.splineU > u1) continue;
@@ -4953,10 +5049,8 @@
       pt, normal, tangent, houseSide, houseDist, order, isModernVilla, isWinter, u, tossRadius = 5.5, targetParentGroup = null
     }) {
       // B173: the house sits HOUSE_SETBACK further back than the old placement, which had the plinth touching the footpath
-      // and left no room for an entrance. The drop ring is moved forward by the same amount (see `ring` below) so its WORLD
-      // position, the toss range and everything keyed to targetEntry.pos are unchanged.
+      // and left no room for an entrance. The drop ring now sits at the porch (end of the path).
       const HOUSE_SETBACK = 4.5;
-      const oldHouseY = this.groundHeightAt(pt, pt.clone().addScaledVector(normal, houseDist), houseDist);
       // The old gravel bay drew one prng value per segment for its colour jitter. Keep drawing them so every later house
       // and prop in world generation lands exactly where it did before (the ring must match `main`).
       const legacySegs = Math.max(4, Math.round(Math.abs(houseDist - houseSide * (CONFIG.ROAD_WIDTH * 0.5 - 0.25)) / 2.8));
@@ -4973,16 +5067,17 @@
       const fpOuter = (CONFIG.SIDEWALK && CONFIG.SIDEWALK.enabled) ? CONFIG.ROAD_WIDTH * 0.52 + CONFIG.SIDEWALK.width + 0.12 : CONFIG.ROAD_WIDTH * 0.5 + 0.8;
       const startT = houseSide * fpOuter;
       const endT = houseDist - houseSide * 3.9;                       // stops at the front edge of the house plinth
-      const pathLen = Math.abs(endT - startT);
+      const dirP = Math.sign(endT - startT) || 1, sMesh = startT - dirP * 0.3, eMesh = endT + dirP * 0.9;   // B179: run 0.3 m under the footpath and 0.9 m under the porch slab so no terrain shows at either end
+      const pathLen = Math.abs(eMesh - sMesh);
       const segments = Math.max(6, Math.round(pathLen / 0.7));           // short steps so the kerbs follow the verge easing smoothly
       const PT = 1.8;                                                  // paving texture repeat in metres
       const positions = [], uvs = [], colors = [], indices = [];
       const edgeL = [], edgeR = [], bedL = [], bedR = [];              // per-segment centre/width for the kerbs and beds
-      const slabWarm = new THREE.Color(0xc9c0b0), slabCool = new THREE.Color(0xb3aea6);
+      const slabWarm = new THREE.Color(0x6e665a), slabCool = new THREE.Color(0x5e5a54);
 
       for (let s = 0; s <= segments; s++) {
         const frac = s / segments;
-        const t = THREE.MathUtils.lerp(startT, endT, frac);
+        const t = THREE.MathUtils.lerp(sMesh, eMesh, frac);
         const centerPos = pt.clone().addScaledVector(normal, t);
         centerPos.y = calcTerrainY(centerPos, t) + 0.10;
         const w = 2.8;
@@ -5037,14 +5132,15 @@
           q(a0 + 3, a1 + 3, a1 + 2, a0 + 2);                       // outer face
         }
       };
-      addKerb(edgeL, -1); addKerb(edgeR, +1);
+      const kerbOk = (e) => (e.t - startT) * dirP >= -0.01 && (e.t - endT) * dirP <= 0.05;   // kerbs only along the visible path, not under the footpath / porch
+      addKerb(edgeL.filter(kerbOk), -1); addKerb(edgeR.filter(kerbOk), +1);
       const kerbGeom = new THREE.BufferGeometry();
       kerbGeom.setAttribute('position', new THREE.Float32BufferAttribute(kPos, 3));
       kerbGeom.setAttribute('uv', new THREE.Float32BufferAttribute(kUv, 2));
       kerbGeom.setIndex(kInd);
       kerbGeom.computeVertexNormals();
       const kerbMesh = new THREE.Mesh(kerbGeom, new THREE.MeshStandardMaterial({
-        map: RealTextureFactory.edgeStoneColor(), normalMap: RealTextureFactory.edgeStoneNormal(), roughness: 0.95, side: THREE.DoubleSide, color: 0xd8d0c2
+        map: RealTextureFactory.edgeStoneColor(), normalMap: RealTextureFactory.edgeStoneNormal(), roughness: 0.95, side: THREE.DoubleSide, color: 0x7a7063
       }));
       kerbMesh.receiveShadow = true;
       driveMesh.add(kerbMesh);
@@ -5060,21 +5156,44 @@
         const at = (t, lat) => { const p = pt.clone().addScaledVector(normal, t).addScaledVector(tangent, lat); p.y = calcTerrainY(p, t); return p; };
         const ang = Math.atan2(normal.x * dirS, normal.z * dirS);                       // yaw that points local +Z along the path toward the house
         const parts = [], m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
-        const put = (geo, p, dy, yaw, sx, sy, sz, hex) => {
-          q.setFromEuler(e.set(0, ang + yaw, 0)); m4.compose(new THREE.Vector3(p.x, p.y + dy, p.z), q, new THREE.Vector3(sx, sy, sz));
+        const put = (geo, p, dy, yaw, sx, sy, sz, hex, rx = 0) => {
+          q.setFromEuler(e.set(rx, ang + yaw, 0, 'YXZ')); m4.compose(new THREE.Vector3(p.x, p.y + dy, p.z), q, new THREE.Vector3(sx, sy, sz));
           parts.push({ g: geo.clone().applyMatrix4(m4), c: new THREE.Color(hex) });
         };
         const box = new THREE.BoxGeometry(1, 1, 1), cyl = new THREE.CylinderGeometry(0.5, 0.4, 1, 8), blob = new THREE.IcosahedronGeometry(0.5, 0);
-        const stone = [0xd6cdbd, 0xc9bfae, 0xe0d3b8][Math.floor(hs(1) * 3)], iron = 0x2b2f33, terra = [0xb5532f, 0xc2623a, 0xa0482a][Math.floor(hs(2) * 3)];
+        const stone = [0x756b5e, 0x6a6155, 0x82766a][Math.floor(hs(1) * 3)], iron = 0x2b2f33, terra = [0xb5532f, 0xc2623a, 0xa0482a][Math.floor(hs(2) * 3)];
         const t0 = startT + dirS * 0.7;
         for (const sd of [-1, 1]) {
           const pp = at(t0, sd * 1.72);
           put(box, pp, 0.62, 0, 0.34, 1.24, 0.34, stone);                                 // pillar
-          put(box, pp, 1.3, 0, 0.46, 0.1, 0.46, 0xbab09d);                              // cap
-          put(box, pp, 1.46, 0, 0.2, 0.2, 0.2, 0xf3e2b0);                            // lantern
-          const wl = at(t0, sd * 3.0);
-          put(box, wl, 0.22, 0, 1.5, 0.44, 0.2, stone);                                  // low wall running out along the footpath
+          put(box, pp, 1.3, 0, 0.46, 0.1, 0.46, 0x574f45);                              // cap
+          put(box, pp, 1.46, 0, 0.2, 0.2, 0.2, 0xf3e2b0); parts[parts.length - 1].lamp = true;   // lantern (glows at dusk/night)
         }
+        // Boundary wall (B180): a compound wall right round the premises - front wall either side of the gate, side walls back
+        // along the house, and a back wall behind it - leaving a lawn strip all round for flower tufts. Wall height follows the
+        // ground (each 1.25 m panel is sunk 0.6 m below its lowest corner so slopes never leave gaps), with a cap slab and piers.
+        const CW = 8.0, wF = t0, wB = houseDist + houseSide * 7.2, capHex = 0x574f45;
+        const wall = (tA, lA, tZ, lZ) => {
+          const len = Math.hypot(tZ - tA, lZ - lA), n = Math.max(1, Math.round(len / 1.25)), seg = len / n;
+          const alongLat = Math.abs(lZ - lA) > Math.abs(tZ - tA);
+          for (let k = 0; k < n; k++) {
+            const f0 = k / n, f1 = (k + 1) / n, fm = (f0 + f1) / 2;
+            const p0 = at(tA + (tZ - tA) * f0, lA + (lZ - lA) * f0), p1 = at(tA + (tZ - tA) * f1, lA + (lZ - lA) * f1), pm = at(tA + (tZ - tA) * fm, lA + (lZ - lA) * fm);
+            const lo = Math.min(p0.y, p1.y, pm.y) - 0.6, hi = Math.max(p0.y, p1.y, pm.y) + 1.0, h = hi - lo;
+            put(box, pm, (hi + lo) / 2 - pm.y, 0, alongLat ? seg + 0.04 : 0.24, h, alongLat ? 0.24 : seg + 0.04, stone);
+            put(box, pm, hi - pm.y + 0.04, 0, alongLat ? seg + 0.04 : 0.36, 0.08, alongLat ? 0.36 : seg + 0.04, capHex);
+            if (k % 4 === 0) put(box, p0, (hi + 0.1 + lo) / 2 - p0.y, 0, 0.42, h + 0.1, 0.42, stone);
+          }
+        };
+        for (const sd of [-1, 1]) {
+          wall(wF, sd * 1.95, wF, sd * CW);                                              // front wall, from the gate pillar out to the corner
+          wall(wF, sd * CW, wB, sd * CW);                                                // side wall
+        }
+        wall(wB, -CW, wB, CW);                                                           // back wall
+        for (const [ct, cl] of [[wF, -CW], [wF, CW], [wB, -CW], [wB, CW]]) { const cp = at(ct, cl); put(box, cp, 0.62, 0, 0.5, 1.5, 0.5, stone); put(box, cp, 1.4, 0, 0.62, 0.1, 0.62, capHex); }   // corner piers
+        pathInfo.compound = { tF: wF, tB: wB, W: CW };
+        this.houseCompounds = this.houseCompounds || [];
+        this.houseCompounds.push({ pt: pt.clone(), normal: normal.clone(), tangent: tangent.clone(), t0: Math.min(wF, wB), t1: Math.max(wF, wB), W: CW });
         // gate leaf, hinged on one pillar and swung open about 75 degrees (towards the house)
         const side0 = hs(3) > 0.5 ? -1 : 1, gp = at(t0, side0 * 1.72), gy = ang + side0 * 1.3;
         const hinge = new THREE.Vector3(gp.x + Math.sin(gy) * 0.6, gp.y, gp.z + Math.cos(gy) * 0.6);
@@ -5083,28 +5202,63 @@
         // planters flanking the door end of the path
         for (const sd of [-1, 1]) {
           const pp = at(endT - dirS * 0.7, sd * 1.95);
-          put(cyl, pp, 0.28, 0, 0.55, 0.56, 0.55, terra);
-          put(blob, pp, 0.78, hs(5 + sd) * 3, 0.55 + hs(7) * 0.15, 0.5, 0.55, [0x3f7a35, 0x4a8a3c, 0x356b30][Math.floor(hs(8 + sd) * 3)]);
+          put(cyl, pp, 0.28, 0, 0.55, 0.56, 0.55, terra);                              // pot; its plants are the game's own flowering tufts (see buildHouseFlowers)
+          put(cyl, pp, 0.58, 0, 0.62, 0.06, 0.62, 0x8f3d22);                            // rim
+          put(cyl, pp, 0.6, 0, 0.48, 0.03, 0.48, 0x3a2a1c);                             // soil
         }
         // letterbox post and a lantern post beside the gate
         const mp = at(t0 + dirS * 0.4, (hs(4) > 0.5 ? 1 : -1) * 2.35);
         put(box, mp, 0.55, 0, 0.1, 1.1, 0.1, 0x4a3a2a); put(box, mp, 1.2, 0, 0.42, 0.26, 0.24, [0xc23b2c, 0x2f5fa0, 0x2a7d52][Math.floor(hs(9) * 3)]);
         const lp = at(endT - dirS * 2.2, (hs(4) > 0.5 ? -1 : 1) * 2.35);
-        put(box, lp, 0.7, 0, 0.08, 1.4, 0.08, iron); put(box, lp, 1.55, 0, 0.26, 0.3, 0.26, 0xf3e2b0);
-        // merge
-        const pos = [], nor = [], col = [], idx = [];
-        for (const pr of parts) {
-          const g = pr.g, pa = g.attributes.position, na = g.attributes.normal, o = pos.length / 3;
-          for (let i = 0; i < pa.count; i++) { pos.push(pa.getX(i), pa.getY(i), pa.getZ(i)); nor.push(na.getX(i), na.getY(i), na.getZ(i)); col.push(pr.c.r, pr.c.g, pr.c.b); }
-          if (g.index) for (let i = 0; i < g.index.count; i++) idx.push(g.index.getX(i) + o); else for (let i = 0; i < pa.count; i++) idx.push(o + i);
-          g.dispose();
+        put(box, lp, 0.7, 0, 0.08, 1.4, 0.08, iron); put(box, lp, 1.55, 0, 0.26, 0.3, 0.26, 0xf3e2b0); parts[parts.length - 1].lamp = true;
+        // wheelie bins, a parked bicycle against the lawn side and a washing line behind the house front (B176)
+        const sideA = hs(4) > 0.5 ? 1 : -1, tB = endT - dirS * 0.9;
+        const binP = at(tB, -sideA * 3.2), binP2 = at(tB - dirS * 0.55, -sideA * 3.25);
+        put(cyl, binP, 0.36, 0.2, 0.46, 0.72, 0.46, 0x2f7d4a); put(box, binP, 0.74, 0.2, 0.52, 0.06, 0.52, 0x23603a);
+        put(cyl, binP2, 0.36, -0.1, 0.46, 0.72, 0.46, 0x2f5fa0); put(box, binP2, 0.74, -0.1, 0.52, 0.06, 0.52, 0x23477a);
+        const torus = new THREE.TorusGeometry(0.32, 0.025, 5, 14), bk = at(tB - dirS * 0.2, sideA * 3.4), bikeC = [0xc23b2c, 0x2f5fa0, 0x2a7d52, 0xd9a21b][Math.floor(hs(11) * 4)];
+        for (const wz of [-0.55, 0.55]) put(torus, new THREE.Vector3(bk.x + Math.sin(ang) * wz, bk.y, bk.z + Math.cos(ang) * wz), 0.33, Math.PI / 2, 1, 1, 1, 0x1d1f22);
+        const bz = (z) => new THREE.Vector3(bk.x + Math.sin(ang) * z, bk.y, bk.z + Math.cos(ang) * z);
+        put(box, bz(0.02), 0.68, 0, 0.035, 0.035, 0.65, bikeC);                      // top tube
+        put(box, bz(0.05), 0.5, 0, 0.035, 0.035, 0.78, bikeC, -0.4);                 // down tube
+        put(box, bz(-0.43), 0.535, 0, 0.03, 0.03, 0.5, bikeC, -1.04);                // rear stay
+        put(box, bz(0.5), 0.5, 0, 0.03, 0.03, 0.62, 0x55595e, -1.25);                // fork
+        put(box, bz(-0.3), 0.78, 0, 0.03, 0.3, 0.03, 0x55595e);                      // seat post
+        put(box, bz(-0.3), 0.95, 0, 0.1, 0.045, 0.24, 0x1d1f22);                     // saddle
+        put(box, bz(0.55), 0.84, 0, 0.46, 0.03, 0.03, 0x55595e);                     // handlebar
+        put(box, bz(0.66), 0.95, 0, 0.3, 0.16, 0.22, 0x8a6a3c);                      // front basket
+        const wl1 = at(endT + dirS * 0.4, sideA * 5.4), wl2 = at(endT + dirS * 3.6, sideA * 5.4);
+        put(box, wl1, 1.0, 0, 0.07, 2.0, 0.07, 0x6b5a45); put(box, wl2, 1.0, 0, 0.07, 2.0, 0.07, 0x6b5a45);
+        const wm = new THREE.Vector3((wl1.x + wl2.x) / 2, Math.max(wl1.y, wl2.y), (wl1.z + wl2.z) / 2);
+        put(box, wm, 1.9, 0, 0.015, 0.015, 3.2, 0xcfcfcf);                            // the line
+        const cloth = [0xe8e4d8, 0xc23b2c, 0x2f5fa0, 0xe8b04b, 0xf0f0f0, 0x7a4a8a];
+        for (let k = 0; k < 5; k++) {
+          const f = (k - 2) * 0.62, cp = new THREE.Vector3(wm.x + (wl2.x - wl1.x) / 3.2 * f, wm.y, wm.z + (wl2.z - wl1.z) / 3.2 * f);
+          put(box, cp, 1.52, 0, 0.02, 0.62 + hs(20 + k) * 0.25, 0.46, cloth[Math.floor(hs(30 + k) * cloth.length)]);
         }
-        const pg = new THREE.BufferGeometry();
-        pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); pg.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-        pg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); pg.setIndex(idx);
+        // merge: solid props into one vertex-coloured mesh, lantern boxes into a second one whose emissive follows the window glow
+        const mergeParts = (list) => {
+          const pos = [], nor = [], col = [], idx = [];
+          for (const pr of list) {
+            const g = pr.g, pa = g.attributes.position, na = g.attributes.normal, o = pos.length / 3;
+            for (let i = 0; i < pa.count; i++) { pos.push(pa.getX(i), pa.getY(i), pa.getZ(i)); nor.push(na.getX(i), na.getY(i), na.getZ(i)); col.push(pr.c.r, pr.c.g, pr.c.b); }
+            if (g.index) for (let i = 0; i < g.index.count; i++) idx.push(g.index.getX(i) + o); else for (let i = 0; i < pa.count; i++) idx.push(o + i);
+            g.dispose();
+          }
+          const pg = new THREE.BufferGeometry();
+          pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); pg.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+          pg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); pg.setIndex(idx);
+          return pg;
+        };
         if (!HousesAsset.propMat) HousesAsset.propMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85 });
-        const propMesh = new THREE.Mesh(pg, HousesAsset.propMat); propMesh.castShadow = true; propMesh.receiveShadow = true;
+        const propMesh = new THREE.Mesh(mergeParts(parts.filter((p) => !p.lamp)), HousesAsset.propMat); propMesh.castShadow = true; propMesh.receiveShadow = true;
         driveMesh.add(propMesh);
+        const lamps = parts.filter((p) => p.lamp);
+        if (lamps.length) {
+          if (!HousesAsset.lampMat) HousesAsset.lampMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.6, emissive: 0xffcf80, emissiveIntensity: 0 });
+          if (this.windowMaterials && !this.windowMaterials.includes(HousesAsset.lampMat)) this.windowMaterials.push(HousesAsset.lampMat);
+          driveMesh.add(new THREE.Mesh(mergeParts(lamps), HousesAsset.lampMat));
+        }
       }
 
       // Procedural Modern Architectural Drop Point
@@ -5293,9 +5447,8 @@
         houseGroup.add(ring);
       }
 
-      const ringDy = oldHouseY - housePos.y;                           // the house is on different ground now: keep the ring at its old world height
-      ring.position.z += HOUSE_SETBACK;                                // keep the ring where it was in the world (house group faces +Z = the road)
-      ring.position.y += ringDy;
+      // The drop ring stays where the house model puts it (at the porch, end of the entrance path). It used to be held at its
+      // old world position, which left it 4.5 m out on the lawn away from the house.
 
       // Modeled house: replaces the built-in villa/bungalow above (kept as the
       // stand-in until houses.glb loads). Variant is derived from u rather than
@@ -5310,7 +5463,7 @@
           houseGroup.add(model);
           let spot = null;
           model.traverse((o) => { if (!spot && /^DropSpot/.test(o.name || '')) spot = o; });
-          if (spot) ring.position.set(spot.position.x, spot.position.y + 0.02 + ringDy, spot.position.z + HOUSE_SETBACK);
+          if (spot) ring.position.set(spot.position.x, spot.position.y + 0.02, spot.position.z);
           if (HousesAsset.windowMat && this.windowMaterials && !this.windowMaterials.includes(HousesAsset.windowMat)) {
             this.windowMaterials.push(HousesAsset.windowMat);
           }
@@ -5393,7 +5546,7 @@
       // Rock color: frost-grey for winter, warm sandy for everything else
       const rockBaseColor = isWinter ? (season.snowRockColor || 0xbec4cc) : 0x7a5c3a;
       const rockMat = new THREE.MeshStandardMaterial({
-        color: rockBaseColor,
+        color: rockBaseColor, vertexColors: true,
         roughness: isWinter ? 0.75 : 0.85,
         metalness: 0.05,
         map: RealTextureFactory.rockColor(),
@@ -5833,7 +5986,7 @@
                 v.set(posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi)).applyMatrix4(rotMat).multiply(scaleVec);
                 if (v.y < minY) minY = v.y;
               }
-              const finalPos = new THREE.Vector3(cPos.x, cPos.y - minY, cPos.z);
+              const finalPos = new THREE.Vector3(cPos.x, cPos.y - minY - 0.45 * Math.abs(minY), cPos.z);      // B178: bed the rock into the ground (the road/terrain mesh and the height formula differ by up to ~0.4 m, which left boulders hovering)
               const rockMat4 = new THREE.Matrix4();
               rockMat4.makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
               rockMat4.scale(scaleVec);
@@ -6183,7 +6336,7 @@
                 v.set(posAttr.getX(vi), posAttr.getY(vi), posAttr.getZ(vi)).applyMatrix4(rotMat).multiply(scaleVec);
                 if (v.y < minY) minY = v.y;
               }
-              const finalRockPos = new THREE.Vector3(rockPos.x, groundY - minY, rockPos.z);
+              const finalRockPos = new THREE.Vector3(rockPos.x, groundY - minY - 0.45 * Math.abs(minY), rockPos.z);
               const rockMat4 = new THREE.Matrix4();
               rockMat4.makeRotationFromEuler(new THREE.Euler(rotX, rotY, 0));
               rockMat4.scale(scaleVec);
@@ -6257,6 +6410,7 @@
           o.type === 'building' && o.pos.distanceTo(d.pos) < (o.radius + d.radius + 1.0)
         );
         if (overlapsBuilding) return;
+        if (this._inCompound(d.pos.x, d.pos.z, d.radius + 0.5)) return;                  // B180: nothing grows inside or through a house's boundary wall
         // Same hairpin/switchback risk as skyscrapers, just at a shorter
         // offset — the curve can loop back near a tree's local placement.
         // Billboard sweep clearance: account for camera rotation sweep width (radius * 1.25 + 1.2)
@@ -6315,8 +6469,13 @@
           this.obstacles = this.obstacles.filter(o => !stillOverlapping.includes(o));
         }
         pendingRocks = pendingRocks.filter(r =>
-          !buildings.some(b => r.pos.distanceTo(b.pos) < (r.radius + b.radius))
+          !buildings.some(b => r.pos.distanceTo(b.pos) < (r.radius + b.radius)) && !this._inCompound(r.pos.x, r.pos.z, r.radius + 0.3)
         );
+        {
+          const inWalls = this.obstacles.filter(o => (o.type === 'rock' || o.type === 'tree') && this._inCompound(o.pos.x, o.pos.z, (o.radius || 1) + 0.3));
+          inWalls.forEach(o => { if (o.mesh && o.mesh.parent) o.mesh.parent.remove(o.mesh); });
+          if (inWalls.length) this.obstacles = this.obstacles.filter(o => !inWalls.includes(o));
+        }
 
         // Rule 16: Unconditional road corridor clearance sweep - prune any prop breaching the asphalt corridor
         const minCorridorClear = CONFIG.ROAD_WIDTH * 0.5 + 1.0;
@@ -7599,7 +7758,9 @@
       // Signal post on the verge.
       const side = this.prng.next() > 0.5 ? 1 : -1;
       const postLat = side * (roadHalf + 1.4);
-      const postPos = pt.clone().addScaledVector(normal, postLat);
+      // B176: stand the post beside the crossing's end, not on its centre line - that line is also the axis of the house
+      // gate/path the crossing was placed for (houses call tryPlaceCrossingNear), so a post there blocks the entrance.
+      const postPos = pt.clone().addScaledVector(normal, postLat).addScaledVector(tangent, side * 4.3);
       postPos.y = this.groundHeightAt(pt, postPos, postLat);
 
       const post = new THREE.Group();
@@ -9188,7 +9349,7 @@
 
             rp.y = this.groundHeightAt(pt, rp, rockLat);
             const rockMatCurrent = new THREE.MeshStandardMaterial({
-              color: curPalette.rockColor, roughness: 0.88, metalness: 0.04,
+              color: curPalette.rockColor, vertexColors: true, roughness: 0.88, metalness: 0.04,
               map: RealTextureFactory.rockColor(), normalMap: RealTextureFactory.rockNormal()
             });
             const rock = new THREE.Mesh(streamRockGeom, rockMatCurrent);
@@ -14028,6 +14189,33 @@
       }
     }
 
+    // B179: make the designated house easy to spot. A tall additive light beam (fades out toward the top, ignores fog so it
+    // reads from far away and above the trees) plus a pulsing, brightened ring at the porch of the NEAREST undelivered target,
+    // which is the one the GPS arrow and the DROP prompt already follow. One shared beacon object is moved between targets.
+    _updateTargetBeacon(target) {
+      let b = this._targetBeacon;
+      if (!b) {
+        const H = 30, geo = new THREE.CylinderGeometry(0.55, 0.9, H, 20, 6, true); geo.translate(0, H / 2, 0);
+        const pos = geo.attributes.position, cols = [];
+        for (let i = 0; i < pos.count; i++) { const y = pos.getY(i) / H, a = 0.36 * Math.pow(1 - y, 1.5) * Math.min(1, 0.45 + y * 7); cols.push(0.35, 1.0, 0.72, a); }
+        geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 4));
+        const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false });
+        b = this._targetBeacon = new THREE.Mesh(geo, mat); b.frustumCulled = false; b.renderOrder = 5; b.visible = false;
+      }
+      if (b.parent !== this.scene) this.scene.add(b);
+      const prev = this._beaconTarget;
+      if (prev && prev !== target && prev.ring) { prev.ring.scale.set(1, 1, 1); if (!prev.delivered) prev.ring.material.color.setHex(0x10b981); }
+      this._beaconTarget = target || null;
+      if (!target || target.delivered || !target.ring) { b.visible = false; return; }
+      const t = performance.now() / 1000, pulse = 0.5 + 0.5 * Math.sin(t * 3.2);
+      const dark = this.dayProgress >= 0.64 || this.dayProgress <= 0.08;               // same dusk/night window the window glow uses
+      b.material.blending = dark ? THREE.AdditiveBlending : THREE.NormalBlending; b.material.color.setScalar(dark ? 2.4 : 1.0);
+      b.visible = true; b.position.copy(target.pos); b.position.y = target.pos.y + 0.1;
+      b.scale.set(1 + 0.08 * pulse, 1, 1 + 0.08 * pulse);
+      target.ring.scale.set(1 + 0.12 * pulse, 1, 1 + 0.12 * pulse);
+      target.ring.material.color.setRGB(0.18 + 0.2 * pulse, 0.95 + 0.6 * pulse, 0.62 + 0.35 * pulse);
+    }
+
     updateGPSNavigation() {
       if (!this.world || !this.vehicle) return;
       const playerPos = this.vehicle.mesh.position;
@@ -14046,6 +14234,7 @@
           }
         }
       });
+      this._updateTargetBeacon(nextTarget);
 
       // Update Waypoint HUD Arrow & Modern Delivery Mission Capsule
       const capsule = document.getElementById('delivery-mission-capsule');
