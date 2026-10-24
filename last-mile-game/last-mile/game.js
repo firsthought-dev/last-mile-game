@@ -2757,6 +2757,7 @@
             const sgn = i % 2 ? 1 : -1, along = hash(sx, sz, i * 7) * span, off = 1.7 + hash(sx, sz, i * 7 + 1) * 0.9;
             const t = pi.startT + Math.sign(pi.endT - pi.startT) * along;
             const pos = pi.pt.clone().addScaledVector(pi.normal, t).addScaledVector(pi.tangent, sgn * off);
+            if (Math.hypot(pos.x - tg.pos.x, pos.z - tg.pos.z) < 6.3) continue;   // the drop point's frontage stays bare (B167)
             pos.y = this.groundHeightAt(pi.pt, pos, t) - 0.02;
             const r1 = hash(sx, sz, i * 7 + 2), r2 = hash(sx, sz, i * 7 + 3), r3 = hash(sx, sz, i * 7 + 4);
             const h = 0.4 + r1 * 0.35, w = h * (1.0 + r2 * 0.2);
