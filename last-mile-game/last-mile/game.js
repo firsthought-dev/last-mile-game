@@ -10767,6 +10767,14 @@
       this._firstOpenTime = this._onboardingActive ? Date.now() : null;
 
       this.renderDispatchHub();
+
+      // Play-now: first-time players (and ?play=1 links from portals) go straight
+      // to driving; ?play=0 keeps the hub (test scripts). Pressing the hub's own
+      // DRIVE button keeps the loader, world build and drive start in one code path.
+      const playParam = (window.location.search.match(/[?&]play=([01])\b/) || [])[1];
+      if (playParam === '1' || (this._onboardingActive && playParam !== '0')) {
+        document.getElementById('btn-start-dispatch')?.click();
+      }
     }
 
     // Portals expect the game to stop and go quiet when the tab is hidden.
@@ -10911,6 +10919,7 @@
       }
 
       this.startDrive();
+      this._booting = false;
       requestAnimationFrame(this.animate.bind(this));
     }
 
@@ -13462,10 +13471,14 @@
 
       document.getElementById('btn-start-dispatch')?.addEventListener('click', (e) => {
         e.preventDefault();
+        // Play-now already started the first boot; a second press (or a test
+        // script's click) mid-boot must not build the world twice.
+        if (this._booting) return;
         if (!this._worldBuilt) {
           // First launch: show the full-screen loader and build the world
           // in staged, yielded steps (see _bootWithLoader) before driving.
           this._worldBuilt = true;
+          this._booting = true;
           const loaderEl = document.getElementById('game-loader');
           if (loaderEl) { loaderEl.style.display = 'flex'; loaderEl.style.opacity = '1'; }
           this._bootWithLoader();

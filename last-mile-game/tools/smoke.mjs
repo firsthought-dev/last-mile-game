@@ -1,5 +1,7 @@
 // Headless-browser smoke test of a staged build.
-//   node tools/smoke.mjs <dir> [--out <screens-dir>] [--no-storage]
+//   node tools/smoke.mjs <dir> [--out <screens-dir>] [--no-storage] [--returning]
+// Default = a first-time player (fresh storage): the game must start driving on its own
+// (Play-now). --returning seeds a career save: the hub must show and wait for DRIVE.
 // Serves <dir> under /portal/sub/ (portals host games in a sub-path), blocks every
 // non-local request, starts a drive and holds the throttle for 10 s.
 import fs from 'node:fs';
@@ -11,6 +13,8 @@ const args = process.argv.slice(2);
 const dir = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--out');
 const outDir = args.includes('--out') ? args[args.indexOf('--out') + 1] : null;
 const noStorage = args.includes('--no-storage');
+const returning = args.includes('--returning');
+const tag = noStorage ? ' (storage blocked)' : returning ? ' (returning player)' : '';
 if (!dir) { console.error('usage: smoke.mjs <dir> [--out <dir>] [--no-storage]'); process.exit(2); }
 
 const PROFILES = [
@@ -29,7 +33,7 @@ let failed = false;
 const fail = (profile, msg) => { failed = true; console.error(`  FAIL [${profile}] ${msg}`); };
 
 for (const p of PROFILES) {
-  console.log(`smoke ${p.name}${noStorage ? ' (storage blocked)' : ''}`);
+  console.log(`smoke ${p.name}${tag}`);
   const ctx = await browser.newContext({ viewport: p.viewport, isMobile: p.mobile, hasTouch: p.mobile });
   const page = await ctx.newPage();
   const external = [];
@@ -38,6 +42,11 @@ for (const p of PROFILES) {
   if (noStorage) {
     await page.addInitScript(() => {
       Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('denied', 'SecurityError'); } });
+    });
+  }
+  if (returning) {
+    await page.addInitScript(() => {
+      localStorage.setItem('shiplyp_career_v1', JSON.stringify({ career: { deliveries: 3, shifts: 1 } }));
     });
   }
   await page.route('**/*', (route) => {
@@ -52,10 +61,17 @@ for (const p of PROFILES) {
 
   await page.goto(server.url, { waitUntil: 'load' });
   try {
-    // Either the hub (click Start) or straight into the drive (first-time players).
-    await page.waitForFunction(() => window.game && (window.game.gameState === 'playing' || document.getElementById('btn-start-dispatch')), null, { timeout: BOOT_TIMEOUT });
-    const startsInDrive = await page.evaluate(() => window.game.gameState === 'playing');
-    if (!startsInDrive) await page.evaluate(() => document.getElementById('btn-start-dispatch').click());
+    await page.waitForFunction(() => window.game, null, { timeout: BOOT_TIMEOUT });
+    if (returning) {
+      // Returning players land on the hub and stay there until they press DRIVE.
+      await page.waitForFunction(() => document.getElementById('btn-start-dispatch'), null, { timeout: BOOT_TIMEOUT });
+      await page.waitForTimeout(3000);
+      if (await page.evaluate(() => window.game.gameState === 'playing' || window.game._worldBuilt)) {
+        fail(p.name, 'a returning player was sent straight into the drive (Play-now should be first-time only)');
+      }
+      await page.evaluate(() => document.getElementById('btn-start-dispatch').click());
+    }
+    // First-time players are never clicked for: the game has to start by itself.
     await page.waitForFunction(() => window.game.gameState === 'playing' && window.game.vehicle, null, { timeout: BOOT_TIMEOUT });
   } catch (e) {
     fail(p.name, `never reached gameState "playing": ${e.message.split('\n')[0]}`);
@@ -78,7 +94,7 @@ for (const p of PROFILES) {
   });
   if (outDir) {
     fs.mkdirSync(outDir, { recursive: true });
-    await page.screenshot({ path: path.join(outDir, `smoke-${p.name}${noStorage ? '-nostorage' : ''}.png`) });
+    await page.screenshot({ path: path.join(outDir, `smoke-${p.name}${noStorage ? '-nostorage' : returning ? '-returning' : ''}.png`) });
   }
   // Hidden tab: the game must freeze (and go quiet) while hidden, and move again after.
   const pos = () => page.evaluate(() => { const q = window.game.vehicle.mesh.position; return [q.x, q.z]; });

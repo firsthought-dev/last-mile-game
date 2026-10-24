@@ -10,7 +10,7 @@
     "check:cdn": "node tools/check-no-cdn.mjs --self-test && node tools/check-no-cdn.mjs dist/stage",
     "package": "bash last-mile/package_web_portal.sh",
     "check:size": "node tools/check-size.mjs dist/shiplyp-web-portal.zip",
-    "smoke": "node tools/smoke.mjs dist/stage --out dist/smoke && node tools/smoke.mjs dist/stage --no-storage --out dist/smoke",
+    "smoke": "node tools/smoke.mjs dist/stage --out dist/smoke && node tools/smoke.mjs dist/stage --no-storage --out dist/smoke && node tools/smoke.mjs dist/stage --returning --out dist/smoke",
     "ci": "npm run stage && npm run check:cdn && npm run package && npm run check:size && npm run smoke"
   },
   "keywords": [],
