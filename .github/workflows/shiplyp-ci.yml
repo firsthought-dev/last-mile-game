@@ -1,0 +1,41 @@
+name: Shiplyp web build
+
+on:
+  push:
+    paths:
+      - 'last-mile-game/last-mile/**'
+      - 'last-mile-game/tools/**'
+      - 'last-mile-game/package*.json'
+      - '.github/workflows/shiplyp-ci.yml'
+  pull_request:
+    paths:
+      - 'last-mile-game/last-mile/**'
+      - 'last-mile-game/tools/**'
+      - 'last-mile-game/package*.json'
+      - '.github/workflows/shiplyp-ci.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: last-mile-game
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: last-mile-game/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # stage -> no-CDN scan -> portal ZIP -> size budget -> headless smoke test
+      - run: npm run ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shiplyp-build
+          path: |
+            last-mile-game/dist/shiplyp-web-portal.zip
+            last-mile-game/dist/smoke/*.png
