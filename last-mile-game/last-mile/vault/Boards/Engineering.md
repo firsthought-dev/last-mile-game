@@ -26,11 +26,14 @@ kanban-plugin: board
 	Done on a branch, not merged: faster drawing, richer trees and pines, worn road, textured footpath, real grass ground, warmer grass colour, plants around footpath and houses. Waiting on a real-phone performance check before merging. [[2026-10-19 - Visual Quality Baseline]]
 - [ ] 🔴 **Vehicle roster: Cargo three-wheeler (Rickshaw)** · @{2026-09-27}
 	Cycle, Motorbike and the reworked Muscle Coupe are done, each with its own pay rate; the cargo three-wheeler is still pending its own model. [[Projects/Last-Mile Game]]
-- [ ] 🔴 **Launch blockers**: bundle third-party libraries locally, web portal setup, keep the first download small · @{2026-09-23}
+- [ ] 🔴 **Launch blockers**: web portal setup and a real-phone performance check · @{2026-09-23}
+	Libraries and fonts are now bundled and the first download is within budget (see Done). Left: portal advertising kit, portal accounts, real-phone check. [[Projects/Last-Mile Game]]
 
 
 
 ## ✅ Done
+- [x] B180–B187 Portal-ready build: bundled 3D library and fonts, one shared build recipe, automatic checks, new players start driving straight away, pause when the tab is hidden · @{2026-10-24}
+	[[2026-10-24 - B180-B187 Portal-Ready Build]]
 - [x] B144 Riding along the kerb no longer gives wanted stars for people on the sidewalk · @{2026-10-19}
 	[[2026-10-19 - B144 Sidewalk Pedestrians No Longer Count as Hits]]
 - [x] B140–B143 Spare parcels per shift, barrier hits cost speed, no-assist pay bonus, audio/FPS moved into Settings, shift earnings corrected · @{2026-10-05}

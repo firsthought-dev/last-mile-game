@@ -145,11 +145,15 @@
     const base = defaultProfile();
     if (!loaded || typeof loaded !== 'object') return base;
 
+    // `fresh` is a second copy of the defaults: Object.assign(base, loaded) below
+    // replaces base.career/daily/unlocks with the saved objects, so merging into
+    // base.career afterwards would never fill in a field the save lacks.
+    const fresh = defaultProfile();
     const out = Object.assign(base, loaded);
     out.version = SCHEMA_VERSION;
-    out.career = Object.assign(base.career, loaded.career || {});
-    out.daily = Object.assign(base.daily, loaded.daily || {});
-    out.unlocks = Object.assign(base.unlocks, loaded.unlocks || {});
+    out.career = Object.assign(fresh.career, loaded.career || {});
+    out.daily = Object.assign(fresh.daily, loaded.daily || {});
+    out.unlocks = Object.assign(fresh.unlocks, loaded.unlocks || {});
     out.hints = (loaded.hints && typeof loaded.hints === 'object') ? loaded.hints : {};
     out.stars = (loaded.stars && typeof loaded.stars === 'object') ? loaded.stars : {};
 
@@ -158,8 +162,8 @@
     out.wallet = safeNum(out.wallet, 0);
     out.lifetimeEarned = safeNum(out.lifetimeEarned, 0);
     for (const k of Object.keys(out.career)) out.career[k] = safeNum(out.career[k], 0);
-    if (!Array.isArray(out.unlocks.vehicles)) out.unlocks.vehicles = base.unlocks.vehicles;
-    if (!Array.isArray(out.unlocks.cities)) out.unlocks.cities = base.unlocks.cities;
+    if (!Array.isArray(out.unlocks.vehicles)) out.unlocks.vehicles = fresh.unlocks.vehicles;
+    if (!Array.isArray(out.unlocks.cities)) out.unlocks.cities = fresh.unlocks.cities;
 
     // Defensively clamp selectedVehicle to an unlocked vehicle (never allow locked vehicle on boot/reload)
     const validVehicles = out.unlocks.vehicles;

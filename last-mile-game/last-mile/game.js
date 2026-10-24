@@ -552,7 +552,8 @@
       this.masterFilter = null;
       // One mute flag for all game audio (SFX, engine, wind). The radio was
       // removed entirely (B112), so there is nothing else to mute.
-      this.sfxMuted = localStorage.getItem('shiplyp_sfx_muted') === '1';
+      this.sfxMuted = false;
+      try { this.sfxMuted = localStorage.getItem('shiplyp_sfx_muted') === '1'; } catch (e) { /* storage blocked: start unmuted */ }
       // Whenever gameState isn't 'playing' (menu, dispatch hub, restart),
       // all audio is fully suspended regardless of the mute flag.
       // Initialized to TRUE so nothing plays until the player starts driving.
@@ -583,15 +584,27 @@
           this.masterFilter.connect(this.ctx.destination);
         }
       }
-      if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+      if (this.ctx && this.ctx.state === 'suspended' && !this._silenced) this.ctx.resume();
       return this.ctx;
     }
 
     get muted() { return this.sfxMuted; }
 
+    // Hard silence for ads and hidden tabs. Separate from the player's own mute
+    // setting (sfxMuted), so ending an ad never un-mutes a muted player.
+    mute() {
+      this._silenced = true;
+      try { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); } catch (e) {}
+    }
+
+    unmute() {
+      this._silenced = false;
+      try { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); } catch (e) {}
+    }
+
     toggleMute() {
       this.sfxMuted = !this.sfxMuted;
-      localStorage.setItem('shiplyp_sfx_muted', this.sfxMuted ? '1' : '0');
+      try { localStorage.setItem('shiplyp_sfx_muted', this.sfxMuted ? '1' : '0'); } catch (e) {}
       return this.sfxMuted;
     }
 
@@ -10642,7 +10655,8 @@
       this.currentStyle = null;
       this.needsNormalPass = false;
 
-      let saved = localStorage.getItem('shiplyp_visualStyle');
+      let saved = null;
+      try { saved = localStorage.getItem('shiplyp_visualStyle'); } catch (e) { /* storage blocked: use the default style */ }
       // B116 migration: Enhanced was renamed Crisp, and Classic (removed) was
       // the lightest style, so its players land on the lighter remaining one.
       if (saved === 'enhanced' || saved === 'classic') saved = 'crisp';
@@ -10759,7 +10773,7 @@
       if (style === this.currentStyle) return;
       this.currentStyle = style;
       this.selectedStyle = style;
-      localStorage.setItem('shiplyp_visualStyle', style);
+      try { localStorage.setItem('shiplyp_visualStyle', style); } catch (e) {}
 
       const { bloomPass, filmPass, fxaaPass } = this.game;
 
@@ -10891,6 +10905,7 @@
 
       this.initThree();
       this.initEvents();
+      this.initVisibilityPause();
       this.initHUD();
       this.clock = new THREE.Clock();
       this._worldBuilt = false;
@@ -10913,6 +10928,35 @@
       this._firstOpenTime = this._onboardingActive ? Date.now() : null;
 
       this.renderDispatchHub();
+
+      // Play-now: first-time players (and ?play=1 links from portals) go straight
+      // to driving; ?play=0 keeps the hub (test scripts). Pressing the hub's own
+      // DRIVE button keeps the loader, world build and drive start in one code path.
+      const playParam = (window.location.search.match(/[?&]play=([01])\b/) || [])[1];
+      if (playParam === '1' || (this._onboardingActive && playParam !== '0')) {
+        document.getElementById('btn-start-dispatch')?.click();
+      }
+    }
+
+    // Portals expect the game to stop and go quiet when the tab is hidden.
+    // Browsers already throttle rAF in hidden tabs; this also silences audio and
+    // tells the portal SDK that gameplay stopped. _hiddenPaused freezes the frame
+    // so nothing moves if the page is hidden in a way that keeps rAF running.
+    initVisibilityPause() {
+      this._hiddenPaused = false;
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          if (this.gameState !== 'playing' || this._hiddenPaused) return;
+          this._hiddenPaused = true;
+          sound.mute();
+          if (typeof ShiplypAds !== 'undefined' && ShiplypAds) ShiplypAds.gameplayStop();
+        } else if (this._hiddenPaused) {
+          this._hiddenPaused = false;
+          sound.unmute();
+          this.clock.getDelta(); // drop the time spent hidden so the next frame does not jump
+          if (this.gameState === 'playing' && typeof ShiplypAds !== 'undefined' && ShiplypAds) ShiplypAds.gameplayStart();
+        }
+      });
     }
 
     async _bootWithLoader() {
@@ -11036,6 +11080,7 @@
       }
 
       this.startDrive();
+      this._booting = false;
       requestAnimationFrame(this.animate.bind(this));
     }
 
@@ -13587,10 +13632,14 @@
 
       document.getElementById('btn-start-dispatch')?.addEventListener('click', (e) => {
         e.preventDefault();
+        // Play-now already started the first boot; a second press (or a test
+        // script's click) mid-boot must not build the world twice.
+        if (this._booting) return;
         if (!this._worldBuilt) {
           // First launch: show the full-screen loader and build the world
           // in staged, yielded steps (see _bootWithLoader) before driving.
           this._worldBuilt = true;
+          this._booting = true;
           const loaderEl = document.getElementById('game-loader');
           if (loaderEl) { loaderEl.style.display = 'flex'; loaderEl.style.opacity = '1'; }
           this._bootWithLoader();
@@ -14510,7 +14559,7 @@
         this._fpsAccumFrames = 0;
       }
 
-      if (this._adPaused || window.ShiplypPolice?.isPaused()) {
+      if (this._adPaused || this._hiddenPaused || window.ShiplypPolice?.isPaused()) {
         if (this.composer) {
           this.visualStyle?.preRender();
           this.composer.render();
