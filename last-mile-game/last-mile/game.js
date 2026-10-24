@@ -297,7 +297,7 @@
     VARIANTS: ['House_Cottage', 'House_TwoStorey', 'House_PinkGable'],
     load() {
       if (typeof THREE.GLTFLoader === 'undefined') return;
-      new THREE.GLTFLoader().load('assets/models/houses.glb?v=houses2', (gltf) => {
+      new THREE.GLTFLoader().load('assets/models/houses.glb?v=houses4', (gltf) => {
         gltf.scene.traverse((child) => {
           if (!child.isMesh) return;
           child.castShadow = true;
@@ -2139,6 +2139,10 @@
     roadNormal() { return this._get('roadNormal', 'assets/textures/road_normal.webp'); },
     woodColor() { return this._get('woodColor', 'assets/textures/wood_color.webp'); },
     woodNormal() { return this._get('woodNormal', 'assets/textures/wood_normal.webp'); },
+    pathPaversColor() { return this._get('pathPaversC', 'assets/textures/path_pavers_c.webp'); },
+    pathPaversNormal() { return this._get('pathPaversN', 'assets/textures/path_pavers_n.webp'); },
+    edgeStoneColor() { return this._get('edgeStoneC', 'assets/textures/edge_stone_c.webp'); },
+    edgeStoneNormal() { return this._get('edgeStoneN', 'assets/textures/edge_stone_n.webp'); },
     gravelColor() { return this._get('roadGravel', 'assets/textures/gravel_color.webp'); },
     gravelNormal() { return this._get('roadNormal', 'assets/textures/road_normal.webp'); }
   };
@@ -4916,61 +4920,104 @@
     buildScenicVillaAndTurnout({
       pt, normal, tangent, houseSide, houseDist, order, isModernVilla, isWinter, u, tossRadius = 5.5, targetParentGroup = null
     }) {
+      // B173: the house sits HOUSE_SETBACK further back than the old placement, which had the plinth touching the footpath
+      // and left no room for an entrance. The drop ring is moved forward by the same amount (see `ring` below) so its WORLD
+      // position, the toss range and everything keyed to targetEntry.pos are unchanged.
+      const HOUSE_SETBACK = 4.5;
+      const oldHouseY = this.groundHeightAt(pt, pt.clone().addScaledVector(normal, houseDist), houseDist);
+      // The old gravel bay drew one prng value per segment for its colour jitter. Keep drawing them so every later house
+      // and prop in world generation lands exactly where it did before (the ring must match `main`).
+      const legacySegs = Math.max(4, Math.round(Math.abs(houseDist - houseSide * (CONFIG.ROAD_WIDTH * 0.5 - 0.25)) / 2.8));
+      for (let i = 0; i <= legacySegs; i++) this.prng.next();
+      houseDist += houseSide * HOUSE_SETBACK;
       const calcTerrainY = (pos, latDist) => this.groundHeightAt(pt, pos, latDist);
       const housePos = pt.clone().addScaledVector(normal, houseDist);
       housePos.y = calcTerrainY(housePos, houseDist);
 
-      // PBR Crushed Gravel Turnout Bay connecting road shoulder to the villa
-      const startT = houseSide * (CONFIG.ROAD_WIDTH * 0.5 - 0.25);
-      const segments = Math.max(4, Math.round(Math.abs(houseDist - startT) / 2.8));
+      // Paved entrance path (B173): real concrete paving slabs from the road shoulder up to the house, stone kerb edging either side and a flower-bed strip beyond each kerb (plants added by
+      // buildPathBeds). The path is a constant 2.8 m wide (a flare made the kerbs kink); nothing is ever planted on it.
+      // Starts at the OUTER edge of the footpath (the footpath itself already carries pedestrians over to the gate), so the
+      // kerbs never poke through it; the drop-kerb ramp is the first slab.
+      const fpOuter = (CONFIG.SIDEWALK && CONFIG.SIDEWALK.enabled) ? CONFIG.ROAD_WIDTH * 0.52 + CONFIG.SIDEWALK.width + 0.12 : CONFIG.ROAD_WIDTH * 0.5 + 0.8;
+      const startT = houseSide * fpOuter;
+      const endT = houseDist - houseSide * 3.9;                       // stops at the front edge of the house plinth
+      const pathLen = Math.abs(endT - startT);
+      const segments = Math.max(6, Math.round(pathLen / 0.7));           // short steps so the kerbs follow the verge easing smoothly
+      const PT = 1.8;                                                  // paving texture repeat in metres
       const positions = [], uvs = [], colors = [], indices = [];
-      const gravelBase = new THREE.Color(0xb0a89c);
-      const gravelWarm = new THREE.Color(0xd2c7b5);
+      const edgeL = [], edgeR = [], bedL = [], bedR = [];              // per-segment centre/width for the kerbs and beds
+      const slabWarm = new THREE.Color(0xc9c0b0), slabCool = new THREE.Color(0xb3aea6);
 
       for (let s = 0; s <= segments; s++) {
         const frac = s / segments;
-        const t = THREE.MathUtils.lerp(startT, houseDist, frac);
+        const t = THREE.MathUtils.lerp(startT, endT, frac);
         const centerPos = pt.clone().addScaledVector(normal, t);
-        centerPos.y = calcTerrainY(centerPos, t) + 0.08;
-
-        // Bell-mouth flare at road junction: 4.4m wide at road shoulder, tapering to 3.2m at villa landing
-        const w = THREE.MathUtils.lerp(4.4, 3.2, frac);
+        centerPos.y = calcTerrainY(centerPos, t) + 0.10;
+        const w = 2.8;
         const left = centerPos.clone().addScaledVector(tangent, -w * 0.5);
-        left.y = calcTerrainY(left, t) + 0.08;
+        left.y = calcTerrainY(left, t) + 0.10;
         const right = centerPos.clone().addScaledVector(tangent, w * 0.5);
-        right.y = calcTerrainY(right, t) + 0.08;
-
+        right.y = calcTerrainY(right, t) + 0.10;
         positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
-        uvs.push(0, frac * 4.0, 1, frac * 4.0);
-
-        const c = gravelBase.clone().lerp(gravelWarm, this.prng.next() * 0.4);
+        const dAlong = frac * pathLen;
+        uvs.push(-w * 0.5 / PT, dAlong / PT, w * 0.5 / PT, dAlong / PT);
+        const c = slabWarm.clone().lerp(slabCool, (Math.sin(s * 2.1) * 0.5 + 0.5) * 0.6);
         colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+        edgeL.push({ p: left, t, w, frac }); edgeR.push({ p: right, t, w, frac });
       }
-
       for (let s = 0; s < segments; s++) {
         const a = s * 2, b = a + 1, c = a + 2, d = a + 3;
         indices.push(a, b, c, b, d, c);
       }
-
       const driveGeom = new THREE.BufferGeometry();
       driveGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
       driveGeom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       driveGeom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
       driveGeom.setIndex(indices);
       driveGeom.computeVertexNormals();
-
       const driveMat = new THREE.MeshStandardMaterial({
-        map: RealTextureFactory.gravelColor(),
-        normalMap: RealTextureFactory.gravelNormal(),
-        vertexColors: true,
-        roughness: 0.88,
-        metalness: 0.04,
-        side: THREE.DoubleSide
+        map: RealTextureFactory.pathPaversColor(), normalMap: RealTextureFactory.pathPaversNormal(), normalScale: new THREE.Vector2(0.8, 0.8),
+        vertexColors: true, roughness: 0.92, metalness: 0.0, side: THREE.DoubleSide
       });
       const driveMesh = new THREE.Mesh(driveGeom, driveMat);
       driveMesh.receiveShadow = true;
       driveMesh.userData.isDriveway = true;
       driveMesh.userData.housePos = housePos.clone();
+
+      // Stone kerb edging: a raised bar (top + two sides) along each edge of the path.
+      const kPos = [], kUv = [], kInd = [];
+      const KW = 0.20, KH = 0.14, KT = 1.4;
+      const addKerb = (edge, outSign) => {
+        for (let s = 0; s < edge.length; s++) {
+          const e = edge[s]; const inner = e.p, outer = e.p.clone().addScaledVector(tangent, outSign * KW);
+          const yb = inner.y - 0.02, yt = inner.y + KH;
+          const along = (e.frac * pathLen) / KT;
+          const iB = new THREE.Vector3(inner.x, yb, inner.z), iT = new THREE.Vector3(inner.x, yt, inner.z);
+          const oB = new THREE.Vector3(outer.x, yb, outer.z), oT = new THREE.Vector3(outer.x, yt, outer.z);
+          [iB, iT, oT, oB].forEach((v, k) => { kPos.push(v.x, v.y, v.z); kUv.push(k === 0 || k === 3 ? 0 : 0.5, along * (k < 2 ? 1 : 1)); });
+        }
+        const base = kPos.length / 3 - edge.length * 4;
+        for (let s = 0; s < edge.length - 1; s++) {
+          const a0 = base + s * 4, a1 = base + (s + 1) * 4;
+          const q = (p0, p1, p2, p3) => kInd.push(p0, p1, p2, p0, p2, p3);
+          q(a0 + 1, a0 + 2, a1 + 2, a1 + 1);                       // top
+          q(a0 + 0, a0 + 1, a1 + 1, a1 + 0);                       // inner face
+          q(a0 + 3, a1 + 3, a1 + 2, a0 + 2);                       // outer face
+        }
+      };
+      addKerb(edgeL, -1); addKerb(edgeR, +1);
+      const kerbGeom = new THREE.BufferGeometry();
+      kerbGeom.setAttribute('position', new THREE.Float32BufferAttribute(kPos, 3));
+      kerbGeom.setAttribute('uv', new THREE.Float32BufferAttribute(kUv, 2));
+      kerbGeom.setIndex(kInd);
+      kerbGeom.computeVertexNormals();
+      const kerbMesh = new THREE.Mesh(kerbGeom, new THREE.MeshStandardMaterial({
+        map: RealTextureFactory.edgeStoneColor(), normalMap: RealTextureFactory.edgeStoneNormal(), roughness: 0.95, side: THREE.DoubleSide, color: 0xd8d0c2
+      }));
+      kerbMesh.receiveShadow = true;
+      driveMesh.add(kerbMesh);
+      // Remember the path so buildPathBeds() can lay the flower beds along it once the rest of the world exists.
+      const pathInfo = { pt: pt.clone(), normal: normal.clone(), tangent: tangent.clone(), houseSide, startT, endT };
 
       // Procedural Modern Architectural Drop Point
       const houseGroup = new THREE.Group();
@@ -5158,6 +5205,10 @@
         houseGroup.add(ring);
       }
 
+      const ringDy = oldHouseY - housePos.y;                           // the house is on different ground now: keep the ring at its old world height
+      ring.position.z += HOUSE_SETBACK;                                // keep the ring where it was in the world (house group faces +Z = the road)
+      ring.position.y += ringDy;
+
       // Modeled house: replaces the built-in villa/bungalow above (kept as the
       // stand-in until houses.glb loads). Variant is derived from u rather than
       // this.prng so choosing it doesn't shift the rest of world generation.
@@ -5171,7 +5222,7 @@
           houseGroup.add(model);
           let spot = null;
           model.traverse((o) => { if (!spot && /^DropSpot/.test(o.name || '')) spot = o; });
-          if (spot) ring.position.set(spot.position.x, spot.position.y + 0.02, spot.position.z);
+          if (spot) ring.position.set(spot.position.x, spot.position.y + 0.02 + ringDy, spot.position.z + HOUSE_SETBACK);
           if (HousesAsset.windowMat && this.windowMaterials && !this.windowMaterials.includes(HousesAsset.windowMat)) {
             this.windowMaterials.push(HousesAsset.windowMat);
           }
@@ -5206,7 +5257,8 @@
         ring: ring,
         delivered: false,
         splineU: u,
-        tossRadius: tossRadius
+        tossRadius: tossRadius,
+        pathInfo: pathInfo
       };
       this.deliveryTargets.push(targetEntry);
       this.addFenceGap(pt, normal, houseSide, 4.5);
