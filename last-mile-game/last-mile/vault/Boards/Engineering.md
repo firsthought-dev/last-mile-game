@@ -32,6 +32,8 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B200–B206 Unused code and asset cleanup: removed unused legacy code and an unused texture, style previews now a lighter image format; smaller download, no change for players · @{2026-10-24}
+	[[2026-10-24 - Unused code and asset cleanup]]
 - [x] B180–B187 Portal-ready build: bundled 3D library and fonts, one shared build recipe, automatic checks, new players start driving straight away, pause when the tab is hidden · @{2026-10-24}
 	[[2026-10-24 - B180-B187 Portal-Ready Build]]
 - [x] B144 Riding along the kerb no longer gives wanted stars for people on the sidewalk · @{2026-10-19}
