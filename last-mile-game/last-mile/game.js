@@ -12885,21 +12885,6 @@
       this.resetInactivity();
       this.updateHUDStats();
 
-      if (typeof window !== 'undefined' && window.location.search.includes('approach=1') && this.world?.deliveryTargets?.length) {
-        const target = this.world.deliveryTargets[0];
-        const targetU = target.splineU;
-        const totalL = this.world.curve.getLength();
-        const approachU = Math.max(0, targetU - 45.0 / totalL);
-        const pt = this.world.curve.getPointAt(approachU);
-        const tang = this.world.curve.getTangentAt(approachU);
-        this.vehicle.mesh.position.copy(pt).add(new THREE.Vector3(0, 0.39, 0));
-        this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
-        this.vehicle.heading = this.vehicle.velocityHeading;
-        this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 11.11 : 10.0;
-        this.updateGPSNavigation();
-      }
-
       // First-run: teleport the vehicle close to the first target so the player
       // sees it immediately and can complete a delivery within ~30 seconds.
       if (this._onboardingActive && this.world?.deliveryTargets?.length && this.world.curve) {
@@ -13457,17 +13442,6 @@
     }
 
     updateCamera(dt) {
-
-      if (typeof window !== 'undefined' && window.location.search.includes('view_villa=1') && this.world?.deliveryTargets?.length) {
-        const target = this.world.deliveryTargets[0];
-        const targetPos = target.pos;
-        const targetU = target.splineU;
-        const pt = this.world.curve.getPointAt(targetU);
-        const tang = this.world.curve.getTangentAt(targetU);
-        this.camera.position.copy(pt).add(new THREE.Vector3(0, 3.2, 0)).addScaledVector(tang, -10.0);
-        this.camera.lookAt(targetPos.x, targetPos.y + 1.2, targetPos.z);
-        return;
-      }
 
       if (!this.vehicle || !this.vehicle.mesh) return;
 
