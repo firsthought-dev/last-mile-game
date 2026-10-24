@@ -1882,125 +1882,6 @@
   };
 
 
-  // Near-field grass layer (B157). Slow Roads' grassy ground is a carpet of large, soft, overlapping tufts close
-  // to the camera. Static placement cannot do that over an 8 km corridor (~1.4 tufts/m2 is hundreds of
-  // thousands of instances), so this builds dense clumps in 8 m cells around the camera on demand (a few
-  // per tick), one InstancedMesh per cell, and drops cells that fall behind. Tufts shrink to nothing between
-  // FADE0 and RADIUS in the vertex shader, so cells never pop. The 6 atlas variants are selected per instance
-  // with an instanced UV offset, so there is no per-variant draw call. Placement is a pure hash of the cell
-  // and index (never the world prng), so a cell rebuilds identically. Kill switch: localStorage.shiplyp_nearGrass = '0'.
-  class NearGrassLayer {
-    constructor(world, scene) {
-      this.world = world; this.scene = scene; this.cells = new Map(); this._acc = 1; this._on = true;
-      this._on = false;                                              // superseded by buildGroundCover, which covers the WHOLE route at load; this streamed layer left bare ground far from the player
-      try { this._on = localStorage.getItem('shiplyp_nearGrass') === '1'; } catch (e) { /* stay off */ }
-      this.group = new THREE.Group(); this.group.name = 'NearGrass'; scene.add(this.group);
-      NearGrassLayer.RADIUS = 58; NearGrassLayer.FADE0 = 38; NearGrassLayer.CELL = 9;
-      this.geom = NearGrassLayer.geometry(); this.mat = NearGrassLayer.material();
-    }
-    static geometry() {
-      if (NearGrassLayer._geom) return NearGrassLayer._geom;
-      const pos = [], uv = [];
-      for (let k = 0; k < 3; k++) {                                   // 3 crossed quads, tile 0 UVs (offset per instance)
-        const a = k * Math.PI / 3, cx = Math.cos(a) * 0.5, cz = Math.sin(a) * 0.5;
-        const q = [[-cx, 0, -cz], [cx, 0, cz], [cx, 1, cz], [-cx, 1, -cz]], uvq = [[0, 0], [1 / 6, 0], [1 / 6, 1], [0, 1]];
-        for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(q[i][0], q[i][1], q[i][2]); uv.push(uvq[i][0], uvq[i][1]); }
-      }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-      g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(pos.length / 3).fill(0).flatMap(() => [0, 1, 0]), 3));
-      g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.5, 0), 1.2);
-      return (NearGrassLayer._geom = g);
-    }
-    static material() {
-      if (NearGrassLayer._mat) return NearGrassLayer._mat;
-      const base = RoadGrassFactory.material();
-      const m = new THREE.MeshLambertMaterial({ map: base.map, alphaTest: 0.5, side: THREE.DoubleSide });
-      m.onBeforeCompile = (shader) => {
-        shader.uniforms.uFade = { value: new THREE.Vector2(NearGrassLayer.FADE0, NearGrassLayer.RADIUS) };
-        shader.uniforms.uCam = { value: new THREE.Vector3(1e6, 0, 1e6) };       // fed every frame by the layer; cameraPosition is not reliable here
-        m.userData.shader = shader;
-        shader.vertexShader = shader.vertexShader
-          .replace('#include <common>', '#include <common>\nattribute vec2 aUvOff;\nuniform vec2 uFade;\nuniform vec3 uCam;')
-          .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_UV\nvUv += aUvOff;\n#endif')
-          .replace('#include <begin_vertex>', `#include <begin_vertex>
-            vec3 shpOrg = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-            float shpD = distance(uCam, shpOrg);
-            transformed *= (1.0 + 0.45 * smoothstep(8.0, uFade.x, shpD)) * (1.0 - smoothstep(uFade.x, uFade.y, shpD));   // a little bigger with distance so the carpet still reads, then shrink away`);
-      };
-      return (NearGrassLayer._mat = m);
-    }
-    _hash(a, b, c) { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2246822519)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
-    _buildCell(cx, cz) {
-      const w = this.world, C = NearGrassLayer.CELL, grid = w.roadSpatialGrid, pts = w.roadSpacedPoints;
-      const out = [], up = new THREE.Vector3(0, 1, 0), dummy = new THREE.Object3D();
-      const buildings = (w.obstacles || []).filter(o => o.type === 'building');
-      const COUNT = 260;
-      for (let i = 0; i < COUNT; i++) {
-        const x = (cx + this._hash(cx, cz, i * 3)) * C, z = (cz + this._hash(cx, cz, i * 3 + 1)) * C;
-        const near = grid.getNearestRoadPoint(x, z, 34);
-        if (!near) continue;
-        const lat = near.dist;
-        if (lat < 6.1 || lat > 31) continue;                          // past the footpath/barrier, inside the corridor
-        // density falls off with distance from the road
-        if (this._hash(cx, cz, i * 3 + 2) > 1.0 - Math.max(0, (lat - 6.1) / 30) * 0.7) continue;
-        const pos = new THREE.Vector3(x, 0, z);
-        let blocked = false; for (const o of buildings) { if (o.pos.distanceTo(pos) < o.radius + 1.6) { blocked = true; break; } }
-        if (blocked) continue;
-        const idx = near.index, p0 = pts[idx], p1 = pts[Math.min(idx + 1, pts.length - 1)];
-        const tx = p1.x - p0.x, tz = p1.z - p0.z, side = Math.sign(tx * (z - p0.z) - tz * (x - p0.x)) || 1;
-        if (w._inTunnelAtU && w._inTunnelAtU(idx / (pts.length - 1), 3)) continue;
-        pos.y = w.groundHeightAt(near.point, pos, side * lat) - 0.02;
-        const r1 = this._hash(cx, cz, i * 7 + 11), r2 = this._hash(cx, cz, i * 7 + 12), r3 = this._hash(cx, cz, i * 7 + 13);
-        const h = 0.55 + r1 * 0.45, wd = h * (1.0 + r2 * 0.25);
-        dummy.position.copy(pos); dummy.rotation.set((r3 - 0.5) * 0.35, r2 * Math.PI * 2, (r1 - 0.5) * 0.35); dummy.scale.set(wd, h, wd); dummy.updateMatrix();
-        out.push({ m: dummy.matrix.clone(), v: this._hash(cx, cz, i * 7 + 14) < 0.10 ? 4 + (r3 > 0.5 ? 1 : 0) : Math.floor(r2 * 4) % 4, g: 0.9 + r3 * 0.2 });
-      }
-      if (!out.length) return null;
-      const mesh = new THREE.InstancedMesh(this.geom, this.mat, out.length);
-      const off = new Float32Array(out.length * 2), col = new THREE.Color();
-      out.forEach((o, i) => { mesh.setMatrixAt(i, o.m); off[i * 2] = o.v / 6; off[i * 2 + 1] = 0; mesh.setColorAt(i, col.setRGB(1.25 * o.g, 1.3 * o.g, 1.08 * o.g)); });
-      mesh.geometry = this.geom.clone(); mesh.geometry.boundingSphere = null;
-      mesh.geometry.setAttribute('aUvOff', new THREE.InstancedBufferAttribute(off, 2));
-      mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true; mesh.frustumCulled = false;
-      // cell-sized culling sphere so whole far cells are skipped by the renderer
-      mesh.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1); mesh.frustumCulled = false;
-      mesh.userData.cellCentre = new THREE.Vector3((cx + 0.5) * C, 0, (cz + 0.5) * C);
-      return mesh;
-    }
-    update(camPos, dt) {
-      if (!this._on || !this.world || !this.world.roadSpatialGrid || !this.world.roadSpacedPoints) return;
-      const sh = this.mat.userData.shader; if (sh) sh.uniforms.uCam.value.copy(camPos);   // every frame, so the shrink tracks the camera
-      this._acc += dt; if (this._acc < 0.2) return; this._acc = 0;
-      if (this.world.seasonKey === 'winter') return;
-      const C = NearGrassLayer.CELL, R = NearGrassLayer.RADIUS;
-      const c0x = Math.floor((camPos.x - R) / C), c1x = Math.floor((camPos.x + R) / C), c0z = Math.floor((camPos.z - R) / C), c1z = Math.floor((camPos.z + R) / C);
-      // drop cells that are well out of range
-      this.cells.forEach((mesh, key) => {
-        if (!mesh) return;
-        if (mesh.userData.cellCentre.distanceTo(camPos) > R + C * 2.5) { this.group.remove(mesh); mesh.geometry.dispose(); mesh.dispose(); this.cells.delete(key); }
-      });
-      this.cells.forEach((mesh, key) => { if (!mesh && this._far(key, camPos, R + C * 2.5)) this.cells.delete(key); });
-      // build the nearest missing cells, at most 3 per tick
-      const want = [];
-      for (let cx = c0x; cx <= c1x; cx++) for (let cz = c0z; cz <= c1z; cz++) {
-        const key = cx + ',' + cz; if (this.cells.has(key)) continue;
-        const dx = (cx + 0.5) * C - camPos.x, dz = (cz + 0.5) * C - camPos.z, d = Math.hypot(dx, dz);
-        if (d <= R + C) want.push([d, cx, cz, key]);
-      }
-      want.sort((a, b) => a[0] - b[0]);
-      const budget = this.cells.size < 14 ? 8 : 3;                     // fill quickly after a spawn/teleport, trickle while driving
-      for (let i = 0; i < Math.min(budget, want.length); i++) {
-        const [, cx, cz, key] = want[i]; const mesh = this._buildCell(cx, cz);
-        this.cells.set(key, mesh);                                     // null = empty cell, remembered so it is not retried
-        if (mesh) this.group.add(mesh);
-      }
-    }
-    _far(key, camPos, lim) { const [cx, cz] = key.split(',').map(Number), C = NearGrassLayer.CELL; return Math.hypot((cx + 0.5) * C - camPos.x, (cz + 0.5) * C - camPos.z) > lim; }
-    dispose() { this.cells.forEach(m => { if (m) { this.group.remove(m); m.geometry.dispose(); m.dispose(); } }); this.cells.clear(); this.scene.remove(this.group); }
-  }
-
   // Roadside grass overhang (B150). Tufts grow at the outer footpath edge and the barrier
   // base and lean in over the footpath. Each tuft is 3 crossed quads (6 tris) using one of
   // 4 tufts in an original atlas (assets/textures/grass_tufts.webp, built by
@@ -10836,8 +10717,6 @@
       // First-run: force easy so the first house spawns close and the timer is generous.
       if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
-      if (this.nearGrass) this.nearGrass.dispose();
-      this.nearGrass = new NearGrassLayer(this.world, this.scene);
       // Built AFTER the props so they can see the buildings, tea stalls and garages (B164).
       if (this._roadsideGrass) this.scene.remove(this._roadsideGrass);
       this._roadsideGrass = this.world.buildRoadsideGrass(0, 1);
@@ -11189,8 +11068,6 @@
       this.world.createMountainArches(this.scene, season);
       if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
-      if (this.nearGrass) this.nearGrass.dispose();
-      this.nearGrass = new NearGrassLayer(this.world, this.scene);
       // Built AFTER the props so they can see the buildings, tea stalls and garages (B164).
       if (this._roadsideGrass) this.scene.remove(this._roadsideGrass);
       this._roadsideGrass = this.world.buildRoadsideGrass(0, 1);
@@ -14453,9 +14330,6 @@
             }
           }
         }
-
-        // Near-field grass carpet follows the camera (B157)
-        if (this.nearGrass && this.camera) this.nearGrass.update(this.camera.position, dt);
 
         // Continuous Diurnal Cycle, Atmosphere, Auto-Headlights & Lighting
         this.updateDayNightCycle(dt);
