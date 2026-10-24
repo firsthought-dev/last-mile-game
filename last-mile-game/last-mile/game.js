@@ -2166,11 +2166,6 @@
       this.crossers = [];
       this.patrons = [];
       this.trafficSignals = [];
-      // Thin roadside props (poles, lampposts) the camera can end up
-      // staring straight through when the on-foot courier walks up close
-      // to one — tracked separately from `obstacles` (which only stores a
-      // position/radius, not the mesh) so the camera can fade them out.
-      this.occluderMeshes = [];
 
       this.districtSimplexMap = new Map();
       this.generateSpline();
@@ -6736,7 +6731,6 @@
       g.lookAt(pt.x, pos.y, pt.z); // flatten (Pattern 8): cross-arms parallel to the road
       this.foliageGroup.add(g);
       this.obstacles.push({ pos: pos.clone(), radius: 0.9, type: 'pole' });
-      if (this.occluderMeshes) this.occluderMeshes.push(g);
     }
 
     spawnStreetLamp(pt, normal, side) {
@@ -6753,7 +6747,6 @@
       g.lookAt(pt.x, pos.y, pt.z); // arm reaches toward the road (+Z after lookAt)
       this.foliageGroup.add(g);
       this.obstacles.push({ pos: pos.clone(), radius: 0.8, type: 'pole' });
-      if (this.occluderMeshes) this.occluderMeshes.push(g);
     }
 
     spawnMilestone(pt, normal, side) {
@@ -7499,7 +7492,6 @@
       post.lookAt(postPos.x + tangent.x, postPos.y, postPos.z + tangent.z);
       (this.foliageGroup || scene).add(post);
       this.obstacles.push({ pos: postPos.clone(), radius: 0.7, type: 'pole' });
-      if (this.occluderMeshes) this.occluderMeshes.push(post);
 
       const signal = {
         lamps,
@@ -13624,71 +13616,6 @@
           this.renderDispatchHub();
         }
       };
-    }
-
-    // Fades out thin roadside props (poles, lampposts) when they sit
-    // directly between the on-foot follow camera and the courier — a pole
-    // right next to a house the camera lingers close to otherwise reads as
-    // clipping straight through the character. Raycasts camera->subject,
-    // fades anything hit down to translucent, and restores anything no
-    // longer hit back to opaque.
-    updateOccluderFade(dt, subjectPos) {
-      if (!this.world || !this.world.occluderMeshes || !this.world.occluderMeshes.length) return;
-      if (!this._occluderRaycaster) this._occluderRaycaster = new THREE.Raycaster();
-      if (!this._fadedOccluders) this._fadedOccluders = new Set();
-
-      const camPos = this.camera.position;
-      const toSubject = subjectPos.clone().sub(camPos);
-      const dist = toSubject.length();
-      if (dist < 0.01) return;
-      toSubject.normalize();
-
-      this._occluderRaycaster.set(camPos, toSubject);
-      this._occluderRaycaster.far = dist - 0.3; // stop short of the subject itself
-      this._occluderRaycaster.near = 0.1;
-
-      // Pre-filter: only test occluder meshes within 20m of the subject.
-      // Buildings farther away cannot physically sit on the camera-to-subject ray,
-      // so skipping them avoids unnecessary BVH traversal per frame.
-      const nearOccluders = this.world.occluderMeshes.filter(
-        m => m.position.distanceToSquared(subjectPos) < 400 // 20m²
-      );
-      const hits = this._occluderRaycaster.intersectObjects(
-        nearOccluders.length ? nearOccluders : this.world.occluderMeshes, true
-      );
-      const hitRoots = new Set();
-      hits.forEach(h => {
-        let o = h.object;
-        while (o.parent && !this.world.occluderMeshes.includes(o)) o = o.parent;
-        hitRoots.add(o);
-      });
-
-      const FADE_TARGET = 0.18;
-      const fadeLerp = Math.min(1.0, 1.0 - Math.exp(-10.0 * dt));
-
-      hitRoots.forEach(root => {
-        this._fadedOccluders.add(root);
-        root.traverse(n => {
-          if (n.isMesh && n.material) {
-            n.material.transparent = true;
-            n.material.opacity = THREE.MathUtils.lerp(n.material.opacity ?? 1, FADE_TARGET, fadeLerp);
-          }
-        });
-      });
-
-      // Restore anything that was faded last frame but isn't hit anymore.
-      this._fadedOccluders.forEach(root => {
-        if (hitRoots.has(root)) return;
-        let done = true;
-        root.traverse(n => {
-          if (n.isMesh && n.material) {
-            n.material.opacity = THREE.MathUtils.lerp(n.material.opacity ?? 1, 1.0, fadeLerp);
-            if (n.material.opacity < 0.98) done = false;
-            else { n.material.opacity = 1.0; n.material.transparent = false; }
-          }
-        });
-        if (done) this._fadedOccluders.delete(root);
-      });
     }
 
     // First-person gets a much closer near-clip than every other view: any
