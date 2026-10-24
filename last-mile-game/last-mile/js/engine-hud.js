@@ -1000,9 +1000,12 @@
         const nextLine = rank.next
           ? `₹${rank.toNext.toLocaleString('en-IN')} to ${rank.next.name}`
           : 'Top rank reached';
+        const goal = Career.dailyGoal();
+        const savedNote = (daily && daily.event === 'saved') ? ' &bull; your grace day kept the streak alive' : '';
         const dailyLine = (daily && daily.bonus > 0)
-          ? `<div class="career-daily-row">${UI.icon('flame', 13)} Day ${daily.streak} check-in &bull; +₹${daily.bonus} paid into your account</div>`
+          ? `<div class="career-daily-row">${UI.icon('flame', 13)} Day ${daily.streak} check-in &bull; +₹${daily.bonus} paid into your account${savedNote}</div>`
           : '';
+        const goalLine = `<div class="career-daily-row">${UI.icon('check', 13)} Today's goal: ${goal.paid ? 'done, +₹' + goal.bonus + ' paid' : goal.done + '/' + goal.target + ' drops for +₹' + goal.bonus}</div>`;
 
         careerStrip = `
           <div class="hub-career-strip">
@@ -1024,6 +1027,7 @@
               <span><b>${stats.shifts}</b> ${stats.shifts === 1 ? 'SHIFT' : 'SHIFTS'}</span>
             </div>
             ${dailyLine}
+            ${goalLine}
           </div>
         `;
       }

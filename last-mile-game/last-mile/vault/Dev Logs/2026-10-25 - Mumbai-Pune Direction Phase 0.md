@@ -12,5 +12,6 @@ This note grows as Phase 0 units land. Nothing here changes how the game plays y
 - **Baseline measured:** the current sharp-outline look is heavier than the target for mid-range phones, so lighter ways to draw outlines will be tested before more is added to the scene.
 - **A start-up layout issue was found** for first-time players (some garden plants sit in front of delivery houses). Evidence is gathered; the fix waits for a go-ahead.
 - **Junction prototype:** a four-way junction was prototyped two different ways on a side branch, to choose how roads with crossings will be represented. The choice is pending.
+- **Streak forgiveness and a daily goal arrive** (from an earlier unmerged experiment): one missed day no longer wipes the streak, and delivering three parcels in a day pays a bonus. The hub shows today's goal. Progress on a new device or after reinstall is unchanged (still on-device).
 
 Related: [[Projects/Last-Mile Game]], [[2026-10-25 - Modular Codebase Architecture Split]]

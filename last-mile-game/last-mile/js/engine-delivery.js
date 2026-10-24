@@ -220,6 +220,15 @@
         sound.playRepair();
         this.addNotification(`${UI.icon('flame')} PROMOTED — ${careerResult.promoted.name.toUpperCase()}`, 'success', 6000);
       }
+      // Daily goal (B146): a quiet progress note per drop, and one celebration when it pays.
+      if (careerResult && careerResult.dailyGoal) {
+        const goal = careerResult.dailyGoal;
+        if (goal.justCompleted) {
+          this.addNotification(`${UI.icon('check')} DAILY GOAL DONE — +₹${goal.bonus}`, 'success', 5000);
+        } else if (goal.done < goal.target) {
+          this.addNotification(`${UI.icon('check')} Daily goal ${goal.done}/${goal.target}`, 'info', 2500);
+        }
+      }
 
       this.deliveryHistory.unshift({
         name: target.order?.name || 'Delivery',
@@ -242,6 +251,7 @@
         if (this._firstOpenTime) {
           const ms = Date.now() - this._firstOpenTime;
           console.info('[Shiplyp] first_open_to_first_delivery_ms', ms);
+          if (Career && Career.noteFirstDelivery) Career.noteFirstDelivery(ms);
         }
       }
 
