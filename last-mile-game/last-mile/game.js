@@ -552,7 +552,8 @@
       this.masterFilter = null;
       // One mute flag for all game audio (SFX, engine, wind). The radio was
       // removed entirely (B112), so there is nothing else to mute.
-      this.sfxMuted = localStorage.getItem('shiplyp_sfx_muted') === '1';
+      this.sfxMuted = false;
+      try { this.sfxMuted = localStorage.getItem('shiplyp_sfx_muted') === '1'; } catch (e) { /* storage blocked: start unmuted */ }
       // Whenever gameState isn't 'playing' (menu, dispatch hub, restart),
       // all audio is fully suspended regardless of the mute flag.
       // Initialized to TRUE so nothing plays until the player starts driving.
@@ -591,7 +592,7 @@
 
     toggleMute() {
       this.sfxMuted = !this.sfxMuted;
-      localStorage.setItem('shiplyp_sfx_muted', this.sfxMuted ? '1' : '0');
+      try { localStorage.setItem('shiplyp_sfx_muted', this.sfxMuted ? '1' : '0'); } catch (e) {}
       return this.sfxMuted;
     }
 
@@ -10425,7 +10426,8 @@
       this.currentStyle = null;
       this.needsNormalPass = false;
 
-      let saved = localStorage.getItem('shiplyp_visualStyle');
+      let saved = null;
+      try { saved = localStorage.getItem('shiplyp_visualStyle'); } catch (e) { /* storage blocked: use the default style */ }
       // B116 migration: Enhanced was renamed Crisp, and Classic (removed) was
       // the lightest style, so its players land on the lighter remaining one.
       if (saved === 'enhanced' || saved === 'classic') saved = 'crisp';
@@ -10542,7 +10544,7 @@
       if (style === this.currentStyle) return;
       this.currentStyle = style;
       this.selectedStyle = style;
-      localStorage.setItem('shiplyp_visualStyle', style);
+      try { localStorage.setItem('shiplyp_visualStyle', style); } catch (e) {}
 
       const { bloomPass, filmPass, fxaaPass } = this.game;
 
