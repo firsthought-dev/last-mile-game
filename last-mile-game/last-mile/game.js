@@ -5039,6 +5039,62 @@
       // Remember the path so buildPathBeds() can lay the flower beds along it once the rest of the world exists.
       const pathInfo = { pt: pt.clone(), normal: normal.clone(), tangent: tangent.clone(), houseSide, startT, endT };
 
+      // Entrance props (B175): gate pillars with a swung-open leaf and low walls where the path meets the footpath, terracotta
+      // planters either side of the door end, a letterbox post and a lantern post. One merged vertex-coloured mesh per house;
+      // purely decorative (no obstacles, nothing on the slabs). Variation comes from a hash of the road point, not this.prng.
+      {
+        const hs = (k) => { let h = (Math.imul(Math.round(pt.x * 5) | 0, 374761393) + Math.imul(Math.round(pt.z * 5) | 0, 668265263) + Math.imul(k, 2246822519)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+        const dirS = Math.sign(endT - startT) || 1;
+        const at = (t, lat) => { const p = pt.clone().addScaledVector(normal, t).addScaledVector(tangent, lat); p.y = calcTerrainY(p, t); return p; };
+        const ang = Math.atan2(normal.x * dirS, normal.z * dirS);                       // yaw that points local +Z along the path toward the house
+        const parts = [], m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+        const put = (geo, p, dy, yaw, sx, sy, sz, hex) => {
+          q.setFromEuler(e.set(0, ang + yaw, 0)); m4.compose(new THREE.Vector3(p.x, p.y + dy, p.z), q, new THREE.Vector3(sx, sy, sz));
+          parts.push({ g: geo.clone().applyMatrix4(m4), c: new THREE.Color(hex) });
+        };
+        const box = new THREE.BoxGeometry(1, 1, 1), cyl = new THREE.CylinderGeometry(0.5, 0.4, 1, 8), blob = new THREE.IcosahedronGeometry(0.5, 0);
+        const stone = [0xd6cdbd, 0xc9bfae, 0xe0d3b8][Math.floor(hs(1) * 3)], iron = 0x2b2f33, terra = [0xb5532f, 0xc2623a, 0xa0482a][Math.floor(hs(2) * 3)];
+        const t0 = startT + dirS * 0.7;
+        for (const sd of [-1, 1]) {
+          const pp = at(t0, sd * 1.72);
+          put(box, pp, 0.62, 0, 0.34, 1.24, 0.34, stone);                                 // pillar
+          put(box, pp, 1.3, 0, 0.46, 0.1, 0.46, 0xbab09d);                              // cap
+          put(box, pp, 1.46, 0, 0.2, 0.2, 0.2, 0xf3e2b0);                            // lantern
+          const wl = at(t0, sd * 3.0);
+          put(box, wl, 0.22, 0, 1.5, 0.44, 0.2, stone);                                  // low wall running out along the footpath
+        }
+        // gate leaf, hinged on one pillar and swung open about 75 degrees (towards the house)
+        const side0 = hs(3) > 0.5 ? -1 : 1, gp = at(t0, side0 * 1.72), gy = ang + side0 * 1.3;
+        const hinge = new THREE.Vector3(gp.x + Math.sin(gy) * 0.6, gp.y, gp.z + Math.cos(gy) * 0.6);
+        put(box, hinge, 0.28, side0 * 1.3, 0.04, 0.05, 1.15, iron); put(box, hinge, 0.92, side0 * 1.3, 0.04, 0.05, 1.15, iron);   // rails
+        for (let k = 0; k < 6; k++) { const o = new THREE.Vector3(hinge.x + Math.sin(gy) * (k - 2.5) * 0.19, hinge.y, hinge.z + Math.cos(gy) * (k - 2.5) * 0.19); put(box, o, 0.6, side0 * 1.3, 0.04, 0.78, 0.04, iron); }
+        // planters flanking the door end of the path
+        for (const sd of [-1, 1]) {
+          const pp = at(endT - dirS * 0.7, sd * 1.95);
+          put(cyl, pp, 0.28, 0, 0.55, 0.56, 0.55, terra);
+          put(blob, pp, 0.78, hs(5 + sd) * 3, 0.55 + hs(7) * 0.15, 0.5, 0.55, [0x3f7a35, 0x4a8a3c, 0x356b30][Math.floor(hs(8 + sd) * 3)]);
+        }
+        // letterbox post and a lantern post beside the gate
+        const mp = at(t0 + dirS * 0.4, (hs(4) > 0.5 ? 1 : -1) * 2.35);
+        put(box, mp, 0.55, 0, 0.1, 1.1, 0.1, 0x4a3a2a); put(box, mp, 1.2, 0, 0.42, 0.26, 0.24, [0xc23b2c, 0x2f5fa0, 0x2a7d52][Math.floor(hs(9) * 3)]);
+        const lp = at(endT - dirS * 2.2, (hs(4) > 0.5 ? -1 : 1) * 2.35);
+        put(box, lp, 0.7, 0, 0.08, 1.4, 0.08, iron); put(box, lp, 1.55, 0, 0.26, 0.3, 0.26, 0xf3e2b0);
+        // merge
+        const pos = [], nor = [], col = [], idx = [];
+        for (const pr of parts) {
+          const g = pr.g, pa = g.attributes.position, na = g.attributes.normal, o = pos.length / 3;
+          for (let i = 0; i < pa.count; i++) { pos.push(pa.getX(i), pa.getY(i), pa.getZ(i)); nor.push(na.getX(i), na.getY(i), na.getZ(i)); col.push(pr.c.r, pr.c.g, pr.c.b); }
+          if (g.index) for (let i = 0; i < g.index.count; i++) idx.push(g.index.getX(i) + o); else for (let i = 0; i < pa.count; i++) idx.push(o + i);
+          g.dispose();
+        }
+        const pg = new THREE.BufferGeometry();
+        pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); pg.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+        pg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); pg.setIndex(idx);
+        if (!HousesAsset.propMat) HousesAsset.propMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85 });
+        const propMesh = new THREE.Mesh(pg, HousesAsset.propMat); propMesh.castShadow = true; propMesh.receiveShadow = true;
+        driveMesh.add(propMesh);
+      }
+
       // Procedural Modern Architectural Drop Point
       const houseGroup = new THREE.Group();
       let ring;
