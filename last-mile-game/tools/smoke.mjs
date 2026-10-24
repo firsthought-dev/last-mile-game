@@ -94,7 +94,12 @@ for (const p of PROFILES) {
   });
   if (outDir) {
     fs.mkdirSync(outDir, { recursive: true });
-    await page.screenshot({ path: path.join(outDir, `smoke-${p.name}${noStorage ? '-nostorage' : returning ? '-returning' : ''}.png`) });
+    // Diagnostic only: under software GL (CI) a frame can take over 30 s, so give it time and never fail the run on it.
+    try {
+      await page.screenshot({ path: path.join(outDir, `smoke-${p.name}${noStorage ? '-nostorage' : returning ? '-returning' : ''}.png`), timeout: 120000 });
+    } catch (e) {
+      console.warn(`  (screenshot skipped: ${e.message.split('\n')[0]})`);
+    }
   }
   // Hidden tab: the game must freeze (and go quiet) while hidden, and move again after.
   const pos = () => page.evaluate(() => { const q = window.game.vehicle.mesh.position; return [q.x, q.z]; });

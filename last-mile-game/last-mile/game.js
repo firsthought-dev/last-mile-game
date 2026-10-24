@@ -860,7 +860,6 @@
   if (!Career && typeof console !== 'undefined') {
     console.warn('[Shiplyp] save.js not loaded — career progress will not persist this session.');
   }
-  const Ads = (typeof window !== 'undefined' && window.ShiplypAds) ? window.ShiplypAds : null;
   // B132: chance a pedestrian cluster also gets a signalled crossing (tuned for ~+15%).
   const CROSSING_AT_CLUSTER_CHANCE = 0.85;
   window.sound = sound;
@@ -1285,141 +1284,6 @@
   }
 
   // --------------------------------------------------------------------------
-  // 4B. PROCEDURAL GROUND TEXTURES
-  // No external texture files are bundled, so ground materials render as
-  // flat vertex-color triangles — fine up close but reads as "vector art"
-  // under the new PBR/bloom pipeline. These canvas-based tileable textures
-  // give grass/asphalt/rock a repeating micro-detail speckle; they're
-  // multiplied against the existing per-vertex terrain colors (map *
-  // vertexColors) rather than replacing them, so seasonal palettes still work.
-  const TextureFactory = {
-    _cache: {},
-
-    _canvas(size) {
-      const c = document.createElement('canvas');
-      c.width = c.height = size;
-      return c;
-    },
-
-    grass(prng) {
-      if (this._cache.grass) return this._cache.grass;
-      const size = 256;
-      const c = this._canvas(size);
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, size, size);
-      // Speckled blade/clump noise: light and dark flecks over neutral grey
-      // (grey so it multiplies cleanly against any season's grass color).
-      for (let i = 0; i < 5500; i++) {
-        const x = prng.next() * size;
-        const y = prng.next() * size;
-        const shade = 0.72 + prng.next() * 0.5;
-        const c8 = Math.floor(Math.min(255, 255 * shade));
-        ctx.fillStyle = `rgba(${c8},${c8},${c8},0.5)`;
-        const w = 0.6 + prng.next() * 1.6;
-        const h = 2 + prng.next() * 5;
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(prng.next() * Math.PI);
-        ctx.fillRect(-w / 2, -h / 2, w, h);
-        ctx.restore();
-      }
-      const tex = new THREE.CanvasTexture(c);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      this._cache.grass = tex;
-      return tex;
-    },
-
-    asphalt(prng) {
-      if (this._cache.asphalt) return this._cache.asphalt;
-      const size = 256;
-      const c = this._canvas(size);
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#a8a8a8';
-      ctx.fillRect(0, 0, size, size);
-      for (let i = 0; i < 9000; i++) {
-        const x = prng.next() * size;
-        const y = prng.next() * size;
-        const shade = 0.55 + prng.next() * 0.7;
-        const c8 = Math.floor(Math.min(255, 168 * shade));
-        ctx.fillStyle = `rgba(${c8},${c8},${c8},0.6)`;
-        const r = 0.5 + prng.next() * 1.3;
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      const tex = new THREE.CanvasTexture(c);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      this._cache.asphalt = tex;
-      return tex;
-    },
-
-    rock(prng) {
-      if (this._cache.rock) return this._cache.rock;
-      const size = 256;
-      const c = this._canvas(size);
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#bdbdbd';
-      ctx.fillRect(0, 0, size, size);
-      for (let i = 0; i < 1400; i++) {
-        const x = prng.next() * size;
-        const y = prng.next() * size;
-        const shade = 0.5 + prng.next() * 0.85;
-        const c8 = Math.floor(Math.min(255, 189 * shade));
-        ctx.fillStyle = `rgba(${c8},${c8},${c8},0.55)`;
-        const w = 4 + prng.next() * 14;
-        const h = 3 + prng.next() * 10;
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(prng.next() * Math.PI);
-        ctx.fillRect(-w / 2, -h / 2, w, h);
-        ctx.restore();
-      }
-      const tex = new THREE.CanvasTexture(c);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      this._cache.rock = tex;
-      return tex;
-    }
-  };
-
-  // Setting `flatShading: false` on a material does nothing by itself if
-  // the geometry has no smooth normal data to interpolate — and Three.js's
-  // primitive polyhedra (DodecahedronGeometry etc.) are built non-indexed,
-  // with each triangle's 3 vertices duplicated and given that triangle's
-  // own flat face normal. There is nothing smooth stored on the geometry
-  // for flatShading:false to blend between, so the material flag alone is
-  // a no-op — confirmed directly: reading a rock's normal attribute showed
-  // 9 consecutive vertices sharing one identical flat normal despite
-  // flatShading already being off (see SLOWROADS_PARITY_LOG.md item 2's
-  // correction). This welds coincident positions (the geometry stays
-  // non-indexed — every duplicate vertex at a shared corner just gets
-  // written the same averaged normal, which reads identically to a
-  // properly indexed+smoothed mesh) and averages their face normals, the
-  // same effect `BufferGeometryUtils.mergeVertices()` + computeVertexNormals
-  // would give, without adding that as a new script dependency.
-  function smoothFaceNormals(geometry, precision = 4) {
-    geometry.computeVertexNormals(); // baseline: flat per-triangle normals
-    const pos = geometry.attributes.position;
-    const norm = geometry.attributes.normal;
-    const groups = new Map();
-    for (let i = 0; i < pos.count; i++) {
-      const key = `${pos.getX(i).toFixed(precision)},${pos.getY(i).toFixed(precision)},${pos.getZ(i).toFixed(precision)}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(i);
-    }
-    const avg = new THREE.Vector3();
-    const tmp = new THREE.Vector3();
-    for (const indices of groups.values()) {
-      avg.set(0, 0, 0);
-      for (const i of indices) avg.add(tmp.set(norm.getX(i), norm.getY(i), norm.getZ(i)));
-      avg.normalize();
-      for (const i of indices) norm.setXYZ(i, avg.x, avg.y, avg.z);
-    }
-    norm.needsUpdate = true;
-    return geometry;
-  }
-
-  // --------------------------------------------------------------------------
   // Faceted Rock Geometry Factory — creates low-poly angular weathered rocks
   // matching Slow Roads reference (sharp facets, per-vertex perturbation,
   // flat face normals, zero blurry smooth-shaded spheres).
@@ -1467,7 +1331,7 @@
   // --------------------------------------------------------------------------
   // Billboard trees — replaces the ConeGeometry/DodecahedronGeometry
   // primitive trees per SHIPLYP_VISUAL_ENHANCEMENT_BRIEF.md section 3.3.
-  // Even with correct smooth shading (see smoothFaceNormals above), a
+  // Even with correct smooth shading, a
   // primitive-geometry tree still reads as a stacked cone or a round ball —
   // the actual gap against slowroads.io's trees is silhouette and texture
   // detail (individual needle/leaf-cluster edges), not shading smoothness.
@@ -1882,125 +1746,6 @@
   };
 
 
-  // Near-field grass layer (B157). Slow Roads' grassy ground is a carpet of large, soft, overlapping tufts close
-  // to the camera. Static placement cannot do that over an 8 km corridor (~1.4 tufts/m2 is hundreds of
-  // thousands of instances), so this builds dense clumps in 8 m cells around the camera on demand (a few
-  // per tick), one InstancedMesh per cell, and drops cells that fall behind. Tufts shrink to nothing between
-  // FADE0 and RADIUS in the vertex shader, so cells never pop. The 6 atlas variants are selected per instance
-  // with an instanced UV offset, so there is no per-variant draw call. Placement is a pure hash of the cell
-  // and index (never the world prng), so a cell rebuilds identically. Kill switch: localStorage.shiplyp_nearGrass = '0'.
-  class NearGrassLayer {
-    constructor(world, scene) {
-      this.world = world; this.scene = scene; this.cells = new Map(); this._acc = 1; this._on = true;
-      this._on = false;                                              // superseded by buildGroundCover, which covers the WHOLE route at load; this streamed layer left bare ground far from the player
-      try { this._on = localStorage.getItem('shiplyp_nearGrass') === '1'; } catch (e) { /* stay off */ }
-      this.group = new THREE.Group(); this.group.name = 'NearGrass'; scene.add(this.group);
-      NearGrassLayer.RADIUS = 58; NearGrassLayer.FADE0 = 38; NearGrassLayer.CELL = 9;
-      this.geom = NearGrassLayer.geometry(); this.mat = NearGrassLayer.material();
-    }
-    static geometry() {
-      if (NearGrassLayer._geom) return NearGrassLayer._geom;
-      const pos = [], uv = [];
-      for (let k = 0; k < 3; k++) {                                   // 3 crossed quads, tile 0 UVs (offset per instance)
-        const a = k * Math.PI / 3, cx = Math.cos(a) * 0.5, cz = Math.sin(a) * 0.5;
-        const q = [[-cx, 0, -cz], [cx, 0, cz], [cx, 1, cz], [-cx, 1, -cz]], uvq = [[0, 0], [1 / 6, 0], [1 / 6, 1], [0, 1]];
-        for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(q[i][0], q[i][1], q[i][2]); uv.push(uvq[i][0], uvq[i][1]); }
-      }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-      g.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(pos.length / 3).fill(0).flatMap(() => [0, 1, 0]), 3));
-      g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.5, 0), 1.2);
-      return (NearGrassLayer._geom = g);
-    }
-    static material() {
-      if (NearGrassLayer._mat) return NearGrassLayer._mat;
-      const base = RoadGrassFactory.material();
-      const m = new THREE.MeshLambertMaterial({ map: base.map, alphaTest: 0.5, side: THREE.DoubleSide });
-      m.onBeforeCompile = (shader) => {
-        shader.uniforms.uFade = { value: new THREE.Vector2(NearGrassLayer.FADE0, NearGrassLayer.RADIUS) };
-        shader.uniforms.uCam = { value: new THREE.Vector3(1e6, 0, 1e6) };       // fed every frame by the layer; cameraPosition is not reliable here
-        m.userData.shader = shader;
-        shader.vertexShader = shader.vertexShader
-          .replace('#include <common>', '#include <common>\nattribute vec2 aUvOff;\nuniform vec2 uFade;\nuniform vec3 uCam;')
-          .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_UV\nvUv += aUvOff;\n#endif')
-          .replace('#include <begin_vertex>', `#include <begin_vertex>
-            vec3 shpOrg = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-            float shpD = distance(uCam, shpOrg);
-            transformed *= (1.0 + 0.45 * smoothstep(8.0, uFade.x, shpD)) * (1.0 - smoothstep(uFade.x, uFade.y, shpD));   // a little bigger with distance so the carpet still reads, then shrink away`);
-      };
-      return (NearGrassLayer._mat = m);
-    }
-    _hash(a, b, c) { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2246822519)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
-    _buildCell(cx, cz) {
-      const w = this.world, C = NearGrassLayer.CELL, grid = w.roadSpatialGrid, pts = w.roadSpacedPoints;
-      const out = [], up = new THREE.Vector3(0, 1, 0), dummy = new THREE.Object3D();
-      const buildings = (w.obstacles || []).filter(o => o.type === 'building');
-      const COUNT = 260;
-      for (let i = 0; i < COUNT; i++) {
-        const x = (cx + this._hash(cx, cz, i * 3)) * C, z = (cz + this._hash(cx, cz, i * 3 + 1)) * C;
-        const near = grid.getNearestRoadPoint(x, z, 34);
-        if (!near) continue;
-        const lat = near.dist;
-        if (lat < 6.1 || lat > 31) continue;                          // past the footpath/barrier, inside the corridor
-        // density falls off with distance from the road
-        if (this._hash(cx, cz, i * 3 + 2) > 1.0 - Math.max(0, (lat - 6.1) / 30) * 0.7) continue;
-        const pos = new THREE.Vector3(x, 0, z);
-        let blocked = false; for (const o of buildings) { if (o.pos.distanceTo(pos) < o.radius + 1.6) { blocked = true; break; } }
-        if (blocked) continue;
-        const idx = near.index, p0 = pts[idx], p1 = pts[Math.min(idx + 1, pts.length - 1)];
-        const tx = p1.x - p0.x, tz = p1.z - p0.z, side = Math.sign(tx * (z - p0.z) - tz * (x - p0.x)) || 1;
-        if (w._inTunnelAtU && w._inTunnelAtU(idx / (pts.length - 1), 3)) continue;
-        pos.y = w.groundHeightAt(near.point, pos, side * lat) - 0.02;
-        const r1 = this._hash(cx, cz, i * 7 + 11), r2 = this._hash(cx, cz, i * 7 + 12), r3 = this._hash(cx, cz, i * 7 + 13);
-        const h = 0.55 + r1 * 0.45, wd = h * (1.0 + r2 * 0.25);
-        dummy.position.copy(pos); dummy.rotation.set((r3 - 0.5) * 0.35, r2 * Math.PI * 2, (r1 - 0.5) * 0.35); dummy.scale.set(wd, h, wd); dummy.updateMatrix();
-        out.push({ m: dummy.matrix.clone(), v: this._hash(cx, cz, i * 7 + 14) < 0.10 ? 4 + (r3 > 0.5 ? 1 : 0) : Math.floor(r2 * 4) % 4, g: 0.9 + r3 * 0.2 });
-      }
-      if (!out.length) return null;
-      const mesh = new THREE.InstancedMesh(this.geom, this.mat, out.length);
-      const off = new Float32Array(out.length * 2), col = new THREE.Color();
-      out.forEach((o, i) => { mesh.setMatrixAt(i, o.m); off[i * 2] = o.v / 6; off[i * 2 + 1] = 0; mesh.setColorAt(i, col.setRGB(1.25 * o.g, 1.3 * o.g, 1.08 * o.g)); });
-      mesh.geometry = this.geom.clone(); mesh.geometry.boundingSphere = null;
-      mesh.geometry.setAttribute('aUvOff', new THREE.InstancedBufferAttribute(off, 2));
-      mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true; mesh.frustumCulled = false;
-      // cell-sized culling sphere so whole far cells are skipped by the renderer
-      mesh.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1); mesh.frustumCulled = false;
-      mesh.userData.cellCentre = new THREE.Vector3((cx + 0.5) * C, 0, (cz + 0.5) * C);
-      return mesh;
-    }
-    update(camPos, dt) {
-      if (!this._on || !this.world || !this.world.roadSpatialGrid || !this.world.roadSpacedPoints) return;
-      const sh = this.mat.userData.shader; if (sh) sh.uniforms.uCam.value.copy(camPos);   // every frame, so the shrink tracks the camera
-      this._acc += dt; if (this._acc < 0.2) return; this._acc = 0;
-      if (this.world.seasonKey === 'winter') return;
-      const C = NearGrassLayer.CELL, R = NearGrassLayer.RADIUS;
-      const c0x = Math.floor((camPos.x - R) / C), c1x = Math.floor((camPos.x + R) / C), c0z = Math.floor((camPos.z - R) / C), c1z = Math.floor((camPos.z + R) / C);
-      // drop cells that are well out of range
-      this.cells.forEach((mesh, key) => {
-        if (!mesh) return;
-        if (mesh.userData.cellCentre.distanceTo(camPos) > R + C * 2.5) { this.group.remove(mesh); mesh.geometry.dispose(); mesh.dispose(); this.cells.delete(key); }
-      });
-      this.cells.forEach((mesh, key) => { if (!mesh && this._far(key, camPos, R + C * 2.5)) this.cells.delete(key); });
-      // build the nearest missing cells, at most 3 per tick
-      const want = [];
-      for (let cx = c0x; cx <= c1x; cx++) for (let cz = c0z; cz <= c1z; cz++) {
-        const key = cx + ',' + cz; if (this.cells.has(key)) continue;
-        const dx = (cx + 0.5) * C - camPos.x, dz = (cz + 0.5) * C - camPos.z, d = Math.hypot(dx, dz);
-        if (d <= R + C) want.push([d, cx, cz, key]);
-      }
-      want.sort((a, b) => a[0] - b[0]);
-      const budget = this.cells.size < 14 ? 8 : 3;                     // fill quickly after a spawn/teleport, trickle while driving
-      for (let i = 0; i < Math.min(budget, want.length); i++) {
-        const [, cx, cz, key] = want[i]; const mesh = this._buildCell(cx, cz);
-        this.cells.set(key, mesh);                                     // null = empty cell, remembered so it is not retried
-        if (mesh) this.group.add(mesh);
-      }
-    }
-    _far(key, camPos, lim) { const [cx, cz] = key.split(',').map(Number), C = NearGrassLayer.CELL; return Math.hypot((cx + 0.5) * C - camPos.x, (cz + 0.5) * C - camPos.z) > lim; }
-    dispose() { this.cells.forEach(m => { if (m) { this.group.remove(m); m.geometry.dispose(); m.dispose(); } }); this.cells.clear(); this.scene.remove(this.group); }
-  }
-
   // Roadside grass overhang (B150). Tufts grow at the outer footpath edge and the barrier
   // base and lean in over the footpath. Each tuft is 3 crossed quads (6 tris) using one of
   // 4 tufts in an original atlas (assets/textures/grass_tufts.webp, built by
@@ -2168,9 +1913,7 @@
     pathPaversColor() { return this._get('pathPaversC', 'assets/textures/path_pavers_c.webp'); },
     pathPaversNormal() { return this._get('pathPaversN', 'assets/textures/path_pavers_n.webp'); },
     edgeStoneColor() { return this._get('edgeStoneC', 'assets/textures/edge_stone_c.webp'); },
-    edgeStoneNormal() { return this._get('edgeStoneN', 'assets/textures/edge_stone_n.webp'); },
-    gravelColor() { return this._get('roadGravel', 'assets/textures/gravel_color.webp'); },
-    gravelNormal() { return this._get('roadNormal', 'assets/textures/road_normal.webp'); }
+    edgeStoneNormal() { return this._get('edgeStoneN', 'assets/textures/edge_stone_n.webp'); }
   };
 
   // --------------------------------------------------------------------------
@@ -2285,11 +2028,6 @@
       this.crossers = [];
       this.patrons = [];
       this.trafficSignals = [];
-      // Thin roadside props (poles, lampposts) the camera can end up
-      // staring straight through when the on-foot courier walks up close
-      // to one — tracked separately from `obstacles` (which only stores a
-      // position/radius, not the mesh) so the camera can fade them out.
-      this.occluderMeshes = [];
 
       this.districtSimplexMap = new Map();
       this.generateSpline();
@@ -2899,7 +2637,6 @@
         const shrubGeoms = ClumpTreeFactory.shrubGeoms(), shrubMat = ClumpTreeFactory.shrubMaterial();
         const tufts = tuftGeoms.map(() => []), shrubs = shrubGeoms.map(() => []);
         const up = new THREE.Vector3(0, 1, 0), dummy = new THREE.Object3D();
-        const grassBase = new THREE.Color(season && season.grassLight != null ? season.grassLight : 0x3a874d).lerp(new THREE.Color(0xffffff), 0.5);
         const buildings = (this.obstacles || []).filter(o => o.type === 'building');
         const hash = (a, b) => { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
         const blocked = (pos, absLat, margin) => {
@@ -5513,7 +5250,6 @@
       this.foliageGroup.clear();
       this.deliveryTargets = [];
       this.trafficVehicles = [];
-      this.speedCameras = [];
       this.repairBays = [];
       this.obstacles = [];
       this.crossers = [];
@@ -5531,17 +5267,10 @@
       const isOpenRoad = !!cityCfg.openRoad;
 
       // Reusable Low-Poly Foliage & Prop Geometries
-      // Pine/broadleaf tree canopy geometry retired — trees are now
-      // TreeBillboardFactory sprites (see SLOWROADS_PARITY_LOG.md item 5),
-      // trunk baked into the sprite art, so trunkGeom/trunkMat/
-      // pineLeavesGeom/decLeavesGeom no longer have any callers.
-      const bushGeom = new THREE.DodecahedronGeometry(1.2, 0);
+      // Trees are TreeBillboardFactory sprites (see SLOWROADS_PARITY_LOG.md item 5).
       // Pool of 6 distinct rock shapes (different seeds → different silhouettes)
       // so clusters never look like copies of the same stamp.
       const rockGeomPool = [2, 11, 23, 37, 53, 71].map(s => RockGeometryFactory.createFacetedRockGeometry(s));
-      const rockGeom = rockGeomPool[0]; // fallback for legacy references
-      const poleGeom = new THREE.CylinderGeometry(0.1, 0.12, 6.5, 6);
-      const crossbarGeom = new THREE.BoxGeometry(1.8, 0.12, 0.12);
       const isWinter = (season.id === 'winter');
       // Rock color: frost-grey for winter, warm sandy for everything else
       const rockBaseColor = isWinter ? (season.snowRockColor || 0xbec4cc) : 0x7a5c3a;
@@ -5558,191 +5287,6 @@
         roughness: 0.7,
         metalness: 0.25
       });
-
-      // Low-poly pedestrian/animal road-crosser builder — same flat-shaded
-      // block-figure style as the porch resident so crossers read as part
-      // of the world rather than a mismatched asset dropped in.
-      // Stylized Indian humanoid road-crosser builder — matching the
-      // polished character turnaround sheet and bicycle courier aesthetic
-      // with clean edge loops, polo collars, and jogger cuffs.
-      const CROSSER_POLO_PALETTE = [0x228b96, 0xd97706, 0x059669, 0x2563eb, 0x7c3aed, 0xdb2777];
-      const CROSSER_PANTS_PALETTE = [0x5f6e43, 0x1e293b, 0x334155, 0x475569, 0x3f3f46];
-      const CROSSER_SKIN_TINTS = [0xffffff, 0xf0d1ab, 0xc68a62, 0x8d5524, 0x5c3a21];
-      const buildCrosserMesh = (kind) => {
-        const courierRig = kind === 'pedestrian' ? CourierAsset.clone() : null;
-        if (courierRig) {
-          // Shared rigged CourierAsset (same model as the player's on-foot
-          // walker) — recolored per-instance (skin/top/bottom tint cloned off
-          // the shared materials so tints don't leak across NPCs) and scaled
-          // for a bit of height variety, with its own Walking clip playing at
-          // a randomized speed so a crowd doesn't move in lockstep.
-          const rig = courierRig;
-          const root = rig.root;
-          root.userData.mixer = rig.mixer;
-          root.userData.actions = rig.actions;
-          const skinTint = CROSSER_SKIN_TINTS[Math.floor(this.prng.range(0, CROSSER_SKIN_TINTS.length))];
-          const topTint = CROSSER_POLO_PALETTE[Math.floor(this.prng.range(0, CROSSER_POLO_PALETTE.length))];
-          const pantsTint = CROSSER_PANTS_PALETTE[Math.floor(this.prng.range(0, CROSSER_PANTS_PALETTE.length))];
-          root.traverse((child) => {
-            if (!child.isMesh || !child.material) return;
-            child.material = child.material.clone();
-            if (child.material.name === 'Bodymat') child.material.color.set(skinTint);
-            else if (child.material.name === 'Topmat') child.material.color.set(topTint);
-            else if (child.material.name === 'Bottommat') child.material.color.set(pantsTint);
-          });
-          root.scale.setScalar(this.prng.range(0.92, 1.08));
-          const walkAction = rig.actions['Walking'];
-          if (walkAction) {
-            walkAction.setEffectiveTimeScale(this.prng.range(0.85, 1.2));
-            walkAction.play();
-          }
-          root.userData.hitRadius = 1.1;
-          root.userData.walkSpeed = this.prng.range(1.0, 1.8);
-          root.userData.isCrosser = true;
-          return root;
-        }
-        const group = new THREE.Group();
-        if (kind === 'pedestrian') {
-          const skinMat = new THREE.MeshStandardMaterial({ color: 0xc68a62, roughness: 0.55 });
-          const poloColor = CROSSER_POLO_PALETTE[Math.floor(this.prng.range(0, CROSSER_POLO_PALETTE.length))];
-          const shirtMat = new THREE.MeshStandardMaterial({ color: poloColor, roughness: 0.60 });
-          const collarMat = new THREE.MeshStandardMaterial({ color: 0xa4d4d8, roughness: 0.65 });
-          const pantsColor = CROSSER_PANTS_PALETTE[Math.floor(this.prng.range(0, CROSSER_PANTS_PALETTE.length))];
-          const legMat = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.70 });
-          const cuffMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85 });
-          const shoeMat = new THREE.MeshStandardMaterial({ color: 0x2a2421, roughness: 0.65 });
-          const soleMat = new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.45 });
-          const hairMat = new THREE.MeshStandardMaterial({ color: 0x181412, roughness: 0.45 });
-
-          // Head & Stylized Hair
-          const headGroup = new THREE.Group();
-          const headGeom = new THREE.SphereGeometry(0.145, 12, 10);
-          headGeom.scale(0.95, 1.05, 1.0);
-          const head = new THREE.Mesh(headGeom, skinMat);
-          headGroup.add(head);
-
-          // Sculpted Hair Cap
-          const hairGeom = new THREE.SphereGeometry(0.152, 12, 10);
-          hairGeom.scale(0.98, 1.02, 1.05);
-          const hair = new THREE.Mesh(hairGeom, hairMat);
-          hair.position.set(0, 0.03, -0.02);
-          headGroup.add(hair);
-
-          // Stylized Nose
-          const nose = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.06, 5), skinMat);
-          nose.rotation.x = Math.PI / 2;
-          nose.position.set(0, 0, 0.145);
-          headGroup.add(nose);
-
-          headGroup.position.y = 1.48;
-          group.add(headGroup);
-
-          // Torso & Polo Collar
-          const torsoGeom = new THREE.CylinderGeometry(0.16, 0.14, 0.52, 12);
-          torsoGeom.scale(1.15, 1.0, 0.75);
-          const torso = new THREE.Mesh(torsoGeom, shirtMat);
-          torso.position.y = 1.04;
-          group.add(torso);
-
-          const collarMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.08, 10), collarMat);
-          collarMesh.position.y = 1.32;
-          group.add(collarMesh);
-
-          // Articulated Arms (Polo sleeves + skin forearms)
-          const makeArm = (sign) => {
-            const armPivot = new THREE.Group();
-            armPivot.position.set(sign * 0.22, 1.25, 0);
-
-            // Polo sleeve
-            const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.18, 8), shirtMat);
-            sleeve.position.y = -0.09;
-            armPivot.add(sleeve);
-
-            // Forearm
-            const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.042, 0.26, 8), skinMat);
-            forearm.position.y = -0.29;
-            armPivot.add(forearm);
-
-            // Hand
-            const hand = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 6), skinMat);
-            hand.position.y = -0.43;
-            armPivot.add(hand);
-
-            return armPivot;
-          };
-
-          const armL = makeArm(-1);
-          const armR = makeArm(1);
-          group.add(armL, armR);
-
-          // Articulated Legs (Joggers + Cuffs + Sneakers)
-          const makeLeg = (sign) => {
-            const legPivot = new THREE.Group();
-            legPivot.position.set(sign * 0.11, 0.78, 0);
-
-            // Thigh & Knee jogger
-            const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.38, 8), legMat);
-            thigh.position.y = -0.19;
-            legPivot.add(thigh);
-
-            // Shin jogger
-            const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.055, 0.32, 8), legMat);
-            shin.position.y = -0.48;
-            legPivot.add(shin);
-
-            // Ribbed Ankle Cuff
-            const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.06, 8), cuffMat);
-            cuff.position.y = -0.65;
-            legPivot.add(cuff);
-
-            // Sneaker
-            const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.08, 0.20), shoeMat);
-            shoe.position.set(0, -0.71, 0.03);
-            const sole = new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.025, 0.21), soleMat);
-            sole.position.set(0, -0.75, 0.03);
-            legPivot.add(shoe, sole);
-
-            return legPivot;
-          };
-
-          const legL = makeLeg(-1);
-          const legR = makeLeg(1);
-          group.add(legL, legR);
-
-          group.userData.legs = [legL, legR];
-          group.userData.arms = [armL, armR];
-          group.userData.hitRadius = 1.1;
-          group.userData.walkSpeed = this.prng.range(1.0, 1.8);
-        } else {
-          // Dog / cat — same low quadruped rig, cat sized down.
-          const isCat = kind === 'cat';
-          const furMat = new THREE.MeshLambertMaterial({ color: isCat ? 0x374151 : CROSSER_PALETTE[Math.floor(this.prng.range(0, CROSSER_PALETTE.length))] });
-          // Dogs were reading as barely-visible specks next to the
-          // pedestrian rig (whose torso alone is 0.62 tall) — scaled up to
-          // an actual stray-dog size instead of a toy-sized silhouette.
-          const scale = isCat ? 0.62 : 1.7;
-          const body = new THREE.Mesh(new THREE.BoxGeometry(0.7 * scale, 0.3 * scale, 0.32 * scale), furMat);
-          body.position.y = 0.32 * scale;
-          const head = new THREE.Mesh(new THREE.BoxGeometry(0.24 * scale, 0.22 * scale, 0.24 * scale), furMat);
-          head.position.set(0.42 * scale, 0.38 * scale, 0);
-          const tail = new THREE.Mesh(new THREE.BoxGeometry(0.32 * scale, 0.08 * scale, 0.08 * scale), furMat);
-          tail.position.set(-0.42 * scale, 0.42 * scale, 0);
-          tail.rotateZ(0.6);
-          const legGeom = new THREE.BoxGeometry(0.09 * scale, 0.26 * scale, 0.09 * scale);
-          const legs = [];
-          [[-0.24, -0.1], [-0.24, 0.1], [0.24, -0.1], [0.24, 0.1]].forEach(([lx, lz]) => {
-            const leg = new THREE.Mesh(legGeom, furMat);
-            leg.position.set(lx * scale, 0.14 * scale, lz * scale);
-            group.add(leg);
-            legs.push(leg);
-          });
-          group.add(body, head, tail);
-          group.userData.legs = legs;
-          group.userData.hitRadius = isCat ? 0.65 : 1.1;
-          group.userData.walkSpeed = this.prng.range(1.6, 2.6);
-        }
-        return group;
-      };
 
       // Skyscraper window-grid texture, generated once on a canvas and
       // reused (tinted per-building via material color) across every tower
@@ -6108,18 +5652,11 @@
           // both shoulders, broken only right where a delivery house sits
           // so the gap itself reads as "turn in here" (houses always spawn
           // at i % 24 === 0, alternating sides via i % 48 — see the cabin
-          // block below).
+          // block below). Gaps are cut in the deferred pass from this.fenceGapSites
+          // (tea stalls, houses, repair shops, zebra crossings), not guessed here.
           if (i % FENCE_STEP === 0 && !inTunnel) {
-            const nearestHouseCheckpoint = Math.round(i / 24) * 24;
-            const houseCheckpointSide = (nearestHouseCheckpoint % 48 === 0) ? 1 : -1;
-            const distToHouse = Math.abs(i - nearestHouseCheckpoint) * avgSegStep;
-            const FENCE_GAP_RADIUS = 18.0; // meters either side of a house's checkpoint
-            const houseInTunnel = this.isInTunnelZone && this.isInTunnelZone(nearestHouseCheckpoint, 35);
-            // Gaps are cut in the deferred pass from this.fenceGapSites (tea
-            // stalls, houses, repair shops, zebra crossings), not guessed here.
-            const blockedByHouse = false;
 
-            if (!blockedByHouse) {
+            {
               // Continuous roadside barrier: placed via getBarrierLateralDistance()
               // flush along the outer edge of the raised sidewalk paver slab (or natural verge).
               const fenceDist = side * this.getBarrierLateralDistance();
@@ -7040,7 +6577,6 @@
       g.lookAt(pt.x, pos.y, pt.z); // flatten (Pattern 8): cross-arms parallel to the road
       this.foliageGroup.add(g);
       this.obstacles.push({ pos: pos.clone(), radius: 0.9, type: 'pole' });
-      if (this.occluderMeshes) this.occluderMeshes.push(g);
     }
 
     spawnStreetLamp(pt, normal, side) {
@@ -7057,7 +6593,6 @@
       g.lookAt(pt.x, pos.y, pt.z); // arm reaches toward the road (+Z after lookAt)
       this.foliageGroup.add(g);
       this.obstacles.push({ pos: pos.clone(), radius: 0.8, type: 'pole' });
-      if (this.occluderMeshes) this.occluderMeshes.push(g);
     }
 
     spawnMilestone(pt, normal, side) {
@@ -7151,13 +6686,6 @@
       gantryGroup.position.copy(pt);
       gantryGroup.lookAt(pt.clone().add(tangent));
       this.foliageGroup.add(gantryGroup);
-
-      this.speedCameras.push({
-        pos: pt.clone(),
-        speedLimit: 20.8, // 75 km/h in m/s
-        speedLimitKmh: 75,
-        triggeredRecently: false
-      });
 
       this.obstacles.push({ pos: pt.clone().addScaledVector(normal, -gantrySpan / 2), radius: 0.8, type: 'gantry' });
       this.obstacles.push({ pos: pt.clone().addScaledVector(normal, gantrySpan / 2), radius: 0.8, type: 'gantry' });
@@ -7803,7 +7331,6 @@
       post.lookAt(postPos.x + tangent.x, postPos.y, postPos.z + tangent.z);
       (this.foliageGroup || scene).add(post);
       this.obstacles.push({ pos: postPos.clone(), radius: 0.7, type: 'pole' });
-      if (this.occluderMeshes) this.occluderMeshes.push(post);
 
       const signal = {
         lamps,
@@ -10150,9 +9677,7 @@
         const cycleConverge = this.isAutodrive ? 14.0 : THREE.MathUtils.lerp(18.0, 8.0, speedRatio) * climateGrip;
         this.velocityHeading += headingDelta * (1 - Math.exp(-cycleConverge * dt));
       } else {
-        // Car: Pacejka-style progressive tire slip with drift capability
-        const B = 4.0, C = 1.35, D = 1.0;
-        const slipTireForce = D * Math.sin(C * Math.atan(B * Math.abs(headingDelta)));
+        // Car: heading convergence slows with heading error, allowing drift
         const lateralEfficiency = THREE.MathUtils.clamp(1.0 - Math.abs(headingDelta) * 0.45, 0.25, 1.0);
         const carConvergeRate = this.isAutodrive
           ? 14.0
@@ -10240,7 +9765,6 @@
       this.lateralOffset = latDist;
 
       const tangent = proj.tangent;
-      const roadRight = proj.normal;
 
       // 4-Wheel Contact Ground Plane Evaluation
       const _vSpec = vehicleSpec(this.vehicleType);
@@ -10390,7 +9914,7 @@
       // verification driving at 114 km/h (a normal speed for this game, not
       // a punishable one): fired a "-₹150 E-CHALLAN" notification, which is
       // courier-fine framing the slowroads-style pivot doesn't want. The
-      // gantry props/`world.speedCameras` spawn logic is left in place
+      // gantry props are left in place
       // (still a visible roadside structure — decorative overhead gantry),
       // only the speed-triggered fine/flash/notification behavior is gone.
 
@@ -10854,7 +10378,6 @@
       this.orderTimer = 36.0;
       this.maxOrderTimer = 36.0;
       this.deliveryHistory = [];
-      this.isStatusPanelOpen = false;
 
       this.resumeCount = 0;
       this.maxResumes = 3;
@@ -11021,8 +10544,6 @@
       // First-run: force easy so the first house spawns close and the timer is generous.
       if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
-      if (this.nearGrass) this.nearGrass.dispose();
-      this.nearGrass = new NearGrassLayer(this.world, this.scene);
       // Built AFTER the props so they can see the buildings, tea stalls and garages (B164).
       if (this._roadsideGrass) this.scene.remove(this._roadsideGrass);
       this._roadsideGrass = this.world.buildRoadsideGrass(0, 1);
@@ -11374,8 +10895,6 @@
       this.world.createMountainArches(this.scene, season);
       if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
-      if (this.nearGrass) this.nearGrass.dispose();
-      this.nearGrass = new NearGrassLayer(this.world, this.scene);
       // Built AFTER the props so they can see the buildings, tea stalls and garages (B164).
       if (this._roadsideGrass) this.scene.remove(this._roadsideGrass);
       this._roadsideGrass = this.world.buildRoadsideGrass(0, 1);
@@ -11425,10 +10944,6 @@
       if (cargoEl) cargoEl.textContent = order.cargo;
     }
 
-    toggleStatusPanel() {
-      // Legacy delivery status panel pruned for Slow Roads cruising parity
-    }
-
     // FPS counter is off by default; Settings > Display & Sound turns it on (B142).
     _fpsCounterOn() {
       try { return localStorage.getItem('shiplyp_showFps') === '1'; } catch (e) { return false; }
@@ -11438,10 +10953,6 @@
       const pill = document.getElementById('hud-fps-pill');
       if (pill) pill.hidden = !this._fpsCounterOn();
     }
-
-    refreshStatusPanel() {}
-
-    renderStatusPanel() {}
 
 
     initEvents() {
@@ -11945,7 +11456,6 @@
       }
       this.updateActiveOrderCard();
       this.updateHUDStats();
-      this.refreshStatusPanel();
 
       // First-run: clear onboarding after the first successful delivery.
       if (this._onboardingActive && this.deliveriesMade === 1) {
@@ -12716,8 +12226,6 @@
       document.getElementById('btn-hud-sound')?.addEventListener('click', () => this.toggleMute());
       document.getElementById('btn-dock-sound')?.addEventListener('click', () => this.toggleMute());
       document.getElementById('btn-hud-audio')?.addEventListener('click', () => this.toggleMute());
-      document.getElementById('btn-hud-status')?.addEventListener('click', () => this.toggleStatusPanel());
-      document.getElementById('btn-dock-status')?.addEventListener('click', () => this.toggleStatusPanel());
       document.getElementById('btn-dock-settings')?.addEventListener('click', () => this.openSettingsModal('gameplay'));
       document.getElementById('btn-dock-home')?.addEventListener('click', () => this.renderDispatchHub());
 
@@ -13377,21 +12885,6 @@
       this.resetInactivity();
       this.updateHUDStats();
 
-      if (typeof window !== 'undefined' && window.location.search.includes('approach=1') && this.world?.deliveryTargets?.length) {
-        const target = this.world.deliveryTargets[0];
-        const targetU = target.splineU;
-        const totalL = this.world.curve.getLength();
-        const approachU = Math.max(0, targetU - 45.0 / totalL);
-        const pt = this.world.curve.getPointAt(approachU);
-        const tang = this.world.curve.getTangentAt(approachU);
-        this.vehicle.mesh.position.copy(pt).add(new THREE.Vector3(0, 0.39, 0));
-        this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
-        this.vehicle.heading = this.vehicle.velocityHeading;
-        this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 11.11 : 10.0;
-        this.updateGPSNavigation();
-      }
-
       // First-run: teleport the vehicle close to the first target so the player
       // sees it immediately and can complete a delivery within ~30 seconds.
       if (this._onboardingActive && this.world?.deliveryTargets?.length && this.world.curve) {
@@ -13483,8 +12976,8 @@
       const vehList = vehicleList();
 
       const styleList = [
-        { id: 'crisp',     name: 'Crisp',     stat: 'Sharp Outlines • Lighter',    gif: 'assets/style-previews/crisp.gif' },
-        { id: 'cinematic', name: 'Cinematic', stat: 'Bloom + Grade • Heavier',     gif: 'assets/style-previews/cinematic.gif' },
+        { id: 'crisp',     name: 'Crisp',     stat: 'Sharp Outlines • Lighter',    gif: 'assets/style-previews/crisp.webp' },
+        { id: 'cinematic', name: 'Cinematic', stat: 'Bloom + Grade • Heavier',     gif: 'assets/style-previews/cinematic.webp' },
       ];
       const currentStyle = this.visualStyle?.selectedStyle || VisualStyleManager.DEFAULT_STYLE;
 
@@ -13934,71 +13427,6 @@
       };
     }
 
-    // Fades out thin roadside props (poles, lampposts) when they sit
-    // directly between the on-foot follow camera and the courier — a pole
-    // right next to a house the camera lingers close to otherwise reads as
-    // clipping straight through the character. Raycasts camera->subject,
-    // fades anything hit down to translucent, and restores anything no
-    // longer hit back to opaque.
-    updateOccluderFade(dt, subjectPos) {
-      if (!this.world || !this.world.occluderMeshes || !this.world.occluderMeshes.length) return;
-      if (!this._occluderRaycaster) this._occluderRaycaster = new THREE.Raycaster();
-      if (!this._fadedOccluders) this._fadedOccluders = new Set();
-
-      const camPos = this.camera.position;
-      const toSubject = subjectPos.clone().sub(camPos);
-      const dist = toSubject.length();
-      if (dist < 0.01) return;
-      toSubject.normalize();
-
-      this._occluderRaycaster.set(camPos, toSubject);
-      this._occluderRaycaster.far = dist - 0.3; // stop short of the subject itself
-      this._occluderRaycaster.near = 0.1;
-
-      // Pre-filter: only test occluder meshes within 20m of the subject.
-      // Buildings farther away cannot physically sit on the camera-to-subject ray,
-      // so skipping them avoids unnecessary BVH traversal per frame.
-      const nearOccluders = this.world.occluderMeshes.filter(
-        m => m.position.distanceToSquared(subjectPos) < 400 // 20m²
-      );
-      const hits = this._occluderRaycaster.intersectObjects(
-        nearOccluders.length ? nearOccluders : this.world.occluderMeshes, true
-      );
-      const hitRoots = new Set();
-      hits.forEach(h => {
-        let o = h.object;
-        while (o.parent && !this.world.occluderMeshes.includes(o)) o = o.parent;
-        hitRoots.add(o);
-      });
-
-      const FADE_TARGET = 0.18;
-      const fadeLerp = Math.min(1.0, 1.0 - Math.exp(-10.0 * dt));
-
-      hitRoots.forEach(root => {
-        this._fadedOccluders.add(root);
-        root.traverse(n => {
-          if (n.isMesh && n.material) {
-            n.material.transparent = true;
-            n.material.opacity = THREE.MathUtils.lerp(n.material.opacity ?? 1, FADE_TARGET, fadeLerp);
-          }
-        });
-      });
-
-      // Restore anything that was faded last frame but isn't hit anymore.
-      this._fadedOccluders.forEach(root => {
-        if (hitRoots.has(root)) return;
-        let done = true;
-        root.traverse(n => {
-          if (n.isMesh && n.material) {
-            n.material.opacity = THREE.MathUtils.lerp(n.material.opacity ?? 1, 1.0, fadeLerp);
-            if (n.material.opacity < 0.98) done = false;
-            else { n.material.opacity = 1.0; n.material.transparent = false; }
-          }
-        });
-        if (done) this._fadedOccluders.delete(root);
-      });
-    }
-
     // First-person gets a much closer near-clip than every other view: any
     // cabin geometry in front of the driver's eye (dash, steering wheel)
     // sits well inside the default 0.5 used by the other camera modes and
@@ -14014,17 +13442,6 @@
     }
 
     updateCamera(dt) {
-
-      if (typeof window !== 'undefined' && window.location.search.includes('view_villa=1') && this.world?.deliveryTargets?.length) {
-        const target = this.world.deliveryTargets[0];
-        const targetPos = target.pos;
-        const targetU = target.splineU;
-        const pt = this.world.curve.getPointAt(targetU);
-        const tang = this.world.curve.getTangentAt(targetU);
-        this.camera.position.copy(pt).add(new THREE.Vector3(0, 3.2, 0)).addScaledVector(tang, -10.0);
-        this.camera.lookAt(targetPos.x, targetPos.y + 1.2, targetPos.z);
-        return;
-      }
 
       if (!this.vehicle || !this.vehicle.mesh) return;
 
@@ -14638,9 +14055,6 @@
             }
           }
         }
-
-        // Near-field grass carpet follows the camera (B157)
-        if (this.nearGrass && this.camera) this.nearGrass.update(this.camera.position, dt);
 
         // Continuous Diurnal Cycle, Atmosphere, Auto-Headlights & Lighting
         this.updateDayNightCycle(dt);
