@@ -49,6 +49,7 @@ Shiplyp is a delivery driving game set on a procedurally generated scenic road t
 - Live build (Vercel): https://shiplyp.vercel.app/
 
 ## Recent Dev Logs
+- [[Dev Logs/2026-10-24 - B180-B187 Portal-Ready Build]]
 - [[Dev Logs/2026-09-23 - B107 Sidewalk Guardrail and Barrier Grounding Alignment]]
 - [[Dev Logs/2026-09-23 - B105 Android WebView Performance and DevTools Remote Debugging]]
 - [[Dev Logs/2026-09-23 - B100 Classic Style Fog and Night Posterize Fix]]
@@ -77,6 +78,7 @@ SORT date DESC
 ```
 
 ## Recent Activity
+- 2026-10-24 — [[2026-10-24 - B180-B187 Portal-Ready Build|B180–B187]]: portal-ready build; no outside servers needed, new players start driving straight away, pause when the tab is hidden
 - 2026-09-29 — [[2026-09-29 - B133 Motorbike and Vehicle Pay Rates|B133]]: motorbike joins the roster with its own courier rider model; each vehicle now pays a different rate, shown on the delivery card
 - 2026-09-28 — [[2026-09-28 - B130 Wanted Stars, Siren and Settle-Up Dialogue|B130]]: wanted stars, siren glow and sound, settle-up dialogue with the police
 - 2026-09-28 — [[2026-09-28 - B132 Clearer Traffic Signals and Zebra Crossings|B132]]: clearer traffic signals and zebra crossings visible from further away, about 15% more crossings; missed deliveries (B131) now cost a small fine and half pay
