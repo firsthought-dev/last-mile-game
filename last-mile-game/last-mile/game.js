@@ -14172,7 +14172,7 @@
       h.tmp.copy(h.cols[0]).lerp(h.cols[1], sm(0.55, 0.45, f)).lerp(h.cols[2], sm(0.25, 0.15, f));
       const u = 1 - f, I = 0.6 + 1.9 * Math.pow(u, 1.3), freq = 1.0 + 2.8 * Math.pow(u, 1.5);
       h.phase += freq * dt; const p = 0.5 + 0.5 * Math.sin(h.phase * Math.PI * 2);
-      const x = this.dayProgress, dark = (x >= 0.72 || x <= 0.05) ? 1 : (x > 0.55 ? sm(0.55, 0.72, x) : (x < 0.14 ? 1 - sm(0.05, 0.14, x) : 0));
+      const x = this.dayProgress, dark = (x >= 0.72 || x <= 0.01) ? 1 : (x > 0.55 ? sm(0.55, 0.72, x) : (x < 0.12 ? 1 - sm(0.01, 0.11, x) : 0));   // dawn fade starts earlier: the sky is already pink by 0.05
       const dayK = 0.14 + 0.86 * dark;                             // daylight glow is only ~14% of the night glow
       h.ringMat.color.copy(h.tmp).multiplyScalar(0.82 + 0.3 * dark); h.ringMat.opacity = 0.82 + 0.13 * p;
       h.glowMat.color.copy(h.tmp); h.glowMat.opacity = Math.min(1, (0.24 + 0.26 * I) * (0.7 + 0.3 * p) * dayK);
