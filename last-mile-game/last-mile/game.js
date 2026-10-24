@@ -1285,141 +1285,6 @@
   }
 
   // --------------------------------------------------------------------------
-  // 4B. PROCEDURAL GROUND TEXTURES
-  // No external texture files are bundled, so ground materials render as
-  // flat vertex-color triangles — fine up close but reads as "vector art"
-  // under the new PBR/bloom pipeline. These canvas-based tileable textures
-  // give grass/asphalt/rock a repeating micro-detail speckle; they're
-  // multiplied against the existing per-vertex terrain colors (map *
-  // vertexColors) rather than replacing them, so seasonal palettes still work.
-  const TextureFactory = {
-    _cache: {},
-
-    _canvas(size) {
-      const c = document.createElement('canvas');
-      c.width = c.height = size;
-      return c;
-    },
-
-    grass(prng) {
-      if (this._cache.grass) return this._cache.grass;
-      const size = 256;
-      const c = this._canvas(size);
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, size, size);
-      // Speckled blade/clump noise: light and dark flecks over neutral grey
-      // (grey so it multiplies cleanly against any season's grass color).
-      for (let i = 0; i < 5500; i++) {
-        const x = prng.next() * size;
-        const y = prng.next() * size;
-        const shade = 0.72 + prng.next() * 0.5;
-        const c8 = Math.floor(Math.min(255, 255 * shade));
-        ctx.fillStyle = `rgba(${c8},${c8},${c8},0.5)`;
-        const w = 0.6 + prng.next() * 1.6;
-        const h = 2 + prng.next() * 5;
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(prng.next() * Math.PI);
-        ctx.fillRect(-w / 2, -h / 2, w, h);
-        ctx.restore();
-      }
-      const tex = new THREE.CanvasTexture(c);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      this._cache.grass = tex;
-      return tex;
-    },
-
-    asphalt(prng) {
-      if (this._cache.asphalt) return this._cache.asphalt;
-      const size = 256;
-      const c = this._canvas(size);
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#a8a8a8';
-      ctx.fillRect(0, 0, size, size);
-      for (let i = 0; i < 9000; i++) {
-        const x = prng.next() * size;
-        const y = prng.next() * size;
-        const shade = 0.55 + prng.next() * 0.7;
-        const c8 = Math.floor(Math.min(255, 168 * shade));
-        ctx.fillStyle = `rgba(${c8},${c8},${c8},0.6)`;
-        const r = 0.5 + prng.next() * 1.3;
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      const tex = new THREE.CanvasTexture(c);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      this._cache.asphalt = tex;
-      return tex;
-    },
-
-    rock(prng) {
-      if (this._cache.rock) return this._cache.rock;
-      const size = 256;
-      const c = this._canvas(size);
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#bdbdbd';
-      ctx.fillRect(0, 0, size, size);
-      for (let i = 0; i < 1400; i++) {
-        const x = prng.next() * size;
-        const y = prng.next() * size;
-        const shade = 0.5 + prng.next() * 0.85;
-        const c8 = Math.floor(Math.min(255, 189 * shade));
-        ctx.fillStyle = `rgba(${c8},${c8},${c8},0.55)`;
-        const w = 4 + prng.next() * 14;
-        const h = 3 + prng.next() * 10;
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(prng.next() * Math.PI);
-        ctx.fillRect(-w / 2, -h / 2, w, h);
-        ctx.restore();
-      }
-      const tex = new THREE.CanvasTexture(c);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      this._cache.rock = tex;
-      return tex;
-    }
-  };
-
-  // Setting `flatShading: false` on a material does nothing by itself if
-  // the geometry has no smooth normal data to interpolate — and Three.js's
-  // primitive polyhedra (DodecahedronGeometry etc.) are built non-indexed,
-  // with each triangle's 3 vertices duplicated and given that triangle's
-  // own flat face normal. There is nothing smooth stored on the geometry
-  // for flatShading:false to blend between, so the material flag alone is
-  // a no-op — confirmed directly: reading a rock's normal attribute showed
-  // 9 consecutive vertices sharing one identical flat normal despite
-  // flatShading already being off (see SLOWROADS_PARITY_LOG.md item 2's
-  // correction). This welds coincident positions (the geometry stays
-  // non-indexed — every duplicate vertex at a shared corner just gets
-  // written the same averaged normal, which reads identically to a
-  // properly indexed+smoothed mesh) and averages their face normals, the
-  // same effect `BufferGeometryUtils.mergeVertices()` + computeVertexNormals
-  // would give, without adding that as a new script dependency.
-  function smoothFaceNormals(geometry, precision = 4) {
-    geometry.computeVertexNormals(); // baseline: flat per-triangle normals
-    const pos = geometry.attributes.position;
-    const norm = geometry.attributes.normal;
-    const groups = new Map();
-    for (let i = 0; i < pos.count; i++) {
-      const key = `${pos.getX(i).toFixed(precision)},${pos.getY(i).toFixed(precision)},${pos.getZ(i).toFixed(precision)}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(i);
-    }
-    const avg = new THREE.Vector3();
-    const tmp = new THREE.Vector3();
-    for (const indices of groups.values()) {
-      avg.set(0, 0, 0);
-      for (const i of indices) avg.add(tmp.set(norm.getX(i), norm.getY(i), norm.getZ(i)));
-      avg.normalize();
-      for (const i of indices) norm.setXYZ(i, avg.x, avg.y, avg.z);
-    }
-    norm.needsUpdate = true;
-    return geometry;
-  }
-
-  // --------------------------------------------------------------------------
   // Faceted Rock Geometry Factory — creates low-poly angular weathered rocks
   // matching Slow Roads reference (sharp facets, per-vertex perturbation,
   // flat face normals, zero blurry smooth-shaded spheres).
@@ -1467,7 +1332,7 @@
   // --------------------------------------------------------------------------
   // Billboard trees — replaces the ConeGeometry/DodecahedronGeometry
   // primitive trees per SHIPLYP_VISUAL_ENHANCEMENT_BRIEF.md section 3.3.
-  // Even with correct smooth shading (see smoothFaceNormals above), a
+  // Even with correct smooth shading, a
   // primitive-geometry tree still reads as a stacked cone or a round ball —
   // the actual gap against slowroads.io's trees is silhouette and texture
   // detail (individual needle/leaf-cluster edges), not shading smoothness.
@@ -2049,9 +1914,7 @@
     pathPaversColor() { return this._get('pathPaversC', 'assets/textures/path_pavers_c.webp'); },
     pathPaversNormal() { return this._get('pathPaversN', 'assets/textures/path_pavers_n.webp'); },
     edgeStoneColor() { return this._get('edgeStoneC', 'assets/textures/edge_stone_c.webp'); },
-    edgeStoneNormal() { return this._get('edgeStoneN', 'assets/textures/edge_stone_n.webp'); },
-    gravelColor() { return this._get('roadGravel', 'assets/textures/gravel_color.webp'); },
-    gravelNormal() { return this._get('roadNormal', 'assets/textures/road_normal.webp'); }
+    edgeStoneNormal() { return this._get('edgeStoneN', 'assets/textures/edge_stone_n.webp'); }
   };
 
   // --------------------------------------------------------------------------
