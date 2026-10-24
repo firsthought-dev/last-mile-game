@@ -2748,6 +2748,24 @@
             buckets[r3 < 0.82 ? 4 + (r2 > 0.5 ? 1 : 0) : Math.floor(r1 * 4) % 4].push(m);       // ~82% flowering sorrel, the rest leafy filler
           }
         }
+        // Flower beds along both kerbs of every entrance path (B173): two dense strips, never on the slabs themselves.
+        for (const tg of (this.deliveryTargets || [])) {
+          const pi = tg.pathInfo; if (!pi || tg.splineU < u0 - 0.002 || tg.splineU > u1) continue;
+          const sx = Math.round(pi.pt.x * 3), sz = Math.round(pi.pt.z * 3), span = Math.abs(pi.endT - pi.startT);
+          const n = Math.round(span * 2 * 1.0 * 9);
+          for (let i = 0; i < n; i++) {
+            const sgn = i % 2 ? 1 : -1, along = hash(sx, sz, i * 7) * span, off = 1.7 + hash(sx, sz, i * 7 + 1) * 0.9;
+            const t = pi.startT + Math.sign(pi.endT - pi.startT) * along;
+            const pos = pi.pt.clone().addScaledVector(pi.normal, t).addScaledVector(pi.tangent, sgn * off);
+            pos.y = this.groundHeightAt(pi.pt, pos, t) - 0.02;
+            const r1 = hash(sx, sz, i * 7 + 2), r2 = hash(sx, sz, i * 7 + 3), r3 = hash(sx, sz, i * 7 + 4);
+            const h = 0.4 + r1 * 0.35, w = h * (1.0 + r2 * 0.2);
+            dummy.position.copy(pos); dummy.rotation.set(0, r3 * Math.PI * 2, 0); dummy.scale.set(w, h, w); dummy.updateMatrix();
+            const m = dummy.matrix.clone(); const g = 0.95 + r2 * 0.2;
+            m._tint = new THREE.Color(1.3 * g, 1.34 * g, 1.12 * g);
+            buckets[r3 < 0.85 ? 4 + (r2 > 0.5 ? 1 : 0) : Math.floor(r1 * 4) % 4].push(m);
+          }
+        }
         buckets.forEach((list, v) => addChunkedInstances(group, geoms[v], mat, list, { cell: 200, onChunk: (mesh, l) => { l.forEach((m, i) => mesh.setColorAt(i, m._tint)); mesh.instanceColor.needsUpdate = true; } }));
       } catch (err) {
         console.error('buildHouseFlowers failed:', err);
