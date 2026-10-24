@@ -3,6 +3,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -10,6 +11,8 @@ const MIME = {
   '.woff2': 'font/woff2', '.gif': 'image/gif', '.png': 'image/png', '.json': 'application/json',
   '.txt': 'text/plain; charset=utf-8',
 };
+
+const TEXT = new Set(['.html', '.js', '.css', '.json', '.txt']);
 
 export function serve(dir, { prefix = '/', port = 0 } = {}) {
   const root = path.resolve(dir);
@@ -23,7 +26,16 @@ export function serve(dir, { prefix = '/', port = 0 } = {}) {
     if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
       res.writeHead(404); res.end('not found'); return;
     }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    const ext = path.extname(file);
+    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' };
+    // Real hosts (Vercel, portals) compress text; models and images are already compact.
+    if (TEXT.has(ext) && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+      headers['Content-Encoding'] = 'gzip';
+      res.writeHead(200, headers);
+      fs.createReadStream(file).pipe(zlib.createGzip()).pipe(res);
+      return;
+    }
+    res.writeHead(200, headers);
     fs.createReadStream(file).pipe(res);
   });
   return new Promise((resolve) => {
