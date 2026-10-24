@@ -14,6 +14,7 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 # Keep this list in step with the scripts index.html loads.
 cp "$DIR"/{index.html,game.js,save.js,ads.js,police.js,style.css} "$OUT"/
+[ -d "$DIR/js" ] && cp -r "$DIR/js" "$OUT/js"
 cp -r "$DIR/assets" "$OUT/assets"
 # Third-party code and fonts, once bundled locally (tools/vendor.sh).
 [ -d "$DIR/vendor" ] && cp -r "$DIR/vendor" "$OUT/vendor"
