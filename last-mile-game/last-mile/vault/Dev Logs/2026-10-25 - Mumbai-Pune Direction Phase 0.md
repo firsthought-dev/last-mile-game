@@ -10,5 +10,6 @@ This note grows as Phase 0 units land. Nothing here changes how the game plays y
 - **Retention and release work runs alongside the city work**, not after it, so progress can be measured from the start.
 - **Open decision:** whether AI vehicle traffic returns after being removed in August. Nothing that depends on it is built until that is answered.
 - **Baseline measured:** the current sharp-outline look is heavier than the target for mid-range phones, so lighter ways to draw outlines will be tested before more is added to the scene.
+- **A start-up layout issue was found** for first-time players (some garden plants sit in front of delivery houses). Evidence is gathered; the fix waits for a go-ahead.
 
 Related: [[Projects/Last-Mile Game]], [[2026-10-25 - Modular Codebase Architecture Split]]
