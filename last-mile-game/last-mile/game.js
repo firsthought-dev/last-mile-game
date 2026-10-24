@@ -11334,6 +11334,7 @@
           pos: parcelGroup.position.clone(),
           vel: new THREE.Vector3(vx, vy, vz),
           nearestTarget: nearestTarget,
+          groundY: carPos.y,
           life: flightTime + 0.4
         });
       } else {
@@ -11345,6 +11346,7 @@
           pos: parcelGroup.position.clone(),
           vel: targetDir.multiplyScalar(22.0).add(new THREE.Vector3(0, 7.0, 0)),
           nearestTarget: null,
+          groundY: carPos.y,
           life: 1.5
         });
       }
@@ -11518,7 +11520,10 @@
           }
         }
 
-        if (p.life <= 0 || p.pos.y < 0.2) {
+        // Landed: out of time, or fallen below the ground under the throw. The
+        // floor is relative to the car's ground height, not absolute Y, so
+        // parcels on terrain below sea level are not deleted on the first frame.
+        if (p.life <= 0 || p.pos.y < (p.groundY ?? 0.2) - 0.5) {
           this.scene.remove(p.mesh);
           this.parcels.splice(i, 1);
         }
