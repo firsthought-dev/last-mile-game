@@ -152,6 +152,12 @@
 
     _spendSpareParcel() {
       if (this.spareParcels == null) this.spareParcels = CONFIG.SPARE_PARCELS;
+      // A first-time player is still finding the button: an early drop costs nothing.
+      if (this._onboardingActive) {
+        this._track('order_fail', { reason: 'early_throw_onboarding', spare_left: this.spareParcels, vehicle: this.selectedVehicle });
+        this.addNotification(`${UI.icon('package')} Not close enough yet. Drive up to the ring first`, 'info', 2500);
+        return;
+      }
       if (this.spareParcels <= 0) {
         this._track('order_fail', { reason: 'out_of_parcels', spare_left: 0, vehicle: this.selectedVehicle });
         this.addNotification(`${UI.icon('package')} OUT OF PARCELS — SHIFT OVER`, 'warning', 4000);

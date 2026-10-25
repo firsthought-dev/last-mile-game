@@ -581,6 +581,24 @@
     }
 
 
+    // First-run helper (WI-18). Starts the player ONBOARD_APPROACH_M before the first drop,
+    // at a walking-pace speed, so there is time to see the ring and read the hint. Also used
+    // to put them back if they drive past the house, so the first delivery cannot be lost.
+    _placeForFirstOrder() {
+      const target = this.world.deliveryTargets[0];
+      const totalL = this.world.curve.getLength();
+      const approachU = Math.max(0, target.splineU - CONFIG.ONBOARD.APPROACH_M / totalL);
+      const pt = this.world.curve.getPointAt(approachU);
+      const tang = this.world.curve.getTangentAt(approachU);
+      this.vehicle.mesh.position.copy(pt).add(new THREE.Vector3(0, 0.39, 0));
+      this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
+      this.vehicle.heading = this.vehicle.velocityHeading;
+      this.vehicle.splineProgress = approachU;
+      this.vehicle.lateralOffset = 0;
+      this.vehicle.speed = CONFIG.ONBOARD.START_SPEED;
+      this.updateGPSNavigation();
+    }
+
     // Telemetry never gets to break the game: no module, no backend, or a throwing one is all fine.
     _track(name, params) {
       try { if (window.ShiplypTelemetry) window.ShiplypTelemetry.track(name, params); } catch (e) { /* ignore */ }
@@ -635,21 +653,10 @@
       this.resetInactivity();
       this.updateHUDStats();
 
-      // First-run: teleport the vehicle close to the first target so the player
-      // sees it immediately and can complete a delivery within ~30 seconds.
+      // First-run: put the vehicle on the approach to the first target so the
+      // player sees the ring at once and can complete a delivery within ~30 seconds.
       if (this._onboardingActive && this.world?.deliveryTargets?.length && this.world.curve) {
-        const target = this.world.deliveryTargets[0];
-        const targetU = target.splineU;
-        const totalL = this.world.curve.getLength();
-        const approachU = Math.max(0, targetU - 18.0 / totalL);
-        const pt = this.world.curve.getPointAt(approachU);
-        const tang = this.world.curve.getTangentAt(approachU);
-        this.vehicle.mesh.position.copy(pt).add(new THREE.Vector3(0, 0.39, 0));
-        this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
-        this.vehicle.heading = this.vehicle.velocityHeading;
-        this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 11.11 : 8.0;
-        this.updateGPSNavigation();
+        this._placeForFirstOrder();
         this._showOnboardingHint('drive');
       }
 
@@ -796,15 +803,30 @@
         this.updateClimateHUD();
         this.updateHealthHUD();
 
-        // Switch onboarding hint from "drive" to "toss" when close to target
+        // First delivery assist (WI-18), first-time players only: ease off near the first
+        // house so the drop window is seconds long, not a blink, and if they still drive
+        // past it, put them back on the approach. Switch the hint from "drive" to "toss"
+        // as soon as a drop would land.
         if (this._onboardingActive && this.vehicle && this.world?.deliveryTargets?.length) {
           const firstTarget = this.world.deliveryTargets.find(t => !t.delivered);
           if (firstTarget) {
-            const d = this.vehicle.mesh.position.distanceTo(firstTarget.pos);
-            if (d < 22 && this._onboardingHintStep !== 'toss') {
+            const vp = this.vehicle.mesh.position;
+            const d = vp.distanceTo(firstTarget.pos);
+            const vh = this.vehicle.velocityHeading;
+            const ahead = (firstTarget.pos.x - vp.x) * Math.sin(vh) + (firstTarget.pos.z - vp.z) * Math.cos(vh);
+            if (firstTarget === this.world.deliveryTargets[0]) {
+              if (d < CONFIG.ONBOARD.SLOW_ZONE_M && ahead > 0 && this.vehicle.speed > CONFIG.ONBOARD.SLOW_SPEED) {
+                this.vehicle.speed = Math.max(CONFIG.ONBOARD.SLOW_SPEED, this.vehicle.speed - 10 * dt);
+              } else if (ahead < -CONFIG.ONBOARD.PASSED_M) {
+                this._placeForFirstOrder();
+                this.addNotification(`${UI.icon('target')} Passed it. Back on the approach: drop at the ring`, 'info', 3500);
+              }
+            }
+            const tossAt = CONFIG.TOSS_RANGE - 5;
+            if (d < tossAt && ahead > -CONFIG.TOSS_BEHIND_SLACK && this._onboardingHintStep !== 'toss') {
               this._onboardingHintStep = 'toss';
               this._showOnboardingHint('toss');
-            } else if (d >= 22 && this._onboardingHintStep !== 'drive') {
+            } else if ((d >= tossAt || ahead <= -CONFIG.TOSS_BEHIND_SLACK) && this._onboardingHintStep !== 'drive') {
               this._onboardingHintStep = 'drive';
               this._showOnboardingHint('drive');
             }

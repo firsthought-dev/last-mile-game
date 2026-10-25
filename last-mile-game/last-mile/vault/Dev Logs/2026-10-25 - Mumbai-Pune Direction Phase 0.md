@@ -15,5 +15,6 @@ This note grows as Phase 0 units land. Nothing here changes how the game plays y
 - **Streak forgiveness and a daily goal arrive** (from an earlier unmerged experiment): one missed day no longer wipes the streak, and delivering three parcels in a day pays a bonus. The hub shows today's goal. Progress on a new device or after reinstall is unchanged (still on-device).
 - **Gameplay measurements:** a small set of anonymous play events (opens, shifts, deliveries, misses, unlocks, session length, smoothness samples) is now recorded inside the game. On the web nothing leaves the device; on Android it only appears in debug logs for now. Players can switch it off.
 - **Android release prep:** automatic cloud backup of game data is switched off, and release-build rules keep the new event hook working.
+- **Easier first delivery:** new players now start further back from their first house, slow down near it, get put back on the approach if they drive past, and lose nothing for dropping too early. Testing with real new players is still to do.
 
 Related: [[Projects/Last-Mile Game]], [[2026-10-25 - Modular Codebase Architecture Split]]
