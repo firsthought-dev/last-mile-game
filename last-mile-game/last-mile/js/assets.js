@@ -226,8 +226,13 @@
     pending: [],
     windowMat: null,
     VARIANTS: ['House_Cottage', 'House_TwoStorey', 'House_PinkGable'],
+    // Settles once houses.glb has loaded or failed. The world build awaits it (see
+    // _bootWithLoader) so house models are in place before anything is laid out round
+    // the drop points; a house swapped in later moves its drop point.
+    ready: null,
     load() {
-      if (typeof THREE.GLTFLoader === 'undefined') return;
+      let settle; this.ready = new Promise((res) => { settle = res; });
+      if (typeof THREE.GLTFLoader === 'undefined') { settle(); return; }
       new THREE.GLTFLoader().load('assets/models/houses.glb?v=houses4', (gltf) => {
         gltf.scene.traverse((child) => {
           if (!child.isMesh) return;
@@ -244,8 +249,10 @@
           try { fn(); } catch (err) { console.error('HousesAsset: swap failed', err); }
         });
         this.pending.length = 0;
+        settle();
       }, undefined, (err) => {
         console.warn('HousesAsset: failed to load houses.glb, keeping built-in villas', err);
+        settle();
       });
     },
     clone(name) {

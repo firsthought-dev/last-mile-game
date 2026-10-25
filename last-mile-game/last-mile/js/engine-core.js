@@ -2,7 +2,7 @@
   "use strict";
   const S = window.Shiplyp = window.Shiplyp || {};
   const {
-    CONFIG, Career, isTwoWheeler, isPedalVehicle, sound, MuscleCoupeAsset,
+    CONFIG, Career, isTwoWheeler, isPedalVehicle, sound, MuscleCoupeAsset, HousesAsset,
     VehicleController, RainSystem, VisualStyleManager, ProceduralWorld, UI
   } = S;
 
@@ -194,6 +194,14 @@
       await frame();
 
       // --- Stage 4: Foliage, props, villas, rocks (heaviest stage) ---
+      // Wait for the house models (up to 8 s; a failed or slow load falls back to the old
+      // swap-in-later path). Play-now builds the world at once, before houses.glb arrives,
+      // and the late swap moved every drop point after the flowers had been laid round the
+      // old ones (WI-03).
+      if (HousesAsset && HousesAsset.ready) {
+        await Promise.race([HousesAsset.ready, new Promise((res) => setTimeout(res, 8000))]);
+      }
+
       // First-run: force easy so the first house spawns close and the timer is generous.
       if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
