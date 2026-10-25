@@ -13,5 +13,7 @@ This note grows as Phase 0 units land. Nothing here changes how the game plays y
 - **A start-up layout issue was found** for first-time players (some garden plants sit in front of delivery houses). Evidence is gathered; the fix waits for a go-ahead.
 - **Junction prototype:** a four-way junction was prototyped two different ways on a side branch, to choose how roads with crossings will be represented. The choice is pending.
 - **Streak forgiveness and a daily goal arrive** (from an earlier unmerged experiment): one missed day no longer wipes the streak, and delivering three parcels in a day pays a bonus. The hub shows today's goal. Progress on a new device or after reinstall is unchanged (still on-device).
+- **Gameplay measurements:** a small set of anonymous play events (opens, shifts, deliveries, misses, unlocks, session length, smoothness samples) is now recorded inside the game. On the web nothing leaves the device; on Android it only appears in debug logs for now. Players can switch it off.
+- **Android release prep:** automatic cloud backup of game data is switched off, and release-build rules keep the new event hook working.
 
 Related: [[Projects/Last-Mile Game]], [[2026-10-25 - Modular Codebase Architecture Split]]
