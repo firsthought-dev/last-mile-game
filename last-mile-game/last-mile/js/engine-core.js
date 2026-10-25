@@ -112,6 +112,12 @@
       const careerStats = Career ? Career.career() : null;
       this._onboardingActive = careerStats ? (careerStats.deliveries === 0 && careerStats.shifts === 0) : false;
       this._firstOpenTime = this._onboardingActive ? Date.now() : null;
+      this._track('app_open', {
+        platform: window.ShiplypNativeTelemetry ? 'android' : 'web',
+        returning: !!(careerStats && (careerStats.deliveries > 0 || careerStats.shifts > 0)),
+        streak: this._dailyCheckIn ? this._dailyCheckIn.streak : 0,
+        build: String(window.__BUILD || '')
+      });
 
       this.renderDispatchHub();
 
@@ -575,6 +581,11 @@
     }
 
 
+    // Telemetry never gets to break the game: no module, no backend, or a throwing one is all fine.
+    _track(name, params) {
+      try { if (window.ShiplypTelemetry) window.ShiplypTelemetry.track(name, params); } catch (e) { /* ignore */ }
+    }
+
     startDrive() {
       this.gameState = 'playing';
       if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
@@ -589,6 +600,10 @@
       // is cumulative on a vehicle instance that outlives a single shift, so
       // only the delta since this point may be added to the career total.
       if (Career) Career.beginShift();
+      this._track('shift_start', {
+        shift_no: Career ? Career.career().shifts : 0,
+        vehicle: this.selectedVehicle, city: this.selectedCity, difficulty: this.selectedDifficulty
+      });
       this._distanceBanked = this.vehicle ? this.vehicle.distanceTraveled : 0;
       sound.resumeForGameplay();
       this.modalContainer.innerHTML = '';
@@ -709,6 +724,9 @@
         const fpsEl = document.getElementById('hud-fps-value');
         if (fpsEl) fpsEl.textContent = String(fps);
         this._adaptRenderScale(fps);
+        if (this.gameState === 'playing' && !this._hiddenPaused && !this._adPaused && window.ShiplypTelemetry) {
+          window.ShiplypTelemetry.fpsSample(fps, { pixel_ratio: this._pr, style: this.visualStyle && this.visualStyle.currentStyle, vehicle: this.selectedVehicle });
+        }
         this._fpsAccumTime = 0;
         this._fpsAccumFrames = 0;
       }

@@ -242,6 +242,7 @@
           if (!Career) return;
           const result = Career.purchase('vehicles', vehId, meta.price);
           if (result.ok) {
+            this._track('unlock', { kind: 'vehicle', id: vehId, price: meta.price });
             sheet.remove();
             this.selectedVehicle = vehId;
             if (Career && typeof Career.setSelectedVehicle === 'function') {

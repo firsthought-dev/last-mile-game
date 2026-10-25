@@ -153,6 +153,7 @@
     _spendSpareParcel() {
       if (this.spareParcels == null) this.spareParcels = CONFIG.SPARE_PARCELS;
       if (this.spareParcels <= 0) {
+        this._track('order_fail', { reason: 'out_of_parcels', spare_left: 0, vehicle: this.selectedVehicle });
         this.addNotification(`${UI.icon('package')} OUT OF PARCELS — SHIFT OVER`, 'warning', 4000);
         setTimeout(() => this.showShiftSummary({ outOfParcels: true }), 900);
         return;
@@ -160,6 +161,7 @@
       this.spareParcels--;
       this._renderSpareParcels();
       const left = this.spareParcels;
+      this._track('order_fail', { reason: 'missed_throw', spare_left: left, vehicle: this.selectedVehicle });
       this.addNotification(`${UI.icon('package')} MISSED THROW — ${left === 0 ? 'NO SPARE PARCELS LEFT. ONE MORE MISS ENDS THE SHIFT' : `${left} SPARE PARCEL${left === 1 ? '' : 'S'} LEFT`}`, 'warning', 3500);
     },
 
@@ -203,6 +205,10 @@
         });
       }
 
+      this._track('order_complete', {
+        order_no: this.deliveriesMade, stars, late: missed, payout: earnedBonus,
+        time_left_pct: Math.round(Math.max(0, Math.min(1, timeLeftRatio)) * 100), vehicle: this.selectedVehicle
+      });
       this.orderTimer = this.maxOrderTimer; // Reset clock for next order
       this._assistUsedThisOrder = !!(this.vehicle && (this.vehicle.isAutodrive || this.vehicle.isCruise));
 
@@ -252,6 +258,7 @@
           const ms = Date.now() - this._firstOpenTime;
           console.info('[Shiplyp] first_open_to_first_delivery_ms', ms);
           if (Career && Career.noteFirstDelivery) Career.noteFirstDelivery(ms);
+          this._track('first_open_to_first_order', { ms });
         }
       }
 
