@@ -324,6 +324,8 @@
       document.body.appendChild(modal);
 
       this._shiftDoubleClaimed = false;
+      const adsOn = !(typeof ShiplypAds !== 'undefined' && ShiplypAds && ShiplypAds.isEnabled && !ShiplypAds.isEnabled());
+      if (!adsOn) modal.querySelector('#shift-double-btn')?.remove();
       const doubleBtn = modal.querySelector('#shift-double-btn');
       doubleBtn?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -1153,6 +1155,7 @@
           this.startDrive();
         }
       });
+      if (typeof ShiplypAds !== 'undefined' && ShiplypAds && ShiplypAds.isEnabled && !ShiplypAds.isEnabled()) document.getElementById('btn-hub-sponsor')?.remove();
       document.getElementById('btn-hub-sponsor')?.addEventListener('click', (e) => {
         e.preventDefault();
         const now = Date.now();
