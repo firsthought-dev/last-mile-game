@@ -2,7 +2,7 @@
   "use strict";
   const S = window.Shiplyp = window.Shiplyp || {};
   const {
-    CONFIG, Career, isTwoWheeler, isPedalVehicle, sound, MuscleCoupeAsset, HousesAsset,
+    CONFIG, Career, isTwoWheeler, isPedalVehicle, sound, MuscleCoupeAsset, HousesAsset, CrowdAsset,
     VehicleController, RainSystem, VisualStyleManager, ProceduralWorld, UI
   } = S;
 
@@ -198,9 +198,8 @@
       // swap-in-later path). Play-now builds the world at once, before houses.glb arrives,
       // and the late swap moved every drop point after the flowers had been laid round the
       // old ones (WI-03).
-      if (HousesAsset && HousesAsset.ready) {
-        await Promise.race([HousesAsset.ready, new Promise((res) => setTimeout(res, 8000))]);
-      }
+      const waits = [HousesAsset && HousesAsset.ready, CrowdAsset && CrowdAsset.ready].filter(Boolean);
+      if (waits.length) await Promise.race([Promise.all(waits), new Promise((res) => setTimeout(res, 8000))]);
 
       // First-run: force easy so the first house spawns close and the timer is generous.
       if (this._onboardingActive) this.selectedDifficulty = 'easy';
