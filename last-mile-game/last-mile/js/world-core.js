@@ -59,7 +59,14 @@
 
     // 1. C1 Continuous Blended Terrain Evaluator across Districts (4 km intervals with 1 km Hermite blend)
 
+    // The terrain height every system reads. The zone road network (WI-05, ?net=1) grades the ground
+    // under and beside its cross roads, so terrain, props and vehicles all see the same cutting or fill.
     getRawTerrainHeight(x, z) {
+      const h = this._baseTerrainHeight(x, z);
+      return this.roadNet ? this.roadNet.adjustHeight(x, z, h) : h;
+    }
+
+    _baseTerrainHeight(x, z) {
       const DISTRICT_SPAN = 4000.0;
       const BLEND_SPAN = 1000.0;
 
@@ -637,6 +644,9 @@
       const TOTAL_POINTS = 800; // matches createFoliageAndProps' getSpacedPoints(800)
       const i = Math.round(splineProgress * TOTAL_POINTS);
       const avgSegStep = (this.curve ? this.curve.getLength() : 5000) / TOTAL_POINTS;
+
+      // At a junction the clamp opens wide so a vehicle can turn onto the cross road (WI-05).
+      if (this.roadNet && this.curve && this.roadNet.inBox(splineProgress * this.curve.getLength(), 1)) return 14.0;
 
       // Inside tunnel bore, widen lateral clamp to the tunnel walls (5.0m)
       const meshIdx = Math.round(splineProgress * CONFIG.ROAD_MESH_SEGMENTS);

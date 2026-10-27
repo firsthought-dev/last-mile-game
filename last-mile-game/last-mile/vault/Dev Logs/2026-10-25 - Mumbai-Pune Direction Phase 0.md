@@ -19,5 +19,6 @@ This note grows as Phase 0 units land. Nothing here changes how the game plays y
 - **More varied pedestrians:** crowds now mix men and women, different skin tones and outfits (tees, long tunics, shorts, long trousers, skirts, sarees) with long or tied-up hair, and read in real colours instead of near-black. Each person is drawn with far fewer GPU draw calls.
 - **Traffic vehicle shapes:** simple generic shapes for scooters, cars, an SUV, a cab, an auto, a goods tempo and two buses were blocked out, to be refined from street photos.
 - **Road network groundwork:** the first four junctions with cross roads, lanes and traffic signals now exist as data behind a developer switch, with an automatic check. Nothing changes for players yet.
+- **Junctions now look like junctions** (behind a developer switch): cross roads with road surface and paint, gaps in the footpath and barriers, traffic signal poles with changing lights, and graded ground so the cross roads are not steep. Vehicles can turn onto them.
 
 Related: [[Projects/Last-Mile Game]], [[2026-10-25 - Modular Codebase Architecture Split]]

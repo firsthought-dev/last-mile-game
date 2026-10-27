@@ -174,6 +174,15 @@
       // --- Stage 2: World object + sky dome + road ---
       this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
       this.world._game = this;
+
+      // WI-05 (opt-in, ?net=1): the zone road network. It must exist BEFORE the road, terrain, props and fences
+      // are made so they all see the graded cross roads and leave the junctions clear.
+      this.roadNet = null; this.world.roadNet = null;
+      if (S.RoadNetwork && /[?&]net=1\b/.test(window.location.search)) {
+        this.roadNet = new S.RoadNetwork(this.world).build();
+        this.world.roadNet = this.roadNet;
+      }
+
       this.scene.add(this.world.createSkyDome(season, this.selectedTimeOfDay));
       this.scene.add(this.world.createRoadMesh());
       if (this._sidewalks) this.scene.remove(this._sidewalks);
@@ -215,10 +224,13 @@
       this._houseFlowers = this.world.buildHouseFlowers(0, 1);
       this.scene.add(this._houseFlowers);
 
-      // WI-05 (in progress, opt-in): the zone road network with a debug overlay, ?net=1 only.
-      if (S.RoadNetwork && /[?&]net=1\b/.test(window.location.search)) {
-        this.roadNet = new S.RoadNetwork(this.world).build();
-        this.scene.add(this.roadNet.debugGroup());
+      if (this.roadNet) {
+        if (this._netGroup) this.scene.remove(this._netGroup);
+        this._netGroup = new THREE.Group(); this._netGroup.name = 'RoadNet';
+        this._netGroup.add(this.roadNet.buildSurface());
+        this._netGroup.add(this.roadNet.buildSignals());
+        if (/[?&]netdebug=1\b/.test(window.location.search)) this._netGroup.add(this.roadNet.debugGroup());
+        this.scene.add(this._netGroup);
       }
 
       setProgress(82, 'Seeding subtropical forests & Sahyadri rockfaces...');
@@ -845,6 +857,8 @@
             }
           }
         }
+
+        if (this.roadNet) this.roadNet.update(dt);
 
         // Continuous Diurnal Cycle, Atmosphere, Auto-Headlights & Lighting
         this.updateDayNightCycle(dt);

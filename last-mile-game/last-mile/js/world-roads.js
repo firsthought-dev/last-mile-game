@@ -216,6 +216,7 @@
         polygonOffsetUnits: -1
       });
 
+      this.roadTarmac = baseTarmac.clone();     // the zone road network reuses it for cross-road surfaces
       this.roadMesh = new THREE.Mesh(geom, roadMaterial);
       this.roadMesh.receiveShadow = true;
       return this.roadMesh;
@@ -448,6 +449,11 @@
       return this.tunnelZones.some(z => i >= z.start - extraPad && i <= z.end + extraPad);
     },
 
+
+    // True where the zone road network opens a cross road (WI-05); never true without ?net=1.
+    _inJunctionAtU(u, pad = 1) {
+      return !!(this.roadNet && this.roadNet.inBox(u * this.curve.getLength(), pad));
+    },
 
     _inTunnelAtU(u, pad = 1) {
       if (!this.roadSpacedPoints || !this.isInTunnelZone) return false;
@@ -1626,7 +1632,7 @@
           };
           for (let k = 0; k <= n; k++) {
             const u = u0 + (u1 - u0) * (k / n);
-            if (this._inTunnelAtU(u, 2)) { prev = null; continue; }
+            if (this._inTunnelAtU(u, 2) || this._inJunctionAtU(u, 0.5)) { prev = null; continue; }
             const pt = this.curve.getPointAt(THREE.MathUtils.clamp(u, 0, 1));
             const tg = this.curve.getTangentAt(THREE.MathUtils.clamp(u, 0, 1)).setY(0).normalize();
             const nrm = new THREE.Vector3().crossVectors(tg, up).normalize();
