@@ -28,6 +28,8 @@ kanban-plugin: board
 	Libraries and fonts are now bundled and the first download is within budget (see Done). Left: portal advertising kit, portal accounts, real-phone check. [[Projects/Last-Mile Game]]
 - [ ] 🔴 **Graphics quality tiers (Auto / Medium / High)** · @{2026-10-25}
 	Built on its own branch, not merged. Medium is lighter for mid-range phones; High is unchanged. Waiting on a real-phone check and a decision on scene trims for Medium. [[2026-10-25 - Graphics Quality Tiers]]
+- [ ] 🔴 **Comic-style callouts: banners, speech bubbles, a police chase told with on-screen callouts, and house reactions** · @{2026-10-27}
+	Design kit built on its own branch, not in the game yet and not merged. The callouts are overlays, so the game never pauses for them. Next: hook them into delivery results, pedestrians, the police chase and the customer's reaction.
 
 
 

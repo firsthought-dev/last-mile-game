@@ -19,10 +19,12 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@fontsource/bangers": "5.3.0",
     "@fontsource/barlow": "5.3.0",
     "@fontsource/bebas-neue": "5.3.0",
     "@fontsource/bungee": "5.3.0",
     "@fontsource/chakra-petch": "5.3.0",
+    "@fontsource/comic-neue": "5.3.0",
     "@fontsource/russo-one": "5.3.0",
     "@playwright/test": "^1.63.0",
     "playwright": "^1.63.0",

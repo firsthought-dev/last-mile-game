@@ -4132,3 +4132,554 @@ body.vehicle-cycle .touch-drag-steer {
 
 /* B142: the FPS counter is opt-in from Settings. */
 #hud-fps-pill[hidden] { display: none !important; }
+
+/* ==========================================================================
+   COMIC CALLOUT KIT  (.comic-*)   built by js/comic.js
+   Comic style for callouts ONLY: banners, bubbles (pinned and edge), bursts, the
+   WANTED burst, sound-effect lettering. The world render is never restyled. Everything here is
+   namespaced `.comic-` / `comic-*` keyframes, so no existing selector changes.
+   Style reference is the print look (halftone / Ben-Day dots, offset red and cyan
+   colour plates, ink outlines, panel borders), all art original.
+   ========================================================================== */
+:root {
+  /* ink and paper */
+  --comic-ink: #0d0b14;
+  --comic-paper: #fff8e6;
+  /* burst red. Deliberately NOT named --comic-red: existing rules read that
+     name with their own fallback and must keep it. */
+  --comic-burst-red: #ff3b30;
+  /* offset colour plates (misregistration): cyan goes down-left, red up-right */
+  --comic-plate-cyan: #00d2ff;
+  --comic-plate-red: #ff2e63;
+  --comic-plate-dx: 3px;
+  --comic-plate-dy: 2px;
+  /* Ben-Day dot pitch */
+  --comic-dot-step: 7px;
+  /* Lettering. Bangers = big lettering (banners, bursts, captions, sound effects);
+     Comic Neue Bold = bubble text. The fallbacks keep the kit usable before the
+     webfonts arrive; Comic Neue has no rupee sign, so Barlow supplies it. */
+  --comic-font-display: 'Bangers', 'Bungee', 'Bebas Neue', sans-serif;
+  --comic-font-body: 'Comic Neue', 'Barlow', sans-serif;
+  --comic-font-emoji: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Twemoji Mozilla', sans-serif;
+}
+
+/* ---- layer, live region ---------------------------------------------------- */
+.comic-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 120;            /* above the HUD (50-100), below modal overlays (9500) */
+  overflow: hidden;
+}
+.comic-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+/* doubled class: the pieces set `position: relative` for in-flow use, and this must win when they are placed by x/y */
+.comic-piece.comic-abs { position: absolute; }
+.comic-centred { translate: -50% -50%; }   /* `translate` so animations on `transform` do not fight it */
+.comic-hidden { visibility: hidden; }
+
+/* ---- Ben-Day dots (staggered rows, two gradient layers) ------------------- */
+.comic-dots,
+.comic-banner-body::before {
+  --dot: rgba(255, 90, 0, 0.45);
+  --dot-r: 1.7px;
+  background-image:
+    radial-gradient(circle at center, var(--dot) 0 var(--dot-r), transparent calc(var(--dot-r) + 0.7px)),
+    radial-gradient(circle at center, var(--dot) 0 var(--dot-r), transparent calc(var(--dot-r) + 0.7px));
+  background-size: var(--comic-dot-step) var(--comic-dot-step);
+  background-position: 0 0, calc(var(--comic-dot-step) / 2) calc(var(--comic-dot-step) / 2);
+}
+
+/* ---- offset-plate lettering ------------------------------------------------
+   The element holds the text and a data-text copy. ::before is the cyan plate,
+   ::after the red plate, both behind the ink-stroked text. paint-order keeps the
+   ink stroke outside the glyph; where a browser ignores it for HTML text the
+   stroke simply sits half over the fill, still readable. */
+.comic-plate {
+  position: relative;
+  isolation: isolate;
+  display: inline-block;
+  font-family: var(--comic-font-display);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--comic-paper);
+  -webkit-text-stroke: var(--comic-stroke, 6px) var(--comic-ink);
+  paint-order: stroke fill;
+  white-space: nowrap;
+}
+.comic-plate::before,
+.comic-plate::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  -webkit-text-stroke: var(--comic-stroke, 6px) currentColor;
+  paint-order: normal;
+}
+.comic-plate::before {
+  color: var(--comic-plate-cyan);
+  transform: translate(calc(var(--comic-plate-dx) * -1), var(--comic-plate-dy));
+}
+.comic-plate::after {
+  color: var(--comic-plate-red);
+  transform: translate(var(--comic-plate-dx), calc(var(--comic-plate-dy) * -1));
+}
+/* lively lettering (sound effects, bursts): the plates shiver between two
+   registrations. Off in calm mode. */
+.comic-plate--live::before { animation: comic-plate-cyan 0.7s steps(1) infinite; }
+.comic-plate--live::after { animation: comic-plate-red 0.7s steps(1) infinite; }
+.comic-calm .comic-plate--live::before,
+.comic-calm .comic-plate--live::after { animation: none; }
+
+/* ---- banner ---------------------------------------------------------------- */
+.comic-banner-slot {
+  position: absolute;
+  top: 64px;               /* under the CAM / DAY chips, top right (approved baseline) */
+  right: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+  pointer-events: none;
+}
+.comic-banner {
+  --b-bg: var(--comic-yellow);
+  --b-dot: rgba(255, 90, 0, 0.5);
+  --cb-fs: clamp(24px, 1.2vw + 17px, 38px);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 46px;       /* room for the star that overhangs the left end */
+  transform: rotate(-2deg);
+  transform-origin: 100% 50%;
+  animation: comic-banner-in 0.38s cubic-bezier(0.2, 1.3, 0.4, 1) var(--d, 0ms) both;
+}
+.comic-banner--green { --b-bg: var(--comic-green); --b-dot: rgba(0, 80, 40, 0.42); }
+.comic-banner--orange { --b-bg: var(--comic-orange); --b-dot: rgba(120, 20, 0, 0.4); }
+.comic-banner--red { --b-bg: #ff5148; --b-dot: rgba(120, 0, 20, 0.4); }
+.comic-banner--cyan { --b-bg: var(--comic-cyan); --b-dot: rgba(0, 60, 120, 0.4); }
+.comic-banner-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 5px 24px 7px 42px;
+  background: var(--b-bg);
+  border: 4px solid var(--comic-ink);
+  box-shadow: 5px 6px 0 var(--comic-ink);
+  transform: skewX(-10deg);
+  overflow: hidden;
+}
+/* Ben-Day dots fading in toward the right end */
+.comic-banner-body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  --dot: var(--b-dot);
+  --dot-r: 1.9px;
+  -webkit-mask-image: linear-gradient(to right, transparent 32%, #000 100%);
+  mask-image: linear-gradient(to right, transparent 32%, #000 100%);
+  pointer-events: none;
+}
+.comic-banner-title {
+  position: relative;
+  z-index: 1;
+  font-size: var(--cb-fs);
+  --comic-stroke: 6px;
+}
+.comic-banner-sub {
+  position: relative;
+  z-index: 1;
+  margin-top: 1px;
+  font-family: var(--comic-font-display);
+  font-size: calc(var(--cb-fs) * 0.46);
+  letter-spacing: 0.1em;
+  line-height: 1.1;
+  color: var(--comic-ink);
+  white-space: nowrap;
+}
+.comic-banner-star {
+  position: absolute;
+  left: -50px;
+  top: 50%;
+  width: 84px;
+  height: 84px;
+  margin-top: -42px;
+  z-index: 2;
+  rotate: 8deg;            /* individual transform property: the pop animation owns `transform` */
+  animation: comic-pop 0.34s cubic-bezier(0.2, 1.5, 0.4, 1) calc(var(--d, 0ms) + 110ms) both;
+}
+.comic-burst-art { position: absolute; overflow: visible; pointer-events: none; }
+.comic-banner-glyph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--comic-font-display);
+  font-size: 34px;
+  line-height: 1;
+  color: var(--comic-yellow);
+  -webkit-text-stroke: 5px var(--comic-ink);
+  paint-order: stroke fill;
+}
+.comic-banner-glyph--long { font-size: 22px; }
+
+/* ---- caption box ------------------------------------------------------------ */
+.comic-caption {
+  display: inline-block;
+  padding: 5px 16px 6px;
+  background: var(--comic-yellow);
+  border: 4px solid var(--comic-ink);
+  box-shadow: 5px 5px 0 var(--comic-ink);
+  transform: rotate(var(--tilt, -1deg));
+  transform-origin: 0 50%;
+  animation: comic-caption-in 0.28s cubic-bezier(0.2, 1.2, 0.4, 1) var(--d, 0ms) both;
+}
+.comic-caption--paper { background: var(--comic-paper); }
+.comic-caption-text {
+  font-family: var(--comic-font-display);
+  font-size: 24px;
+  letter-spacing: 0.05em;
+  line-height: 1.1;
+  color: var(--comic-ink);
+  white-space: nowrap;
+}
+
+/* ---- burst and sound effects ------------------------------------------------ */
+.comic-burst {
+  position: relative;
+  animation: comic-slam 0.34s cubic-bezier(0.2, 1.4, 0.4, 1) var(--d, 0ms) both;
+}
+.comic-burst-inner {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--rot, -7deg));
+}
+.comic-burst-text {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -52%;
+  transform: skewX(-8deg);
+  --comic-plate-dx: 4px;
+  --comic-plate-dy: 3px;
+}
+.comic-sfx {
+  position: relative;
+  display: inline-block;
+  animation: comic-slam 0.3s cubic-bezier(0.2, 1.5, 0.4, 1) var(--d, 0ms) both;
+}
+.comic-sfx-inner { transform: rotate(var(--rot, -8deg)) scale(var(--sc, 1)); }
+.comic-sfx-text {
+  font-size: 54px;
+  --comic-stroke: 9px;
+  color: var(--comic-paper);
+  transform: skewX(-8deg);
+}
+.comic-sfx--from-left { animation-name: comic-slide-l; animation-duration: 0.4s; }
+.comic-sfx--from-right { animation-name: comic-slide-r; animation-duration: 0.4s; }
+.comic-sfx--siren .comic-sfx-inner { display: flex; gap: 0.35em; animation: comic-siren-sway 0.7s ease-in-out infinite alternate; }
+.comic-sfx-word--red { color: #ff4a5c; }
+.comic-sfx-word--blue { color: #4aa8ff; }
+.comic-sfx--cyan .comic-sfx-text { color: #5ef0ff; }
+.comic-sfx--yellow .comic-sfx-text { color: var(--comic-yellow); }
+.comic-sfx--pink .comic-sfx-text { color: var(--comic-pink); }
+.comic-sfx--red .comic-sfx-text { color: var(--comic-burst-red); }
+
+/* ---- speed lines ------------------------------------------------------------ */
+.comic-speed {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  animation: comic-speed-in 0.3s ease-out var(--d, 0ms) both;
+}
+
+/* ---- WANTED burst (chase escalation) ---------------------------------------- */
+.comic-wanted {
+  --w-outer: var(--comic-yellow);
+  --w-inner: var(--comic-orange);
+  position: relative;
+  animation: comic-slam 0.34s cubic-bezier(0.2, 1.4, 0.4, 1) var(--d, 0ms) both;
+}
+.comic-wanted.comic-pulse { animation: comic-pulse 0.34s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
+.comic-wanted-inner {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--rot, -6deg));
+}
+.comic-wanted-word {
+  position: absolute;
+  left: 50%;
+  top: 33%;
+  translate: -50% -50%;
+  transform: skewX(-8deg);
+  --comic-plate-dx: 3px;
+  --comic-plate-dy: 2px;
+}
+.comic-wanted-stars {
+  position: absolute;
+  left: 50%;
+  top: 69%;
+  translate: -50% -50%;
+  display: flex;
+  gap: 0;
+}
+.comic-star { width: var(--sz, 26px); height: var(--sz, 26px); overflow: visible; }
+.comic-star polygon {
+  fill: rgba(255, 248, 230, 0.28);
+  stroke: var(--comic-ink);
+  stroke-width: 2.6;
+  stroke-linejoin: round;
+}
+.comic-star.is-lit polygon { fill: var(--comic-yellow); }
+.comic-star.is-new { animation: comic-pop-bounce 0.46s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+
+/* ---- speech / shout bubbles -------------------------------------------------- */
+.comic-bubble {
+  --cb-fs: 16px;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: 1;
+  will-change: transform;
+}
+.comic-bubble--sm { --cb-fs: 14px; }
+.comic-bubble--lg { --cb-fs: clamp(18px, 1vw + 12px, 24px); }
+.comic-bubble-pop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-origin: var(--tx, 0px) var(--ty, 0px);
+  animation: comic-pop 0.26s cubic-bezier(0.2, 1.5, 0.4, 1) var(--d, 0ms) both;
+}
+.comic-bubble-box {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+.comic-bubble-art {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+.comic-bubble-text {
+  position: relative;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(var(--cb-max, 240px), calc(100vw - 110px));   /* never wider than a phone screen can hold */
+  padding: 10px 16px;
+  font-family: var(--comic-font-body);
+  font-weight: 700;
+  font-size: var(--cb-fs);
+  line-height: 1.15;
+  text-align: center;
+  color: var(--comic-ink);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.comic-bubble--shout .comic-bubble-text {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  transform: skewX(-5deg);
+}
+.comic-bubble--lg .comic-bubble-text { padding: 12px 22px; }
+/* edge bubble: slides in from its screen edge; the speaker is off screen */
+.comic-bubble--edge-left .comic-bubble-pop { animation-name: comic-edge-in-l; animation-duration: 0.34s; }
+.comic-bubble--edge-right .comic-bubble-pop { animation-name: comic-edge-in-r; animation-duration: 0.34s; }
+
+/* ---- emoji burst (house reactions) ------------------------------------------ */
+.comic-emoji {
+  position: relative;
+  pointer-events: none;
+}
+.comic-emoji-pop {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 70%;
+  animation: comic-pop-bounce 0.52s cubic-bezier(0.2, 1.4, 0.4, 1) var(--d, 0ms) both;
+}
+.comic-emoji-bob { position: absolute; inset: 0; animation: comic-bob 1.2s ease-in-out 0.7s infinite alternate; }
+.comic-emoji-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--comic-font-emoji);
+  line-height: 1;
+  filter: drop-shadow(2px 3px 0 rgba(13, 11, 20, 0.55));
+}
+.comic-emoji-item {
+  position: absolute;
+  right: -2%;
+  bottom: -2%;
+  display: grid;
+  place-items: center;
+  width: 1.7em;
+  height: 1.7em;
+  border-radius: 50%;
+  background: var(--comic-paper);
+  border: 3px solid var(--comic-ink);
+  box-shadow: 2px 3px 0 var(--comic-ink);
+  font-family: var(--comic-font-emoji);
+  line-height: 1;
+}
+.comic-emoji-extra {
+  position: absolute;
+  font-family: var(--comic-font-emoji);
+  line-height: 1;
+  opacity: 0;
+  animation: comic-float 1.6s ease-out var(--ed, 300ms) infinite both;
+}
+
+/* ---- exits -------------------------------------------------------------------- */
+.comic-out { animation: comic-exit 0.22s ease-in both !important; }
+
+/* ---- keyframes ---------------------------------------------------------------- */
+@keyframes comic-pop {
+  0% { transform: scale(0.3) rotate(-6deg); opacity: 0; }
+  55% { transform: scale(1.12) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes comic-pulse {
+  0% { transform: scale(0.82); }
+  55% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+@keyframes comic-slide-l {
+  0% { transform: translateX(calc(-100% - 160px)); opacity: 1; }
+  62% { transform: translateX(6%); }
+  100% { transform: translateX(0); }
+}
+@keyframes comic-slide-r {
+  0% { transform: translateX(calc(100% + 160px)); opacity: 1; }
+  62% { transform: translateX(-6%); }
+  100% { transform: translateX(0); }
+}
+@keyframes comic-edge-in-l {
+  0% { transform: translateX(-170px) scale(0.9); opacity: 0; }
+  60% { transform: translateX(8px) scale(1.03); opacity: 1; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+@keyframes comic-edge-in-r {
+  0% { transform: translateX(170px) scale(0.9); opacity: 0; }
+  60% { transform: translateX(-8px) scale(1.03); opacity: 1; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+@keyframes comic-siren-sway {
+  from { translate: -7px 0; }
+  to { translate: 7px 0; }
+}
+@keyframes comic-pop-bounce {
+  0% { transform: scale(0) rotate(-14deg); opacity: 0; }
+  38% { transform: scale(1.28) rotate(6deg); opacity: 1; }
+  60% { transform: scale(0.9) rotate(-3deg); }
+  80% { transform: scale(1.06) rotate(1deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes comic-slam {
+  0% { transform: scale(2.3); opacity: 0; }
+  55% { transform: scale(0.93); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes comic-banner-in {
+  0% { transform: translateX(70px) rotate(-8deg) scale(0.8); opacity: 0; }
+  60% { transform: translateX(-6px) rotate(-1deg) scale(1.04); opacity: 1; }
+  100% { transform: translateX(0) rotate(-2deg) scale(1); opacity: 1; }
+}
+@keyframes comic-caption-in {
+  0% { transform: translateX(-30px) rotate(var(--tilt, -1deg)); opacity: 0; }
+  100% { transform: translateX(0) rotate(var(--tilt, -1deg)); opacity: 1; }
+}
+@keyframes comic-speed-in {
+  0% { opacity: 0; transform: scale(1.18); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes comic-bob {
+  from { transform: translateY(0); }
+  to { transform: translateY(-4px); }
+}
+@keyframes comic-float {
+  0% { transform: translate(0, 0) scale(0.4); opacity: 0; }
+  18% { opacity: 1; }
+  100% { transform: translate(var(--dx, 0px), -74px) scale(1.1); opacity: 0; }
+}
+@keyframes comic-plate-cyan {
+  0%, 49% { transform: translate(calc(var(--comic-plate-dx) * -1), var(--comic-plate-dy)); }
+  50%, 100% { transform: translate(calc(var(--comic-plate-dx) * -1.6), calc(var(--comic-plate-dy) * 1.4)); }
+}
+@keyframes comic-plate-red {
+  0%, 49% { transform: translate(var(--comic-plate-dx), calc(var(--comic-plate-dy) * -1)); }
+  50%, 100% { transform: translate(calc(var(--comic-plate-dx) * 1.6), calc(var(--comic-plate-dy) * -1.4)); }
+}
+
+/* ---- calm (reduce flashing) and reduced motion --------------------------------
+   JS adds .comic-calm / .comic-still to each piece's own root, from the in-game
+   switch and the media query; the media query below also covers a piece built
+   before the OS setting changed.
+     calm  = no plate shiver, no siren sway, no pulses, short transitions
+     still = additionally nothing slides or scales: pieces only fade */
+.comic-banner.comic-calm,
+.comic-caption.comic-calm,
+.comic-burst.comic-calm,
+.comic-sfx.comic-calm,
+.comic-wanted.comic-calm { animation-duration: 0.12s; }
+.comic-calm .comic-emoji-bob,
+.comic-sfx--siren.comic-calm .comic-sfx-inner,
+.comic-wanted.comic-calm.comic-pulse,
+.comic-calm .comic-star.is-new { animation: none; }
+.comic-bubble--edge.comic-calm .comic-bubble-pop { animation-duration: 0.12s; }
+@keyframes comic-fade-out { to { opacity: 0; } }
+
+.comic-banner.comic-still { animation: comic-fade-in 0.12s linear var(--d, 0ms) both; transform: none; }
+.comic-still .comic-banner-star,
+.comic-caption.comic-still,
+.comic-burst.comic-still,
+.comic-sfx.comic-still,
+.comic-speed.comic-still,
+.comic-wanted.comic-still,
+.comic-still .comic-bubble-pop,
+.comic-still .comic-emoji-pop { animation: comic-fade-in 0.12s linear var(--d, 0ms) both; }
+.comic-still .comic-emoji-extra { animation: none; opacity: 1; }
+.comic-still .comic-star.is-new { animation: none; }
+.comic-out.comic-still { animation: comic-fade-out 0.1s linear both !important; }
+@keyframes comic-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .comic-plate--live::before,
+  .comic-plate--live::after,
+  .comic-emoji-bob,
+  .comic-sfx--siren .comic-sfx-inner { animation: none; }
+}
+
+/* phones and portrait: keep the banner on the screen with a little room to spare */
+@media (max-width: 768px), (max-aspect-ratio: 1/1) {
+  /* the phone HUD has no CAM/DAY chips: its speed box and hint bar fill the top, so the slot sits below them
+     (Phase C hands the real placement to the B89 popup placer) */
+  .comic-banner-slot { top: 172px; right: 12px; gap: 12px; }
+  .comic-banner { margin-left: 36px; }
+  .comic-banner-star { scale: 0.8; left: -46px; }   /* the star is a fixed-size drawing: scale it, do not resize its box */
+  .comic-caption-text { font-size: 20px; }
+}
