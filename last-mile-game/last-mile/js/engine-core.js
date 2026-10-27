@@ -96,7 +96,7 @@
       this.clock = new THREE.Clock();
       this._worldBuilt = false;
 
-      // Landing screen first: pick road style / vehicle / visual style,
+      // Landing screen first: pick a vehicle,
       // then DRIVE triggers the loader + world build (see renderDispatchHub).
       // The full-screen loader overlay is only needed once that starts.
       const loaderEl = document.getElementById('game-loader');
@@ -729,7 +729,6 @@
 
       if (this._adPaused || this._hiddenPaused || window.ShiplypPolice?.isPaused()) {
         if (this.composer) {
-          this.visualStyle?.preRender();
           this.composer.render();
         } else {
           this.renderer.render(this.scene, this.camera);
@@ -919,7 +918,6 @@
       }
 
       if (this.composer) {
-        this.visualStyle?.preRender();
         this.composer.render();
       } else {
         this.renderer.render(this.scene, this.camera);

@@ -29,7 +29,6 @@
           const pr = this.renderer.getPixelRatio();
           this.fxaaPass.material.uniforms['resolution'].value.set(1 / (window.innerWidth * pr), 1 / (window.innerHeight * pr));
         }
-        if (this.visualStyle) this.visualStyle.resize(window.innerWidth, window.innerHeight);
       };
 
       this._handleResize = handleResize;

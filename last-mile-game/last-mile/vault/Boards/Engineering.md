@@ -9,8 +9,6 @@ kanban-plugin: board
 	Future idea only, not planned yet. [[2026-09-28 - B130 Wanted Stars, Siren and Settle-Up Dialogue]]
 
 - [ ] 🟡 **Repository history cleanup of removed assets** (car rework is done, so this is ready; needs a go-ahead) · @{2026-09-27}
-- [ ] 🟢 **Review Crisp style fog at dusk and night** · @{2026-09-26}
-	Crisp was called Enhanced before B116. Check it doesn't have the same problem B100 fixed for the old Classic style.
 - [ ] 🟢 **Google Play Store release assets & signing** · @{2026-09-28}
 	Release signing, store icon/banner, and an AAB build for Google Play. [[Projects/Last-Mile Game]]
 - [ ] 🟢 **Side-project prototype** · @{2026-10-05}
@@ -34,6 +32,8 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] B209 Crisp style removed: Cinematic is the only look, players on Crisp move to it automatically, and the style picker leaves the start menu (on its branch, not merged) · @{2026-10-25}
+	[[2026-10-25 - Crisp Style Removed]]
 - [x] Modular codebase split: 14,337-line `game.js` divided into 17 browser scripts under `last-mile/js/` with zero regressions across web, portal zip, and Android builds · @{2026-10-25}
 	[[2026-10-25 - Modular Codebase Architecture Split]]
 - [x] B200–B206 Unused code and asset cleanup: removed unused legacy code and an unused texture, style previews now a lighter image format; smaller download, no change for players · @{2026-10-24}

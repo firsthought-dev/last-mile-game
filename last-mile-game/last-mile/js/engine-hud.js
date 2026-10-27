@@ -2,7 +2,7 @@
   "use strict";
   const S = window.Shiplyp = window.Shiplyp || {};
   const {
-    CONFIG, Career, vehicleSpec, vehicleList, isTwoWheeler, sound, VisualStyleManager, QualityManager, UI
+    CONFIG, Career, vehicleSpec, vehicleList, isTwoWheeler, sound, QualityManager, UI
   } = S;
 
   Object.assign(S.ShiplypEngine.prototype, {
@@ -982,12 +982,6 @@
 
       const vehList = vehicleList();
 
-      const styleList = [
-        { id: 'crisp',     name: 'Crisp',     stat: 'Sharp Outlines • Lighter',    gif: 'assets/style-previews/crisp.webp' },
-        { id: 'cinematic', name: 'Cinematic', stat: 'Bloom + Grade • Heavier',     gif: 'assets/style-previews/cinematic.webp' },
-      ];
-      const currentStyle = this.visualStyle?.selectedStyle || VisualStyleManager.DEFAULT_STYLE;
-
       // Career strip: the only place a returning player sees that the last
       // session actually counted. Rendered from the persisted profile, never
       // from live engine state, so what it shows is exactly what was saved.
@@ -1071,20 +1065,6 @@
                 }).join('')}
               </div>
             </div>
-
-            <!-- 4. Select Visual Style -->
-            <div class="hub-difficulty-selector">
-              <span class="hub-section-label">SELECT VISUAL STYLE</span>
-              <div class="hub-style-grid">
-                ${styleList.map(s => `
-                  <button class="style-card-btn ${currentStyle === s.id ? 'active-diff' : ''}" data-style="${s.id}">
-                    <img class="style-card-preview" src="${s.gif}" alt="${s.name} style preview" loading="lazy">
-                    <span class="style-card-title">${s.name.toUpperCase()}</span>
-                    <span class="vehicle-card-stat">${s.stat}</span>
-                  </button>
-                `).join('')}
-              </div>
-            </div>
             </div>
 
             <button id="btn-start-dispatch" class="btn-launch-dispatch">
@@ -1117,16 +1097,6 @@
           btn.classList.add('active-veh');
           if (this.vehicle) this.vehicle.setVehicleType(this.selectedVehicle);
           sound.playTone(750, 'sine', 0.08);
-        });
-      });
-
-      this.modalContainer.querySelectorAll('[data-style]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          this.visualStyle?.applyStyle(btn.dataset.style);
-          this.modalContainer.querySelectorAll('[data-style]').forEach(b => b.classList.remove('active-diff'));
-          btn.classList.add('active-diff');
-          sound.playTone(700, 'sine', 0.08);
         });
       });
 
