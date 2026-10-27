@@ -32,6 +32,8 @@ kanban-plugin: board
 
 
 ## ✅ Done
+- [x] Modular codebase split: the single large game script is now 17 smaller browser scripts, with no intended change for players; web, portal and Android builds updated · @{2026-10-25}
+	[[2026-10-25 - Modular Codebase Architecture Split]]
 - [x] B200–B206 Unused code and asset cleanup: removed unused legacy code and an unused texture, style previews now a lighter image format; smaller download, no change for players · @{2026-10-24}
 	[[2026-10-24 - Unused code and asset cleanup]]
 - [x] B180–B187 Portal-ready build: bundled 3D library and fonts, one shared build recipe, automatic checks, new players start driving straight away, pause when the tab is hidden · @{2026-10-24}

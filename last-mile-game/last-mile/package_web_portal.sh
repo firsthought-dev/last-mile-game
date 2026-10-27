@@ -57,7 +57,7 @@ rm -rf "$STAGE_DIR"
 
 # 6. Verify zip structure
 ZIP_SIZE=$(ls -lh "$OUTPUT_ZIP" | awk '{print $5}')
-ROOT_FILES=$(unzip -l "$OUTPUT_ZIP" | grep -E "index\.html|game\.js|ads\.js" | wc -l | tr -d ' ')
+ROOT_FILES=$(unzip -l "$OUTPUT_ZIP" | grep -E "index\.html|save\.js|ads\.js" | wc -l | tr -d ' ')
 
 echo "=================================================="
 echo "✅ Web Portal Bundle Created Successfully!"
