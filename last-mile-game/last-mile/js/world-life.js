@@ -45,6 +45,29 @@
       const HAIR   = [0x121011, 0x1c1512, 0x3b2417, 0x5c3a21, 0x6b7280, 0xd6d3d1];
       const SHOES  = [0x2a2421, 0x1c1917, 0x44403c, 0x7c2d12, 0x1e293b, 0x78350f];
 
+      // The crowd textures are dark (shirt about 25% bright, trousers 36%), and a colour is
+      // multiplied onto them, so every outfit came out near-black. Brighten each slot's
+      // texture once (cached) so the colours below read as picked. Only NPC copies are
+      // changed; the template and the player's courier keep the original textures.
+      const GAIN = { Topmat: 3.2, Bottommat: 2.3, Hairmat: 1.6, Shoesmat: 1.3, Bodymat: 1.3 };
+      const lit = {};
+      const lighten = (name, map) => {
+        if (!map || !map.image || !GAIN[name]) return map;
+        if (lit[name]) return lit[name];
+        try {
+          const im = map.image, cv = document.createElement('canvas');
+          cv.width = im.width; cv.height = im.height;
+          const cx = cv.getContext('2d'); cx.drawImage(im, 0, 0);
+          const d = cx.getImageData(0, 0, cv.width, cv.height), px = d.data, k = GAIN[name];
+          for (let i = 0; i < px.length; i += 4) { px[i] = Math.min(255, px[i] * k); px[i + 1] = Math.min(255, px[i + 1] * k); px[i + 2] = Math.min(255, px[i + 2] * k); }
+          cx.putImageData(d, 0, 0);
+          const t = new THREE.CanvasTexture(cv);
+          t.flipY = map.flipY; t.encoding = map.encoding; t.wrapS = map.wrapS; t.wrapT = map.wrapT; t.anisotropy = map.anisotropy;
+          t.needsUpdate = true;
+          return (lit[name] = t);
+        } catch (e) { return map; }
+      };
+
       const pick = (arr, seed) => arr[Math.abs(seed) % arr.length];
       const variants = [];
       for (let i = 0; i < 24; i++) {
@@ -52,6 +75,7 @@
         const s1 = i * 7 + 3, s2 = i * 13 + 5, s3 = i * 11 + 7, s4 = i * 17 + 1, s5 = i * 19 + 9;
         for (const name in src) {
           const m = src[name].clone();
+          m.map = lighten(name, m.map);
           if (name === 'Bodymat') m.color.set(pick(SKIN, s1));
           else if (name === 'Topmat') m.color.set(pick(TOP, s2));
           else if (name === 'Bottommat') m.color.set(pick(BOTTOM, s3));
