@@ -231,6 +231,7 @@
         this._netGroup.add(this.roadNet.buildSignals());
         if (/[?&]netdebug=1\b/.test(window.location.search)) this._netGroup.add(this.roadNet.debugGroup());
         this.scene.add(this._netGroup);
+        if (S.TrafficSystem) S.TrafficSystem.start(this);
       }
 
       setProgress(82, 'Seeding subtropical forests & Sahyadri rockfaces...');
@@ -859,6 +860,7 @@
         }
 
         if (this.roadNet) this.roadNet.update(dt);
+        if (this.traffic) this.traffic.update(dt);
 
         // Continuous Diurnal Cycle, Atmosphere, Auto-Headlights & Lighting
         this.updateDayNightCycle(dt);

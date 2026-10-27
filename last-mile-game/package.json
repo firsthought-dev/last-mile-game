@@ -14,7 +14,8 @@
     "check:save": "node tools/check-save.cjs",
     "check:telemetry": "node tools/check-telemetry.cjs",
     "check:roadnet": "node tools/check-roadnet.mjs dist/stage",
-    "ci": "npm run check:save && npm run check:telemetry && npm run stage && npm run check:cdn && npm run package && npm run check:size && npm run smoke && npm run check:roadnet",
+    "check:traffic": "node tools/check-traffic.mjs dist/stage 15",
+    "ci": "npm run check:save && npm run check:telemetry && npm run stage && npm run check:cdn && npm run package && npm run check:size && npm run smoke && npm run check:roadnet && npm run check:traffic",
     "loadtest": "node tools/load-test.mjs dist/stage"
   },
   "keywords": [],

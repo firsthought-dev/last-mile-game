@@ -164,6 +164,18 @@
           c.pred.push(inL); c.succ.push(outL); inL.succ.push(c); outL.pred.push(c); j.connectors.push(c);
         }
       }
+      // conflict table: two connectors of one junction conflict when they merge into the same out lane or cross
+      const segX = (a, b, c, d) => { const o = (p, q, r) => (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x); return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0; };
+      for (const j of J) {
+        for (const c of j.connectors) c.conflicts = [];
+        for (let a = 0; a < j.connectors.length; a++) for (let b = a + 1; b < j.connectors.length; b++) {
+          const A = j.connectors[a], B = j.connectors[b];
+          if (A.from === B.from) continue;                       // one in-lane splitting is not a conflict
+          let hit = A.to === B.to;
+          for (let i = 0; i < A.pts.length - 1 && !hit; i++) for (let k = 0; k < B.pts.length - 1; k++) if (segX(A.pts[i], A.pts[i + 1], B.pts[k], B.pts[k + 1])) { hit = true; break; }
+          if (hit) { A.conflicts.push(B.id); B.conflicts.push(A.id); }
+        }
+      }
       // spatial index
       for (const l of this.lanes.values()) l.pts.forEach((p, idx) => {
         const k = Math.floor(p.x / this._cell) + ',' + Math.floor(p.z / this._cell);
