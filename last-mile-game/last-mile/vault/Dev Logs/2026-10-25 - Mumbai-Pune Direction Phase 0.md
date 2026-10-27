@@ -16,5 +16,7 @@ This note grows as Phase 0 units land. Nothing here changes how the game plays y
 - **Gameplay measurements:** a small set of anonymous play events (opens, shifts, deliveries, misses, unlocks, session length, smoothness samples) is now recorded inside the game. On the web nothing leaves the device; on Android it only appears in debug logs for now. Players can switch it off.
 - **Android release prep:** automatic cloud backup of game data is switched off, and release-build rules keep the new event hook working.
 - **Easier first delivery:** new players now start further back from their first house, slow down near it, get put back on the approach if they drive past, and lose nothing for dropping too early. Testing with real new players is still to do.
+- **More varied pedestrians:** crowds now mix men and women, different skin tones and outfits (tees, long tunics, shorts, long trousers, skirts, sarees) with long or tied-up hair, and read in real colours instead of near-black. Each person is drawn with far fewer GPU draw calls.
+- **Traffic vehicle shapes:** simple generic shapes for scooters, cars, an SUV, a cab, an auto, a goods tempo and two buses were blocked out, to be refined from street photos.
 
 Related: [[Projects/Last-Mile Game]], [[2026-10-25 - Modular Codebase Architecture Split]]
