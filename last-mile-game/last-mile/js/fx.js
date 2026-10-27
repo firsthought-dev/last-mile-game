@@ -286,10 +286,158 @@
     }
   }
 
+  // Quality tiers (WI-14). Two tiers, Medium and High, set the cost knobs that
+  // are not part of the look the player picks (Crisp / Cinematic). The player's
+  // choice is 'auto', 'medium' or 'high'; 'auto' starts from a device probe and
+  // can step down once from High to Medium if the measured frame rate stays low.
+  // Caps for systems that do not exist yet (AI traffic, pedestrians) are only
+  // published here, for those systems to read.
+  class QualityManager {
+    static TIERS = {
+      medium: {
+        shadows: false,
+        maxPixelRatio: 1.25,
+        fpsCap: 30,
+        aiCap: 8,
+        pedestrianScale: 0.6,
+      },
+      high: {
+        shadows: true,
+        maxPixelRatio: 2,
+        fpsCap: 0,              // 0 = display rate
+        aiCap: 15,
+        pedestrianScale: 1,
+      },
+    };
+    static CHOICES = ['auto', 'medium', 'high'];
+    static CHOICE_KEY = 'shiplyp_qualityTier';
+    static AUTO_KEY = 'shiplyp_qualityAuto'; // remembers an auto step-down across launches
+
+    constructor(game) {
+      this.game = game;
+      this.choice = QualityManager._read(QualityManager.CHOICE_KEY);
+      if (!QualityManager.CHOICES.includes(this.choice)) this.choice = 'auto';
+      this.probe = QualityManager.probeDevice(game.renderer);
+      this._lowWindows = 0;
+      this._autoSettled = false;
+      this.tierName = null;
+      this.apply(this.resolve());
+    }
+
+    static _read(key) {
+      try { return localStorage.getItem(key); } catch (e) { return null; }
+    }
+
+    static _write(key, value) {
+      try {
+        if (value == null) localStorage.removeItem(key); else localStorage.setItem(key, value);
+      } catch (e) { /* storage blocked: the choice lasts for this session only */ }
+    }
+
+    // Cheap, synchronous guess from what the browser reports. Phones start on
+    // Medium unless they report plenty of memory and cores and a GPU that is
+    // not on the low list; desktops start on High.
+    static probeDevice(renderer) {
+      const nav = typeof navigator !== 'undefined' ? navigator : {};
+      const coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+      const memory = nav.deviceMemory || 0;          // GB, Chrome only; 0 = unknown
+      const cores = nav.hardwareConcurrency || 0;
+      let gpu = '';
+      try {
+        const gl = renderer && renderer.getContext && renderer.getContext();
+        const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+        if (ext) gpu = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '');
+      } catch (e) { /* no renderer info: decide from the rest */ }
+      const lowGpu = /swiftshader|llvmpipe|software|mali-[34]|mali-t|adreno \(tm\) [345]\d\d|powervr|sgx/i.test(gpu);
+      const reasons = [];
+      let tier = 'high';
+      if (lowGpu) { tier = 'medium'; reasons.push('gpu'); }
+      if (memory && memory <= 4) { tier = 'medium'; reasons.push('memory'); }
+      if (coarse && !(memory >= 6 && cores >= 8 && !lowGpu)) { tier = 'medium'; reasons.push('phone'); }
+      return { tier, coarse, memory, cores, gpu, reasons };
+    }
+
+    resolve() {
+      if (this.choice !== 'auto') return this.choice;
+      const remembered = QualityManager._read(QualityManager.AUTO_KEY);
+      if (remembered === 'medium') return 'medium';
+      return this.probe.tier;
+    }
+
+    get tier() { return QualityManager.TIERS[this.tierName]; }
+
+    setChoice(choice) {
+      if (!QualityManager.CHOICES.includes(choice)) choice = 'auto';
+      this.choice = choice;
+      QualityManager._write(QualityManager.CHOICE_KEY, choice);
+      this._lowWindows = 0;
+      this._autoSettled = false;
+      this.apply(this.resolve());
+    }
+
+    apply(name) {
+      const tier = QualityManager.TIERS[name] || QualityManager.TIERS.high;
+      const changed = name !== this.tierName;
+      const shadowsChanged = this.tierName == null || this.tier.shadows !== tier.shadows;
+      this.tierName = name;
+      const g = this.game;
+
+      // Shadow maps are compiled into every lit material, so a live switch has
+      // to recompile them once.
+      if (g.renderer && g.renderer.shadowMap) {
+        g.renderer.shadowMap.enabled = tier.shadows;
+        if (g.sunLight) g.sunLight.castShadow = tier.shadows;
+        if (shadowsChanged && g.scene) {
+          g.scene.traverse(o => {
+            if (!o.material) return;
+            (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { m.needsUpdate = true; });
+          });
+        }
+      }
+
+      // Narrow the adaptive render scale's ceiling; `_adaptRenderScale` still
+      // moves within [1, cap] from the measured frame rate.
+      if (g._prBaseCap == null) g._prBaseCap = g._prCap || 1;
+      g._prCap = Math.max(1, Math.min(g._prBaseCap, tier.maxPixelRatio));
+      if (g._pr > g._prCap && g.renderer) {
+        g._pr = g._prCap;
+        g.renderer.setPixelRatio(g._pr);
+        if (g.composer && g.composer.setPixelRatio) g.composer.setPixelRatio(g._pr);
+        if (g._handleResize) g._handleResize(true);
+      }
+
+      g.fpsCap = tier.fpsCap;
+      if (changed) g._prSlow = g._prFast = 0;
+    }
+
+    // Called once per FPS window (~0.5 s) with the measured rate. In auto mode,
+    // High steps down to Medium after ~10 s of play below 40 fps that the render
+    // scale has already dropped as far as it can. Only once per launch, and
+    // remembered, so a slow phone does not start on High every time.
+    sampleFps(fps) {
+      if (this.choice !== 'auto' || this._autoSettled || this.tierName !== 'high') return;
+      const g = this.game;
+      if (!g._worldBuilt || g.gameState !== 'playing' || g._adPaused || document.hidden) return;
+      if (fps < 40 && g._pr <= 1) this._lowWindows++;
+      else this._lowWindows = Math.max(0, this._lowWindows - 1);
+      if (this._lowWindows >= 20) {
+        this._autoSettled = true;
+        QualityManager._write(QualityManager.AUTO_KEY, 'medium');
+        this.apply('medium');
+      }
+    }
+
+    label() {
+      const name = this.tierName === 'medium' ? 'MEDIUM' : 'HIGH';
+      return this.choice === 'auto' ? `AUTO (${name})` : name;
+    }
+  }
+
   // --------------------------------------------------------------------------
   // 7. MAIN SHIPLYP DISPATCH & MISSION ENGINE
   // --------------------------------------------------------------------------
 
+  S.QualityManager = QualityManager;
   S.RainSystem = RainSystem;
   S.VisualStyleManager = VisualStyleManager;
 })();

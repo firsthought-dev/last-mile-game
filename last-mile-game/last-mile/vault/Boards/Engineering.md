@@ -28,6 +28,8 @@ kanban-plugin: board
 	Cycle, Motorbike and the reworked Muscle Coupe are done, each with its own pay rate; the cargo three-wheeler is still pending its own model. [[Projects/Last-Mile Game]]
 - [ ] 🔴 **Launch blockers**: web portal setup and a real-phone performance check · @{2026-09-23}
 	Libraries and fonts are now bundled and the first download is within budget (see Done). Left: portal advertising kit, portal accounts, real-phone check. [[Projects/Last-Mile Game]]
+- [ ] 🔴 **Graphics quality tiers (Auto / Medium / High)** · @{2026-10-25}
+	Built on its own branch, not merged. Medium is lighter for mid-range phones; High is unchanged. Waiting on a real-phone check and a decision on scene trims for Medium. [[2026-10-25 - Graphics Quality Tiers]]
 
 
 

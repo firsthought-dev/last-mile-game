@@ -2,7 +2,7 @@
   "use strict";
   const S = window.Shiplyp = window.Shiplyp || {};
   const {
-    CONFIG, Career, vehicleSpec, vehicleList, isTwoWheeler, sound, VisualStyleManager, UI
+    CONFIG, Career, vehicleSpec, vehicleList, isTwoWheeler, sound, VisualStyleManager, QualityManager, UI
   } = S;
 
   Object.assign(S.ShiplypEngine.prototype, {
@@ -1355,6 +1355,14 @@
                     <button type="button" class="slider-val" id="set-show-fps" aria-pressed="${this._fpsCounterOn()}" style="cursor:pointer;min-width:56px;min-height:32px">${this._fpsCounterOn() ? 'ON' : 'OFF'}</button>
                   </div>
                 </div>
+                ${this.quality ? `
+                <div class="settings-row">
+                  <span class="settings-label">Graphics quality</span>
+                  <div class="settings-control">
+                    <button type="button" class="slider-val" id="set-quality" style="cursor:pointer;min-width:56px;min-height:32px">${this.quality.label()}</button>
+                  </div>
+                </div>
+                ` : ''}
               ` : ''}
               ${tab === 'gameplay' && window.ShiplypPolice ? window.ShiplypPolice.settingsHTML() : ''}
               <p class="settings-legal">${document.getElementById('currency-disclaimer')?.textContent || ''}</p>
@@ -1386,6 +1394,15 @@
           this._applyFpsCounter();
           fpsBtn.textContent = on ? 'ON' : 'OFF';
           fpsBtn.setAttribute('aria-pressed', String(on));
+        };
+      }
+      // WI-14: cycles Auto -> Medium -> High.
+      const qualityBtn = document.getElementById('set-quality');
+      if (qualityBtn && this.quality) {
+        qualityBtn.onclick = () => {
+          const order = QualityManager.CHOICES;
+          this.quality.setChoice(order[(order.indexOf(this.quality.choice) + 1) % order.length]);
+          qualityBtn.textContent = this.quality.label();
         };
       }
       this.modalContainer.querySelectorAll('.tab-link').forEach(btn => {
