@@ -13,7 +13,8 @@
     "smoke": "node tools/smoke.mjs dist/stage --out dist/smoke && node tools/smoke.mjs dist/stage --no-storage --out dist/smoke && node tools/smoke.mjs dist/stage --returning --out dist/smoke",
     "check:save": "node tools/check-save.cjs",
     "check:telemetry": "node tools/check-telemetry.cjs",
-    "ci": "npm run check:save && npm run check:telemetry && npm run stage && npm run check:cdn && npm run package && npm run check:size && npm run smoke",
+    "check:roadnet": "node tools/check-roadnet.mjs dist/stage",
+    "ci": "npm run check:save && npm run check:telemetry && npm run stage && npm run check:cdn && npm run package && npm run check:size && npm run smoke && npm run check:roadnet",
     "loadtest": "node tools/load-test.mjs dist/stage"
   },
   "keywords": [],

@@ -18,5 +18,6 @@ This note grows as Phase 0 units land. Nothing here changes how the game plays y
 - **Easier first delivery:** new players now start further back from their first house, slow down near it, get put back on the approach if they drive past, and lose nothing for dropping too early. Testing with real new players is still to do.
 - **More varied pedestrians:** crowds now mix men and women, different skin tones and outfits (tees, long tunics, shorts, long trousers, skirts, sarees) with long or tied-up hair, and read in real colours instead of near-black. Each person is drawn with far fewer GPU draw calls.
 - **Traffic vehicle shapes:** simple generic shapes for scooters, cars, an SUV, a cab, an auto, a goods tempo and two buses were blocked out, to be refined from street photos.
+- **Road network groundwork:** the first four junctions with cross roads, lanes and traffic signals now exist as data behind a developer switch, with an automatic check. Nothing changes for players yet.
 
 Related: [[Projects/Last-Mile Game]], [[2026-10-25 - Modular Codebase Architecture Split]]

@@ -215,6 +215,12 @@
       this._houseFlowers = this.world.buildHouseFlowers(0, 1);
       this.scene.add(this._houseFlowers);
 
+      // WI-05 (in progress, opt-in): the zone road network with a debug overlay, ?net=1 only.
+      if (S.RoadNetwork && /[?&]net=1\b/.test(window.location.search)) {
+        this.roadNet = new S.RoadNetwork(this.world).build();
+        this.scene.add(this.roadNet.debugGroup());
+      }
+
       setProgress(82, 'Seeding subtropical forests & Sahyadri rockfaces...');
       await frame();
 
