@@ -9,8 +9,6 @@ kanban-plugin: board
 	Future idea only, not planned yet. [[2026-09-28 - B130 Wanted Stars, Siren and Settle-Up Dialogue]]
 
 - [ ] 🟡 **Repository history cleanup of removed assets** (car rework is done, so this is ready; needs a go-ahead) · @{2026-09-27}
-- [ ] 🟢 **Review Crisp style fog at dusk and night** · @{2026-09-26}
-	Crisp was called Enhanced before B116. Check it doesn't have the same problem B100 fixed for the old Classic style.
 - [ ] 🟢 **Google Play Store release assets & signing** · @{2026-09-28}
 	Release signing, store icon/banner, and an AAB build for Google Play. [[Projects/Last-Mile Game]]
 - [ ] 🟢 **Side-project prototype** · @{2026-10-05}
@@ -28,10 +26,16 @@ kanban-plugin: board
 	Cycle, Motorbike and the reworked Muscle Coupe are done, each with its own pay rate; the cargo three-wheeler is still pending its own model. [[Projects/Last-Mile Game]]
 - [ ] 🔴 **Launch blockers**: web portal setup and a real-phone performance check · @{2026-09-23}
 	Libraries and fonts are now bundled and the first download is within budget (see Done). Left: portal advertising kit, portal accounts, real-phone check. [[Projects/Last-Mile Game]]
+- [ ] 🔴 **Graphics quality tiers (Auto / Medium / High)** · @{2026-10-25}
+	Built on its own branch, not merged. Medium is lighter for mid-range phones; High is unchanged. Waiting on a real-phone check and a decision on scene trims for Medium. [[2026-10-25 - Graphics Quality Tiers]]
+- [ ] 🔴 **Comic-style callouts: banners, speech bubbles, a police chase told with on-screen callouts, and house reactions** · @{2026-10-27}
+	Design kit built on its own branch, not in the game yet and not merged. The callouts are overlays, so the game never pauses for them. Next: hook them into delivery results, pedestrians, the police chase and the customer's reaction.
 
 
 
 ## ✅ Done
+- [x] B209 Crisp style removed: Cinematic is the only look, players on Crisp move to it automatically, and the style picker leaves the start menu (on its branch, not merged) · @{2026-10-25}
+	[[2026-10-25 - Crisp Style Removed]]
 - [x] Modular codebase split: the single large game script is now 17 smaller browser scripts, with no intended change for players; web, portal and Android builds updated · @{2026-10-25}
 	[[2026-10-25 - Modular Codebase Architecture Split]]
 - [x] B200–B206 Unused code and asset cleanup: removed unused legacy code and an unused texture, style previews now a lighter image format; smaller download, no change for players · @{2026-10-24}

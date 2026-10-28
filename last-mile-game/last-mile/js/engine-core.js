@@ -3,7 +3,7 @@
   const S = window.Shiplyp = window.Shiplyp || {};
   const {
     CONFIG, Career, isTwoWheeler, isPedalVehicle, sound, MuscleCoupeAsset,
-    VehicleController, RainSystem, VisualStyleManager, ProceduralWorld, UI
+    VehicleController, RainSystem, VisualStyleManager, QualityManager, ProceduralWorld, UI
   } = S;
 
   class ShiplypEngine {
@@ -96,7 +96,7 @@
       this.clock = new THREE.Clock();
       this._worldBuilt = false;
 
-      // Landing screen first: pick road style / vehicle / visual style,
+      // Landing screen first: pick a vehicle,
       // then DRIVE triggers the loader + world build (see renderDispatchHub).
       // The full-screen loader overlay is only needed once that starts.
       const loaderEl = document.getElementById('game-loader');
@@ -493,6 +493,9 @@
 
       // Visual style — initialises after all base passes are in place
       this.visualStyle = new VisualStyleManager(this);
+      // Quality tier (WI-14) — after the post passes, since it narrows the
+      // render-scale ceiling and sets the shadow and frame-cap knobs
+      this.quality = new QualityManager(this);
     }
 
 
@@ -659,6 +662,14 @@
       // means one bad frame gets logged and skipped instead of killing the
       // game outright.
       try {
+        // Frame cap from the quality tier (Medium: 30 fps). A skipped display
+        // frame does no work at all, and the clock is not read, so the next
+        // real frame's dt covers the gap.
+        if (this.fpsCap > 0) {
+          const now = performance.now();
+          if (this._lastFrameAt != null && now - this._lastFrameAt < 1000 / this.fpsCap - 2) return;
+          this._lastFrameAt = now;
+        }
         this._animateFrame();
       } catch (err) {
         console.error('animate() frame threw — skipping this frame:', err);
@@ -672,10 +683,13 @@
     // never back above a level that just caused a drop, so it cannot oscillate.
 
     _adaptRenderScale(fps) {
+      this.quality?.sampleFps(fps);
       if (!this._worldBuilt || this._adPaused || document.hidden) { this._prSlow = this._prFast = 0; return; }
       const now = performance.now();
-      if (fps < 45) { this._prSlow++; this._prFast = 0; }
-      else if (fps >= 57) { this._prFast++; this._prSlow = 0; }
+      // Thresholds follow the tier's frame cap: 45/57 of 60, so 22.5/28.5 at a 30 cap.
+      const target = this.fpsCap > 0 ? this.fpsCap : 60;
+      if (fps < target * 0.75) { this._prSlow++; this._prFast = 0; }
+      else if (fps >= target * 0.95) { this._prFast++; this._prSlow = 0; }
       else { this._prSlow = 0; this._prFast = 0; }
 
       let next = this._pr;
@@ -715,7 +729,6 @@
 
       if (this._adPaused || this._hiddenPaused || window.ShiplypPolice?.isPaused()) {
         if (this.composer) {
-          this.visualStyle?.preRender();
           this.composer.render();
         } else {
           this.renderer.render(this.scene, this.camera);
@@ -905,7 +918,6 @@
       }
 
       if (this.composer) {
-        this.visualStyle?.preRender();
         this.composer.render();
       } else {
         this.renderer.render(this.scene, this.camera);

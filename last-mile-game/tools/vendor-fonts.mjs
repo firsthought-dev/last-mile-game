@@ -15,6 +15,9 @@ const FONTS = {
   'Bungee': ['bungee', [[400, 'normal']]],
   'Chakra Petch': ['chakra-petch', [[600, 'normal'], [700, 'normal'], [700, 'italic']]],
   'Russo One': ['russo-one', [[400, 'normal']]],
+  // Comic callouts: Bangers for big lettering, Comic Neue for bubble text.
+  'Bangers': ['bangers', [[400, 'normal']]],
+  'Comic Neue': ['comic-neue', [[700, 'normal']]],
 };
 
 fs.rmSync(OUT, { recursive: true, force: true });
@@ -28,6 +31,9 @@ for (const [family, [pkg, variants]] of Object.entries(FONTS)) {
   fs.copyFileSync(path.join(base, 'LICENSE'), path.join(OUT, `OFL-${pkg}.txt`));
   for (const [weight, style] of variants) {
     for (const subset of SUBSETS) {
+      // Some families ship latin only (Comic Neue); the browser then takes
+      // the missing glyphs, ₹ included, from the next font in the stack.
+      if (!unicode[subset]) continue;
       const file = `${pkg}-${subset}-${weight}-${style}.woff2`;
       fs.copyFileSync(path.join(base, 'files', file), path.join(OUT, file));
       bytes += fs.statSync(path.join(OUT, file)).size;
