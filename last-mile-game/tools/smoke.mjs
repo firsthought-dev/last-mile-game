@@ -116,8 +116,12 @@ for (const p of PROFILES) {
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  await page.waitForTimeout(1500);
-  const resumedTo = await pos();
+  // Poll rather than sleep: under software GL (CI) the first frames after resume can take well over 1.5 s.
+  let resumedTo = await pos();
+  for (let t = 0; t < 60 && !(dist(frozenTo, resumedTo) > 0.5); t++) {
+    await page.waitForTimeout(500);
+    resumedTo = await pos();
+  }
   if (!hiddenPaused) fail(p.name, 'game did not pause when the tab was hidden');
   if (dist(frozenFrom, frozenTo) > 0.01) fail(p.name, `vehicle moved ${dist(frozenFrom, frozenTo).toFixed(2)} m while hidden`);
   if (!(dist(frozenTo, resumedTo) > 0.5)) fail(p.name, 'vehicle did not move again after the tab became visible');
