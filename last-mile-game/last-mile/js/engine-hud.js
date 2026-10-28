@@ -382,6 +382,7 @@
     // on wide layouts it sits at the bottom of the screen, so measure every time.
 
     _placeScorePopups() {
+      if (S.Callouts) return S.Callouts.placeSlot(); // comic banners: same zero-overlap rule, measured on their own slot
       const c = this.scorePopupContainer;
       if (!c) return;
       c.style.top = '';
@@ -397,6 +398,10 @@
 
 
     showScoreBanner(title, sub) {
+      if (S.Callouts) { // comic banner in the same top-right slot; plain toggles (sub-less) get the small cyan one
+        S.Callouts.banner({ title, sub, kind: sub ? 'yellow' : 'cyan', burst: sub ? '\u2605' : '!', duration: sub ? 2600 : 1800 });
+        return;
+      }
       if (!this.scorePopupContainer) return;
       const banner = document.createElement('div');
       banner.className = 'score-popup-banner';

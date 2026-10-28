@@ -161,6 +161,7 @@
       this._renderSpareParcels();
       const left = this.spareParcels;
       this.addNotification(`${UI.icon('package')} MISSED THROW — ${left === 0 ? 'NO SPARE PARCELS LEFT. ONE MORE MISS ENDS THE SHIFT' : `${left} SPARE PARCEL${left === 1 ? '' : 'S'} LEFT`}`, 'warning', 3500);
+      S.Callouts?.onMissedThrow(this); // C3: a passer-by comments (kind-aware), callout only
     },
 
 
@@ -210,15 +211,17 @@
       if (stars >= 3 && typeof ShiplypAds !== 'undefined' && ShiplypAds) {
         ShiplypAds.happyTime();
       }
-      this.spawnConfetti(target.pos, 36);
+      if (stars >= 3 || !S.Callouts) this.spawnConfetti(target.pos, 36); // C2: confetti on green (express) drops only
       this._showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak: this.streakCount, orderId: target.order?.id, orderName: target.order?.name || 'Delivery', base: target.order?.reward || 0, diffMult: diffCfg.payoutMult, vehId: this.selectedVehicle, missed, noAssist });
-      this.addNotification(`${UI.icon('check')} DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
+      S.Callouts?.houseReaction(this, { target, timeLeftRatio, missed }); // C2: the customer answers from the house
+      if (!S.Callouts) this.addNotification(`${UI.icon('check')} DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000); // folded into the comic banner when it exists
 
       // Rank-up is the only career event loud enough to interrupt a shift.
       // Everything else about the profile is read back at the hub.
       if (careerResult && careerResult.promoted) {
         sound.playRepair();
-        this.addNotification(`${UI.icon('flame')} PROMOTED — ${careerResult.promoted.name.toUpperCase()}`, 'success', 6000);
+        if (S.Callouts) S.Callouts.banner({ title: 'PROMOTED!', sub: careerResult.promoted.name.toUpperCase(), kind: 'orange', burst: '\u2605', delay: 900, key: 'promo', duration: 4200 });
+        else this.addNotification(`${UI.icon('flame')} PROMOTED — ${careerResult.promoted.name.toUpperCase()}`, 'success', 6000);
       }
 
       this.deliveryHistory.unshift({
@@ -261,6 +264,7 @@
 
     _showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak, orderName, base, diffMult, vehId, missed, noAssist }) {
       if (!this.scorePopupContainer) return;
+      if (S.Callouts && S.Callouts.dropBanner(this, { timeLeftRatio, earnedBonus, streak, missed })) return; // C2: one comic banner replaces this card
       const timeFill  = Math.max(0.04, Math.min(1, timeLeftRatio));
       const accFill   = stars === 3 ? 0.9 : (stars === 2 ? 0.65 : 0.3);
       const strFill   = Math.min(1, Math.max(0.04, (streak - 1) / 9));

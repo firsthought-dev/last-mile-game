@@ -4683,3 +4683,158 @@ body.vehicle-cycle .touch-drag-steer {
   .comic-banner-star { scale: 0.8; left: -46px; }   /* the star is a fixed-size drawing: scale it, do not resize its box */
   .comic-caption-text { font-size: 20px; }
 }
+
+/* ==========================================================================
+   COMIC CALLOUTS IN THE GAME  (Phase C)   driven by js/comic-callouts.js
+   - the speed-line layer sits UNDER the HUD (z 10 < HUD 50) so lines never cross a chip
+   - the settle-up box (police.js openEncounter, class .pd-comic) in the comic scheme:
+     the officer speaks from a bubble, the answers are comic buttons. Same markup and
+     class names as before, so the duel, the keys and the focus handling are untouched.
+   ========================================================================== */
+.comic-layer.comic-layer--under { z-index: 10; }
+.comic-piece { pointer-events: none; }
+
+#police-dialog-wrap.pd-comic.on { background: rgba(13, 11, 20, 0.5); }
+#police-dialog-wrap.pd-comic .pd-box {
+  position: relative;
+  background: var(--comic-paper);
+  color: var(--comic-ink);
+  border: 4px solid var(--comic-ink);
+  border-radius: 8px;
+  box-shadow: 6px 7px 0 var(--comic-ink);
+  font-family: var(--comic-font-body);
+  padding: 16px 18px 14px;
+}
+/* Ben-Day dots fading in from the bottom-right corner */
+#police-dialog-wrap.pd-comic .pd-box::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 46, 99, 0.3) 1.7px, transparent 1.9px);
+  background-size: 9px 9px;
+  -webkit-mask-image: linear-gradient(115deg, transparent 55%, #000 100%);
+  mask-image: linear-gradient(115deg, transparent 55%, #000 100%);
+  border-radius: 4px;
+}
+#police-dialog-wrap.pd-comic .pd-box > * { position: relative; }
+#police-dialog-wrap.pd-comic .pd-portrait {
+  border: 4px solid var(--comic-ink);
+  border-radius: 6px;
+  background: var(--comic-cyan);
+  box-shadow: 4px 4px 0 var(--comic-ink);
+  transform: rotate(-3deg);
+}
+#police-dialog-wrap.pd-comic .pd-tag {
+  background: var(--comic-yellow);
+  color: var(--comic-ink);
+  border: 3px solid var(--comic-ink);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 var(--comic-ink);
+  font-family: var(--comic-font-display);
+  font-weight: 400;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  padding: 2px 10px 3px;
+  transform: rotate(-1deg);
+}
+#police-dialog-wrap.pd-comic .pd-stars { color: var(--comic-burst-red); font-size: 15px; -webkit-text-stroke: 1px var(--comic-ink); paint-order: stroke fill; }
+#police-dialog-wrap.pd-comic .pd-why { color: #a83200; font-family: var(--comic-font-body); font-weight: 700; font-size: 13px; }
+/* the officer's line is a speech bubble whose tail points at the portrait */
+#police-dialog-wrap.pd-comic .pd-line:not(.sub) {
+  position: relative;
+  margin: 12px 0 0 12px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 3px solid var(--comic-ink);
+  border-radius: 18px 18px 18px 4px;
+  box-shadow: 3px 4px 0 var(--comic-ink);
+  font-family: var(--comic-font-body);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.25;
+}
+#police-dialog-wrap.pd-comic .pd-line:not(.sub)::before {
+  content: '';
+  position: absolute;
+  left: -17px;
+  top: 12px;
+  border: 9px solid transparent;
+  border-right: 14px solid var(--comic-ink);
+  border-left: 0;
+}
+#police-dialog-wrap.pd-comic .pd-line:not(.sub)::after {
+  content: '';
+  position: absolute;
+  left: -11px;
+  top: 14px;
+  border: 7px solid transparent;
+  border-right: 11px solid #fff;
+  border-left: 0;
+}
+#police-dialog-wrap.pd-comic .pd-line.sub {
+  font-family: var(--comic-font-body);
+  font-weight: 700;
+  font-style: italic;
+  font-size: 14px;
+  opacity: 1;
+  color: #4a3a6a;
+  margin: 8px 0 0 12px;
+}
+#police-dialog-wrap.pd-comic .pd-btn {
+  background: var(--comic-yellow);
+  color: var(--comic-ink);
+  border: 3px solid var(--comic-ink);
+  border-radius: 4px;
+  box-shadow: 4px 5px 0 var(--comic-ink);
+  font-family: var(--comic-font-display);
+  font-weight: 400;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+#police-dialog-wrap.pd-comic .pd-btn.tea { background: var(--comic-green); }
+#police-dialog-wrap.pd-comic .pd-btn.off { background: var(--comic-pink); }
+#police-dialog-wrap.pd-comic .pd-btn:hover:not([disabled]),
+#police-dialog-wrap.pd-comic .pd-btn:focus-visible { background: #fff; transform: translate(-1px, -2px) rotate(-1deg); box-shadow: 5px 7px 0 var(--comic-ink); }
+#police-dialog-wrap.pd-comic .pd-btn:active:not([disabled]) { transform: translate(3px, 4px); box-shadow: 1px 1px 0 var(--comic-ink); }
+#police-dialog-wrap.pd-comic .pd-btn:focus-visible { outline: 4px solid var(--comic-cyan); outline-offset: 2px; }
+#police-dialog-wrap.pd-comic .pd-btn[disabled] { opacity: 0.5; box-shadow: 2px 3px 0 var(--comic-ink); }
+#police-dialog-wrap.pd-comic .pd-btn .k {
+  display: inline-block;
+  min-width: 1.3em;
+  padding: 0 0.25em;
+  margin-right: 0.15em;
+  background: var(--comic-ink);
+  color: var(--comic-paper);
+  border-radius: 3px;
+  opacity: 1;
+  font-size: 0.7em;
+  font-weight: 400;
+  text-align: center;
+}
+#police-dialog-wrap.pd-comic .pd-btn .h { font-family: var(--comic-font-body); font-weight: 700; font-size: 12px; opacity: 0.85; letter-spacing: 0; }
+#police-dialog-wrap.pd-comic .pd-foot { font-family: var(--comic-font-body); font-weight: 700; opacity: 0.8; }
+#police-dialog-wrap.pd-comic .pd-result span { background: var(--comic-ink); color: var(--comic-yellow); font-family: var(--comic-font-display); font-weight: 400; letter-spacing: 0.05em; border-radius: 3px; font-size: 15px; }
+/* the excuse duel: long excuses read better in the body face */
+#police-dialog-wrap.pd-comic .pdd-opts .pd-btn { font-family: var(--comic-font-body); font-weight: 700; font-size: 15px; letter-spacing: 0; background: #fff; }
+#police-dialog-wrap.pd-comic .pdd-opts .pd-btn.pdd-plea { background: var(--comic-cyan); }
+#police-dialog-wrap.pd-comic .pdd-opt.picked { background: var(--comic-yellow); outline: 3px solid var(--comic-ink); }
+#police-dialog-wrap.pd-comic .pdd-meta { font-family: var(--comic-font-display); font-weight: 400; font-size: 15px; letter-spacing: 0.06em; opacity: 1; }
+#police-dialog-wrap.pd-comic .pdd-patience { border: 3px solid var(--comic-ink); border-radius: 3px; background: #fff; }
+#police-dialog-wrap.pd-comic .pdd-pfill { background: var(--comic-burst-red); }
+#police-dialog-wrap.pd-comic .pdd-winline { background: var(--comic-ink); width: 3px; }
+#police-dialog-wrap.pd-comic .pdd-tfill { background: var(--comic-ink); }
+@media (max-width: 520px) {
+  #police-dialog-wrap.pd-comic .pd-btn { font-size: 18px; }
+  #police-dialog-wrap.pd-comic .pdd-opts .pd-btn { font-size: 14px; }
+  #police-dialog-wrap.pd-comic .pd-line:not(.sub) { font-size: 15px; margin-left: 10px; }
+}
+@media (max-height: 430px) {
+  #police-dialog-wrap.pd-comic .pd-line:not(.sub) { font-size: 14px; padding: 6px 10px; margin-top: 6px; }
+  #police-dialog-wrap.pd-comic .pd-btn { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #police-dialog-wrap.pd-comic .pd-btn { transition: none; transform: none !important; }
+}

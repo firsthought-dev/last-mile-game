@@ -829,7 +829,7 @@
           const distIcon = UI.icon('building');
           const distLabel = 'DISTRICT';
           const taglineSnippet = distTagline ? ` — ${distTagline}` : '';
-          this.addNotification(`${distIcon} ENTERED ${distLabel} ${this.currentDistrict}: ${distName}!${taglineSnippet} • Highway Bonus +₹${bonus}`, 'success', 5500);
+          if (!S.Callouts) this.addNotification(`${distIcon} ENTERED ${distLabel} ${this.currentDistrict}: ${distName}!${taglineSnippet} • Highway Bonus +₹${bonus}`, 'success', 5500); // the comic banner below says it when comics are on
           this.showScorePopup(bonus, `${distLabel} ${this.currentDistrict}: ${distName.toUpperCase()}`);
 
           // Time of day advances continuously and gradually without jarring snaps at district milestones

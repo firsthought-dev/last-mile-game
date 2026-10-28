@@ -218,6 +218,7 @@
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
   const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const money = (n) => Math.round(n).toLocaleString('en-IN');
+  const callouts = () => (global.Shiplyp && global.Shiplyp.Callouts) || null; // comic callouts (js/comic-callouts.js); presentation only
 
   // --------------------------------------------------------------------------
   // TUNING
@@ -542,10 +543,11 @@
       S.lastGain = S.time;
       const g = S.game;
       if (reason && g && typeof g.addNotification === 'function') {
-        g.addNotification(esc(fmt(STRINGS.starGained, { stars: S.stars, reason })), 'warning', 3500);
+        if (!callouts()) g.addNotification(esc(fmt(STRINGS.starGained, { stars: S.stars, reason })), 'warning', 3500); // the WANTED burst + caption says it when comics are on
         explainFirstStar(g);
       }
     }
+    if (callouts()) callouts().onStars(prev, S.stars, reason || '');
     renderHUD(S.stars !== prev);
   }
 
@@ -560,7 +562,7 @@
     g.addNotification(esc(fmt(STRINGS.firstStar, { limit: TUNE.postedLimitKmh, decay: TUNE.decayEvery, settle: settleTxt })), 'warning', 10000);
   }
 
-  function reportOffence(type) {
+  function reportOffence(type, where) {
     if (S.paused) return;
     // A drive can start mid-crossing on a red; nothing counts until the
     // player has had a moment to take control.
@@ -571,6 +573,7 @@
     if (S.offences.length > 50) S.offences.shift();
     const escalate = recent ? 1 : 0;
     setStars(S.stars + add + escalate, fmt(STRINGS.offence[type] || type, { limit: TUNE.postedLimitKmh }));
+    if (callouts()) callouts().onOffence(type, where); // `where` = the crossing, for the bystander bubble
     if (global.console && S.debugLog) console.log('[police] offence', type, '->', S.stars);
   }
 
@@ -601,7 +604,7 @@
       S.signalSides.set(c, along);
       if (prev == null || lateral > 7) continue;
       const crossed = (prev < 0 && along >= 0) || (prev > 0 && along <= 0);
-      if (crossed && speed > 2 && c.signal && c.signal.phase === 2) reportOffence('redLight');
+      if (crossed && speed > 2 && c.signal && c.signal.phase === 2) reportOffence('redLight', c);
     }
   }
 
@@ -636,7 +639,7 @@
       const w = C && typeof C.wallet === 'function' ? C.wallet() : 0;
       const fine = Math.min(TUNE.missedFine, Math.max(0, w || 0));
       if (fine > 0) spendWallet(fine);
-      game.addNotification(`Time's up! Delivery missed: −₹${fine} fine, half pay and streak lost`, 'warning', 4000);
+      if (!(callouts() && callouts().timesUp(fine))) game.addNotification(`Time's up! Delivery missed: −₹${fine} fine, half pay and streak lost`, 'warning', 4000);
     }
     if (t <= 0 || t > TUNE.tickWindow || S.time < (S.tickQuietUntil || 0)) return;
     const rate = t <= TUNE.tickFastBelow ? 2 : 1;
@@ -745,6 +748,7 @@
     document.querySelectorAll('#police-dialog-wrap').forEach(n => n.remove()); // a closing one still fading out
     const wrap = document.createElement('div');
     wrap.id = 'police-dialog-wrap';
+    if (callouts()) wrap.classList.add('pd-comic'); // comic look (style.css), same structure
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
     wrap.setAttribute('aria-label', tag);
@@ -767,6 +771,7 @@
         <div class="pd-foot"><span class="desk-only">${esc(STRINGS.keyHint)}</span><span>₹${w == null ? '—' : money(w)}</span></div>
       </div>`;
     document.body.appendChild(wrap);
+    if (callouts()) callouts().onEncounter(wrap, where);
     if (document.body.classList.contains('touch-controls-active')) wrap.querySelector('.desk-only').style.visibility = 'hidden';
     requestAnimationFrame(() => wrap.classList.add('on'));
     dlg = { wrap, game, stars, cost, canTea, partial, officer, where, pers, duelRounds, done: false };
