@@ -10,6 +10,12 @@ Part of the comic callouts work, on its own branch. Not merged. The game never p
 - **The police chase is told with callouts.** A WANTED burst with the reason, "WEE-OO WEE-OO" lettering, a shout from the unseen officer on the siren side that gets bolder with every star, speed lines under the HUD from three stars, and bystanders cheering or gasping. "LOST 'EM!" when the stars wear off. The settle-up box is restyled in the same comic look: the officer speaks from a bubble and the answers are comic buttons; nothing about how it plays changed.
 - Other moment notices (promotion, time's up, district entered) are comic banners too. System messages (locked vehicle, sponsor cooldown, ad unavailable) stay plain.
 
+## Follow-up: no clutter on any screen (2026-10-29)
+- Callouts no longer cover the rider, the road ahead or the map on any screen size, from small phones to wide desktops, portrait and landscape. One notification at a time: a new one replaces the one showing (B215).
+- One comic banner at a time, smaller on phones and smaller again on short and landscape screens; a house reaction shrinks to a short line or just the emoji where there is no room; the chase shows a small WANTED badge next to the star chip. At most two callouts on screen at once.
+- A permanent automated check now runs in the build and fails if a screen shape gets cluttered again.
+- The in-game HUD now scales with the screen and gives every panel its own place, so the order card, speed, WANTED stars, road map and controls no longer overlap on any phone, tablet or desktop, portrait or landscape, and the road and rider stay clear.
+
 ## Notes
 - Every order now has a kind and a short name so lines match the cargo.
 - No setting for callout frequency; the limits above are the only control.

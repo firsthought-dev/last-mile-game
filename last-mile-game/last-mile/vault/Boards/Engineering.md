@@ -29,7 +29,7 @@ kanban-plugin: board
 - [ ] 🔴 **Graphics quality tiers (Auto / Medium / High)** · @{2026-10-25}
 	Built on its own branch, not merged. Medium is lighter for mid-range phones; High is unchanged. Waiting on a real-phone check and a decision on scene trims for Medium. [[2026-10-25 - Graphics Quality Tiers]]
 - [ ] 🔴 **Comic-style callouts: banners, speech bubbles, a police chase told with on-screen callouts, and house reactions** · @{2026-10-27}
-	Now wired into the game on its own branch, not merged: delivery banner, the customer's reaction at the house, pedestrian bubbles, the police chase and the restyled settle-up box. The callouts are overlays, so the game never pauses for them. Next: choose the final lines, check on real phones and older emoji fonts. [[2026-10-28 - Comic Callouts In Game]]
+	Now wired into the game on its own branch, not merged: delivery banner, the customer's reaction at the house, pedestrian bubbles, the police chase and the restyled settle-up box. The callouts are overlays, so the game never pauses for them. Callouts now stay clear of the rider, road and map on every screen size, with one notification and one banner at a time, guarded by an automated check. The HUD now scales with the screen and keeps its panels from overlapping on every screen size. Next: choose the final lines, check on real phones and older emoji fonts. [[2026-10-28 - Comic Callouts In Game]]
 
 
 

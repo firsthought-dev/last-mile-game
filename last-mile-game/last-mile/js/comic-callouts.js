@@ -193,7 +193,7 @@
     bannerUntil: 0,
     reds: [],             // timestamps of red-light jumps
     pedCool: new WeakMap(),
-    burst: null, burstCap: null, burstUntil: 0, burstRect: null,
+    burst: null, burstCap: null, burstUntil: 0, burstRec: null,
     sirenAt: 0, sirenSide: Math.random() < 0.5 ? 'left' : 'right', siren: null,
     speed: null, under: null,
     pendingEdge: null, nextEdge: 0, nextCrowd: 0,
@@ -257,42 +257,144 @@ const _a = new THREE.Vector3();
     return !onboarding(g) && slotFree(t) && t >= st.bannerUntil && t - st.lastNpcEnd >= T.npcCooldownMs && !(police() && police().isPaused());
   }
 
-  // ---- banners ----------------------------------------------------------------------------
-  // Banner slot placement (the B89 zero-overlap rule): the slot starts under the
-  // CAM / DAY chips (top right); wherever it would cross another piece of HUD it
-  // drops below it. Measured every time, since the HUD changes height.
-  const AVOID = ['.slowroads-telemetry-box', '.slowroads-top-bar', '.touch-util-btn', '#onboarding-hint', '#police-wanted.on', '#delivery-mission-capsule'];
-  function placeSlot() {
-    const slot = Comic.bannerSlot();
-    slot.style.top = '';
-    const base = Comic.layer().getBoundingClientRect();
-    for (let pass = 0; pass < 4; pass++) {
-      const r = slot.getBoundingClientRect();
-      if (!r.height) return;
-      let push = 0;
-      for (let i = 0; i < AVOID.length; i++) {
-        const list = document.querySelectorAll(AVOID[i]);
-        for (let k = 0; k < list.length; k++) {
-          const q = list[k].getBoundingClientRect();
-          if (!q.width || !q.height) continue;
-          if (r.left < q.right && r.right > q.left && r.top < q.bottom && r.bottom > q.top) push = Math.max(push, q.bottom - r.top + 8);
-        }
-      }
-      if (!push) return;
-      const cur = parseFloat(slot.style.top) || (r.top - base.top);
-      slot.style.top = Math.round(cur + push) + 'px';
-    }
+  // ---- screen tier ----------------------------------------------------------------------------
+  // Sized by height and aspect ratio as well as width: a 667 px tall phone and a landscape phone
+  // are tight whatever their width. (The banner's CSS size follows the same split in style.css.)
+  //   phone   : the short side is under 520 px
+  //   land    : landscape and under 600 px tall (a phone on its side)
+  //   short   : under 700 px tall
+  //   compact : land or short (house reactions shrink to a very short line)
+  function tier(sz) {
+    sz = sz || size();
+    const land = sz.W > sz.H && sz.H < 600;
+    const short = sz.H < 700;
+    return { W: sz.W, H: sz.H, phone: Math.min(sz.W, sz.H) < 520, land, short, compact: land || short };
   }
-  // Shrink a banner's lettering until it fits the screen (phones, long district names).
-  // Measured on layout width (offsetWidth), not on the screen rect: the slide-in animation
-  // moves the rect while it plays.
-  function fit(root) {
+
+  // ---- the protected zone -----------------------------------------------------------------------
+  // The rider, the road ahead of the rider (about the middle 40% of the width, from the rider up to
+  // the horizon) and the road radar are never covered by a callout. Neither is the HUD (capsules,
+  // chips, touch controls, the notification) or another callout. Every callout asks for a clear
+  // spot with findSpot() and shrinks, takes a smaller form or is dropped when there is none.
+  const HUD_SEL = ['#slowroads-radar-box', '.telemetry-digits-box', '.telemetry-controls-col', '.slowroads-top-bar', '.touch-btn', '#touch-tools-drawer', '#onboarding-hint', '#police-wanted.on',
+    '#delivery-mission-capsule', '#drop-action-prompt', '.slowroads-dock', '#notification-panel .notification-item'];
+  const _bx = new THREE.Box3();
+  const _bp = new THREE.Vector3();
+  function vehicleRect(g, sz) {
+    const m = g.vehicle && g.vehicle.mesh, cam = g.camera;
+    if (!m || !cam) return null;
+    m.updateMatrixWorld(true);
+    _bx.setFromObject(m);
+    if (_bx.isEmpty()) return null;
+    let l = 1e9, t = 1e9, r = -1e9, b = -1e9;
+    for (let i = 0; i < 8; i++) {
+      _bp.set(i & 1 ? _bx.max.x : _bx.min.x, i & 2 ? _bx.max.y : _bx.min.y, i & 4 ? _bx.max.z : _bx.min.z).applyMatrix4(cam.matrixWorldInverse);
+      if (_bp.z > -0.05) continue;
+      _bp.applyMatrix4(cam.projectionMatrix);
+      const x = (_bp.x * 0.5 + 0.5) * sz.W, y = (-_bp.y * 0.5 + 0.5) * sz.H;
+      if (x < l) l = x; if (x > r) r = x; if (y < t) t = y; if (y > b) b = y;
+    }
+    return r > l ? { l: Math.max(0, l), t: Math.max(0, t), r: Math.min(sz.W, r), b: Math.min(sz.H, b) } : null;
+  }
+  function visRect(e, base, anyOpacity) {   // anyOpacity: a piece that is about to fade in still counts
+    const q = e.getBoundingClientRect();
+    if (!q.width || !q.height) return null;
+    const cs = getComputedStyle(e);
+    if (cs.display === 'none' || cs.visibility === 'hidden' || (!anyOpacity && parseFloat(cs.opacity) < 0.05)) return null;
+    return { l: q.left - base.left, t: q.top - base.top, r: q.right - base.left, b: q.bottom - base.top };
+  }
+  // The fixed part of the zone: rider, road ahead, HUD. `skipNote` leaves out the notification (when it is the one being placed).
+  function staticZone(g, sz, skipNote) {
+    const out = [];
+    const base = Comic.layer().getBoundingClientRect();
+    const v = g ? vehicleRect(g, sz) : null;
+    if (v) {
+      out.push({ l: v.l - 8, t: v.t - 8, r: v.r + 8, b: v.b + 8 });
+      const cTop = sz.H * 0.35;
+      if (v.t > cTop + 4) out.push({ l: sz.W * 0.3, t: cTop, r: sz.W * 0.7, b: v.t });
+    }
+    for (let i = 0; i < HUD_SEL.length; i++) {
+      if (skipNote && HUD_SEL[i].indexOf('notification') >= 0) continue;
+      const list = document.querySelectorAll(HUD_SEL[i]);
+      for (let k = 0; k < list.length; k++) { const r = visRect(list[k], base, HUD_SEL[i].indexOf('notification') >= 0); if (r) out.push(r); }
+    }
+    // the star chip fades in just after the callouts for a new star are placed: count it as soon as there is a star
+    const chip = document.getElementById('police-wanted');
+    if (chip && police() && police().stars() > 0 && !chip.classList.contains('on')) { const r = visRect(chip, base, true); if (r) out.push(r); }
+    return out;
+  }
+  // Everything a new callout has to stay clear of. `except` = the piece being placed (its own rect never blocks it).
+  function zone(g, sz, except, skipNote) {
+    const out = staticZone(g, sz, skipNote);
+    for (let i = 0; i < live.length; i++) if (live[i] !== except && live[i].rect) out.push(live[i].rect);
+    return out;
+  }
+  let zoneAt = 0, zoneList = null;
+  function cachedZone(g, sz, except) {   // per-frame callers (pinned bubbles): the static part is re-measured every 120 ms
+    const t = now();
+    if (!zoneList || t - zoneAt > 120) { zoneList = staticZone(g, sz, false); zoneAt = t; }
+    const out = zoneList.slice();
+    for (let i = 0; i < live.length; i++) if (live[i] !== except && live[i].rect) out.push(live[i].rect);
+    return out;
+  }
+  const hits = (a, list, pad) => {
+    pad = pad == null ? 2 : pad;
+    for (let i = 0; i < list.length; i++) { const q = list[i]; if (a.l < q.r + pad && a.r > q.l - pad && a.t < q.b + pad && a.b > q.t - pad) return true; }
+    return false;
+  };
+  // Nearest clear w x h box to `want` (centre) or, without one, the highest. Scans a grid; null when nothing fits.
+  function findSpot(w, h, blocked, o) {
+    o = o || {};
+    const m = o.margin != null ? o.margin : 8;
+    const R = o.region || { l: m, t: m, r: size().W - m, b: size().H - m };
+    const step = 8;
+    let best = null, bestC = 1e18;
+    const ls = [];
+    for (let l = R.l; l + w <= R.r; l += step) ls.push(l);
+    if (R.r - w >= R.l) ls.push(R.r - w);
+    for (let t = R.t; t + h <= R.b; t += step) {
+      for (let i = 0; i < ls.length; i++) {
+        const l = ls[i];
+        if (hits({ l, t, r: l + w, b: t + h }, blocked, 3)) continue;
+        const c = o.want ? Math.hypot(l + w / 2 - o.want.x, t + h / 2 - o.want.y) : t;
+        if (c < bestC) { bestC = c; best = { l, t }; }
+      }
+    }
+    return best;
+  }
+
+  // ---- what is on screen: at most two callouts, house reaction > banner > chase > NPC bubble -------
+  // A callout that is made of several drawn pieces (a house reaction = emoji + bubble) counts as one.
+  const live = [];
+  const PRIO = { house: 4, banner: 3, chase: 2, npc: 1 };
+  function release(rec) { const i = live.indexOf(rec); if (i >= 0) live.splice(i, 1); }
+  function admit(kind, name, until, drop) {
+    const t = now();
+    for (let i = live.length - 1; i >= 0; i--) if (live[i].until <= t) live.splice(i, 1);
+    for (let i = live.length - 1; i >= 0; i--) if (live[i].name === name) live[i].drop();
+    while (live.length >= 2) {
+      let low = live[0];
+      for (let i = 1; i < live.length; i++) if (live[i].prio < low.prio) low = live[i];
+      if (low.prio >= PRIO[kind]) return null;
+      low.drop();
+    }
+    const rec = { kind, name, prio: PRIO[kind], until, rect: null, drop: null };
+    rec.drop = () => { release(rec); try { drop(); } catch (e) { /* already gone */ } };
+    live.push(rec);
+    return rec;
+  }
+
+  // ---- banners ----------------------------------------------------------------------------
+  // One banner at a time: the newest replaces the one showing. It is sized by screen (CSS --cb-k),
+  // placed in the clear spot nearest the top right, and shrinks (then loses its sub line) before it
+  // would cover the rider, the road or the map; with no clear spot it is dropped.
+  let cur = null;   // { rec, api, baseK }
+  function fit(root, sz) {
     const title = root.querySelector('.comic-banner-title');
     const sub = root.querySelector('.comic-banner-sub');
     if (!title) return;
-    const slot = root.parentNode;
-    const cs = getComputedStyle(slot);
-    const room = Comic.layer().clientWidth - (parseFloat(cs.right) || 0) - 8 - (parseFloat(getComputedStyle(root).marginLeft) || 0) - 14; // 14 = skew + shadow
+    const ml = parseFloat(getComputedStyle(root).marginLeft) || 0;
+    const room = sz.W - 16 - ml - 14;   // 14 = skew + shadow
     let tries = 0;
     while (tries++ < 6 && root.offsetWidth > room) {
       const fs = parseFloat(getComputedStyle(title).fontSize) * 0.9;
@@ -300,14 +402,93 @@ const _a = new THREE.Vector3();
       if (sub) sub.style.letterSpacing = '0.03em';
     }
   }
+  const BANNER_STEPS = [{ k: 1 }, { k: 0.82 }, { k: 0.68 }, { k: 0.68, mini: true }, { k: 0.52, mini: true }];
+  function placeBanner() {
+    const b = cur;
+    if (!b || !b.api.el.isConnected) return;
+    const root = b.api.el, slot = b.slot;
+    const g = game(), sz = size(), T_ = tier(sz);
+    const blocked = zone(g, sz, b.rec);
+    for (let i = 0; i < BANNER_STEPS.length; i++) {
+      const s = BANNER_STEPS[i];
+      root.style.setProperty('--cb-k', (b.baseK * s.k).toFixed(3));
+      root.style.removeProperty('--cb-fs');
+      root.classList.toggle('comic-banner--mini', !!s.mini);
+      fit(root, sz);
+      const k = b.baseK * s.k;
+      const ml = parseFloat(getComputedStyle(root).marginLeft) || 0;
+      const w = ml + root.offsetWidth + 12, h = Math.max(root.offsetHeight, 100 * k) + 12;
+      const want = { x: sz.W - 12 - w / 2, y: (T_.phone ? Math.max(120, sz.H * 0.16) : 70) + h / 2 };
+      const spot = findSpot(w, h, blocked, { want });
+      if (!spot) continue;
+      slot.style.right = 'auto';
+      slot.style.left = Math.round(spot.l) + 'px';
+      slot.style.top = Math.round(spot.t + 6 + (h - 12 - root.offsetHeight) / 2) + 'px';
+      b.rec.rect = { l: spot.l, t: spot.t, r: spot.l + w, b: spot.t + h };
+      return;
+    }
+    b.rec.drop();   // nowhere clear on this screen right now
+  }
+  const NO_API = { el: null, dismiss() {}, get done() { return true; } };
   function banner(opts) {
     const o = Object.assign({}, opts, { title: plain(opts.title), sub: opts.sub ? plain(opts.sub) : opts.sub });
-    const api = Comic.banner(o);
-    fit(api.el);
-    placeSlot();
+    if (o.delay > 0) {   // a delayed banner takes the slot when its time comes, not before
+      const d = o.delay; delete o.delay;
+      setTimeout(() => banner(o), d);
+      return NO_API;
+    }
+    const t = now();
+    const dur = o.duration === 0 ? 2600 : (o.duration || 2600);
+    let api = null;
+    const rec = admit('banner', 'banner', t + dur + 300, () => { if (api) api.dismiss(); if (cur && cur.rec === rec) cur = null; });
+    if (!rec) return NO_API;
+    // each banner gets its own slot, so one still fading out is not dragged along when the next is placed
+    const slot = document.createElement('div');
+    slot.className = 'comic-banner-slot';
+    slot.style.right = 'auto';
+    Comic.layer().appendChild(slot);
+    setTimeout(() => { if (slot.parentNode) slot.parentNode.removeChild(slot); }, dur + 900);
+    api = Comic.banner(Object.assign({}, o, { max: 1, container: slot }));
+    cur = { rec, api, slot, baseK: parseFloat(getComputedStyle(api.el).getPropertyValue('--cb-k')) || 1 };
     st.live = true;
-    st.bannerUntil = Math.max(st.bannerUntil, now() + (o.duration === 0 ? 2600 : (o.duration || 2600)));
+    st.bannerUntil = Math.max(st.bannerUntil, t + dur);
+    placeBanner();
     return api;
+  }
+  function placeSlot() { placeBanner(); }
+
+  // ---- notifications ----------------------------------------------------------------------
+  // addNotification() keeps one item. Its slot (a row in the top middle, set by the HUD layout in style.css) is clear of the
+  // rider, the road ahead, the map and every other HUD piece by construction. This only double-checks that on this screen and,
+  // if the slot is taken (an odd window), narrows the panel and moves it to the nearest clear spot, or hides the notice.
+  function placeNote() {
+    const panel = document.getElementById('notification-panel');
+    if (!panel || !panel.querySelector('.notification-item')) return;
+    const g = game(), sz = size(), base = Comic.layer().getBoundingClientRect();
+    panel.style.left = panel.style.top = panel.style.bottom = panel.style.right = panel.style.margin = panel.style.width = '';
+    panel.style.visibility = '';
+    const blocked = zone(g, sz, null, true);
+    const slot = panel.getBoundingClientRect();
+    const item = panel.querySelector('.notification-item').getBoundingClientRect();
+    const mine = { l: item.left - base.left, t: item.top - base.top, r: item.right - base.left, b: item.bottom - base.top };
+    if (!hits(mine, blocked, 0)) return true;
+    const tries = [1, 0.8, 0.65, 0.5, 0.4];
+    for (let i = 0; i < tries.length; i++) {
+      const w0 = Math.max(110, Math.round(slot.width * tries[i]));
+      panel.style.width = w0 + 'px';
+      const q = panel.getBoundingClientRect();
+      const w = q.width + 6, h = q.height + 6;
+      const spot = findSpot(w, h, blocked, { want: { x: slot.left - base.left + slot.width / 2, y: slot.top - base.top + h / 2 } });
+      if (!spot) continue;
+      panel.style.margin = '0';
+      panel.style.right = 'auto';
+      panel.style.left = Math.round(spot.l + base.left + 3) + 'px';
+      panel.style.top = Math.round(spot.t + base.top + 3) + 'px';
+      return true;
+    }
+    panel.style.width = '';
+    panel.style.visibility = 'hidden';   // no clear spot on this screen right now: a notice is lost before the rider is covered
+    return false;
   }
 
   // ---- delivery: banner + house reaction ---------------------------------------------------
@@ -340,9 +521,12 @@ const _a = new THREE.Vector3();
     const h = st.house;
     if (!h) return;
     st.house = null;
-    h.bubble.dismiss();
+    release(h.rec);
+    if (h.bubble) h.bubble.dismiss();
     h.emoji.dismiss();
   }
+  // Very short lines for short screens and landscape, where a full line would not fit clear of the rider.
+  const SHORT = { green: 'YAY!', photo: 'PHEW!', yellow: 'OK!', red: 'FINALLY!', missed: 'TOO LATE!' };
   function houseReaction(g, d) {
     if (!g || !g.camera || !d.target || !d.target.pos) return;
     const order = d.target.order || {};
@@ -351,51 +535,68 @@ const _a = new THREE.Vector3();
     const text = cap1(deal('h:' + kind + ':' + band, HOUSE[kind][band]).replace('{item}', order.short || 'order'));
     endHouse();
     if (st.npc) { st.npc.api.dismiss(); st.npc = null; }
-    const sz = size();
-    const px = sz.W < 600 ? 66 : 84;
+    const sz = size(), T_ = tier(sz);
     const t = now();
+    const rec = admit('house', 'house', t + T.houseShowMs + 300, endHouse);
+    if (!rec) return;
+    // the house reaction has first pick of the clear space: the banner (placed a moment ago) steps aside and is placed again after
+    if (cur) cur.rec.rect = null;
+    const blocked = zone(g, sz, rec);
     const ref = d.target.pos;
     const pr = project(g, ref.x, ref.y + T.houseLift, ref.z, sz);
-    const emoji = Comic.emojiBurst({
-      face: (kind === 'medical' ? FACE_MED : FACE)[band], item: ITEM[kind], extras: kind === 'medical' ? [] : EXTRAS[band],
-      mood: band, size: px, x: pr.x, y: pr.y, duration: T.houseShowMs, label: text
-    });
-    const bubble = Comic.bubble({ text, size: 'md', maxWidth: sz.W < 600 ? 190 : 250, x: pr.x, y: pr.y - px / 2 - 4, silent: true, duration: T.houseShowMs });
-    st.house = { bubble, emoji, ref, until: t + T.houseShowMs, px };
-    st.live = true;
-    pinHouse(g, sz);
-  }
-  function pinHouse(g, sz) {
-    const h = st.house;
-    const pr = project(g, h.ref.x, h.ref.y + T.houseLift, h.ref.z, sz);
-    const m = 8 + h.px / 2;
-    const ex = clamp(pr.x, m, sz.W - m), ey = clamp(pr.y, m, sz.H - m);
-    h.emoji.updatePosition(ex, ey, { width: sz.W, height: sz.H });
-    const bh = h.bubble.size().h;
-    const sr = Comic.bannerSlot().getBoundingClientRect();   // keep the bubble clear of a banner showing in the slot
-    const top = sr.height ? Math.max(8, sr.bottom - Comic.layer().getBoundingClientRect().top + 10) : 8;
-    if (ey - h.px / 2 - 4 - 26 - bh < top) h.bubble.updatePosition(ex, ey + h.px / 2 + 4, { width: sz.W, height: sz.H, side: 'below' });
-    else h.bubble.updatePosition(ex, ey - h.px / 2 - 4, { width: sz.W, height: sz.H });
+    const want = T_.phone ? { x: sz.W * 0.5, y: sz.H * 0.14 } : { x: clamp(pr.x, 0, sz.W), y: clamp(pr.y, 0, sz.H) };
+    const face = (kind === 'medical' ? FACE_MED : FACE)[band];
+    const tries = [];
+    if (!T_.compact) {
+      if (T_.phone) tries.push({ px: 44, mw: 112, text }, { px: 44, mw: 92, text });
+      else tries.push({ px: 84, mw: 230, text }, { px: 72, mw: 190, text });
+    }
+    tries.push({ px: T_.phone ? 44 : 64, mw: 100, text: SHORT[band] });
+    tries.push({ px: T_.phone ? 44 : 64 }, { px: 34 });   // emoji only
+    for (let i = 0; i < tries.length; i++) {
+      const a = tries[i];
+      let bubble = null, w = a.px + 16, h = a.px + 16, bh = 0;
+      if (a.text) {
+        bubble = Comic.bubble({ text: a.text, size: T_.phone ? 'sm' : 'md', maxWidth: a.mw, silent: true, duration: T.houseShowMs, group: 'house' });
+        bubble.hide();
+        const bs = bubble.size();
+        bh = bs.h;
+        w = Math.max(bs.w, a.px) + 10; h = bh + 30 + a.px + 10;
+      }
+      const spot = findSpot(w, h, blocked, { want, margin: 10 });
+      if (!spot) { if (bubble) bubble.destroy(); continue; }
+      const ex = spot.l + w / 2, ey = bubble ? spot.t + bh + 30 + a.px / 2 : spot.t + h / 2;
+      const emoji = Comic.emojiBurst({
+        face, item: ITEM[kind], extras: kind === 'medical' || a.px < 60 ? [] : EXTRAS[band],
+        mood: band, size: a.px, x: ex, y: ey, duration: T.houseShowMs, label: text, group: 'house'
+      });
+      if (bubble) { bubble.updatePosition(ex, ey - a.px / 2 - 4, { width: sz.W, height: sz.H }); bubble.show(); }
+      rec.rect = { l: spot.l, t: spot.t, r: spot.l + w, b: spot.t + h };
+      st.house = { bubble, emoji, until: t + T.houseShowMs, px: a.px, rec };
+      st.live = true;
+      placeBanner();
+      return;
+    }
+    rec.drop();   // not even the emoji fits clear of the rider on this screen
+    placeBanner();
   }
 
   // ---- NPC bubbles ----------------------------------------------------------------------------
   function say(g, text, anchor, opts) {
     opts = opts || {};
-    const sz = size();
+    const sz = size(), T_ = tier(sz);
     const first = new THREE.Vector3();
     const p = anchor(first);
     if (!p) return false;
     const pr = project(g, p.x, p.y, p.z, sz);
     if (pr.behind) return false;
-    const api = Comic.bubble({ text, size: 'md', maxWidth: sz.W < 600 ? 190 : 230, x: pr.x, y: pr.y, duration: 0 });
-    // keep clear of the WANTED burst + caption: if the bubble would sit on them, hang it below the speaker's head instead
-    let side = 'above';
-    const R = st.burst && st.burstRect;
-    if (R) {
-      const bz = api.size(), cx = clamp(pr.x, bz.w / 2 + 10, sz.W - bz.w / 2 - 10), cy = pr.y - 26 - bz.h / 2;
-      if (cx - bz.w / 2 < R.r && cx + bz.w / 2 > R.l && cy - bz.h / 2 < R.b && cy + bz.h / 2 > R.t) side = 'below';
-    }
-    st.npc = { api, anchor, until: now() + (opts.ms || T.npcShowMs), obj: opts.obj || null, side };
+    const until = now() + (opts.ms || T.npcShowMs);
+    const rec = admit('npc', 'npc', until + 300, () => {
+      if (st.npc && st.npc.rec === rec) { const n = st.npc; st.npc = null; n.api.dismiss(); st.lastNpcEnd = now(); }
+    });
+    if (!rec) return false;
+    const api = Comic.bubble({ text, size: T_.phone ? 'sm' : 'md', maxWidth: T_.phone ? 120 : 230, x: pr.x, y: pr.y, duration: 0 });
+    st.npc = { api, anchor, until, obj: opts.obj || null, side: 'above', rec };
     st.live = true;
     return true;
   }
@@ -403,6 +604,7 @@ const _a = new THREE.Vector3();
     const n = st.npc;
     if (!n) return;
     st.npc = null;
+    release(n.rec);
     n.api.dismiss();
     st.lastNpcEnd = t;
   }
@@ -528,45 +730,117 @@ const _a = new THREE.Vector3();
   function hideBurst() {
     if (st.burst) { st.burst.dismiss(); st.burst = null; }
     if (st.burstCap) { st.burstCap.dismiss(); st.burstCap = null; }
+    if (st.burstRec) { release(st.burstRec); st.burstRec = null; }
   }
   function hideSpeed() { if (st.speed) { st.speed.dismiss(); st.speed = null; } }
   function sirenSfx(g, sz) {
     const t = now();
     if (t - st.sirenAt < 1500) return;
+    const T_ = tier(sz);
+    const side = st.sirenSide === 'left' ? 'right' : 'left';
+    const rec = admit('chase', 'siren', t + 2400, () => { const s = st.siren; if (s) { s.dismiss(); st.siren = null; } });
+    if (!rec) return;
     st.sirenAt = t;
-    st.sirenSide = st.sirenSide === 'left' ? 'right' : 'left';
-    if (st.siren) st.siren.dismiss();
-    st.siren = Comic.sfx({ text: CHASE.siren, color: 'siren', from: st.sirenSide, x: sz.W < 600 ? sz.W * 0.5 : sz.W * (st.sirenSide === 'left' ? 0.3 : 0.7), y: sz.H * 0.64, scale: sz.W < 600 ? 0.55 : 1, rotate: st.sirenSide === 'left' ? -6 : 6 });
-    const s = st.siren;
-    setTimeout(() => { s.dismiss(); if (st.siren === s) st.siren = null; }, 2200);
+    st.sirenSide = side;
+    const word = Comic.sfx({ text: CHASE.siren, color: 'siren', from: side, x: sz.W / 2, y: sz.H / 2, scale: 1, rotate: side === 'left' ? -6 : 6 });
+    const ow = word.el.offsetWidth || 300, oh = word.el.offsetHeight || 60;
+    const scales = T_.phone ? [0.5, 0.42, 0.34] : [1, 0.8, 0.62, 0.5, 0.4];
+    const blocked = zone(g, sz, rec);
+    const want = { x: sz.W * (side === 'left' ? 0.18 : 0.82), y: sz.H * 0.5 };
+    for (let i = 0; i < scales.length; i++) {
+      const w = ow * scales[i] * 1.12 + 16, h = oh * scales[i] * 1.12 + 14;
+      const spot = findSpot(w, h, blocked, { want });
+      if (!spot) continue;
+      word.el.style.setProperty('--sc', String(scales[i]));
+      word.el.style.left = Math.round(spot.l + w / 2) + 'px';
+      word.el.style.top = Math.round(spot.t + h / 2) + 'px';
+      rec.rect = { l: spot.l, t: spot.t, r: spot.l + w, b: spot.t + h };
+      st.siren = word;
+      const s = word;
+      setTimeout(() => { s.dismiss(); if (st.siren === s) { st.siren = null; release(rec); } }, 2200);
+      return;
+    }
+    word.dismiss();
+    release(rec);
   }
   function edgeSay(g, stars, t) {
-    const sz = size();
+    const sz = size(), T_ = tier(sz);
+    if (T_.land) return;   // landscape phones: only the badge and the siren word
     const text = deal('c:edge' + stars, CHASE.edge[clamp(stars, 1, 5)]);
-    const api = Comic.bubble({ edge: st.sirenSide, text, y: sz.H * (sz.W < 600 ? 0.44 : 0.34), maxWidth: sz.W < 600 ? 205 : 240, duration: 0 });
-    st.npc = { api, anchor: null, until: t + T.edgeShowMs };
-    st.live = true;
+    const until = t + T.edgeShowMs;
+    const rec = admit('chase', 'edge', until + 300, () => {
+      if (st.npc && st.npc.rec === rec) { const n = st.npc; st.npc = null; n.api.dismiss(); }
+    });
+    if (!rec) return;
     st.nextEdge = t + T.tauntMs;
+    const api = Comic.bubble({ edge: st.sirenSide, text, size: T_.phone ? 'sm' : 'md', y: sz.H * 0.3, maxWidth: T_.phone ? 120 : 210, duration: 0 });
+    const u = { width: sz.W, height: sz.H };
+    const blocked = zone(g, sz, rec);
+    const pref = sz.H * 0.3;
+    for (let pass = 0; pass < 2; pass++) {
+      if (pass === 1) api.setMaxWidth(90);
+      const ys = [];
+      for (let y = sz.H * 0.12; y <= sz.H * 0.5; y += 8) ys.push(y);
+      ys.sort((a, b) => Math.abs(a - pref) - Math.abs(b - pref));
+      for (let i = 0; i < ys.length; i++) {
+        const r = api.edgeRect(ys[i], u);
+        if (hits(r, blocked, 3)) continue;
+        api.updateEdge(ys[i], u);
+        rec.rect = r;
+        st.npc = { api, anchor: null, until, rec };
+        st.live = true;
+        return;
+      }
+    }
+    api.destroy();
+    release(rec);
   }
 
-  // police.js setStars -> here. Returns nothing; the plain star notice is replaced
-  // by the burst + caption whenever this module exists.
+  // police.js setStars -> here. A star gained puts a small WANTED badge beside the star chip (and, on big
+  // screens with room, the offence as a caption), then the siren word. The chip itself keeps showing the level.
+  function badgeSpot(g, sz, size0, rec) {
+    const chip = document.getElementById('police-wanted');
+    const base = Comic.layer().getBoundingClientRect();
+    const q = chip ? chip.getBoundingClientRect() : null;
+    const c = q && q.width ? { l: q.left - base.left, t: q.top - base.top, r: q.right - base.left, b: q.bottom - base.top } : { l: sz.W - 190, t: 56, r: sz.W - 16, b: 96 };
+    const blocked = zone(g, sz, rec); blocked.push(c);
+    const onRight = (c.l + c.r) / 2 > sz.W / 2;
+    const sizes = [size0, size0 * 0.82, size0 * 0.66];
+    for (let i = 0; i < sizes.length; i++) {
+      const w = sizes[i] + 14, h = sizes[i] * 0.86 + 14;
+      const want = { x: onRight ? c.l - w / 2 - 6 : c.r + w / 2 + 6, y: (c.t + c.b) / 2 + (i ? h * 0.3 : 0) };
+      const spot = findSpot(w, h, blocked, { want });
+      if (spot) return { size: sizes[i], x: spot.l + w / 2, y: spot.t + h / 2, rect: { l: spot.l, t: spot.t, r: spot.l + w, b: spot.t + h } };
+    }
+    return null;
+  }
   function onStars(prev, stars, reason) {
     const g = game();
     if (!g || g.gameState !== 'playing' || !g.camera) return;
     const t = now();
-    const sz = size();
+    const sz = size(), T_ = tier(sz);
     if (stars > prev) {
-      const big = sz.W >= 600;
-      const bw = big ? 230 : 170;
-      const cy = sz.H * (big ? 0.24 : 0.3);
-      if (st.burst) st.burst.setStars(stars);
-      else st.burst = Comic.wanted({ stars, x: sz.W / 2, y: cy, size: bw });
-      if (st.burstCap) st.burstCap.dismiss();
-      st.burstCap = reason ? Comic.caption(reason, { kind: 'paper', x: sz.W / 2, y: cy + bw * 0.43 + 22, tilt: 1, silent: true }) : null;
-      if (st.burstCap) st.burstCap.el.classList.add('comic-centred');
-      st.burstUntil = t + 3300;
-      st.burstRect = { l: sz.W / 2 - bw * 0.55, r: sz.W / 2 + bw * 0.55, t: cy - bw * 0.43, b: cy + bw * 0.43 + 46 };
+      if (st.burst) { st.burst.setStars(stars); st.burstUntil = t + 3300; if (st.burstRec) st.burstRec.until = t + 3600; }
+      else {
+        const rec = admit('chase', 'wanted', t + 3600, hideBurst);
+        if (rec) {
+          const size0 = T_.phone ? 72 : sz.W >= 1000 ? 120 : 96;
+          const spot = badgeSpot(g, sz, size0, rec);
+          if (spot) {
+            st.burst = Comic.wanted({ stars, x: spot.x, y: spot.y, size: spot.size, group: 'wanted' });
+            st.burstRec = rec;
+            rec.rect = spot.rect;
+            st.burstUntil = t + 3300;
+            if (reason && !T_.phone && !T_.compact) {   // the offence line, only where there is room for it
+              const cap = Comic.caption(reason, { kind: 'paper', x: 0, y: 0, tilt: 1, silent: true, group: 'wanted' });
+              const w = cap.el.offsetWidth + 16, h = cap.el.offsetHeight + 14;
+              const cs = findSpot(w, h, zone(g, sz, null), { want: { x: spot.x, y: spot.rect.b + h / 2 + 4 } });
+              if (cs) { cap.el.style.left = Math.round(cs.l + 4) + 'px'; cap.el.style.top = Math.round(cs.t + 4) + 'px'; st.burstCap = cap; rec.rect = { l: Math.min(spot.rect.l, cs.l), t: spot.rect.t, r: Math.max(spot.rect.r, cs.l + w), b: Math.max(spot.rect.b, cs.t + h) }; }
+              else cap.dismiss();
+            }
+          } else rec.drop();
+        }
+      }
       st.live = true;
       sirenSfx(g, sz);
       st.pendingEdge = { at: t + (stars >= 5 ? 0 : 1500), stars, until: t + 5500 };
@@ -597,11 +871,11 @@ const _a = new THREE.Vector3();
     const pe = st.pendingEdge;
     if (pe && t >= pe.at) {
       if (t > pe.until) st.pendingEdge = null;
-      else if (slotFree(t) && !onboarding(g)) { st.pendingEdge = null; edgeSay(g, Math.max(stars, 1), t); }
+      else if (slotFree(t) && !onboarding(g)) { edgeSay(g, Math.max(stars, 1), t); if (st.npc) st.pendingEdge = null; }
     }
     if (stars >= 2 && !st.pendingEdge) {
       if (t >= st.nextEdge && slotFree(t) && !onboarding(g)) edgeSay(g, stars, t);
-      else if (t >= st.nextCrowd && npcOk(g, t)) {
+      else if (t >= st.nextCrowd && npcOk(g, t) && !tier().land) {
         const c = pickPed(g, null);
         st.nextCrowd = t + T.crowdMs * (0.8 + Math.random() * 0.4);
         if (c) pedSay(g, c, deal('c:crowd', CHASE.crowd));
@@ -613,7 +887,7 @@ const _a = new THREE.Vector3();
   function onEncounter(wrap, where) {
     if (!wrap) return;
     st.pendingEdge = null;
-    if (st.npc) { st.npc.api.dismiss(); st.npc = null; }
+    if (st.npc) { release(st.npc.rec); st.npc.api.dismiss(); st.npc = null; }
     try {
       const w = window.innerWidth;
       const word = Comic.sfx({ container: wrap, text: where === 'caught' ? 'GOTCHA!' : 'TWEEEET!', color: where === 'caught' ? 'yellow' : 'cyan', from: 'right', x: w * 0.5, y: Math.round(window.innerHeight * 0.16), rotate: -6, scale: w < 600 ? 0.8 : 1, silent: true });
@@ -633,6 +907,8 @@ const _a = new THREE.Vector3();
     endHouse();
     if (st.npc) { st.npc.api.destroy(); st.npc = null; }
     hideBurst(); hideSpeed();
+    live.length = 0; cur = null;
+    document.querySelectorAll('.comic-banner-slot').forEach((n) => n.remove());
     if (st.siren) { st.siren.dismiss(); st.siren = null; }
     st.pendingEdge = null;
     Comic.clear();
@@ -644,9 +920,7 @@ const _a = new THREE.Vector3();
     if (!g || g.gameState !== 'playing' || !g.camera || !g.vehicle) { if (st.live) teardown(); return; }
     const t = now();
     const sz = (st.npc || st.house) ? size() : null;
-    if (st.house) {
-      if (t >= st.house.until) endHouse(); else pinHouse(g, sz);
-    }
+    if (st.house && t >= st.house.until) endHouse();
     const n = st.npc;
     if (n) {
       if (t >= n.until) endNpc(t);
@@ -654,7 +928,18 @@ const _a = new THREE.Vector3();
         const v = n.anchor(_a);
         const pr = v && n.obj && treeVisible(n.obj) ? project(g, v.x, v.y, v.z, sz) : null;
         if (!pr || pr.behind) endNpc(t);
-        else n.api.updatePosition(pr.x, pr.y, { width: sz.W, height: sz.H, side: n.side });
+        else {
+          // keep the bubble clear of the rider, the road and the map: try the other side of the head, else hide it
+          const zn = cachedZone(g, sz, n.rec), u = { width: sz.W, height: sz.H };
+          const sides = n.side === 'below' ? ['below', 'above'] : ['above', 'below'];
+          let used = null;
+          for (let i = 0; i < 2 && !used; i++) {
+            const r = n.api.rectFor(pr.x, pr.y, Object.assign({ side: sides[i] }, u));
+            if (!hits(r, zn, 2)) { used = sides[i]; n.rec.rect = r; }
+          }
+          if (used) { n.side = used; n.api.updatePosition(pr.x, pr.y, Object.assign({ side: used }, u)); n.api.show(); }
+          else { n.api.hide(); n.rec.rect = null; }
+        }
       }
     }
     if (t - st.lastProbe >= T.probeMs) { st.lastProbe = t; probe(g, t); chaseTick(g, t); }
@@ -662,12 +947,26 @@ const _a = new THREE.Vector3();
 
   S.Callouts = {
     version: 1, T, LINES: { HOUSE, BANNER, NPC, CHASE },
-    banner, placeSlot, dropBanner, houseReaction, onOffence, onMissedThrow, onStars, onEncounter, timesUp,
+    banner, placeSlot, placeNote, tier, dropBanner, houseReaction, onOffence, onMissedThrow, onStars, onEncounter, timesUp,
     bandOf, teardown,
+    // QA: the protected zone right now (rider, road ahead, HUD, live pieces) in layer pixels
+    zone: () => { const g = game(); return g ? zone(g, size(), null) : []; },
     // QA: what is on screen right now
-    state: () => ({ npc: !!st.npc, house: !!st.house, burst: !!st.burst, speed: !!st.speed, reds: st.reds.length }),
+    state: () => ({ npc: !!st.npc, house: !!st.house, burst: !!st.burst, speed: !!st.speed, reds: st.reds.length, pieces: live.length }),
     gates: () => { const g = game(), t = now(); return { npc: !!st.npc, house: houseActive(t), bannerLeft: Math.round(st.bannerUntil - t), sinceNpcEnd: Math.round(t - st.lastNpcEnd), onboarding: onboarding(g), paused: !!(police() && police().isPaused()), ok: npcOk(g, t) }; }
   };
+
+  // A comic hook must never be able to break the game: a throw here would otherwise abort the delivery
+  // or the police flow that called it. Every public function swallows its own errors (and logs once).
+  for (const k of Object.keys(S.Callouts)) {
+    const fn = S.Callouts[k];
+    if (typeof fn !== 'function') continue;
+    let warned = false;
+    S.Callouts[k] = function () {
+      try { return fn.apply(this, arguments); }
+      catch (e) { if (!warned) { warned = true; console.warn('[comic] ' + k + ' failed:', e); } }
+    };
+  }
 
   // Fonts download on first use: start them now so the first callout is not drawn in the fallback face.
   Comic.preload();

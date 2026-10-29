@@ -31,7 +31,7 @@
     settleKey: '[B]',
     caughtCaption: '5★ = CAUGHT',
     // One-time explainer the first time a save earns a star.
-    firstStar: 'POLICE WATCH: running red lights, hitting pedestrians and speeding over {limit} km/h earn stars. At 5★ you are caught. Keep driving clean and a star drops every {decay} s. {settle} to settle up early.',
+    firstStar: 'POLICE WATCH: red lights and speeding earn stars. 5★ = caught. {settle} to settle up.',
     firstStarSettleTouch: 'Tap the stars',
     firstStarSettleKey: 'Press B or tap the stars',
     settleAria: 'Wanted level {stars} stars. Settle with the police',
@@ -295,15 +295,12 @@
   // CSS (injected so the module stays self-contained)
   // --------------------------------------------------------------------------
   const CSS = `
-  #police-wanted{position:fixed;right:16px;top:64px;z-index:70;display:flex;align-items:center;gap:8px;cursor:pointer;color:inherit;min-height:36px;
-    background:rgba(17,20,28,.92);border:2.5px solid #000;border-radius:10px;padding:6px 10px;box-shadow:3px 3px 0 #000;
+  #police-wanted{position:fixed;z-index:70;display:flex;align-items:center;gap:8px;cursor:pointer;color:inherit;
+    background:rgba(17,20,28,.92);border:2.5px solid #000;border-radius:10px;box-shadow:3px 3px 0 #000;
     pointer-events:none;opacity:0;transform:translateY(-6px);transition:opacity .25s ease,transform .25s ease;font-family:var(--font-telemetry,'Chakra Petch',monospace)}
   #police-wanted.on{opacity:1;transform:none;pointer-events:auto}
   #police-wanted .pw-settle{font-size:10px;font-weight:800;letter-spacing:1px;color:#111;background:#ffd23f;border:1.5px solid #000;border-radius:6px;padding:2px 6px}
   #police-wanted .pw-key{opacity:.6}
-  #police-wanted.compact{padding:5px 8px;gap:6px}
-  #police-wanted.compact .pw-label{display:none}
-  #police-wanted.compact .pw-star{font-size:15px}
   body.touch-controls-active #police-wanted .pw-key{display:none}
   #police-wanted:hover .pw-settle,#police-wanted:focus-visible .pw-settle{background:#fff}
   #police-wanted .pw-label{font-size:10px;font-weight:800;letter-spacing:2px;color:#ff5a7a}
@@ -418,29 +415,11 @@
     window.addEventListener('resize', placeHUD);
   }
 
-  // Top-right, tucked under whatever already sits there (desktop status
-  // pills, the touch A-STEER/A-DRIVE/TOOLS row, the landscape/desktop
-  // telemetry) so it never overlaps. Portrait phones have the telemetry in
-  // the top-right corner, so there the meter goes compact under the
-  // delivery capsule on the left instead.
+  // The chip's slot is fixed by the HUD layout in style.css (a column slot under the
+  // order card or the system buttons, sized by --ui), so there is nothing to measure here.
   function placeHUD() {
     if (!el.hud) return;
-    const W = window.innerWidth, H = window.innerHeight;
-    const rects = (q) => Array.from(document.querySelectorAll(q)).map(n => n.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0);
-    const portraitPhone = W < 600 && H > W;
-    el.hud.classList.toggle('compact', portraitPhone);
-    let bottom = 8;
-    if (portraitPhone) {
-      rects('#delivery-mission-capsule').forEach(r => { if (r.top < H * 0.3) bottom = Math.max(bottom, r.bottom); });
-      el.hud.style.left = '8px'; el.hud.style.right = 'auto';
-    } else {
-      const hudW = el.hud.offsetWidth || 260;
-      rects('.slowroads-top-bar, .touch-util-btn, #touch-btn-tools, .telemetry-digits-box').forEach(r => {
-        if (r.right > W - hudW - 16 && r.top < H * 0.35) bottom = Math.max(bottom, r.bottom);
-      });
-      el.hud.style.right = '16px'; el.hud.style.left = 'auto';
-    }
-    el.hud.style.top = Math.round(bottom + 8) + 'px';
+    el.hud.style.top = el.hud.style.right = el.hud.style.left = '';
   }
 
   function renderHUD(bump) {
@@ -559,7 +538,7 @@
     C.markHintSeen('policeStars');
     const touch = document.body.classList.contains('touch-controls-active');
     const settleTxt = touch ? STRINGS.firstStarSettleTouch : STRINGS.firstStarSettleKey;
-    g.addNotification(esc(fmt(STRINGS.firstStar, { limit: TUNE.postedLimitKmh, decay: TUNE.decayEvery, settle: settleTxt })), 'warning', 10000);
+    g.addNotification(esc(fmt(STRINGS.firstStar, { limit: TUNE.postedLimitKmh, decay: TUNE.decayEvery, settle: settleTxt })), 'warning', 4000);
   }
 
   function reportOffence(type, where) {
@@ -717,7 +696,15 @@
   }
 
   let dlg = null;
+  // If building the dialog throws, never leave the game paused with no dialog to close.
   function openEncounter(game, where) {
+    try { openEncounterInner(game, where); }
+    catch (e) {
+      console.warn('[police] encounter failed to open:', e);
+      if (!dlg) { S.paused = false; const w = document.getElementById('police-dialog-wrap'); if (w) w.remove(); }
+    }
+  }
+  function openEncounterInner(game, where) {
     const officer = { rank: STRINGS.ranks[Math.min(5, Math.max(1, S.stars))], name: pick(STRINGS.surnames) };
     ensureDOM();
     if (dlg) return;

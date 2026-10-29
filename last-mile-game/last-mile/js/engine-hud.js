@@ -386,7 +386,7 @@
       const c = this.scorePopupContainer;
       if (!c) return;
       c.style.top = '';
-      const tel = document.querySelector('.slowroads-telemetry-box');
+      const tel = document.querySelector('.telemetry-digits-box');
       if (!tel || !tel.offsetParent) return;
       const t = tel.getBoundingClientRect();
       const r = c.getBoundingClientRect();
@@ -490,6 +490,9 @@
       const stack = document.getElementById('notification-stack');
       if (!stack) return;
 
+      // One notification at a time: a new one replaces whatever is showing.
+      stack.querySelectorAll('.notification-item').forEach((n) => n.remove());
+
       const item = document.createElement('div');
       item.className = `notification-item ${type}`;
       item.innerHTML = message;
@@ -502,9 +505,12 @@
         item.style.opacity = '1';
       });
 
+      if (S.Callouts && S.Callouts.placeNote) S.Callouts.placeNote(); // keep it off the rider, the road ahead and the map
+
       // Auto-remove after duration
       if (duration > 0) {
         setTimeout(() => {
+          if (!item.isConnected) return; // already replaced
           item.classList.add('removing');
           setTimeout(() => item.remove(), 250);
         }, duration);

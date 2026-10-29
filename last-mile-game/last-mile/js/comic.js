@@ -128,6 +128,7 @@
     if (p.reduceMotion) root.classList.add('comic-still');
     root.setAttribute('aria-hidden', 'true');
     if (o && o.delay) root.style.setProperty('--d', o.delay + 'ms');
+    if (o && o.group) root.dataset.comicGroup = o.group;   // pieces of one logical callout (a house reaction = emoji + bubble) share a group
     return p;
   }
   function mount(root, container) { (container || layer()).appendChild(root); return root; }
@@ -243,7 +244,7 @@
   // the top-right slot under the CAM/DAY chips.
   // ===========================================================================
   function banner(opts) {
-    const o = Object.assign({ kind: 'yellow', burst: '★', duration: 2600, max: 2, key: null }, opts);
+    const o = Object.assign({ kind: 'yellow', burst: '★', duration: 2600, max: 1, key: null }, opts);
     const host = o.container || bannerSlot();
     const shown = Array.from(host.children).filter((c) => c.classList.contains('comic-banner') && !c.classList.contains('comic-out'));
     shown.filter((c) => o.key && c.dataset.comicKey === o.key).forEach((c) => retire(c, 120));
@@ -617,8 +618,8 @@
         setBodyAt(bx, by);
         setTail(tipX - cx, tipY - cy, !!limited);
       },
-      updatePosition(ax, ay, u) {
-        replay = () => api.updatePosition(ax, ay, u);
+      // Where the body would sit for an anchor (no DOM change): { bx, by, inside }
+      calc(ax, ay, u) {
         u = u || {};
         const W = u.width || host.clientWidth || window.innerWidth;
         const H = u.height || host.clientHeight || window.innerHeight;
@@ -631,12 +632,40 @@
           const lo = m + size / 2, hi = max - m - size / 2;
           return lo > hi ? max / 2 : clamp(v, lo, hi);
         };
-        const bx = fit(ax, bw, W);
-        by = fit(by, bh, H);
-        const inside = ax >= 0 && ax <= W && ay >= 0 && ay <= H;
-        api.offscreen = !inside;
-        setBodyAt(bx, by);
-        setTail(ax - cx, ay - cy, !inside);
+        return { bx: fit(ax, bw, W), by: fit(by, bh, H), inside: ax >= 0 && ax <= W && ay >= 0 && ay <= H };
+      },
+      // Screen rect of body + tail tip + hard shadow for an anchor, without moving anything.
+      rectFor(ax, ay, u) {
+        const c = api.calc(ax, ay, u);
+        return {
+          l: Math.min(c.bx - bw / 2, ax - 4), t: Math.min(c.by - bh / 2, ay - 4),
+          r: Math.max(c.bx + bw / 2 + 5, ax + 4), b: Math.max(c.by + bh / 2 + 6, ay + 4)
+        };
+      },
+      // Edge bubble: rect from the screen edge to the far side of the body at height ey.
+      edgeRect(ey, u) {
+        u = u || {};
+        const W = u.width || host.clientWidth || window.innerWidth;
+        const H = u.height || host.clientHeight || window.innerHeight;
+        const m = u.margin != null ? u.margin : o.margin;
+        const reach = edgeR(0) * (kind === 'shout' ? 1.06 : 1) + o.tailLen + 14 + 4;
+        const bx = edge === 'left' ? reach : W - reach;
+        const lo = m + bh / 2, hi = H - m - bh / 2;
+        const by = lo > hi ? H / 2 : clamp(ey, lo, hi);
+        return edge === 'left' ? { l: 0, t: by - bh / 2, r: bx + bw / 2 + 5, b: by + bh / 2 + 6 } : { l: bx - bw / 2, t: by - bh / 2, r: W, b: by + bh / 2 + 6 };
+      },
+      // Narrow (or widen) the text box and re-measure.
+      setMaxWidth(px) {
+        root.style.setProperty('--cb-max', cssLen(px));
+        build();
+        if (replay) replay();
+      },
+      updatePosition(ax, ay, u) {
+        replay = () => api.updatePosition(ax, ay, u);
+        const c = api.calc(ax, ay, u);
+        api.offscreen = !c.inside;
+        setBodyAt(c.bx, c.by);
+        setTail(ax - cx, ay - cy, !c.inside);
       },
       updateEdge(ey, u) {
         replay = () => api.updateEdge(ey, u);
