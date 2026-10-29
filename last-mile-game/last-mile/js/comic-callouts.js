@@ -659,6 +659,9 @@ const _a = new THREE.Vector3();
     st.reds.push(t);
     if (!npcOk(g, t)) return;
     const text = st.reds.length >= T.redWatchAt ? deal('n:redWatch', NPC.redWatch) : deal('n:red', NPC.red);
+    // The star burst that just fired already holds the callout slots; the bystander's line is the point of
+    // a red-light jump, so it takes the place of the siren word (the WANTED burst stays).
+    for (const r of live.slice()) if (r.name === 'siren') r.drop();
     const c = pickPed(g, crossing);
     if (c && pedSay(g, c, text)) return;
     banner({ title: 'RED LIGHT!', sub: text, kind: 'orange', burst: '!', duration: 2600, key: 'red' });

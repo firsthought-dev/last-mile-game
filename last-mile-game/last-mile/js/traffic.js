@@ -284,7 +284,7 @@
 
   // Load the vehicle models, then build and attach a TrafficSystem to the game.
   TrafficSystem.start = function (game) {
-    const sys = new TrafficSystem(game, game.roadNet, { seed: 5927 });
+    const sys = new TrafficSystem(game, game.roadNet, { seed: 5927, TARGET: game.quality ? game.quality.tier.aiCap : T.TARGET });
     game.traffic = sys;
     if (typeof THREE.GLTFLoader === 'undefined') return sys;
     new THREE.GLTFLoader().load('assets/models/npc-vehicles.glb?v=' + (window.__BUILD_V || 1), (gltf) => sys.attachRender(game.scene, gltf),

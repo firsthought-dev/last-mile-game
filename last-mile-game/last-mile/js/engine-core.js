@@ -174,6 +174,7 @@
       // --- Stage 2: World object + sky dome + road ---
       this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
       this.world._game = this;
+      this.world._pedKeep = this.quality ? this.quality.tier.pedestrianScale : 1;
 
       // WI-05 (opt-in, ?net=1): the zone road network. It must exist BEFORE the road, terrain, props and fences
       // are made so they all see the graded cross roads and leave the junctions clear.
@@ -569,6 +570,7 @@
 
       this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
       this.world._game = this; // back-reference for distance culling in updateCrossers
+      this.world._pedKeep = this.quality ? this.quality.tier.pedestrianScale : 1;
       this.scene.add(this.world.createSkyDome(season, this.selectedTimeOfDay));
       this.scene.add(this.world.createRoadMesh());
       if (this._sidewalks) this.scene.remove(this._sidewalks);

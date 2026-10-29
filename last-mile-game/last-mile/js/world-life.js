@@ -270,6 +270,13 @@
           pathLen: along ? Math.abs(along.sB - along.sA) : startPos.distanceTo(endPos),
           along
         });
+        // Medium keeps a share of the verge walkers. The pick is a hash of the position, not this.prng,
+        // so the rest of the world layout is identical on both tiers.
+        const keep = this._pedKeep == null ? 1 : this._pedKeep;
+        if (keep < 1) {
+          const hh = Math.sin(startPos.x * 12.9898 + startPos.z * 78.233 + c * 3.1) * 43758.5453;
+          if (hh - Math.floor(hh) >= keep) { this.crossers.pop(); this.foliageGroup.remove(mesh); continue; }
+        }
         spawned++;
       }
       // B132: occasionally also offer a signalled crossing where a group of
