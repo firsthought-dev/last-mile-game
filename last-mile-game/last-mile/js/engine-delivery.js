@@ -369,6 +369,27 @@
     },
 
 
+    vehicleHandling() { return vehicleSpec(this.selectedVehicle).handling; },
+
+    // Called by the traffic system when the player's body overlaps an AI vehicle (WI-08).
+    // info: { pen (overlap, m), nx, nz (unit vector from the player toward the other vehicle), relSpeed (m/s) }
+    _onTrafficCrash(agent, info) {
+      const v = this.vehicle, now = performance.now();
+      if (!v) return;
+      // always separate the bodies; only the first touch in a moment costs anything
+      v.mesh.position.x -= info.nx * (info.pen + 0.05); v.mesh.position.z -= info.nz * (info.pen + 0.05);
+      if (now - (this._lastCrashMs || 0) < CONFIG.CRASH_COOLDOWN_MS) return;
+      this._lastCrashMs = now;
+      if (info.relSpeed > 1.5) {
+        v.speed *= CONFIG.CRASH_SPEED_KEEP;
+        this.earnings = Math.max(0, this.earnings - CONFIG.CRASH_CASH_PENALTY);
+        this.streakCount = 0;
+        sound.playCrash();
+        this.addNotification(`${UI.icon('flame')} CRASH! -₹${CONFIG.CRASH_CASH_PENALTY} AND THE STREAK IS GONE`, 'warning', 3000);
+        // WI-09: a crash will also report an offence to the police system here.
+      }
+    },
+
     _updateDeliveryHalo(target) {
       let h = this._halo;
       if (!h) {

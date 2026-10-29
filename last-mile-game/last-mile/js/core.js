@@ -168,6 +168,8 @@
     // Parcel toss reach (B136): ground-plane metres, and how far past abeam a drop still counts.
     TOSS_RANGE: 35,
     TOSS_BEHIND_SLACK: 3,
+    // Crashing into AI traffic (WI-08): the player keeps this share of speed, loses this much shift cash, and cannot be hit again by anyone for a moment.
+    CRASH_SPEED_KEEP: 0.35, CRASH_CASH_PENALTY: 40, CRASH_COOLDOWN_MS: 1200,
     // First-time player guidance (WI-18): where the first drop starts, how fast, and the slow
     // zone round the first house that keeps the drop window seconds long.
     ONBOARD: { APPROACH_M: 45, START_SPEED: 6, SLOW_ZONE_M: 38, SLOW_SPEED: 4.5, PASSED_M: 8 },
