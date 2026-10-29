@@ -176,6 +176,8 @@
     // Spare parcels per shift (B140): a throw that can't reach a drop uses
     // one; missing with none left ends the shift.
     SPARE_PARCELS: 3,
+    // With none left, a spare comes back this often (ms) instead of the shift ending.
+    SPARE_RESTOCK_MS: 20000,
     // Barrier hits (B140): a fresh impact keeps this share of speed, and
     // scraping along the barrier drags off this share per second.
     BARRIER_HIT_SPEED_KEEP: 0.75,

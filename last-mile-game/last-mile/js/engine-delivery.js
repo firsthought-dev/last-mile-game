@@ -22,6 +22,21 @@
     },
 
 
+    // Distance to the nearest undelivered drop still ahead, or null when there is none (wasted throw).
+    _tossTooFar(carPos, carForward) {
+      if (!this.world) return null;
+      let minD = null;
+      this.world.deliveryTargets.forEach(t => {
+        if (t.delivered) return;
+        const dx = t.pos.x - carPos.x, dz = t.pos.z - carPos.z;
+        if (dx * carForward.x + dz * carForward.z < -CONFIG.TOSS_BEHIND_SLACK) return;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (minD == null || d < minD) minD = d;
+      });
+      return minD != null && minD <= 150 ? minD : null;
+    },
+
+
     tossParcel3D() {
       if (!this.vehicle || !this.world) return;
       const carPos = this.vehicle.mesh.position.clone();
@@ -32,6 +47,15 @@
       // parcel used to home onto any undelivered target within 65 m, even one
       // already passed, so a throw into nowhere still delivered.
       const nearestTarget = this._findTossTarget(carPos, carForward);
+
+      // Nothing in reach but a drop is ahead: tell the player how far it is instead of wasting a spare parcel.
+      if (!nearestTarget) {
+        const far = this._tossTooFar(carPos, carForward);
+        if (far != null) {
+          this.addNotification(`${UI.icon('package')} TOO FAR — ${Math.round(far)}m to the drop. Get within ${CONFIG.TOSS_RANGE}m`, 'info', 2200);
+          return;
+        }
+      }
 
       // Differentiated 3D Cargo Models based on active order
       const parcelGroup = new THREE.Group();
@@ -137,6 +161,7 @@
 
     _resetSpareParcels() {
       this.spareParcels = CONFIG.SPARE_PARCELS;
+      this._spareRestockFrom = null;
       this._renderSpareParcels();
     },
 
@@ -150,6 +175,20 @@
     },
 
 
+    // One spare comes back every SPARE_RESTOCK_MS while below the full count.
+    _restockSpareParcels() {
+      if (this.spareParcels == null || this.spareParcels >= CONFIG.SPARE_PARCELS) return;
+      const now = performance.now();
+      if (this._spareRestockFrom == null) this._spareRestockFrom = now;
+      const n = Math.floor((now - this._spareRestockFrom) / CONFIG.SPARE_RESTOCK_MS);
+      if (n > 0) {
+        this.spareParcels = Math.min(CONFIG.SPARE_PARCELS, this.spareParcels + n);
+        this._spareRestockFrom = this.spareParcels >= CONFIG.SPARE_PARCELS ? null : this._spareRestockFrom + n * CONFIG.SPARE_RESTOCK_MS;
+        this._renderSpareParcels();
+      }
+    },
+
+
     _spendSpareParcel() {
       if (this.spareParcels == null) this.spareParcels = CONFIG.SPARE_PARCELS;
       // A first-time player is still finding the button: an early drop costs nothing.
@@ -158,17 +197,21 @@
         this.addNotification(`${UI.icon('package')} Not close enough yet. Drive up to the ring first`, 'info', 2500);
         return;
       }
+      this._restockSpareParcels();
       if (this.spareParcels <= 0) {
+        // No popup: the streak is lost and a spare comes back after a short wait, so play never stops.
         this._track('order_fail', { reason: 'out_of_parcels', spare_left: 0, vehicle: this.selectedVehicle });
-        this.addNotification(`${UI.icon('package')} OUT OF PARCELS — SHIFT OVER`, 'warning', 4000);
-        setTimeout(() => this.showShiftSummary({ outOfParcels: true }), 900);
+        this.streakCount = 0;
+        const wait = Math.max(1, Math.ceil((CONFIG.SPARE_RESTOCK_MS - (performance.now() - (this._spareRestockFrom || 0))) / 1000));
+        this.addNotification(`${UI.icon('package')} OUT OF SPARE PARCELS — STREAK LOST. NEXT SPARE IN ${wait}s`, 'warning', 3500);
         return;
       }
+      if (this.spareParcels >= CONFIG.SPARE_PARCELS) this._spareRestockFrom = performance.now();
       this.spareParcels--;
       this._renderSpareParcels();
       const left = this.spareParcels;
       this._track('order_fail', { reason: 'missed_throw', spare_left: left, vehicle: this.selectedVehicle });
-      this.addNotification(`${UI.icon('package')} MISSED THROW — ${left === 0 ? 'NO SPARE PARCELS LEFT. ONE MORE MISS ENDS THE SHIFT' : `${left} SPARE PARCEL${left === 1 ? '' : 'S'} LEFT`}`, 'warning', 3500);
+      this.addNotification(`${UI.icon('package')} MISSED THROW — ${left === 0 ? 'NO SPARE PARCELS LEFT. ONE MORE MISS LOSES YOUR STREAK' : `${left} SPARE PARCEL${left === 1 ? '' : 'S'} LEFT`}`, 'warning', 3500);
       S.Callouts?.onMissedThrow(this); // C3: a passer-by comments (kind-aware), callout only
     },
 
@@ -481,10 +524,11 @@
         if (cargoDescEl) cargoDescEl.textContent = nextTarget.order?.cargo || 'Express Package';
         if (distBadgeEl) {
           distBadgeEl.textContent = `${distMeters}m`;
-          distBadgeEl.classList.toggle('dist-near', distMeters <= 65);
+          distBadgeEl.classList.toggle('dist-near', distMeters <= CONFIG.TOSS_RANGE); // lit = a throw can land
         }
         if (sideBadgeEl) sideBadgeEl.textContent = `${aheadText} [${sideText}]`;
 
+        this._restockSpareParcels(); // keeps the spare-parcel count in the HUD current
         // Approach state within 75m
         const isNearDrop = !!this._findTossTarget(carPos, playerForward);
         const touchDropBtn = document.getElementById('touch-btn-drop');
