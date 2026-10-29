@@ -168,9 +168,16 @@
     // Parcel toss reach (B136): ground-plane metres, and how far past abeam a drop still counts.
     TOSS_RANGE: 35,
     TOSS_BEHIND_SLACK: 3,
+    // Crashing into AI traffic (WI-08): the player keeps this share of speed, loses this much shift cash, and cannot be hit again by anyone for a moment.
+    CRASH_SPEED_KEEP: 0.35, CRASH_CASH_PENALTY: 40, CRASH_COOLDOWN_MS: 1200,
+    // First-time player guidance (WI-18): where the first drop starts, how fast, and the slow
+    // zone round the first house that keeps the drop window seconds long.
+    ONBOARD: { APPROACH_M: 45, START_SPEED: 6, SLOW_ZONE_M: 38, SLOW_SPEED: 4.5, PASSED_M: 8 },
     // Spare parcels per shift (B140): a throw that can't reach a drop uses
     // one; missing with none left ends the shift.
     SPARE_PARCELS: 3,
+    // With none left, a spare comes back this often (ms) instead of the shift ending.
+    SPARE_RESTOCK_MS: 20000,
     // Barrier hits (B140): a fresh impact keeps this share of speed, and
     // scraping along the barrier drags off this share per second.
     BARRIER_HIT_SPEED_KEEP: 0.75,
@@ -511,58 +518,58 @@
 
     ORDERS_BY_CITY: {
       mumbai: [
-        { id: 101, name: 'Neelgiri Foothill Bungalow', cargo: 'Fresh Irani Chai, Maska Bun & Pastries', reward: 75 },
-        { id: 102, name: 'Cloudspire Valley Ridge Villa', cargo: 'Warm Vada Pav & Thermos Cutting Chai', reward: 85 },
-        { id: 103, name: 'Chandragiri Peak Lookout Estate', cargo: 'Piping Hot Puran Poli & Sol Kadhi Tiffin', reward: 110 },
-        { id: 104, name: 'Sonaghati Lakeside Villa', cargo: 'Dabbawala Multi-Tier Lunch & Buttermilk', reward: 90 },
-        { id: 105, name: 'Nilambari Mist Hillside Bungalow', cargo: 'Artisanal Chikki Box & Espresso Beans', reward: 80 },
-        { id: 106, name: 'Suryakoot Valley Pass Estate', cargo: 'Alphonso Mango Crate & Kokum Juice', reward: 105 },
-        { id: 107, name: 'Mayurakshi Ridge Forest Retreat', cargo: 'Urgent Survey Electronics & Hard Disk', reward: 125 },
-        { id: 108, name: 'Neelgiri Foothill Homestead', cargo: 'Fresh Morning Farm Milk & Forest Honey', reward: 70 },
-        { id: 109, name: 'Sonaghati Riverfront Bungalow', cargo: 'Spicy Mountain Misal Pav & Pav', reward: 95 },
-        { id: 110, name: 'Chandragiri Ghat Overlook Villa', cargo: 'Camera Telephoto Lens & Battery Pack', reward: 130 },
-        { id: 111, name: 'Nilambari Sanctuary Outpost', cargo: 'Medical First-Aid Dispatch & Antivenom', reward: 140 },
-        { id: 112, name: 'Cloudspire Summit Villa', cargo: 'Fresh Strawberry Crates & Clotted Cream', reward: 115 }
+        { id: 101, name: 'Neelgiri Foothill Bungalow', cargo: 'Fresh Irani Chai, Maska Bun & Pastries', reward: 75, kind: 'brew', short: 'chai' },
+        { id: 102, name: 'Cloudspire Valley Ridge Villa', cargo: 'Warm Vada Pav & Thermos Cutting Chai', reward: 85, kind: 'meal', short: 'vada pav' },
+        { id: 103, name: 'Chandragiri Peak Lookout Estate', cargo: 'Piping Hot Puran Poli & Sol Kadhi Tiffin', reward: 110, kind: 'meal', short: 'puran poli' },
+        { id: 104, name: 'Sonaghati Lakeside Villa', cargo: 'Dabbawala Multi-Tier Lunch & Buttermilk', reward: 90, kind: 'meal', short: 'lunch' },
+        { id: 105, name: 'Nilambari Mist Hillside Bungalow', cargo: 'Artisanal Chikki Box & Espresso Beans', reward: 80, kind: 'sweets', short: 'chikki' },
+        { id: 106, name: 'Suryakoot Valley Pass Estate', cargo: 'Alphonso Mango Crate & Kokum Juice', reward: 105, kind: 'fresh', short: 'mangoes' },
+        { id: 107, name: 'Mayurakshi Ridge Forest Retreat', cargo: 'Urgent Survey Electronics & Hard Disk', reward: 125, kind: 'tech', short: 'electronics' },
+        { id: 108, name: 'Neelgiri Foothill Homestead', cargo: 'Fresh Morning Farm Milk & Forest Honey', reward: 70, kind: 'fresh', short: 'milk' },
+        { id: 109, name: 'Sonaghati Riverfront Bungalow', cargo: 'Spicy Mountain Misal Pav & Pav', reward: 95, kind: 'meal', short: 'misal pav' },
+        { id: 110, name: 'Chandragiri Ghat Overlook Villa', cargo: 'Camera Telephoto Lens & Battery Pack', reward: 130, kind: 'tech', short: 'camera lens' },
+        { id: 111, name: 'Nilambari Sanctuary Outpost', cargo: 'Medical First-Aid Dispatch & Antivenom', reward: 140, kind: 'medical', short: 'first-aid kit' },
+        { id: 112, name: 'Cloudspire Summit Villa', cargo: 'Fresh Strawberry Crates & Clotted Cream', reward: 115, kind: 'fresh', short: 'strawberries' }
       ],
       delhi: [
-        { id: 201, name: 'Amber Lane Haveli', cargo: 'Hot Parathas & Lassi Kulhad', reward: 65 },
-        { id: 202, name: 'Jaspura Village Flat', cargo: 'Butter Chicken & Naan Tiffin', reward: 85 },
-        { id: 203, name: 'Kiranpura Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
-        { id: 204, name: 'Ashavani Heritage Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 75 },
-        { id: 205, name: 'Rangoli Market Kothi', cargo: 'Festival Sweets & Kaju Katli Gift', reward: 60 },
-        { id: 206, name: 'Devkund Colony Residency', cargo: 'Chole Bhature & Sweet Lassi', reward: 95 },
-        { id: 207, name: 'Vanavasi Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
-        { id: 208, name: 'Saffronia Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+        { id: 201, name: 'Amber Lane Haveli', cargo: 'Hot Parathas & Lassi Kulhad', reward: 65, kind: 'meal', short: 'parathas' },
+        { id: 202, name: 'Jaspura Village Flat', cargo: 'Butter Chicken & Naan Tiffin', reward: 85, kind: 'meal', short: 'butter chicken' },
+        { id: 203, name: 'Kiranpura Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110, kind: 'docs', short: 'papers' },
+        { id: 204, name: 'Ashavani Heritage Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 75, kind: 'news', short: 'newspaper' },
+        { id: 205, name: 'Rangoli Market Kothi', cargo: 'Festival Sweets & Kaju Katli Gift', reward: 60, kind: 'sweets', short: 'sweets' },
+        { id: 206, name: 'Devkund Colony Residency', cargo: 'Chole Bhature & Sweet Lassi', reward: 95, kind: 'meal', short: 'chole bhature' },
+        { id: 207, name: 'Vanavasi Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120, kind: 'tech', short: 'charger' },
+        { id: 208, name: 'Saffronia Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55, kind: 'fresh', short: 'milk' }
       ],
       kolkata: [
-        { id: 301, name: 'Vidyapuri Street Bonedi Bari', cargo: '2x Hot Kathi Rolls & Buttermilk', reward: 65 },
-        { id: 302, name: 'Gangavati Riverfront Residency', cargo: 'Traditional Biryani & Rasgullas', reward: 95 },
-        { id: 303, name: 'Udyanpura Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
-        { id: 304, name: 'Shubhkund Rajbari Courtyard', cargo: 'Festival Sweets & Sandesh Gift', reward: 75 },
-        { id: 305, name: 'Tarangpur Heritage Kothi', cargo: 'Morning Gazette & Highland Mountain Tea', reward: 60 },
-        { id: 306, name: 'Lavanya Sector Flat', cargo: 'Fish Curry & Steamed Rice Tiffin', reward: 85 },
-        { id: 307, name: 'Chandanpur Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
-        { id: 308, name: 'Shilpanagar Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+        { id: 301, name: 'Vidyapuri Street Bonedi Bari', cargo: '2x Hot Kathi Rolls & Buttermilk', reward: 65, kind: 'meal', short: 'kathi rolls' },
+        { id: 302, name: 'Gangavati Riverfront Residency', cargo: 'Traditional Biryani & Rasgullas', reward: 95, kind: 'meal', short: 'biryani' },
+        { id: 303, name: 'Udyanpura Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110, kind: 'docs', short: 'papers' },
+        { id: 304, name: 'Shubhkund Rajbari Courtyard', cargo: 'Festival Sweets & Sandesh Gift', reward: 75, kind: 'sweets', short: 'sweets' },
+        { id: 305, name: 'Tarangpur Heritage Kothi', cargo: 'Morning Gazette & Highland Mountain Tea', reward: 60, kind: 'news', short: 'newspaper' },
+        { id: 306, name: 'Lavanya Sector Flat', cargo: 'Fish Curry & Steamed Rice Tiffin', reward: 85, kind: 'meal', short: 'fish curry' },
+        { id: 307, name: 'Chandanpur Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120, kind: 'tech', short: 'charger' },
+        { id: 308, name: 'Shilpanagar Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55, kind: 'fresh', short: 'milk' }
       ],
       pune: [
-        { id: 401, name: 'Prashanti Peth Wada', cargo: '2x Hot Misal Pav & Buttermilk', reward: 65 },
-        { id: 402, name: 'Ketakivana Park Bungalow', cargo: 'Irani Chai, Maska Bun & Pastries', reward: 85 },
-        { id: 403, name: 'Vigyanpur Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
-        { id: 404, name: 'Vrindavan Wada (Behind Banyan Tree)', cargo: 'Festival Sweets & Kaju Katli Gift', reward: 75 },
-        { id: 405, name: 'Mayurakshi Gymkhana Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 60 },
-        { id: 406, name: 'Mangalpura Peth Residency', cargo: 'Puran Poli & Sol Kadhi Tiffin', reward: 95 },
-        { id: 407, name: 'Girikund Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
-        { id: 408, name: 'Prashanti Peth Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+        { id: 401, name: 'Prashanti Peth Wada', cargo: '2x Hot Misal Pav & Buttermilk', reward: 65, kind: 'meal', short: 'misal pav' },
+        { id: 402, name: 'Ketakivana Park Bungalow', cargo: 'Irani Chai, Maska Bun & Pastries', reward: 85, kind: 'brew', short: 'chai' },
+        { id: 403, name: 'Vigyanpur Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110, kind: 'docs', short: 'papers' },
+        { id: 404, name: 'Vrindavan Wada (Behind Banyan Tree)', cargo: 'Festival Sweets & Kaju Katli Gift', reward: 75, kind: 'sweets', short: 'sweets' },
+        { id: 405, name: 'Mayurakshi Gymkhana Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 60, kind: 'news', short: 'newspaper' },
+        { id: 406, name: 'Mangalpura Peth Residency', cargo: 'Puran Poli & Sol Kadhi Tiffin', reward: 95, kind: 'meal', short: 'puran poli' },
+        { id: 407, name: 'Girikund Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120, kind: 'tech', short: 'charger' },
+        { id: 408, name: 'Prashanti Peth Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55, kind: 'fresh', short: 'milk' }
       ],
       bangalore: [
-        { id: 501, name: 'Mallika Nagar Doorstep', cargo: '2x Hot Masala Dosa & Buttermilk', reward: 65 },
-        { id: 502, name: 'Indravani Nagar Bungalow', cargo: 'Filter Kaapi & Bun Maska', reward: 85 },
-        { id: 503, name: 'Shvetakund Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110 },
-        { id: 504, name: 'Vrushabhpur Wada Courtyard', cargo: 'Festival Sweets & Golden Sweet Pak Gift', reward: 75 },
-        { id: 505, name: 'Jayvanti Heritage Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 60 },
-        { id: 506, name: 'Harsha Layout Residency', cargo: 'Bisi Bele Bath & Rasam Tiffin', reward: 95 },
-        { id: 507, name: 'Kuruvana Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120 },
-        { id: 508, name: 'Vrushabhpur Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55 }
+        { id: 501, name: 'Mallika Nagar Doorstep', cargo: '2x Hot Masala Dosa & Buttermilk', reward: 65, kind: 'meal', short: 'dosa' },
+        { id: 502, name: 'Indravani Nagar Bungalow', cargo: 'Filter Kaapi & Bun Maska', reward: 85, kind: 'brew', short: 'filter coffee' },
+        { id: 503, name: 'Shvetakund Tech Towers', cargo: 'Urgent Legal Dispatch & Hard Disk', reward: 110, kind: 'docs', short: 'papers' },
+        { id: 504, name: 'Vrushabhpur Wada Courtyard', cargo: 'Festival Sweets & Golden Sweet Pak Gift', reward: 75, kind: 'sweets', short: 'sweets' },
+        { id: 505, name: 'Jayvanti Heritage Kothi', cargo: 'Morning Gazette & Artisanal Tea', reward: 60, kind: 'news', short: 'newspaper' },
+        { id: 506, name: 'Harsha Layout Residency', cargo: 'Bisi Bele Bath & Rasam Tiffin', reward: 95, kind: 'meal', short: 'bisi bele bath' },
+        { id: 507, name: 'Kuruvana Hilltop Villa', cargo: 'Dual Laptop Charger & Espresso', reward: 120, kind: 'tech', short: 'charger' },
+        { id: 508, name: 'Vrushabhpur Hidden Courtyard', cargo: 'Fresh Morning A2 Milk Bottles', reward: 55, kind: 'fresh', short: 'milk' }
       ]
     }
   });

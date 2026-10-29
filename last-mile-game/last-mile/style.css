@@ -285,17 +285,10 @@ html, body {
    SLOWROADS MINIMALIST DELIVERY MISSION CAPSULE (Top-Left)
    ========================================================================== */
 .slowroads-delivery-capsule {
-  position: absolute;
-  top: 24px;
-  left: 28px;
   background: var(--comic-card-bg);
   border: var(--border-comic);
   border-radius: 12px;
-  padding: 10px 16px;
-  min-width: 250px;
-  max-width: min(380px, 45vw);
   box-shadow: var(--shadow-comic);
-  z-index: 60;
   pointer-events: auto;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
@@ -442,27 +435,21 @@ html, body {
 
 /* --- Contextual Drop Action Prompt --- */
 .drop-action-prompt {
-  position: absolute;
-  bottom: 168px;
-  left: 50%;
-  transform: translateX(-50%);
   background: var(--comic-yellow);
   border: var(--border-comic);
   border-radius: 12px;
-  padding: 8px 20px;
   display: flex;
   align-items: center;
   gap: 12px;
   box-shadow: var(--shadow-comic);
-  z-index: 60;
   pointer-events: none;
   animation: comicActionPromptBounce 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes comicActionPromptBounce {
-  0% { opacity: 0; transform: translate(-50%, 16px) scale(0.9); }
-  60% { opacity: 1; transform: translate(-50%, -4px) scale(1.05); }
-  100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  0% { opacity: 0; transform: translateY(16px) scale(0.9); }
+  60% { opacity: 1; transform: translateY(-4px) scale(1.05); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .action-key-pill {
@@ -545,21 +532,12 @@ html, body {
 
 /* --- Top-Right: Slowroads Minimal Audio Bar & System Controls --- */
 .slowroads-top-bar {
-  position: absolute;
-  top: 24px;
-  right: 28px;
-  /* See .slowroads-obj-box for why this cap exists — this side and the
-     dispatch card were each unbounded and routinely summed past 1000px
-     combined. Wraps to a second row (system buttons)
-     instead of overlapping once it can't fit on one line. */
-  max-width: min(460px, 50vw);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
   pointer-events: auto;
-  z-index: 60;
 }
 
 .slowroads-sys-btns {
@@ -685,26 +663,13 @@ div.slowroads-status-pill {
 
 /* --- Bottom-Left: Minimalist Radar Minimap --- */
 .slowroads-radar-box {
-  position: absolute;
-  /* Was 28px — the dock bar (.slowroads-dock) is bottom-anchored and
-     horizontally centered independently of this box, with no shared
-     awareness of each other. On any viewport narrow enough for the
-     centered dock to reach this corner (which is most non-desktop-wide
-     windows, portrait phones especially), the dock's 20-70px band sat
-     entirely inside this box's vertical span, rendering through/over it.
-     Raised enough to clear the dock's height + margin unconditionally
-     rather than only in a mobile-specific media query. */
-  bottom: 86px;
-  left: 28px;
   background: var(--comic-card-bg);
   border: var(--border-comic);
   border-radius: 12px;
-  padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   pointer-events: auto;
-  z-index: 55;
   box-shadow: var(--shadow-comic);
 }
 
@@ -747,16 +712,10 @@ div.slowroads-status-pill {
    EVENT NOTIFICATION PANEL (Collisions, Fines, Deliveries)
    ========================================================================== */
 .notification-panel {
-  position: fixed;
-  bottom: 180px;
-  right: 28px;
-  max-width: 280px;
-  max-height: 240px;
   display: flex;
   flex-direction: column-reverse;
   gap: 6px;
   pointer-events: auto;
-  z-index: 54;
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -834,18 +793,10 @@ div.slowroads-status-pill {
 }
 
 .slowroads-telemetry-box {
-  position: absolute;
-  /* Same dock-clearance reasoning as .slowroads-radar-box above — this
-     box's content is short enough that it usually cleared the dock by
-     luck, but nothing guaranteed it as button labels changed. Matched to
-     the same clearance for consistency. */
-  bottom: 86px;
-  right: 28px;
   display: flex;
   align-items: flex-end;
   gap: 12px;
   pointer-events: auto;
-  z-index: 55;
 }
 
 .telemetry-controls-col {
@@ -2331,63 +2282,9 @@ body.touch-controls-active .slowroads-dock {
    RESPONSIVE DESIGN: Mobile, Tablet, Desktop Breakpoints
    ========================================================================== */
 
-/* In-game HUD (dispatch card / controls bar / wanted meter): below
-   this width, capping each box's max-width in vw isn't enough on its own
-   — a long delivery name or a missed-order banner can still make the
-   dispatch card grow to 2-3 lines tall, and since it and the top-bar are
-   two independently bottom-of-nowhere-anchored absolute boxes (each only
-   constrained horizontally), nothing stops the now-taller card from
-   running into the top-bar vertically. Stack them in normal document flow
-   instead of two independent absolute corner boxes — DOM order in
-   index.html is dispatch card, then wanted meter, then controls
-   bar, so switching all three to position:static stacks them in exactly
-   that (sensible) top-to-bottom order without touching the HTML. */
+/* Dock bar on narrow windows (non-touch only; the touch HUD hides the dock).
+   The in-game HUD itself is laid out by the "HUD LAYOUT" block at the end of this file. */
 @media (max-width: 700px) {
-  .slowroads-obj-box,
-  .wanted-meter-box,
-  .slowroads-top-bar {
-    position: static;
-    max-width: none;
-    width: calc(100% - 24px);
-    margin: 8px auto 0 auto;
-    box-sizing: border-box;
-  }
-
-  .slowroads-top-bar {
-    justify-content: flex-start;
-  }
-
-  .wanted-meter-box {
-    /* Was a hardcoded margin-top assuming a fixed dispatch-card height —
-       meaningless once these are stacked in normal flow instead of both
-       being absolutely positioned from the same top-left origin. */
-    margin-top: 8px;
-    transform: none; /* the show/hide transform no longer makes sense stacked; opacity alone still handles visibility */
-  }
-
-  .wanted-meter-box.wanted-active {
-    transform: none;
-  }
-
-  /* Same unshared-corner problem as the top boxes, just bottom-left
-     (.slowroads-radar-box) vs bottom-right (.slowroads-telemetry-box) —
-     neither had a width limit, so on narrow viewports they collided in
-     the middle, on top of each other and the car. */
-  .slowroads-radar-box {
-    max-width: 46vw;
-  }
-
-  .slowroads-telemetry-box {
-    max-width: 50vw;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  /* Dock bar: at this width the nav tabs + 5 icon buttons don't fit on
-     one line even at the min(860px, 94vw) cap, and .dock-bar-glass's
-     overflow:hidden was silently deleting the icon row instead of
-     wrapping or scrolling it into view. Wrap onto a second row instead —
-     still all reachable, just two rows instead of a hidden one. */
   .dock-bar-glass {
     flex-wrap: wrap;
     height: auto;
@@ -2402,68 +2299,7 @@ body.touch-controls-active .slowroads-dock {
   }
 }
 
-/* True phone widths: the fixes above stop HUD elements from overlapping,
-   but stacking every box at its normal desktop size still eats most of a
-   phone screen's height, leaving almost nothing of the actual game
-   viewport visible. Compact every HUD element's own footprint here rather
-   than just their positioning. */
 @media (max-width: 480px) {
-  .slowroads-obj-box {
-    padding: 6px 10px;
-    gap: 1px;
-  }
-
-  .slowroads-obj-title {
-    font-size: 0.82rem;
-  }
-
-  .slowroads-obj-tag {
-    font-size: 0.5rem;
-  }
-
-  .slowroads-obj-meta {
-    font-size: 0.58rem;
-    gap: 5px;
-  }
-
-  .slowroads-sys-btns .slowroads-icon-btn {
-    padding: 4px 8px;
-    font-size: 0.55rem;
-  }
-
-  /* Radar: shrink the canvas itself, not just its housing, so the box's
-     real footprint shrinks instead of leaving dead padding. */
-  #gps-minimap-canvas {
-    width: 76px;
-    height: 76px;
-  }
-
-  .slowroads-radar-box {
-    padding: 6px 8px;
-    max-width: 40vw;
-  }
-
-  .radar-tag, .radar-dist {
-    font-size: 0.48rem;
-  }
-
-  .slowroads-telemetry-box {
-    max-width: 46vw;
-    gap: 6px;
-  }
-
-  .slowroads-pill-btn {
-    padding: 4px 8px;
-    font-size: 0.55rem;
-  }
-
-  .telemetry-speed-row .telemetry-numeral {
-    font-size: 1.4rem;
-  }
-
-  /* Dock: wrapping to 2 rows (the >700px fix) still costs real vertical
-     space on a phone. Scroll horizontally in a single row instead — every
-     control stays reachable with a swipe, at roughly half the height. */
   .dock-bar-glass {
     flex-wrap: nowrap;
     overflow-x: auto;
@@ -2960,9 +2796,6 @@ body.vehicle-cycle .touch-drag-steer {
 
 /* Left: Steering Cluster (Left Thumb — car/truck only) */
 .touch-steer-cluster {
-  position: absolute;
-  left: 16px;
-  bottom: 22px;
   display: flex;
   gap: 10px;
   pointer-events: auto;
@@ -2977,9 +2810,6 @@ body.vehicle-cycle .touch-drag-steer {
 
 /* Top-Right: Quick Action Utilities (Autopilot & Tools Menu) */
 .touch-utility-cluster {
-  position: absolute;
-  top: 12px;
-  right: 12px;
   display: flex;
   gap: 6px;
   pointer-events: auto;
@@ -3156,9 +2986,6 @@ body.vehicle-cycle .touch-drag-steer {
 
 /* Right: Pedals & Action Drop Cluster (Right Thumb) */
 .touch-pedal-cluster {
-  position: absolute;
-  right: 16px;
-  bottom: 22px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3328,325 +3155,6 @@ body.vehicle-cycle .touch-drag-steer {
     box-shadow: 4px 4px 0 #000;
     margin-top: 4px;
   }
-
-  /* In-Game Top-Left Delivery Capsule: Streamlined compact pill (Fits comfortably on left) */
-  .slowroads-delivery-capsule {
-    top: 10px;
-    left: 10px;
-    min-width: 0 !important;
-    max-width: 116px !important;
-    width: fit-content;
-    padding: 4px 6px;
-    border-radius: 10px;
-    background: var(--comic-card-bg);
-    border: var(--border-comic-sm);
-    box-shadow: var(--shadow-comic-sm);
-  }
-  .delivery-capsule-header {
-    gap: 4px;
-    margin-bottom: 2px;
-  }
-  .delivery-badge {
-    padding: 1px 4px;
-    gap: 3px;
-  }
-  .delivery-tag {
-    display: none; /* Hide 'EXPRESS DROP' text to keep pill ultra compact on phone */
-  }
-  .delivery-order-seq {
-    font-size: 0.54rem;
-  }
-  .delivery-sep {
-    font-size: 0.54rem;
-  }
-  .delivery-payout {
-    font-size: 0.58rem;
-  }
-  .delivery-cargo-row {
-    display: none;
-  }
-  .delivery-dest-name {
-    max-width: 74px;
-    font-size: 0.62rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .delivery-dist-badge {
-    font-size: 0.58rem;
-  }
-
-  /* Top-Right: Action utility pills (Autopilot & Tools Menu) */
-  .touch-utility-cluster {
-    top: 10px;
-    right: 10px;
-    display: flex;
-    gap: 4px;
-    z-index: 9500;
-  }
-  .touch-btn-auto,
-  .touch-btn-tools {
-    height: 26px;
-    padding: 0 7px;
-    gap: 3px;
-    border-radius: 7px;
-  }
-  .touch-btn-auto .util-icon,
-  .touch-btn-tools .util-icon {
-    font-size: 0.70rem;
-  }
-  .touch-btn-auto .util-text-always,
-  .touch-btn-tools .util-text-always {
-    display: inline-block;
-    font-size: 0.56rem;
-    letter-spacing: 0.3px;
-  }
-
-  /* Top-Right: Telemetry Instruments Heads-Up Glass Box (Docked below utility pills) */
-  .slowroads-telemetry-box {
-    top: 38px;
-    right: 10px;
-    bottom: auto !important;
-    left: auto !important;
-    padding: 4px 7px;
-    min-width: 0 !important;
-    width: fit-content;
-    background: var(--comic-card-bg);
-    border: var(--border-comic-sm);
-    border-radius: 8px;
-    box-shadow: var(--shadow-comic-sm);
-    z-index: 55;
-  }
-  /* Hide the desktop pill only when the touch cluster's own AUTO button is
-     actually showing. Gating on viewport alone left a dead zone: a narrow or
-     portrait NON-touch window matched this query but never got
-     `touch-controls-active` (set from `pointer: coarse`), so neither
-     autopilot control rendered at all. */
-  body.touch-controls-active .telemetry-controls-col {
-    display: none;
-  }
-  .telemetry-digits-box {
-    padding: 0;
-    background: transparent;
-    border: none;
-    box-shadow: none;
-  }
-  .telemetry-numeral {
-    font-size: 1.15rem;
-  }
-  .telemetry-unit {
-    font-size: 0.50rem;
-  }
-  .telemetry-trip,
-  .telemetry-earnings {
-    font-size: 0.58rem;
-  }
-
-  /* Hide desktop top-bar buttons when mobile touch is active to prevent clutter */
-  .slowroads-top-bar {
-    display: none !important;
-  }
-
-  /* Event notifications: stack ABOVE the radar box (bottom 124px + ~100px
-     tall) instead of at bottom 180px, where they slid under the radar and
-     had their first words clipped (B113). */
-  .notification-panel {
-    bottom: 236px;
-    right: 12px;
-    max-width: min(280px, calc(100vw - 24px));
-  }
-
-  /* Bottom-Left Radar: Docked safely above the steering touch zone */
-  .slowroads-radar-box {
-    bottom: 124px;
-    left: 12px;
-    padding: 4px 6px;
-    background: var(--comic-card-bg);
-    border: var(--border-comic-sm);
-    border-radius: 10px;
-    box-shadow: var(--shadow-comic-sm);
-    z-index: 55;
-  }
-  #gps-radar-canvas {
-    width: 60px !important;
-    height: 60px !important;
-  }
-
-  /* Touch controls scaling */
-  .touch-drag-steer {
-    height: 112px;
-    width: 48%;
-  }
-  .touch-steer-cluster {
-    bottom: 16px;
-    left: 12px;
-    gap: 8px;
-  }
-  .touch-steer-btn {
-    width: 60px;
-    height: 60px;
-    font-size: 1.45rem;
-    border-radius: 16px;
-  }
-
-  .touch-pedal-cluster {
-    bottom: 16px;
-    right: 12px;
-    gap: 8px;
-    align-items: center;
-  }
-  .touch-pedal-pair {
-    gap: 8px;
-  }
-  .touch-pedal-btn {
-    width: 60px;
-    height: 60px;
-    font-size: 1.45rem;
-    border-radius: 16px;
-  }
-  .touch-action-drop {
-    width: 64px;
-    height: 64px;
-    font-size: 0.76rem;
-    margin-bottom: 6px;
-  }
-}
-
-/* ── Very Narrow Mobile Screens (<= 380px, e.g. Galaxy A55 360px) ───────── */
-@media (max-width: 380px) {
-  .slowroads-delivery-capsule {
-    top: 8px;
-    left: 8px;
-    max-width: 98px !important;
-    padding: 3px 5px;
-  }
-  .delivery-dest-name {
-    max-width: 60px;
-    font-size: 0.58rem;
-  }
-  .touch-utility-cluster {
-    top: 8px;
-    right: 8px;
-    gap: 3px;
-  }
-  .touch-btn-auto,
-  .touch-btn-tools {
-    height: 24px;
-    padding: 0 6px;
-    gap: 2.5px;
-    border-radius: 6px;
-  }
-  .touch-btn-auto .util-icon,
-  .touch-btn-tools .util-icon {
-    font-size: 0.64rem;
-  }
-  .touch-btn-auto .util-text-always,
-  .touch-btn-tools .util-text-always {
-    display: inline-block;
-    font-size: 0.50rem;
-    letter-spacing: 0.2px;
-  }
-  .slowroads-telemetry-box {
-    top: 36px;
-    right: 8px;
-    padding: 3px 6px;
-  }
-  .telemetry-numeral {
-    font-size: 1.20rem;
-  }
-  .slowroads-radar-box {
-    bottom: 118px;
-    left: 8px;
-  }
-  #gps-radar-canvas {
-    width: 56px !important;
-    height: 56px !important;
-  }
-  .touch-drag-steer {
-    height: 106px;
-    width: 48%;
-  }
-  .touch-steer-cluster {
-    bottom: 12px;
-    left: 8px;
-    gap: 6px;
-  }
-  .touch-pedal-cluster {
-    bottom: 12px;
-    right: 8px;
-    gap: 6px;
-  }
-  .touch-steer-btn,
-  .touch-pedal-btn {
-    width: 54px;
-    height: 54px;
-    font-size: 1.3rem;
-    border-radius: 14px;
-  }
-  .touch-action-drop {
-    width: 58px;
-    height: 58px;
-    font-size: 0.70rem;
-  }
-}
-
-/* ── Landscape Mobile Touch (<= 1024px and aspect-ratio > 1/1) ─────────── */
-@media (min-aspect-ratio: 1/1) and (max-width: 1024px) {
-  body.touch-controls-active .slowroads-top-bar {
-    display: none !important;
-  }
-  .slowroads-delivery-capsule {
-    top: 12px;
-    left: 12px;
-    max-width: 280px;
-  }
-  .touch-utility-cluster {
-    top: 12px;
-    right: 12px;
-    display: flex;
-    gap: 6px;
-    z-index: 65;
-  }
-  .touch-util-btn {
-    padding: 4px 8px;
-    height: 26px;
-    font-size: 0.54rem;
-  }
-  .touch-util-btn .util-text {
-    display: inline;
-  }
-  /* Touch only (B126): these corner positions assume the touch layout,
-     where the dock is hidden and the steer/pedal buttons own the corners.
-     Ungated, a <=1024px-wide laptop window (dock visible) got them too and
-     the dock bar covered the radar, the AUTO pills and the speed readout. */
-  body.touch-controls-active .slowroads-telemetry-box {
-    bottom: 18px;
-    right: 170px;
-    padding: 6px 12px;
-    background: var(--comic-card-bg);
-    border: var(--border-comic-sm);
-    box-shadow: var(--shadow-comic-sm);
-  }
-  /* Hide the desktop pill only when the touch cluster's own AUTO button is
-     actually showing. Gating on viewport alone left a dead zone: a narrow or
-     portrait NON-touch window matched this query but never got
-     `touch-controls-active` (set from `pointer: coarse`), so neither
-     autopilot control rendered at all. */
-  body.touch-controls-active .telemetry-controls-col {
-    display: none;
-  }
-  body.touch-controls-active .slowroads-radar-box {
-    bottom: 18px;
-    left: 170px;
-    padding: 4px 8px;
-    background: var(--comic-card-bg);
-    border: var(--border-comic-sm);
-    box-shadow: var(--shadow-comic-sm);
-  }
-  body.touch-controls-active #gps-radar-canvas {
-    width: 60px !important;
-    height: 60px !important;
-  }
 }
 
 /* ============================================================
@@ -3775,20 +3283,14 @@ body.vehicle-cycle .touch-drag-steer {
 
 /* In-game floating hint strip */
 .onboarding-hint {
-  position: fixed;
-  bottom: 92px;
-  left: 50%;
-  transform: translateX(-50%) translateY(12px);
   background: var(--comic-card-bg);
   border: var(--border-comic-sm);
   border-radius: 12px;
   box-shadow: var(--shadow-comic);
-  padding: 10px 20px;
   display: flex;
   align-items: center;
   gap: 10px;
   white-space: nowrap;
-  z-index: 45;
   opacity: 0;
   transition: opacity 0.3s ease, transform 0.3s ease;
   pointer-events: none;
@@ -3797,7 +3299,7 @@ body.vehicle-cycle .touch-drag-steer {
 
 .onboarding-hint.visible {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
 
 .onboarding-hint-icon {
@@ -3837,46 +3339,6 @@ body.vehicle-cycle .touch-drag-steer {
 
 @media (prefers-reduced-motion: reduce) {
   .onboarding-hint { transition: opacity 0.15s ease; }
-}
-
-@media (max-width: 768px), (max-aspect-ratio: 1/1) {
-  .onboarding-hint {
-    top: 125px;
-    bottom: auto;
-    padding: 6px 12px;
-    gap: 6px;
-  }
-  .onboarding-hint-text {
-    font-size: 0.74rem;
-  }
-  .onboarding-hint-sub {
-    font-size: 0.66rem;
-    padding-left: 6px;
-  }
-}
-
-@media (max-width: 380px) {
-  .onboarding-hint {
-    top: 120px;
-    bottom: auto;
-    padding: 4px 8px;
-    gap: 4px;
-    max-width: 320px;
-  }
-  .onboarding-hint-text {
-    font-size: 0.68rem;
-  }
-  .onboarding-hint-sub {
-    display: none; /* Keep hint ultra compact on narrowest phones */
-  }
-}
-
-@media (min-aspect-ratio: 1/1) and (max-width: 1024px) {
-  .onboarding-hint {
-    top: 115px;
-    bottom: auto;
-    padding: 5px 12px;
-  }
 }
 
 /* ==========================================================================
@@ -3933,42 +3395,6 @@ body.vehicle-cycle .touch-drag-steer {
   .veh-lock-cta { padding: 2px 6px; font-size: 0.6rem; }
   .btn-launch-dispatch { padding: 9px 16px; font-size: 1.4rem; margin-top: 2px; }
   .hub-footer-links { margin-top: 4px; gap: 12px; }
-}
-
-/* ==========================================================================
-   Delivery capsule on portrait phones (B123, revised)
-   Two constraints: keep the top-centre sky open (QA invariant: >= 80px
-   between the capsule and the top-right button cluster), and never wrap
-   "0 / 33" or the payout onto two lines. The cluster's left edge is
-   100vw - 204px above 380px (194px wide, 10px inset) and 100vw - 179px at
-   <= 380px (171px wide, 8px inset), so cap the capsule at that minus 80px,
-   its own inset and a 4px rounding margin, fit the header on one line, and ellipsise the name.
-   ========================================================================== */
-@media (max-aspect-ratio: 1/1) and (max-width: 768px) {
-  .slowroads-delivery-capsule {
-    max-width: calc(100vw - 298px) !important;
-    padding: 4px 6px;
-  }
-  .delivery-capsule-header { flex-wrap: nowrap; white-space: nowrap; gap: 3px; }
-  .delivery-sep { display: none; }
-  .delivery-order-seq, .delivery-payout { white-space: nowrap; }
-  .delivery-dest-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
-  .delivery-dest-name {
-    max-width: none;
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: 0.6rem;
-  }
-  .delivery-dist-badge { flex: 0 0 auto; white-space: nowrap; }
-}
-@media (max-aspect-ratio: 1/1) and (max-width: 380px) {
-  .slowroads-delivery-capsule { max-width: calc(100vw - 271px) !important; }
-}
-/* Worst case "33 / 33 +₹140" needs ~83px of header; at 360 there is 73
-   and at 393 there is 79. The badge is only a blinking dot on phones (its
-   label is already hidden), so drop it up to 400px wide. */
-@media (max-aspect-ratio: 1/1) and (max-width: 400px) {
-  .delivery-badge { display: none; }
 }
 
 /* Settings tabs on phones: HUB / VEHICLE TUNING / CONTROLS / TRIP needed
@@ -4257,11 +3683,12 @@ body.vehicle-cycle .touch-drag-steer {
 .comic-banner {
   --b-bg: var(--comic-yellow);
   --b-dot: rgba(255, 90, 0, 0.5);
-  --cb-fs: clamp(24px, 1.2vw + 17px, 38px);
+  --cb-k: 1;               /* size factor: JS and the phone / short-screen queries below scale the whole banner with it */
+  --cb-fs: calc(var(--cb-k) * clamp(24px, 1.2vw + 17px, 38px));
   position: relative;
   display: inline-flex;
   align-items: center;
-  margin-left: 46px;       /* room for the star that overhangs the left end */
+  margin-left: calc(var(--cb-k) * 58px);       /* room for the star that overhangs the left end */
   transform: rotate(-2deg);
   transform-origin: 100% 50%;
   animation: comic-banner-in 0.38s cubic-bezier(0.2, 1.3, 0.4, 1) var(--d, 0ms) both;
@@ -4275,10 +3702,10 @@ body.vehicle-cycle .touch-drag-steer {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: 5px 24px 7px 42px;
+  padding: calc(var(--cb-k) * 5px) calc(var(--cb-k) * 24px) calc(var(--cb-k) * 7px) calc(var(--cb-k) * 42px);
   background: var(--b-bg);
-  border: 4px solid var(--comic-ink);
-  box-shadow: 5px 6px 0 var(--comic-ink);
+  border: calc(var(--cb-k) * 4px) solid var(--comic-ink);
+  box-shadow: calc(var(--cb-k) * 5px) calc(var(--cb-k) * 6px) 0 var(--comic-ink);
   transform: skewX(-10deg);
   overflow: hidden;
 }
@@ -4297,7 +3724,7 @@ body.vehicle-cycle .touch-drag-steer {
   position: relative;
   z-index: 1;
   font-size: var(--cb-fs);
-  --comic-stroke: 6px;
+  --comic-stroke: calc(var(--cb-k) * 6px);
 }
 .comic-banner-sub {
   position: relative;
@@ -4318,6 +3745,7 @@ body.vehicle-cycle .touch-drag-steer {
   height: 84px;
   margin-top: -42px;
   z-index: 2;
+  scale: var(--cb-k);      /* the star is a fixed-size drawing: scale it, do not resize its box */
   rotate: 8deg;            /* individual transform property: the pop animation owns `transform` */
   animation: comic-pop 0.34s cubic-bezier(0.2, 1.5, 0.4, 1) calc(var(--d, 0ms) + 110ms) both;
 }
@@ -4460,6 +3888,7 @@ body.vehicle-cycle .touch-drag-steer {
   will-change: transform;
 }
 .comic-bubble--sm { --cb-fs: 14px; }
+.comic-bubble--sm .comic-bubble-text { padding: 6px 10px; line-height: 1.1; }
 .comic-bubble--lg { --cb-fs: clamp(18px, 1vw + 12px, 24px); }
 .comic-bubble-pop {
   position: absolute;
@@ -4674,12 +4103,517 @@ body.vehicle-cycle .touch-drag-steer {
   .comic-sfx--siren .comic-sfx-inner { animation: none; }
 }
 
-/* phones and portrait: keep the banner on the screen with a little room to spare */
+/* Size by screen, not just width: phones and portrait get a banner about two thirds of the desktop one, short screens and
+   landscape phones about half. JS (comic-callouts.js) picks the final spot and may shrink it further to stay off the rider,
+   the road ahead and the map. The star is a fixed-size drawing: --cb-k scales it. */
 @media (max-width: 768px), (max-aspect-ratio: 1/1) {
-  /* the phone HUD has no CAM/DAY chips: its speed box and hint bar fill the top, so the slot sits below them
-     (Phase C hands the real placement to the B89 popup placer) */
-  .comic-banner-slot { top: 172px; right: 12px; gap: 12px; }
-  .comic-banner { margin-left: 36px; }
-  .comic-banner-star { scale: 0.8; left: -46px; }   /* the star is a fixed-size drawing: scale it, do not resize its box */
+  .comic-banner { --cb-k: 0.66; }
   .comic-caption-text { font-size: 20px; }
 }
+@media (max-height: 700px) {
+  .comic-banner { --cb-k: 0.55; }
+}
+@media (min-aspect-ratio: 1/1) and (max-height: 500px) {
+  .comic-banner { --cb-k: 0.46; }
+}
+/* smallest form: lettering only, no sub line (used when the full banner cannot find a clear spot) */
+.comic-banner--mini .comic-banner-sub { display: none; }
+
+/* ==========================================================================
+   COMIC CALLOUTS IN THE GAME  (Phase C)   driven by js/comic-callouts.js
+   - the speed-line layer sits UNDER the HUD (z 10 < HUD 50) so lines never cross a chip
+   - the settle-up box (police.js openEncounter, class .pd-comic) in the comic scheme:
+     the officer speaks from a bubble, the answers are comic buttons. Same markup and
+     class names as before, so the duel, the keys and the focus handling are untouched.
+   ========================================================================== */
+.comic-layer.comic-layer--under { z-index: 10; }
+.comic-piece { pointer-events: none; }
+
+#police-dialog-wrap.pd-comic.on { background: rgba(13, 11, 20, 0.5); }
+#police-dialog-wrap.pd-comic .pd-box {
+  position: relative;
+  background: var(--comic-paper);
+  color: var(--comic-ink);
+  border: 4px solid var(--comic-ink);
+  border-radius: 8px;
+  box-shadow: 6px 7px 0 var(--comic-ink);
+  font-family: var(--comic-font-body);
+  padding: 16px 18px 14px;
+}
+/* Ben-Day dots fading in from the bottom-right corner */
+#police-dialog-wrap.pd-comic .pd-box::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 46, 99, 0.3) 1.7px, transparent 1.9px);
+  background-size: 9px 9px;
+  -webkit-mask-image: linear-gradient(115deg, transparent 55%, #000 100%);
+  mask-image: linear-gradient(115deg, transparent 55%, #000 100%);
+  border-radius: 4px;
+}
+#police-dialog-wrap.pd-comic .pd-box > * { position: relative; }
+#police-dialog-wrap.pd-comic .pd-portrait {
+  border: 4px solid var(--comic-ink);
+  border-radius: 6px;
+  background: var(--comic-cyan);
+  box-shadow: 4px 4px 0 var(--comic-ink);
+  transform: rotate(-3deg);
+}
+#police-dialog-wrap.pd-comic .pd-tag {
+  background: var(--comic-yellow);
+  color: var(--comic-ink);
+  border: 3px solid var(--comic-ink);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 var(--comic-ink);
+  font-family: var(--comic-font-display);
+  font-weight: 400;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  padding: 2px 10px 3px;
+  transform: rotate(-1deg);
+}
+#police-dialog-wrap.pd-comic .pd-stars { color: var(--comic-burst-red); font-size: 15px; -webkit-text-stroke: 1px var(--comic-ink); paint-order: stroke fill; }
+#police-dialog-wrap.pd-comic .pd-why { color: #a83200; font-family: var(--comic-font-body); font-weight: 700; font-size: 13px; }
+/* the officer's line is a speech bubble whose tail points at the portrait */
+#police-dialog-wrap.pd-comic .pd-line:not(.sub) {
+  position: relative;
+  margin: 12px 0 0 12px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 3px solid var(--comic-ink);
+  border-radius: 18px 18px 18px 4px;
+  box-shadow: 3px 4px 0 var(--comic-ink);
+  font-family: var(--comic-font-body);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.25;
+}
+#police-dialog-wrap.pd-comic .pd-line:not(.sub)::before {
+  content: '';
+  position: absolute;
+  left: -17px;
+  top: 12px;
+  border: 9px solid transparent;
+  border-right: 14px solid var(--comic-ink);
+  border-left: 0;
+}
+#police-dialog-wrap.pd-comic .pd-line:not(.sub)::after {
+  content: '';
+  position: absolute;
+  left: -11px;
+  top: 14px;
+  border: 7px solid transparent;
+  border-right: 11px solid #fff;
+  border-left: 0;
+}
+#police-dialog-wrap.pd-comic .pd-line.sub {
+  font-family: var(--comic-font-body);
+  font-weight: 700;
+  font-style: italic;
+  font-size: 14px;
+  opacity: 1;
+  color: #4a3a6a;
+  margin: 8px 0 0 12px;
+}
+#police-dialog-wrap.pd-comic .pd-btn {
+  background: var(--comic-yellow);
+  color: var(--comic-ink);
+  border: 3px solid var(--comic-ink);
+  border-radius: 4px;
+  box-shadow: 4px 5px 0 var(--comic-ink);
+  font-family: var(--comic-font-display);
+  font-weight: 400;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+#police-dialog-wrap.pd-comic .pd-btn.tea { background: var(--comic-green); }
+#police-dialog-wrap.pd-comic .pd-btn.off { background: var(--comic-pink); }
+#police-dialog-wrap.pd-comic .pd-btn:hover:not([disabled]),
+#police-dialog-wrap.pd-comic .pd-btn:focus-visible { background: #fff; transform: translate(-1px, -2px) rotate(-1deg); box-shadow: 5px 7px 0 var(--comic-ink); }
+#police-dialog-wrap.pd-comic .pd-btn:active:not([disabled]) { transform: translate(3px, 4px); box-shadow: 1px 1px 0 var(--comic-ink); }
+#police-dialog-wrap.pd-comic .pd-btn:focus-visible { outline: 4px solid var(--comic-cyan); outline-offset: 2px; }
+#police-dialog-wrap.pd-comic .pd-btn[disabled] { opacity: 0.5; box-shadow: 2px 3px 0 var(--comic-ink); }
+#police-dialog-wrap.pd-comic .pd-btn .k {
+  display: inline-block;
+  min-width: 1.3em;
+  padding: 0 0.25em;
+  margin-right: 0.15em;
+  background: var(--comic-ink);
+  color: var(--comic-paper);
+  border-radius: 3px;
+  opacity: 1;
+  font-size: 0.7em;
+  font-weight: 400;
+  text-align: center;
+}
+#police-dialog-wrap.pd-comic .pd-btn .h { font-family: var(--comic-font-body); font-weight: 700; font-size: 12px; opacity: 0.85; letter-spacing: 0; }
+#police-dialog-wrap.pd-comic .pd-foot { font-family: var(--comic-font-body); font-weight: 700; opacity: 0.8; }
+#police-dialog-wrap.pd-comic .pd-result span { background: var(--comic-ink); color: var(--comic-yellow); font-family: var(--comic-font-display); font-weight: 400; letter-spacing: 0.05em; border-radius: 3px; font-size: 15px; }
+/* the excuse duel: long excuses read better in the body face */
+#police-dialog-wrap.pd-comic .pdd-opts .pd-btn { font-family: var(--comic-font-body); font-weight: 700; font-size: 15px; letter-spacing: 0; background: #fff; }
+#police-dialog-wrap.pd-comic .pdd-opts .pd-btn.pdd-plea { background: var(--comic-cyan); }
+#police-dialog-wrap.pd-comic .pdd-opt.picked { background: var(--comic-yellow); outline: 3px solid var(--comic-ink); }
+#police-dialog-wrap.pd-comic .pdd-meta { font-family: var(--comic-font-display); font-weight: 400; font-size: 15px; letter-spacing: 0.06em; opacity: 1; }
+#police-dialog-wrap.pd-comic .pdd-patience { border: 3px solid var(--comic-ink); border-radius: 3px; background: #fff; }
+#police-dialog-wrap.pd-comic .pdd-pfill { background: var(--comic-burst-red); }
+#police-dialog-wrap.pd-comic .pdd-winline { background: var(--comic-ink); width: 3px; }
+#police-dialog-wrap.pd-comic .pdd-tfill { background: var(--comic-ink); }
+@media (max-width: 520px) {
+  #police-dialog-wrap.pd-comic .pd-btn { font-size: 18px; }
+  #police-dialog-wrap.pd-comic .pdd-opts .pd-btn { font-size: 14px; }
+  #police-dialog-wrap.pd-comic .pd-line:not(.sub) { font-size: 15px; margin-left: 10px; }
+}
+@media (max-height: 430px) {
+  #police-dialog-wrap.pd-comic .pd-line:not(.sub) { font-size: 14px; padding: 6px 10px; margin-top: 6px; }
+  #police-dialog-wrap.pd-comic .pd-btn { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #police-dialog-wrap.pd-comic .pd-btn { transition: none; transform: none !important; }
+}
+
+/* ==========================================================================
+   HUD LAYOUT: one scale (--ui), fixed slots, no per-device overrides
+   --------------------------------------------------------------------------
+   Every in-game HUD piece owns one slot, placed from the same few variables, so
+   no two pieces can overlap and the middle of the screen stays clear for the road
+   and the rider. Nothing here is measured by script.
+   Portrait : top strip (order card + WANTED on the left, system buttons + speed on
+              the right, then the notification and hint rows), a clear road window,
+              bottom strip (map above the steer buttons, DROP above the pedals).
+   Landscape: left edge column (order card, map, steer) and right edge column
+              (system buttons, WANTED, speed, DROP, pedals); the notification and
+              hint rows sit in the top middle, above the horizon.
+   Desktop  : the landscape layout at a larger --ui; touch controls only on touch.
+   --ui is the size of one "unit" in px. Fonts, paddings, panel and button sizes
+   are all multiples of it.
+   ========================================================================== */
+:root {
+  --ui: clamp(9px, calc(1.55vmin + 6.2px), 18px);
+}
+@media (min-width: 1100px) and (min-height: 600px) {
+  :root { --ui: clamp(16px, calc(1.55vmin + 6.2px), 22px); }
+}
+
+body {
+  --pad: calc(var(--ui) * 0.7);
+  --gap: calc(var(--ui) * 0.4);
+  --sl: max(var(--pad), env(safe-area-inset-left, 0px));
+  --sr: max(var(--pad), env(safe-area-inset-right, 0px));
+  --st: max(var(--pad), env(safe-area-inset-top, 0px));
+  --sb: max(var(--pad), env(safe-area-inset-bottom, 0px));
+  --dock: 0px;                                   /* the desktop dock bar owns the bottom centre */
+  --bot: calc(var(--sb) + var(--dock));
+  --btn: calc(var(--ui) * 4.6);                  /* steer and pedal buttons */
+  --drop: calc(var(--ui) * 5);
+  --util-h: calc(var(--ui) * 2.4);               /* A-STEER / A-DRIVE / TOOLS row, CAM / DAY chips */
+  --card-h: calc(var(--ui) * 4.8);
+  --wanted-h: calc(var(--ui) * 3);
+  --speed-h: calc(var(--ui) * 5);
+  --note-h: calc(var(--ui) * 3.4);
+  --hint-h: calc(var(--ui) * 2.6);
+  --radar-px: calc(var(--ui) * 6);
+  --radar-lift: 0px;                             /* steer buttons sit under the map on touch */
+  --hud-edge: max(2px, calc(var(--ui) * 0.17));
+  --hud-shadow: calc(var(--ui) * 0.2) calc(var(--ui) * 0.2) 0 #000;
+  --colL: calc(var(--ui) * 14);
+  --colR: calc(var(--ui) * 16);
+}
+body:not(.touch-controls-active) { --dock: 86px; }
+body.touch-controls-active { --radar-lift: calc(var(--btn) + var(--gap) * 1.5); }
+@media (max-width: 700px) { body:not(.touch-controls-active) { --dock: 128px; } }
+
+/* ---- portrait ------------------------------------------------------------- */
+body {
+  --colR: calc(var(--ui) * 16);
+  --colL: min(calc(var(--ui) * 14), calc(100vw - var(--colR) - var(--sl) - var(--sr) - var(--gap) * 2));
+  --y-card: var(--st);
+  --y-wanted: calc(var(--st) + var(--card-h) + var(--gap));
+  --y-sys: var(--st);
+  --y-speed: calc(var(--st) + var(--util-h) + var(--gap));
+  --y-note: calc(var(--st) + max(var(--card-h) + var(--wanted-h), var(--util-h) + var(--speed-h)) + var(--gap) * 2);
+  --y-hint: calc(var(--y-note) + var(--note-h) + var(--gap));
+  --y-prompt: calc(var(--y-hint) + var(--hint-h) + var(--gap));
+  --msg-w: calc(100vw - var(--sl) - var(--sr));
+  --y-comic: var(--y-hint);
+}
+/* ---- landscape ------------------------------------------------------------ */
+@media (orientation: landscape) {
+  body {
+    --colL: min(calc(var(--ui) * 17), 27vw);
+    --colR: min(calc(var(--ui) * 16), 29vw);
+    --speed-h: calc(var(--ui) * 7.4);
+    --y-wanted: calc(var(--st) + var(--util-h) + var(--gap));
+    --y-speed: calc(var(--y-wanted) + var(--wanted-h) + var(--gap));
+    --y-note: var(--st);
+    --y-hint: calc(var(--st) + var(--note-h) + var(--gap));
+    --y-prompt: calc(var(--y-hint) + var(--hint-h) + var(--gap));
+    --msg-w: calc(100vw - 2 * (max(var(--colL), var(--colR)) + max(var(--sl), var(--sr)) + var(--pad)));
+    --y-comic: calc(var(--y-speed) + var(--speed-h) + var(--gap));
+  }
+}
+@media (orientation: landscape) and (max-height: 470px) {
+  body { --speed-h: calc(var(--ui) * 5); }       /* short landscape: speed is a compact chip */
+}
+@media (min-width: 1100px) and (min-height: 600px) {
+  body {
+    --colL: min(calc(var(--ui) * 19), 27vw);
+    --colR: min(calc(var(--ui) * 21), 29vw);
+  }
+}
+@media (min-height: 560px) and (orientation: landscape) {
+  body { --card-h: calc(var(--ui) * 6.4); }      /* room for the cargo line */
+}
+
+/* ---- the overlay ---------------------------------------------------------- */
+.hud-overlay { position: fixed; inset: 0; width: auto; height: auto; }
+
+/* ---- order card (left column / top-left) ---------------------------------- */
+.slowroads-delivery-capsule {
+  position: absolute;
+  left: var(--sl);
+  top: var(--y-card);
+  width: var(--colL);
+  height: var(--card-h);
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: calc(var(--ui) * 0.4) calc(var(--ui) * 0.7);
+  border-width: var(--hud-edge);
+  border-radius: calc(var(--ui) * 0.9);
+  box-shadow: var(--hud-shadow);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(var(--ui) * 0.25);
+  z-index: 60;
+}
+.slowroads-delivery-capsule .delivery-capsule-header {
+  flex-wrap: nowrap; white-space: nowrap; gap: calc(var(--ui) * 0.3); margin: 0; min-height: calc(var(--ui) * 1.5);
+  overflow: hidden;
+}
+.slowroads-delivery-capsule .delivery-badge { display: none; padding: calc(var(--ui) * 0.15) calc(var(--ui) * 0.4); }
+.slowroads-delivery-capsule .delivery-tag { font-size: calc(var(--ui) * 0.7); }
+.slowroads-delivery-capsule .delivery-order-seq { font-size: calc(var(--ui) * 0.8); }
+.slowroads-delivery-capsule .delivery-sep { display: none; font-size: calc(var(--ui) * 0.8); }
+.slowroads-delivery-capsule .delivery-payout { font-size: calc(var(--ui) * 0.9); }
+.slowroads-delivery-capsule .delivery-spares { font-size: calc(var(--ui) * 0.8); margin-left: 0; }
+.slowroads-delivery-capsule .delivery-spares svg { width: calc(var(--ui) * 0.9); height: calc(var(--ui) * 0.9); }
+.slowroads-delivery-capsule .delivery-capsule-body { gap: calc(var(--ui) * 0.2); min-width: 0; }
+.slowroads-delivery-capsule .delivery-dest-row { gap: calc(var(--ui) * 0.4); min-width: 0; align-items: center; }
+.slowroads-delivery-capsule .delivery-dest-name { flex: 1 1 auto; min-width: 0; font-size: calc(var(--ui) * 1); }
+.slowroads-delivery-capsule .delivery-dist-badge { flex: 0 0 auto; font-size: calc(var(--ui) * 0.85); }
+.slowroads-delivery-capsule .delivery-cargo-row { display: none; gap: calc(var(--ui) * 0.4); min-width: 0; }
+.slowroads-delivery-capsule .delivery-cargo-desc { font-size: calc(var(--ui) * 0.75); min-width: 0; }
+.slowroads-delivery-capsule .delivery-side-badge { font-size: calc(var(--ui) * 0.6); padding: calc(var(--ui) * 0.1) calc(var(--ui) * 0.4); }
+@media (orientation: landscape) and (min-height: 560px) {
+  .slowroads-delivery-capsule .delivery-cargo-row { display: flex; }
+}
+@media (min-width: 1100px) and (min-height: 600px) {
+  .slowroads-delivery-capsule .delivery-badge { display: inline-flex; }
+}
+
+/* ---- system chips: CAM / DAY (non-touch) and A-STEER / A-DRIVE / TOOLS (touch) -- */
+.slowroads-top-bar {
+  position: absolute;
+  right: var(--sr);
+  top: var(--y-sys);
+  height: var(--util-h);
+  display: flex; flex-wrap: nowrap; align-items: stretch; justify-content: flex-end; gap: var(--gap);
+  z-index: 60;
+}
+body.touch-controls-active .slowroads-top-bar { display: none; }
+.slowroads-top-bar .slowroads-sys-btns { gap: var(--gap); }
+.slowroads-top-bar .slowroads-status-pill,
+.slowroads-top-bar .slowroads-icon-btn {
+  height: 100%; box-sizing: border-box; padding: 0 calc(var(--ui) * 0.8);
+  font-size: calc(var(--ui) * 0.75); letter-spacing: 0.08em;
+  border-width: max(2px, calc(var(--ui) * 0.13)); border-radius: calc(var(--ui) * 0.6);
+  box-shadow: calc(var(--ui) * 0.15) calc(var(--ui) * 0.15) 0 #000;
+}
+
+.touch-utility-cluster {
+  position: absolute;
+  right: var(--sr);
+  top: var(--y-sys);
+  height: var(--util-h);
+  display: flex; gap: var(--gap);
+  z-index: 9500;
+}
+.touch-util-btn, .touch-btn-auto, .touch-btn-tools {
+  height: 100%; box-sizing: border-box; padding: 0 calc(var(--ui) * 0.6); gap: calc(var(--ui) * 0.3);
+  border-width: max(2px, calc(var(--ui) * 0.13)); border-radius: calc(var(--ui) * 0.6);
+  box-shadow: calc(var(--ui) * 0.15) calc(var(--ui) * 0.15) 0 #000;
+}
+.touch-btn-auto .util-text-always, .touch-btn-tools .util-text-always { font-size: calc(var(--ui) * 0.72); letter-spacing: 0.02em; }
+.touch-btn-auto .util-icon, .touch-btn-tools .util-icon { display: none; font-size: calc(var(--ui) * 0.8); }
+@media (min-width: 560px) and (min-height: 560px) { .touch-btn-tools .util-icon { display: inline; } }
+.touch-tools-drawer {
+  top: calc(100% + var(--gap)); right: 0;
+  width: calc(var(--ui) * 15); padding: calc(var(--ui) * 0.6); gap: calc(var(--ui) * 0.4);
+  border-radius: calc(var(--ui) * 0.9);
+}
+.touch-tools-drawer .tools-drawer-title { font-size: calc(var(--ui) * 0.8); }
+.touch-tools-drawer .tools-drawer-item { height: calc(var(--ui) * 2.6); font-size: calc(var(--ui) * 0.8); gap: calc(var(--ui) * 0.6); padding: 0 calc(var(--ui) * 0.7); }
+.touch-tools-drawer .drawer-item-icon { font-size: calc(var(--ui) * 1.1); }
+
+/* ---- WANTED chip (police.js owns its look, this owns its slot) ------------- */
+html body #police-wanted {
+  right: auto; left: var(--sl); top: var(--y-wanted);
+  height: var(--wanted-h); min-height: 0; box-sizing: border-box;
+  padding: 0 calc(var(--ui) * 0.6); gap: calc(var(--ui) * 0.4);
+  border-width: max(2px, calc(var(--ui) * 0.16)); border-radius: calc(var(--ui) * 0.7);
+  box-shadow: calc(var(--ui) * 0.2) calc(var(--ui) * 0.2) 0 #000;
+  max-width: var(--colL); overflow: hidden;
+}
+@media (orientation: landscape) { html body #police-wanted { left: auto; right: var(--sr); max-width: var(--colR); } }
+html body #police-wanted .pw-label { display: none; font-size: calc(var(--ui) * 0.7); }
+html body #police-wanted .pw-cap { display: none; }
+html body #police-wanted .pw-star { font-size: calc(var(--ui) * 1.05); }
+html body #police-wanted .pw-stars { gap: calc(var(--ui) * 0.1); }
+html body #police-wanted .pw-settle { font-size: calc(var(--ui) * 0.7); letter-spacing: 0.03em; padding: calc(var(--ui) * 0.15) calc(var(--ui) * 0.4); white-space: nowrap; }
+@media (min-width: 1100px) and (min-height: 600px) {
+  html body #police-wanted .pw-label { display: inline; }
+}
+
+/* ---- speed chip ------------------------------------------------------------- */
+.slowroads-telemetry-box { display: contents; }
+.telemetry-digits-box {
+  position: absolute;
+  right: var(--sr);
+  top: var(--y-speed);
+  height: var(--speed-h);
+  min-width: calc(var(--ui) * 8);
+  box-sizing: border-box; overflow: hidden;
+  padding: calc(var(--ui) * 0.35) calc(var(--ui) * 0.8);
+  border-width: var(--hud-edge); border-radius: calc(var(--ui) * 0.9);
+  box-shadow: var(--hud-shadow);
+  justify-content: center; gap: calc(var(--ui) * 0.2);
+  z-index: 55;
+}
+.telemetry-digits-box .telemetry-numeral { font-size: calc(var(--ui) * 2.1); text-shadow: calc(var(--ui) * 0.12) calc(var(--ui) * 0.12) 0 #000; }
+.telemetry-digits-box .telemetry-unit { font-size: calc(var(--ui) * 0.7); }
+.telemetry-digits-box .telemetry-sub-row { display: none; margin-top: 0; font-size: calc(var(--ui) * 0.7); }
+.telemetry-digits-box .telemetry-gear,
+.telemetry-digits-box .telemetry-trip { font-size: calc(var(--ui) * 0.7); }
+.telemetry-digits-box .telemetry-delivery-row { margin-top: 0; gap: calc(var(--ui) * 0.3); }
+.telemetry-digits-box .telemetry-rupee { font-size: calc(var(--ui) * 0.8); }
+.telemetry-digits-box .telemetry-earnings { font-size: calc(var(--ui) * 0.9); }
+.telemetry-digits-box .telemetry-streak { font-size: calc(var(--ui) * 0.7); padding: 0 calc(var(--ui) * 0.4); white-space: nowrap; }
+@media (orientation: landscape) and (min-height: 471px) {
+  .telemetry-digits-box .telemetry-sub-row { display: flex; }
+  .telemetry-digits-box .telemetry-numeral { font-size: calc(var(--ui) * 2.6); }
+}
+
+/* desktop AUTO STEER / AUTO DRIVE / RECENTER: bottom right, above the dock bar (hidden on touch) */
+.telemetry-controls-col {
+  position: absolute;
+  right: var(--sr);
+  bottom: var(--bot);
+  margin: 0; gap: var(--gap);
+  z-index: 55;
+}
+body.touch-controls-active .telemetry-controls-col { display: none; }
+.telemetry-controls-col .slowroads-pill-btn {
+  height: calc(var(--ui) * 2.2); box-sizing: border-box; padding: 0 calc(var(--ui) * 0.8);
+  font-size: calc(var(--ui) * 0.72); letter-spacing: 0.06em; white-space: nowrap;
+  border-width: max(2px, calc(var(--ui) * 0.13)); border-radius: calc(var(--ui) * 0.6);
+  box-shadow: calc(var(--ui) * 0.15) calc(var(--ui) * 0.15) 0 #000;
+}
+
+/* ---- road radar (bottom left, above the steer buttons on touch) -------------- */
+.slowroads-radar-box {
+  position: absolute;
+  left: var(--sl);
+  bottom: calc(var(--bot) + var(--radar-lift));
+  box-sizing: border-box;
+  padding: calc(var(--ui) * 0.4) calc(var(--ui) * 0.5);
+  gap: calc(var(--ui) * 0.3);
+  border-width: var(--hud-edge); border-radius: calc(var(--ui) * 0.9);
+  box-shadow: var(--hud-shadow);
+  z-index: 55;
+}
+.slowroads-radar-box .radar-tag { font-size: calc(var(--ui) * 0.62); letter-spacing: 0.1em; white-space: nowrap; }
+.slowroads-radar-box .radar-dist { font-size: calc(var(--ui) * 0.72); white-space: nowrap; }
+.slowroads-radar-box .radar-canvas-housing { border-width: max(1.5px, calc(var(--ui) * 0.12)); border-radius: calc(var(--ui) * 0.6); line-height: 0; }
+#gps-radar-canvas { width: var(--radar-px); height: var(--radar-px); display: block; }
+
+/* ---- touch controls: steer (left), pedals + DROP (right) ---------------------- */
+.touch-steer-cluster {
+  position: absolute;
+  left: var(--sl);
+  bottom: var(--sb);
+  display: flex; gap: calc(var(--ui) * 0.6);
+}
+.touch-pedal-cluster {
+  position: absolute;
+  right: var(--sr);
+  bottom: var(--sb);
+  display: flex; flex-direction: column; align-items: center; gap: calc(var(--ui) * 0.6);
+}
+.touch-pedal-pair { display: flex; gap: calc(var(--ui) * 0.6); }
+.touch-steer-btn, .touch-pedal-btn {
+  width: var(--btn); height: var(--btn);
+  font-size: calc(var(--ui) * 1.5);
+  border-width: max(2px, calc(var(--ui) * 0.2)); border-radius: calc(var(--ui) * 1.1);
+  box-shadow: calc(var(--ui) * 0.22) calc(var(--ui) * 0.22) 0 #000;
+}
+.touch-action-drop {
+  width: var(--drop); height: var(--drop); margin-bottom: 0;
+  font-size: calc(var(--ui) * 0.95);
+}
+.touch-drag-steer { height: 40%; width: 50%; }
+
+/* ---- transient rows: notification, hint, drop prompt (centre, one slot each) -- */
+.notification-panel {
+  position: fixed;
+  left: 0; right: 0; margin-inline: auto;
+  top: var(--y-note);
+  width: min(calc(var(--ui) * 26), var(--msg-w));
+  height: var(--note-h);
+  overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch;
+  pointer-events: none;
+  z-index: 54;
+}
+.notification-panel .notification-item {
+  box-sizing: border-box; max-height: 100%;
+  padding: calc(var(--ui) * 0.4) calc(var(--ui) * 0.8);
+  font-size: calc(var(--ui) * 0.8); line-height: 1.25;
+  border-radius: calc(var(--ui) * 0.5);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  text-align: center;
+}
+.onboarding-hint {
+  position: fixed;
+  left: 0; right: 0; margin-inline: auto; width: max-content; max-width: var(--msg-w);
+  top: var(--y-hint);
+  height: var(--hint-h); box-sizing: border-box; overflow: hidden;
+  padding: 0 calc(var(--ui) * 0.9); gap: calc(var(--ui) * 0.5);
+  border-width: max(2px, calc(var(--ui) * 0.13)); border-radius: calc(var(--ui) * 0.8);
+  box-shadow: calc(var(--ui) * 0.15) calc(var(--ui) * 0.15) 0 #000;
+  transform: translateY(calc(var(--ui) * 0.6));
+  z-index: 45;
+}
+.onboarding-hint-icon { font-size: calc(var(--ui) * 0.7); }
+.onboarding-hint-text { font-size: calc(var(--ui) * 0.9); }
+.onboarding-hint-sub { display: none; font-size: calc(var(--ui) * 0.8); padding-left: calc(var(--ui) * 0.5); }
+.onboarding-hint kbd { font-size: calc(var(--ui) * 0.75); padding: 0 calc(var(--ui) * 0.4); }
+@media (min-width: 480px) and (min-height: 480px) { .onboarding-hint-sub { display: inline; } }
+.drop-action-prompt {
+  position: absolute;
+  left: 0; right: 0; margin-inline: auto; width: max-content; max-width: var(--msg-w);
+  top: var(--y-prompt);
+  height: var(--hint-h); box-sizing: border-box;
+  padding: 0 calc(var(--ui) * 1); gap: calc(var(--ui) * 0.7);
+  border-width: max(2px, calc(var(--ui) * 0.17)); border-radius: calc(var(--ui) * 0.8);
+  box-shadow: var(--hud-shadow);
+  z-index: 60;
+}
+.drop-action-prompt .action-key-pill { font-size: calc(var(--ui) * 0.95); gap: calc(var(--ui) * 0.5); white-space: nowrap; }
+.drop-action-prompt .key-cap { font-size: calc(var(--ui) * 0.72); padding: 0 calc(var(--ui) * 0.5); }
+.score-popup-container { top: var(--y-prompt); }
+
+/* comic banners start in the free band under the HUD columns / strip; the script moves them if a spot is taken */
+.comic-banner-slot { top: var(--y-comic); right: var(--sr); }

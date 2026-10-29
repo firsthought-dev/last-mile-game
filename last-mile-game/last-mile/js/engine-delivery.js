@@ -22,6 +22,21 @@
     },
 
 
+    // Distance to the nearest undelivered drop still ahead, or null when there is none (wasted throw).
+    _tossTooFar(carPos, carForward) {
+      if (!this.world) return null;
+      let minD = null;
+      this.world.deliveryTargets.forEach(t => {
+        if (t.delivered) return;
+        const dx = t.pos.x - carPos.x, dz = t.pos.z - carPos.z;
+        if (dx * carForward.x + dz * carForward.z < -CONFIG.TOSS_BEHIND_SLACK) return;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (minD == null || d < minD) minD = d;
+      });
+      return minD != null && minD <= 150 ? minD : null;
+    },
+
+
     tossParcel3D() {
       if (!this.vehicle || !this.world) return;
       const carPos = this.vehicle.mesh.position.clone();
@@ -32,6 +47,15 @@
       // parcel used to home onto any undelivered target within 65 m, even one
       // already passed, so a throw into nowhere still delivered.
       const nearestTarget = this._findTossTarget(carPos, carForward);
+
+      // Nothing in reach but a drop is ahead: tell the player how far it is instead of wasting a spare parcel.
+      if (!nearestTarget) {
+        const far = this._tossTooFar(carPos, carForward);
+        if (far != null) {
+          this.addNotification(`${UI.icon('package')} TOO FAR — ${Math.round(far)}m to the drop. Get within ${CONFIG.TOSS_RANGE}m`, 'info', 2200);
+          return;
+        }
+      }
 
       // Differentiated 3D Cargo Models based on active order
       const parcelGroup = new THREE.Group();
@@ -137,6 +161,7 @@
 
     _resetSpareParcels() {
       this.spareParcels = CONFIG.SPARE_PARCELS;
+      this._spareRestockFrom = null;
       this._renderSpareParcels();
     },
 
@@ -150,17 +175,44 @@
     },
 
 
+    // One spare comes back every SPARE_RESTOCK_MS while below the full count.
+    _restockSpareParcels() {
+      if (this.spareParcels == null || this.spareParcels >= CONFIG.SPARE_PARCELS) return;
+      const now = performance.now();
+      if (this._spareRestockFrom == null) this._spareRestockFrom = now;
+      const n = Math.floor((now - this._spareRestockFrom) / CONFIG.SPARE_RESTOCK_MS);
+      if (n > 0) {
+        this.spareParcels = Math.min(CONFIG.SPARE_PARCELS, this.spareParcels + n);
+        this._spareRestockFrom = this.spareParcels >= CONFIG.SPARE_PARCELS ? null : this._spareRestockFrom + n * CONFIG.SPARE_RESTOCK_MS;
+        this._renderSpareParcels();
+      }
+    },
+
+
     _spendSpareParcel() {
       if (this.spareParcels == null) this.spareParcels = CONFIG.SPARE_PARCELS;
-      if (this.spareParcels <= 0) {
-        this.addNotification(`${UI.icon('package')} OUT OF PARCELS — SHIFT OVER`, 'warning', 4000);
-        setTimeout(() => this.showShiftSummary({ outOfParcels: true }), 900);
+      // A first-time player is still finding the button: an early drop costs nothing.
+      if (this._onboardingActive) {
+        this._track('order_fail', { reason: 'early_throw_onboarding', spare_left: this.spareParcels, vehicle: this.selectedVehicle });
+        this.addNotification(`${UI.icon('package')} Not close enough yet. Drive up to the ring first`, 'info', 2500);
         return;
       }
+      this._restockSpareParcels();
+      if (this.spareParcels <= 0) {
+        // No popup: the streak is lost and a spare comes back after a short wait, so play never stops.
+        this._track('order_fail', { reason: 'out_of_parcels', spare_left: 0, vehicle: this.selectedVehicle });
+        this.streakCount = 0;
+        const wait = Math.max(1, Math.ceil((CONFIG.SPARE_RESTOCK_MS - (performance.now() - (this._spareRestockFrom || 0))) / 1000));
+        this.addNotification(`${UI.icon('package')} OUT OF SPARE PARCELS — STREAK LOST. NEXT SPARE IN ${wait}s`, 'warning', 3500);
+        return;
+      }
+      if (this.spareParcels >= CONFIG.SPARE_PARCELS) this._spareRestockFrom = performance.now();
       this.spareParcels--;
       this._renderSpareParcels();
       const left = this.spareParcels;
-      this.addNotification(`${UI.icon('package')} MISSED THROW — ${left === 0 ? 'NO SPARE PARCELS LEFT. ONE MORE MISS ENDS THE SHIFT' : `${left} SPARE PARCEL${left === 1 ? '' : 'S'} LEFT`}`, 'warning', 3500);
+      this._track('order_fail', { reason: 'missed_throw', spare_left: left, vehicle: this.selectedVehicle });
+      this.addNotification(`${UI.icon('package')} MISSED THROW — ${left === 0 ? 'NO SPARE PARCELS LEFT. ONE MORE MISS LOSES YOUR STREAK' : `${left} SPARE PARCEL${left === 1 ? '' : 'S'} LEFT`}`, 'warning', 3500);
+      S.Callouts?.onMissedThrow(this); // C3: a passer-by comments (kind-aware), callout only
     },
 
 
@@ -203,6 +255,10 @@
         });
       }
 
+      this._track('order_complete', {
+        order_no: this.deliveriesMade, stars, late: missed, payout: earnedBonus,
+        time_left_pct: Math.round(Math.max(0, Math.min(1, timeLeftRatio)) * 100), vehicle: this.selectedVehicle
+      });
       this.orderTimer = this.maxOrderTimer; // Reset clock for next order
       this._assistUsedThisOrder = !!(this.vehicle && (this.vehicle.isAutodrive || this.vehicle.isCruise));
 
@@ -210,15 +266,26 @@
       if (stars >= 3 && typeof ShiplypAds !== 'undefined' && ShiplypAds) {
         ShiplypAds.happyTime();
       }
-      this.spawnConfetti(target.pos, 36);
+      if (stars >= 3 || !S.Callouts) this.spawnConfetti(target.pos, 36); // C2: confetti on green (express) drops only
       this._showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak: this.streakCount, orderId: target.order?.id, orderName: target.order?.name || 'Delivery', base: target.order?.reward || 0, diffMult: diffCfg.payoutMult, vehId: this.selectedVehicle, missed, noAssist });
-      this.addNotification(`${UI.icon('check')} DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000);
+      S.Callouts?.houseReaction(this, { target, timeLeftRatio, missed }); // C2: the customer answers from the house
+      if (!S.Callouts) this.addNotification(`${UI.icon('check')} DELIVERY #${this.deliveriesMade} COMPLETE! +₹${earnedBonus} (${this.streakCount}x streak)`, 'success', 4000); // folded into the comic banner when it exists
 
       // Rank-up is the only career event loud enough to interrupt a shift.
       // Everything else about the profile is read back at the hub.
       if (careerResult && careerResult.promoted) {
         sound.playRepair();
-        this.addNotification(`${UI.icon('flame')} PROMOTED — ${careerResult.promoted.name.toUpperCase()}`, 'success', 6000);
+        if (S.Callouts) S.Callouts.banner({ title: 'PROMOTED!', sub: careerResult.promoted.name.toUpperCase(), kind: 'orange', burst: '\u2605', delay: 900, key: 'promo', duration: 4200 });
+        else this.addNotification(`${UI.icon('flame')} PROMOTED — ${careerResult.promoted.name.toUpperCase()}`, 'success', 6000);
+      }
+      // Daily goal (B146): a quiet progress note per drop, and one celebration when it pays.
+      if (careerResult && careerResult.dailyGoal) {
+        const goal = careerResult.dailyGoal;
+        if (goal.justCompleted) {
+          this.addNotification(`${UI.icon('check')} DAILY GOAL DONE — +₹${goal.bonus}`, 'success', 5000);
+        } else if (goal.done < goal.target) {
+          this.addNotification(`${UI.icon('check')} Daily goal ${goal.done}/${goal.target}`, 'info', 2500);
+        }
       }
 
       this.deliveryHistory.unshift({
@@ -242,6 +309,8 @@
         if (this._firstOpenTime) {
           const ms = Date.now() - this._firstOpenTime;
           console.info('[Shiplyp] first_open_to_first_delivery_ms', ms);
+          if (Career && Career.noteFirstDelivery) Career.noteFirstDelivery(ms);
+          this._track('first_open_to_first_order', { ms });
         }
       }
 
@@ -261,6 +330,7 @@
 
     _showDeliveryResult({ timeLeftRatio, earnedBonus, timeBonus, stars, streak, orderName, base, diffMult, vehId, missed, noAssist }) {
       if (!this.scorePopupContainer) return;
+      if (S.Callouts && S.Callouts.dropBanner(this, { timeLeftRatio, earnedBonus, streak, missed })) return; // C2: one comic banner replaces this card
       const timeFill  = Math.max(0.04, Math.min(1, timeLeftRatio));
       const accFill   = stars === 3 ? 0.9 : (stars === 2 ? 0.65 : 0.3);
       const strFill   = Math.min(1, Math.max(0.04, (streak - 1) / 9));
@@ -341,6 +411,27 @@
       }
     },
 
+
+    vehicleHandling() { return vehicleSpec(this.selectedVehicle).handling; },
+
+    // Called by the traffic system when the player's body overlaps an AI vehicle (WI-08).
+    // info: { pen (overlap, m), nx, nz (unit vector from the player toward the other vehicle), relSpeed (m/s) }
+    _onTrafficCrash(agent, info) {
+      const v = this.vehicle, now = performance.now();
+      if (!v) return;
+      // always separate the bodies; only the first touch in a moment costs anything
+      v.mesh.position.x -= info.nx * (info.pen + 0.05); v.mesh.position.z -= info.nz * (info.pen + 0.05);
+      if (now - (this._lastCrashMs || 0) < CONFIG.CRASH_COOLDOWN_MS) return;
+      this._lastCrashMs = now;
+      if (info.relSpeed > 1.5) {
+        v.speed *= CONFIG.CRASH_SPEED_KEEP;
+        this.earnings = Math.max(0, this.earnings - CONFIG.CRASH_CASH_PENALTY);
+        this.streakCount = 0;
+        sound.playCrash();
+        this.addNotification(`${UI.icon('flame')} CRASH! -₹${CONFIG.CRASH_CASH_PENALTY} AND THE STREAK IS GONE`, 'warning', 3000);
+        window.ShiplypPolice?.reportOffence('crash');   // WI-09: a crash earns a star and can bring the police
+      }
+    },
 
     _updateDeliveryHalo(target) {
       let h = this._halo;
@@ -433,10 +524,11 @@
         if (cargoDescEl) cargoDescEl.textContent = nextTarget.order?.cargo || 'Express Package';
         if (distBadgeEl) {
           distBadgeEl.textContent = `${distMeters}m`;
-          distBadgeEl.classList.toggle('dist-near', distMeters <= 65);
+          distBadgeEl.classList.toggle('dist-near', distMeters <= CONFIG.TOSS_RANGE); // lit = a throw can land
         }
         if (sideBadgeEl) sideBadgeEl.textContent = `${aheadText} [${sideText}]`;
 
+        this._restockSpareParcels(); // keeps the spare-parcel count in the HUD current
         // Approach state within 75m
         const isNearDrop = !!this._findTossTarget(carPos, playerForward);
         const touchDropBtn = document.getElementById('touch-btn-drop');

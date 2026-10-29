@@ -204,14 +204,14 @@
         shadows: false,
         maxPixelRatio: 1.25,
         fpsCap: 30,
-        aiCap: 8,
-        pedestrianScale: 0.6,
+        aiCap: 12,              // AI traffic vehicles at once (js/traffic.js TARGET)
+        pedestrianScale: 0.6,   // share of verge pedestrians kept at world build
       },
       high: {
         shadows: true,
         maxPixelRatio: 2,
         fpsCap: 0,              // 0 = display rate
-        aiCap: 15,
+        aiCap: 20,
         pedestrianScale: 1,
       },
     };
@@ -313,6 +313,8 @@
       }
 
       g.fpsCap = tier.fpsCap;
+      if (g.traffic && g.traffic.opt) g.traffic.opt.TARGET = tier.aiCap; // a switch mid-drive: extra cars just stop respawning
+      if (g.world) g.world._pedKeep = tier.pedestrianScale;
       if (changed) g._prSlow = g._prFast = 0;
     }
 

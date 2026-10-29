@@ -242,6 +242,7 @@
           if (!Career) return;
           const result = Career.purchase('vehicles', vehId, meta.price);
           if (result.ok) {
+            this._track('unlock', { kind: 'vehicle', id: vehId, price: meta.price });
             sheet.remove();
             this.selectedVehicle = vehId;
             if (Career && typeof Career.setSelectedVehicle === 'function') {
@@ -323,6 +324,8 @@
       document.body.appendChild(modal);
 
       this._shiftDoubleClaimed = false;
+      const adsOn = !(typeof ShiplypAds !== 'undefined' && ShiplypAds && ShiplypAds.isEnabled && !ShiplypAds.isEnabled());
+      if (!adsOn) modal.querySelector('#shift-double-btn')?.remove();
       const doubleBtn = modal.querySelector('#shift-double-btn');
       doubleBtn?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -382,10 +385,11 @@
     // on wide layouts it sits at the bottom of the screen, so measure every time.
 
     _placeScorePopups() {
+      if (S.Callouts) return S.Callouts.placeSlot(); // comic banners: same zero-overlap rule, measured on their own slot
       const c = this.scorePopupContainer;
       if (!c) return;
       c.style.top = '';
-      const tel = document.querySelector('.slowroads-telemetry-box');
+      const tel = document.querySelector('.telemetry-digits-box');
       if (!tel || !tel.offsetParent) return;
       const t = tel.getBoundingClientRect();
       const r = c.getBoundingClientRect();
@@ -397,6 +401,10 @@
 
 
     showScoreBanner(title, sub) {
+      if (S.Callouts) { // comic banner in the same top-right slot; plain toggles (sub-less) get the small cyan one
+        S.Callouts.banner({ title, sub, kind: sub ? 'yellow' : 'cyan', burst: sub ? '\u2605' : '!', duration: sub ? 2600 : 1800 });
+        return;
+      }
       if (!this.scorePopupContainer) return;
       const banner = document.createElement('div');
       banner.className = 'score-popup-banner';
@@ -485,6 +493,9 @@
       const stack = document.getElementById('notification-stack');
       if (!stack) return;
 
+      // One notification at a time: a new one replaces whatever is showing.
+      stack.querySelectorAll('.notification-item').forEach((n) => n.remove());
+
       const item = document.createElement('div');
       item.className = `notification-item ${type}`;
       item.innerHTML = message;
@@ -497,9 +508,12 @@
         item.style.opacity = '1';
       });
 
+      if (S.Callouts && S.Callouts.placeNote) S.Callouts.placeNote(); // keep it off the rider, the road ahead and the map
+
       // Auto-remove after duration
       if (duration > 0) {
         setTimeout(() => {
+          if (!item.isConnected) return; // already replaced
           item.classList.add('removing');
           setTimeout(() => item.remove(), 250);
         }, duration);
@@ -994,9 +1008,12 @@
         const nextLine = rank.next
           ? `₹${rank.toNext.toLocaleString('en-IN')} to ${rank.next.name}`
           : 'Top rank reached';
+        const goal = Career.dailyGoal();
+        const savedNote = (daily && daily.event === 'saved') ? ' &bull; your grace day kept the streak alive' : '';
         const dailyLine = (daily && daily.bonus > 0)
-          ? `<div class="career-daily-row">${UI.icon('flame', 13)} Day ${daily.streak} check-in &bull; +₹${daily.bonus} paid into your account</div>`
+          ? `<div class="career-daily-row">${UI.icon('flame', 13)} Day ${daily.streak} check-in &bull; +₹${daily.bonus} paid into your account${savedNote}</div>`
           : '';
+        const goalLine = `<div class="career-daily-row">${UI.icon('check', 13)} Today's goal: ${goal.paid ? 'done, +₹' + goal.bonus + ' paid' : goal.done + '/' + goal.target + ' drops for +₹' + goal.bonus}</div>`;
 
         careerStrip = `
           <div class="hub-career-strip">
@@ -1018,6 +1035,7 @@
               <span><b>${stats.shifts}</b> ${stats.shifts === 1 ? 'SHIFT' : 'SHIFTS'}</span>
             </div>
             ${dailyLine}
+            ${goalLine}
           </div>
         `;
       }
@@ -1118,6 +1136,7 @@
           this.startDrive();
         }
       });
+      if (typeof ShiplypAds !== 'undefined' && ShiplypAds && ShiplypAds.isEnabled && !ShiplypAds.isEnabled()) document.getElementById('btn-hub-sponsor')?.remove();
       document.getElementById('btn-hub-sponsor')?.addEventListener('click', (e) => {
         e.preventDefault();
         const now = Date.now();

@@ -2,7 +2,7 @@
   "use strict";
   const S = window.Shiplyp = window.Shiplyp || {};
   const {
-    CONFIG, PRNG, CourierAsset, CROSSING_AT_CLUSTER_CHANCE
+    CONFIG, PRNG, CourierAsset, CrowdAsset, CROSSING_AT_CLUSTER_CHANCE
   } = S;
 
   Object.assign(S.ProceduralWorld.prototype, {
@@ -45,6 +45,29 @@
       const HAIR   = [0x121011, 0x1c1512, 0x3b2417, 0x5c3a21, 0x6b7280, 0xd6d3d1];
       const SHOES  = [0x2a2421, 0x1c1917, 0x44403c, 0x7c2d12, 0x1e293b, 0x78350f];
 
+      // The crowd textures are dark (shirt about 25% bright, trousers 36%), and a colour is
+      // multiplied onto them, so every outfit came out near-black. Brighten each slot's
+      // texture once (cached) so the colours below read as picked. Only NPC copies are
+      // changed; the template and the player's courier keep the original textures.
+      const GAIN = { Topmat: 3.2, Bottommat: 2.3, Hairmat: 1.6, Shoesmat: 1.3, Bodymat: 1.3 };
+      const lit = {};
+      const lighten = (name, map) => {
+        if (!map || !map.image || !GAIN[name]) return map;
+        if (lit[name]) return lit[name];
+        try {
+          const im = map.image, cv = document.createElement('canvas');
+          cv.width = im.width; cv.height = im.height;
+          const cx = cv.getContext('2d'); cx.drawImage(im, 0, 0);
+          const d = cx.getImageData(0, 0, cv.width, cv.height), px = d.data, k = GAIN[name];
+          for (let i = 0; i < px.length; i += 4) { px[i] = Math.min(255, px[i] * k); px[i + 1] = Math.min(255, px[i + 1] * k); px[i + 2] = Math.min(255, px[i + 2] * k); }
+          cx.putImageData(d, 0, 0);
+          const t = new THREE.CanvasTexture(cv);
+          t.flipY = map.flipY; t.encoding = map.encoding; t.wrapS = map.wrapS; t.wrapT = map.wrapT; t.anisotropy = map.anisotropy;
+          t.needsUpdate = true;
+          return (lit[name] = t);
+        } catch (e) { return map; }
+      };
+
       const pick = (arr, seed) => arr[Math.abs(seed) % arr.length];
       const variants = [];
       for (let i = 0; i < 24; i++) {
@@ -52,6 +75,7 @@
         const s1 = i * 7 + 3, s2 = i * 13 + 5, s3 = i * 11 + 7, s4 = i * 17 + 1, s5 = i * 19 + 9;
         for (const name in src) {
           const m = src[name].clone();
+          m.map = lighten(name, m.map);
           if (name === 'Bodymat') m.color.set(pick(SKIN, s1));
           else if (name === 'Topmat') m.color.set(pick(TOP, s2));
           else if (name === 'Bottommat') m.color.set(pick(BOTTOM, s3));
@@ -70,14 +94,54 @@
     // it too — roadside pedestrians used to stop existing past the initial
     // spline entirely.
 
+    // 40 pedestrian looks from the crowd part library: gender, outfit and colours picked from a
+    // fixed seed, so the same looks come back every load. Each look is ONE merged skinned mesh
+    // with its own tinted atlas. null while the library has not loaded (the old crowd is used).
+    _crowdVariants() {
+      if (this._crowdVars !== undefined) return this._crowdVars;
+      if (!CrowdAsset || !CrowdAsset.template) return null;
+      const rng = (seed) => () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+      const SKIN = [0xffe3cc, 0xf0cba2, 0xd9a273, 0xc68a62, 0xa9714b, 0x8d5524, 0x74441f];
+      const TOP_M = [0xd97706, 0x2563eb, 0x059669, 0xc2410c, 0xe7e5e4, 0x0f766e, 0x9f1239, 0x7c3aed, 0x0891b2, 0x4338ca, 0x64748b, 0xfbbf24, 0xf5f5f4, 0x7f1d1d];
+      const TOP_F = [0xdb2777, 0x0d9488, 0xca8a04, 0x7c3aed, 0xdc2626, 0x16a34a, 0xf472b6, 0xea580c, 0x1d4ed8, 0xfde68a, 0xa21caf, 0xe11d48];
+      const BOT_M = [0x334155, 0x1e293b, 0x3f3f46, 0x6b7280, 0x854d0e, 0x475569, 0x1e3a5f, 0x44403c, 0xd6d3d1];
+      const BOT_F = [0x1e293b, 0x7f1d1d, 0x14532d, 0xb45309, 0x581c87, 0x0f766e, 0xbe185d, 0x334155, 0x92400e];
+      const HAIR = [0x1a1412, 0x24180f, 0x3b2417, 0x4a3320, 0x6b7280, 0xd6d3d1];
+      const SHOES = [0x2a2421, 0x1c1917, 0x44403c, 0x7c2d12, 0x1e293b, 0xe7e5e4, 0x78350f];
+      const out = [];
+      for (let i = 0; i < 40; i++) {
+        const r = rng(1000 + i * 7919), pick = (a) => a[Math.floor(r() * a.length)];
+        const female = r() < 0.42;
+        const kurta = r() < (female ? 0.45 : 0.30);
+        const top = kurta ? 'Top_Kurta_' : 'Top_Tee_';
+        let bottom;
+        if (female) { const q = r(); bottom = kurta ? 'Bottom_Long_F' : (q < 0.45 ? 'Bottom_Skirt_F' : q < 0.7 ? 'Bottom_Saree_F' : 'Bottom_Long_F'); }
+        else bottom = (kurta || r() < 0.55) ? 'Bottom_Long_M' : 'Bottom_Shorts_M';
+        const hair = female ? (r() < 0.5 ? 'Hair_Bun_F' : 'Hair_Long_F') : 'Hair_Short_M';
+        const g = female ? 'F' : 'M';
+        const names = ['Body_' + g, 'Shoes', top + g, bottom, hair].filter((n) => CrowdAsset.parts[n]);
+        const topC = pick(female ? TOP_F : TOP_M);
+        // a saree or skirt takes a colour that differs from the blouse, so the outfit reads as two pieces
+        const botC = bottom.indexOf('Saree') >= 0 || bottom.indexOf('Skirt') >= 0 ? pick(TOP_F) : pick(female ? BOT_F : BOT_M);
+        const tex = CrowdAsset.tintedTexture({ Body: pick(SKIN), Top: topC, Bottom: botC, Hair: pick(HAIR), Shoes: pick(SHOES) });
+        const material = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, metalness: 0, skinning: true });
+        out.push({ geometry: CrowdAsset.geometryFor(names), material, female });
+      }
+      this._crowdVars = out;
+      return out;
+    },
+
     buildPedestrian() {
-      const rig = CourierAsset.clone();
+      let rig = null, crowd = null;
+      const cv = this._crowdVariants();
+      if (cv && cv.length) { crowd = cv[Math.floor(this.prng.range(0, cv.length))]; rig = CrowdAsset.build(crowd.geometry, crowd.material); }
+      if (!rig) rig = CourierAsset.clone();
       if (!rig) return null;
       const root = rig.root;
       root.userData.mixer = rig.mixer;
       root.userData.actions = rig.actions;
 
-      const variants = this._pedestrianVariants();
+      const variants = crowd ? null : this._pedestrianVariants();
       if (variants && variants.length) {
         const v = variants[Math.floor(this.prng.range(0, variants.length))];
         const slot = (n) => String(n || '').replace(/\.\d{3}$/, '');
@@ -87,6 +151,7 @@
       }
 
       root.scale.setScalar(this.prng.range(0.92, 1.08));
+      if (crowd && crowd.female) root.scale.multiply(new THREE.Vector3(0.93, 0.96, 0.93));
       const walk = rig.actions['Walking'];
       if (walk) {
         walk.setEffectiveTimeScale(this.prng.range(0.85, 1.2));
@@ -205,6 +270,13 @@
           pathLen: along ? Math.abs(along.sB - along.sA) : startPos.distanceTo(endPos),
           along
         });
+        // Medium keeps a share of the verge walkers. The pick is a hash of the position, not this.prng,
+        // so the rest of the world layout is identical on both tiers.
+        const keep = this._pedKeep == null ? 1 : this._pedKeep;
+        if (keep < 1) {
+          const hh = Math.sin(startPos.x * 12.9898 + startPos.z * 78.233 + c * 3.1) * 43758.5453;
+          if (hh - Math.floor(hh) >= keep) { this.crossers.pop(); this.foliageGroup.remove(mesh); continue; }
+        }
         spawned++;
       }
       // B132: occasionally also offer a signalled crossing where a group of

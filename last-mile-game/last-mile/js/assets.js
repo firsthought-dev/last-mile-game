@@ -226,8 +226,13 @@
     pending: [],
     windowMat: null,
     VARIANTS: ['House_Cottage', 'House_TwoStorey', 'House_PinkGable'],
+    // Settles once houses.glb has loaded or failed. The world build awaits it (see
+    // _bootWithLoader) so house models are in place before anything is laid out round
+    // the drop points; a house swapped in later moves its drop point.
+    ready: null,
     load() {
-      if (typeof THREE.GLTFLoader === 'undefined') return;
+      let settle; this.ready = new Promise((res) => { settle = res; });
+      if (typeof THREE.GLTFLoader === 'undefined') { settle(); return; }
       new THREE.GLTFLoader().load('assets/models/houses.glb?v=houses4', (gltf) => {
         gltf.scene.traverse((child) => {
           if (!child.isMesh) return;
@@ -244,8 +249,10 @@
           try { fn(); } catch (err) { console.error('HousesAsset: swap failed', err); }
         });
         this.pending.length = 0;
+        settle();
       }, undefined, (err) => {
         console.warn('HousesAsset: failed to load houses.glb, keeping built-in villas', err);
+        settle();
       });
     },
     clone(name) {
@@ -387,6 +394,94 @@
   };
   CourierAsset.load();
 
+  // ---- Crowd library (WI pedestrian pass) -----------------------------------
+  // courier-crowd-v2.glb is a part library on the same rig: bodies (M/F), shoes, tops (tee,
+  // kurta), bottoms (shorts, long, skirt, saree), hair (short, bun, long) and ONE shared
+  // colour atlas (one 256 px cell per part type). A pedestrian is the chosen parts merged
+  // into a single skinned mesh (one draw call, not five) with a per-variant tinted atlas.
+  // The old CourierAsset stays for the on-foot courier and as the fallback.
+  const CrowdAsset = {
+    template: null, animations: null, parts: null, atlas: null, boneNames: null, boneInverses: null,
+    bindMatrix: null, partParent: null, ready: null, _geo: {},
+    CELLS: { Body: [0, 0], Top: [1, 0], Bottom: [2, 0], Hair: [3, 0], Shoes: [0, 1] },   // [cx, cy], cy counted from the bottom
+    load() {
+      let settle; this.ready = new Promise((res) => { settle = res; });
+      if (typeof THREE.GLTFLoader === 'undefined') { settle(); return; }
+      new THREE.GLTFLoader().load('assets/models/courier-crowd-v2.glb?v=' + ASSET_VERSION, (gltf) => {
+        try { this._prepare(gltf); } catch (err) { console.warn('CrowdAsset: unusable, keeping the old crowd', err); this.template = null; }
+        settle();
+      }, undefined, (err) => { console.warn('CrowdAsset: failed to load courier-crowd-v2.glb', err); settle(); });
+    },
+    _prepare(gltf) {
+      const scene = gltf.scene, parts = {};
+      scene.traverse((c) => { if (c.isSkinnedMesh) parts[c.name] = c; });
+      const first = Object.values(parts)[0];
+      if (!first || !first.material.map) throw new Error('no skinned parts or atlas');
+      const im = first.material.map.image, cv = document.createElement('canvas');
+      cv.width = im.width; cv.height = im.height;
+      const cx = cv.getContext('2d'); cx.drawImage(im, 0, 0);
+      this.atlas = { w: cv.width, h: cv.height, data: cx.getImageData(0, 0, cv.width, cv.height).data };
+      this.boneNames = first.skeleton.bones.map((b) => b.name);
+      this.boneInverses = first.skeleton.boneInverses.map((m) => m.clone());
+      this.bindMatrix = first.bindMatrix.clone();
+      this.partParent = first.parent.name;
+      Object.values(parts).forEach((m) => m.parent.remove(m));       // keep the bones, drop the meshes
+      this.parts = parts; this.template = scene; this.animations = gltf.animations;
+    },
+    // Tint the atlas per cell: colours = { Body, Top, Bottom, Hair, Shoes } (hex). Returns a texture.
+    tintedTexture(colors) {
+      const a = this.atlas, out = new Uint8ClampedArray(a.data), CS = a.w / 4;
+      for (const k of Object.keys(this.CELLS)) {
+        const c = new THREE.Color(colors[k]), r = c.r * 0.9, g = c.g * 0.9, b = c.b * 0.9;
+        const x0 = this.CELLS[k][0] * CS, y0 = a.h - (this.CELLS[k][1] + 1) * CS;   // file rows run top to bottom
+        for (let y = y0; y < y0 + CS; y++) for (let x = x0; x < x0 + CS; x++) {
+          const i = (y * a.w + x) * 4;
+          out[i] = out[i] * r; out[i + 1] = out[i + 1] * g; out[i + 2] = out[i + 2] * b;
+        }
+      }
+      const cv = document.createElement('canvas'); cv.width = a.w; cv.height = a.h;
+      cv.getContext('2d').putImageData(new ImageData(out, a.w, a.h), 0, 0);
+      const t = new THREE.CanvasTexture(cv);
+      t.flipY = false; t.encoding = THREE.sRGBEncoding; t.anisotropy = 2; t.needsUpdate = true;
+      return t;
+    },
+    // Merge the named parts into one geometry (cached by key).
+    geometryFor(names) {
+      const key = names.join('+');
+      if (this._geo[key]) return this._geo[key];
+      const gs = names.map((n) => this.parts[n].geometry);
+      const attrs = ['position', 'normal', 'uv', 'skinIndex', 'skinWeight'];
+      const g = new THREE.BufferGeometry();
+      for (const an of attrs) {
+        const src = gs.map((x) => x.attributes[an]), size = src[0].itemSize;
+        const total = src.reduce((t, x) => t + x.count, 0), arr = new (src[0].array.constructor)(total * size);
+        let off = 0; src.forEach((x) => { arr.set(x.array, off); off += x.array.length; });
+        g.setAttribute(an, new THREE.BufferAttribute(arr, size, src[0].normalized));
+      }
+      const idx = []; let base = 0;
+      gs.forEach((x) => { const ia = x.index.array; for (let i = 0; i < ia.length; i++) idx.push(ia[i] + base); base += x.attributes.position.count; });
+      g.setIndex(base > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
+      g.computeBoundingSphere();
+      return (this._geo[key] = g);
+    },
+    // One pedestrian: { root, mixer, actions } with a single skinned mesh.
+    build(geometry, material) {
+      const root = THREE.SkeletonUtils.clone(this.template), byName = {};
+      root.traverse((o) => { if (o.isBone) byName[o.name] = o; });
+      const skeleton = new THREE.Skeleton(this.boneNames.map((n) => byName[n]), this.boneInverses);
+      const mesh = new THREE.SkinnedMesh(geometry, material);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      let parent = root; root.traverse((o) => { if (o.name === this.partParent) parent = o; });
+      parent.add(mesh);
+      mesh.bind(skeleton, this.bindMatrix);
+      const mixer = new THREE.AnimationMixer(root), actions = {};
+      this.animations.forEach((clip) => { actions[clip.name] = mixer.clipAction(clip); });
+      return { root, mixer, actions };
+    }
+  };
+  CrowdAsset.load();
+
+  S.CrowdAsset = CrowdAsset;
   S.barrierPostStations = barrierPostStations;
   S.addChunkedInstances = addChunkedInstances;
   S.LANE_PAINT = LANE_PAINT;
