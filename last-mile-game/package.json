@@ -11,8 +11,12 @@
     "package": "bash last-mile/package_web_portal.sh",
     "check:size": "node tools/check-size.mjs dist/shiplyp-web-portal.zip",
     "smoke": "node tools/smoke.mjs dist/stage --out dist/smoke && node tools/smoke.mjs dist/stage --no-storage --out dist/smoke && node tools/smoke.mjs dist/stage --returning --out dist/smoke",
+    "check:save": "node tools/check-save.cjs",
+    "check:telemetry": "node tools/check-telemetry.cjs",
+    "check:roadnet": "node tools/check-roadnet.mjs dist/stage",
+    "check:traffic": "node tools/check-traffic.mjs dist/stage 15",
     "check:clutter": "node tools/check-clutter.mjs dist/stage",
-    "ci": "npm run stage && npm run check:cdn && npm run package && npm run check:size && npm run smoke && npm run check:clutter",
+    "ci": "npm run check:save && npm run check:telemetry && npm run stage && npm run check:cdn && npm run package && npm run check:size && npm run smoke && npm run check:clutter && npm run check:roadnet && npm run check:traffic",
     "loadtest": "node tools/load-test.mjs dist/stage"
   },
   "keywords": [],

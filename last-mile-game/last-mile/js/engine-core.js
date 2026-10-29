@@ -2,7 +2,7 @@
   "use strict";
   const S = window.Shiplyp = window.Shiplyp || {};
   const {
-    CONFIG, Career, isTwoWheeler, isPedalVehicle, sound, MuscleCoupeAsset,
+    CONFIG, Career, isTwoWheeler, isPedalVehicle, sound, MuscleCoupeAsset, HousesAsset, CrowdAsset,
     VehicleController, RainSystem, VisualStyleManager, QualityManager, ProceduralWorld, UI
   } = S;
 
@@ -112,6 +112,12 @@
       const careerStats = Career ? Career.career() : null;
       this._onboardingActive = careerStats ? (careerStats.deliveries === 0 && careerStats.shifts === 0) : false;
       this._firstOpenTime = this._onboardingActive ? Date.now() : null;
+      this._track('app_open', {
+        platform: window.ShiplypNativeTelemetry ? 'android' : 'web',
+        returning: !!(careerStats && (careerStats.deliveries > 0 || careerStats.shifts > 0)),
+        streak: this._dailyCheckIn ? this._dailyCheckIn.streak : 0,
+        build: String(window.__BUILD || '')
+      });
 
       this.renderDispatchHub();
 
@@ -168,6 +174,15 @@
       // --- Stage 2: World object + sky dome + road ---
       this.world = new ProceduralWorld(this.selectedSeed, this.selectedSeason, this.selectedCity);
       this.world._game = this;
+
+      // WI-05 (opt-in, ?net=1): the zone road network. It must exist BEFORE the road, terrain, props and fences
+      // are made so they all see the graded cross roads and leave the junctions clear.
+      this.roadNet = null; this.world.roadNet = null;
+      if (S.RoadNetwork && /[?&]net=1\b/.test(window.location.search)) {
+        this.roadNet = new S.RoadNetwork(this.world).build();
+        this.world.roadNet = this.roadNet;
+      }
+
       this.scene.add(this.world.createSkyDome(season, this.selectedTimeOfDay));
       this.scene.add(this.world.createRoadMesh());
       if (this._sidewalks) this.scene.remove(this._sidewalks);
@@ -188,6 +203,13 @@
       await frame();
 
       // --- Stage 4: Foliage, props, villas, rocks (heaviest stage) ---
+      // Wait for the house models (up to 8 s; a failed or slow load falls back to the old
+      // swap-in-later path). Play-now builds the world at once, before houses.glb arrives,
+      // and the late swap moved every drop point after the flowers had been laid round the
+      // old ones (WI-03).
+      const waits = [HousesAsset && HousesAsset.ready, CrowdAsset && CrowdAsset.ready].filter(Boolean);
+      if (waits.length) await Promise.race([Promise.all(waits), new Promise((res) => setTimeout(res, 8000))]);
+
       // First-run: force easy so the first house spawns close and the timer is generous.
       if (this._onboardingActive) this.selectedDifficulty = 'easy';
       this.world.createFoliageAndProps(this.scene, season, this.selectedDifficulty);
@@ -201,6 +223,16 @@
       if (this._houseFlowers) this.scene.remove(this._houseFlowers);
       this._houseFlowers = this.world.buildHouseFlowers(0, 1);
       this.scene.add(this._houseFlowers);
+
+      if (this.roadNet) {
+        if (this._netGroup) this.scene.remove(this._netGroup);
+        this._netGroup = new THREE.Group(); this._netGroup.name = 'RoadNet';
+        this._netGroup.add(this.roadNet.buildSurface());
+        this._netGroup.add(this.roadNet.buildSignals());
+        if (/[?&]netdebug=1\b/.test(window.location.search)) this._netGroup.add(this.roadNet.debugGroup());
+        this.scene.add(this._netGroup);
+        if (S.TrafficSystem) S.TrafficSystem.start(this);
+      }
 
       setProgress(82, 'Seeding subtropical forests & Sahyadri rockfaces...');
       await frame();
@@ -578,6 +610,29 @@
     }
 
 
+    // First-run helper (WI-18). Starts the player ONBOARD_APPROACH_M before the first drop,
+    // at a walking-pace speed, so there is time to see the ring and read the hint. Also used
+    // to put them back if they drive past the house, so the first delivery cannot be lost.
+    _placeForFirstOrder() {
+      const target = this.world.deliveryTargets[0];
+      const totalL = this.world.curve.getLength();
+      const approachU = Math.max(0, target.splineU - CONFIG.ONBOARD.APPROACH_M / totalL);
+      const pt = this.world.curve.getPointAt(approachU);
+      const tang = this.world.curve.getTangentAt(approachU);
+      this.vehicle.mesh.position.copy(pt).add(new THREE.Vector3(0, 0.39, 0));
+      this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
+      this.vehicle.heading = this.vehicle.velocityHeading;
+      this.vehicle.splineProgress = approachU;
+      this.vehicle.lateralOffset = 0;
+      this.vehicle.speed = CONFIG.ONBOARD.START_SPEED;
+      this.updateGPSNavigation();
+    }
+
+    // Telemetry never gets to break the game: no module, no backend, or a throwing one is all fine.
+    _track(name, params) {
+      try { if (window.ShiplypTelemetry) window.ShiplypTelemetry.track(name, params); } catch (e) { /* ignore */ }
+    }
+
     startDrive() {
       this.gameState = 'playing';
       if (typeof ShiplypAds !== 'undefined' && ShiplypAds) {
@@ -592,6 +647,10 @@
       // is cumulative on a vehicle instance that outlives a single shift, so
       // only the delta since this point may be added to the career total.
       if (Career) Career.beginShift();
+      this._track('shift_start', {
+        shift_no: Career ? Career.career().shifts : 0,
+        vehicle: this.selectedVehicle, city: this.selectedCity, difficulty: this.selectedDifficulty
+      });
       this._distanceBanked = this.vehicle ? this.vehicle.distanceTraveled : 0;
       sound.resumeForGameplay();
       this.modalContainer.innerHTML = '';
@@ -623,21 +682,10 @@
       this.resetInactivity();
       this.updateHUDStats();
 
-      // First-run: teleport the vehicle close to the first target so the player
-      // sees it immediately and can complete a delivery within ~30 seconds.
+      // First-run: put the vehicle on the approach to the first target so the
+      // player sees the ring at once and can complete a delivery within ~30 seconds.
       if (this._onboardingActive && this.world?.deliveryTargets?.length && this.world.curve) {
-        const target = this.world.deliveryTargets[0];
-        const targetU = target.splineU;
-        const totalL = this.world.curve.getLength();
-        const approachU = Math.max(0, targetU - 18.0 / totalL);
-        const pt = this.world.curve.getPointAt(approachU);
-        const tang = this.world.curve.getTangentAt(approachU);
-        this.vehicle.mesh.position.copy(pt).add(new THREE.Vector3(0, 0.39, 0));
-        this.vehicle.velocityHeading = Math.atan2(tang.x, tang.z);
-        this.vehicle.heading = this.vehicle.velocityHeading;
-        this.vehicle.splineProgress = approachU;
-        this.vehicle.speed = isPedalVehicle(this.vehicle.vehicleType) ? 11.11 : 8.0;
-        this.updateGPSNavigation();
+        this._placeForFirstOrder();
         this._showOnboardingHint('drive');
       }
 
@@ -723,6 +771,9 @@
         const fpsEl = document.getElementById('hud-fps-value');
         if (fpsEl) fpsEl.textContent = String(fps);
         this._adaptRenderScale(fps);
+        if (this.gameState === 'playing' && !this._hiddenPaused && !this._adPaused && window.ShiplypTelemetry) {
+          window.ShiplypTelemetry.fpsSample(fps, { pixel_ratio: this._pr, style: this.visualStyle && this.visualStyle.currentStyle, vehicle: this.selectedVehicle });
+        }
         this._fpsAccumTime = 0;
         this._fpsAccumFrames = 0;
       }
@@ -791,20 +842,38 @@
         this.updateClimateHUD();
         this.updateHealthHUD();
 
-        // Switch onboarding hint from "drive" to "toss" when close to target
+        // First delivery assist (WI-18), first-time players only: ease off near the first
+        // house so the drop window is seconds long, not a blink, and if they still drive
+        // past it, put them back on the approach. Switch the hint from "drive" to "toss"
+        // as soon as a drop would land.
         if (this._onboardingActive && this.vehicle && this.world?.deliveryTargets?.length) {
           const firstTarget = this.world.deliveryTargets.find(t => !t.delivered);
           if (firstTarget) {
-            const d = this.vehicle.mesh.position.distanceTo(firstTarget.pos);
-            if (d < 22 && this._onboardingHintStep !== 'toss') {
+            const vp = this.vehicle.mesh.position;
+            const d = vp.distanceTo(firstTarget.pos);
+            const vh = this.vehicle.velocityHeading;
+            const ahead = (firstTarget.pos.x - vp.x) * Math.sin(vh) + (firstTarget.pos.z - vp.z) * Math.cos(vh);
+            if (firstTarget === this.world.deliveryTargets[0]) {
+              if (d < CONFIG.ONBOARD.SLOW_ZONE_M && ahead > 0 && this.vehicle.speed > CONFIG.ONBOARD.SLOW_SPEED) {
+                this.vehicle.speed = Math.max(CONFIG.ONBOARD.SLOW_SPEED, this.vehicle.speed - 10 * dt);
+              } else if (ahead < -CONFIG.ONBOARD.PASSED_M) {
+                this._placeForFirstOrder();
+                this.addNotification(`${UI.icon('target')} Passed it. Back on the approach: drop at the ring`, 'info', 3500);
+              }
+            }
+            const tossAt = CONFIG.TOSS_RANGE - 5;
+            if (d < tossAt && ahead > -CONFIG.TOSS_BEHIND_SLACK && this._onboardingHintStep !== 'toss') {
               this._onboardingHintStep = 'toss';
               this._showOnboardingHint('toss');
-            } else if (d >= 22 && this._onboardingHintStep !== 'drive') {
+            } else if ((d >= tossAt || ahead <= -CONFIG.TOSS_BEHIND_SLACK) && this._onboardingHintStep !== 'drive') {
               this._onboardingHintStep = 'drive';
               this._showOnboardingHint('drive');
             }
           }
         }
+
+        if (this.roadNet) this.roadNet.update(dt);
+        if (this.traffic) this.traffic.update(dt);
 
         // Continuous Diurnal Cycle, Atmosphere, Auto-Headlights & Lighting
         this.updateDayNightCycle(dt);

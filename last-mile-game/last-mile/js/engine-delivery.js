@@ -152,7 +152,14 @@
 
     _spendSpareParcel() {
       if (this.spareParcels == null) this.spareParcels = CONFIG.SPARE_PARCELS;
+      // A first-time player is still finding the button: an early drop costs nothing.
+      if (this._onboardingActive) {
+        this._track('order_fail', { reason: 'early_throw_onboarding', spare_left: this.spareParcels, vehicle: this.selectedVehicle });
+        this.addNotification(`${UI.icon('package')} Not close enough yet. Drive up to the ring first`, 'info', 2500);
+        return;
+      }
       if (this.spareParcels <= 0) {
+        this._track('order_fail', { reason: 'out_of_parcels', spare_left: 0, vehicle: this.selectedVehicle });
         this.addNotification(`${UI.icon('package')} OUT OF PARCELS — SHIFT OVER`, 'warning', 4000);
         setTimeout(() => this.showShiftSummary({ outOfParcels: true }), 900);
         return;
@@ -160,6 +167,7 @@
       this.spareParcels--;
       this._renderSpareParcels();
       const left = this.spareParcels;
+      this._track('order_fail', { reason: 'missed_throw', spare_left: left, vehicle: this.selectedVehicle });
       this.addNotification(`${UI.icon('package')} MISSED THROW — ${left === 0 ? 'NO SPARE PARCELS LEFT. ONE MORE MISS ENDS THE SHIFT' : `${left} SPARE PARCEL${left === 1 ? '' : 'S'} LEFT`}`, 'warning', 3500);
       S.Callouts?.onMissedThrow(this); // C3: a passer-by comments (kind-aware), callout only
     },
@@ -204,6 +212,10 @@
         });
       }
 
+      this._track('order_complete', {
+        order_no: this.deliveriesMade, stars, late: missed, payout: earnedBonus,
+        time_left_pct: Math.round(Math.max(0, Math.min(1, timeLeftRatio)) * 100), vehicle: this.selectedVehicle
+      });
       this.orderTimer = this.maxOrderTimer; // Reset clock for next order
       this._assistUsedThisOrder = !!(this.vehicle && (this.vehicle.isAutodrive || this.vehicle.isCruise));
 
@@ -222,6 +234,15 @@
         sound.playRepair();
         if (S.Callouts) S.Callouts.banner({ title: 'PROMOTED!', sub: careerResult.promoted.name.toUpperCase(), kind: 'orange', burst: '\u2605', delay: 900, key: 'promo', duration: 4200 });
         else this.addNotification(`${UI.icon('flame')} PROMOTED — ${careerResult.promoted.name.toUpperCase()}`, 'success', 6000);
+      }
+      // Daily goal (B146): a quiet progress note per drop, and one celebration when it pays.
+      if (careerResult && careerResult.dailyGoal) {
+        const goal = careerResult.dailyGoal;
+        if (goal.justCompleted) {
+          this.addNotification(`${UI.icon('check')} DAILY GOAL DONE — +₹${goal.bonus}`, 'success', 5000);
+        } else if (goal.done < goal.target) {
+          this.addNotification(`${UI.icon('check')} Daily goal ${goal.done}/${goal.target}`, 'info', 2500);
+        }
       }
 
       this.deliveryHistory.unshift({
@@ -245,6 +266,8 @@
         if (this._firstOpenTime) {
           const ms = Date.now() - this._firstOpenTime;
           console.info('[Shiplyp] first_open_to_first_delivery_ms', ms);
+          if (Career && Career.noteFirstDelivery) Career.noteFirstDelivery(ms);
+          this._track('first_open_to_first_order', { ms });
         }
       }
 

@@ -178,6 +178,9 @@
       for (let i = 2; i < sampledPoints.length - 2; i++) {
         const pt = sampledPoints[i];
         const u = i / sampledPoints.length;
+        // WI-05: no fence, tree, building, pole or pedestrian right at a junction: the gap is the
+        // cross road's mouth, and the same skip keeps props off the cross road itself.
+        if (this.roadNet && this.roadNet.nearJunction(pt, this.roadNet.opt.BOX_HALF + 4)) continue;
         const tangent = new THREE.Vector3().subVectors(sampledPoints[i + 1], sampledPoints[i - 1]).normalize();
         const up = new THREE.Vector3(0, 1, 0);
         const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
@@ -1090,6 +1093,7 @@
         const hash = (a, b, c) => { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2246822519)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
         const structs = this._structures(), L = this.curve.getLength(), segLen = L / (pts.length - 1);
         for (const st of structs) {
+          if (st.corridor) continue;
           const near = grid.getNearestRoadPoint(st.pos.x, st.pos.z, 46);
           if (!near) continue;
           const u = near.index * segLen / L;
@@ -1283,6 +1287,7 @@
       for (const o of obs) if (o.type === 'building' && o.radius < 14) list.push({ pos: o.pos, r: o.radius });
       for (const g of gaps) list.push({ pos: g.pos, r: Math.min(g.r, 12) });
       for (const t of (this.deliveryTargets || [])) { const tp = t.pos || t.position || t.housePos; if (tp) list.push({ pos: tp, r: 5.5 }); }   // house frontage: gate, plinth, steps
+      if (this.roadNet) for (const c of this.roadNet.corridorCircles()) list.push({ pos: c.pos, r: c.r, corridor: true });   // WI-05: cross roads
       // Access path (B167): a clear walkway from the road to the structure, so plants go AROUND the way in, not across it.
       const grid = this.roadSpatialGrid;
       if (grid) for (const st of list) { const n = grid.getNearestRoadPoint(st.pos.x, st.pos.z, 24); st.b = n ? n.point : null; }
@@ -1294,7 +1299,7 @@
     _onAccessPath(pos, halfW) {
       const l = this._structures();
       for (let i = 0; i < l.length; i++) {
-        const s = l[i]; if (!s.b) continue;
+        const s = l[i]; if (!s.b || s.corridor) continue;
         const ax = s.pos.x, az = s.pos.z, dx = s.b.x - ax, dz = s.b.z - az, len2 = dx * dx + dz * dz; if (len2 < 1e-6) continue;
         const t = Math.max(0, Math.min(1, ((pos.x - ax) * dx + (pos.z - az) * dz) / len2));
         const px = ax + dx * t - pos.x, pz = az + dz * t - pos.z; if (px * px + pz * pz < halfW * halfW) return true;

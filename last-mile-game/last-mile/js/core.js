@@ -168,6 +168,9 @@
     // Parcel toss reach (B136): ground-plane metres, and how far past abeam a drop still counts.
     TOSS_RANGE: 35,
     TOSS_BEHIND_SLACK: 3,
+    // First-time player guidance (WI-18): where the first drop starts, how fast, and the slow
+    // zone round the first house that keeps the drop window seconds long.
+    ONBOARD: { APPROACH_M: 45, START_SPEED: 6, SLOW_ZONE_M: 38, SLOW_SPEED: 4.5, PASSED_M: 8 },
     // Spare parcels per shift (B140): a throw that can't reach a drop uses
     // one; missing with none left ends the shift.
     SPARE_PARCELS: 3,

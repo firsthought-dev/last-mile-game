@@ -23,6 +23,10 @@
 
   const STORAGE_KEY = 'shiplyp_career_v1';
   const SCHEMA_VERSION = 1;
+  const GRACE_REFILL_DAYS = 7;       // streak days earned before the grace day comes back
+  const DAILY_GOAL_TARGET = 3;       // deliveries
+  const DAILY_GOAL_BONUS = 150;      // rupees, paid once per day
+  const PLAY_DAYS_CAP = 120;
 
   // Writes are debounced: a delivery fires several state changes in one frame
   // and there is no reason to serialize the profile more than once for them.
@@ -117,7 +121,25 @@
         lastDay: null,
         streak: 0,
         bestStreak: 0,
-        claimedDay: null       // day the streak bonus was last paid out
+        claimedDay: null,      // day the streak bonus was last paid out
+        // One free missed day. Spent when a single day is skipped, and handed
+        // back once the streak has grown another GRACE_REFILL_DAYS. Free on
+        // purpose: selling streak protection monetises a loss the game created.
+        graceAvailable: true,
+        graceRefillAt: 0,
+        // Today's delivery goal. Pays for playing, where the check-in bonus
+        // pays for opening the app.
+        goal: { day: null, done: 0, paid: false }
+      },
+
+      // Local-only counters so retention can be read (D1/D7/D30) without any
+      // network or analytics SDK. Nothing here ever leaves the device.
+      metrics: {
+        firstDay: null,
+        sessions: 0,
+        playDays: [],                  // day keys, capped to the last 120
+        firstSessionDeliveries: 0,
+        timeToFirstDeliveryMs: 0       // 0 until the first delivery lands
       },
 
       // orderId -> best stars (1-3). Sparse on purpose: an unattempted order
@@ -153,6 +175,15 @@
     out.version = SCHEMA_VERSION;
     out.career = Object.assign(fresh.career, loaded.career || {});
     out.daily = Object.assign(fresh.daily, loaded.daily || {});
+    // B146 fields: a save from before them gets the defaults, and a stale one cannot poison the maths.
+    out.daily.goal = Object.assign({ day: null, done: 0, paid: false }, (loaded.daily && loaded.daily.goal) || {});
+    out.daily.graceAvailable = loaded.daily && typeof loaded.daily.graceAvailable === 'boolean' ? loaded.daily.graceAvailable : true;
+    out.daily.graceRefillAt = safeNum(out.daily.graceRefillAt, 0);
+    out.metrics = Object.assign(fresh.metrics, loaded.metrics || {});
+    out.metrics.playDays = Array.isArray(out.metrics.playDays) ? out.metrics.playDays.filter(d => typeof d === 'string').slice(-PLAY_DAYS_CAP) : [];
+    out.metrics.sessions = safeNum(out.metrics.sessions, 0);
+    out.metrics.firstSessionDeliveries = safeNum(out.metrics.firstSessionDeliveries, 0);
+    out.metrics.timeToFirstDeliveryMs = safeNum(out.metrics.timeToFirstDeliveryMs, 0);
     out.unlocks = Object.assign(fresh.unlocks, loaded.unlocks || {});
     out.hints = (loaded.hints && typeof loaded.hints === 'object') ? loaded.hints : {};
     out.stars = (loaded.stars && typeof loaded.stars === 'object') ? loaded.stars : {};
@@ -374,6 +405,9 @@
 
       profile.career.deliveries += 1;
       this._shiftDeliveries += 1;
+      if (profile.metrics.sessions <= 1) profile.metrics.firstSessionDeliveries += 1;
+      const goal = this._goalToday();
+      goal.done += 1;
       if (stars >= 3) profile.career.perfectDeliveries += 1;
       if (streak > profile.career.bestStreak) profile.career.bestStreak = streak;
 
@@ -386,10 +420,18 @@
       this.credit(payout, 'delivery');
       const rankAfter = rankFor(profile.lifetimeEarned);
 
+      let goalDone = false;
+      if (goal.done >= DAILY_GOAL_TARGET && !goal.paid) {
+        goal.paid = true;
+        goalDone = true;
+        this.credit(DAILY_GOAL_BONUS, 'daily_goal');
+      }
+
       return {
         wallet: profile.wallet,
         stars,
-        promoted: rankAfter.index > rankBefore.index ? rankAfter : null
+        promoted: rankAfter.index > rankBefore.index ? rankAfter : null,
+        dailyGoal: { done: Math.min(goal.done, DAILY_GOAL_TARGET), target: DAILY_GOAL_TARGET, justCompleted: goalDone, bonus: DAILY_GOAL_BONUS }
       };
     },
 
@@ -421,7 +463,7 @@
       let event = 'same-day';
 
       if (last === today) {
-        return { event, streak: profile.daily.streak, bonus: 0 };
+        return { event, streak: profile.daily.streak, bonus: 0, graceAvailable: profile.daily.graceAvailable };
       }
 
       if (!last) {
@@ -432,6 +474,12 @@
         if (gap === 1) {
           profile.daily.streak += 1;
           event = 'continued';
+        } else if (gap === 2 && profile.daily.graceAvailable) {
+          // One missed day is forgiven, once, then it has to be re-earned.
+          profile.daily.streak += 1;
+          profile.daily.graceAvailable = false;
+          profile.daily.graceRefillAt = profile.daily.streak + GRACE_REFILL_DAYS;
+          event = 'saved';
         } else {
           // Includes a negative gap — a device clock rolled backwards shouldn't
           // hand out a free streak, and shouldn't crash either.
@@ -440,9 +488,22 @@
         }
       }
 
+      if (!profile.daily.graceAvailable && profile.daily.streak >= profile.daily.graceRefillAt) {
+        profile.daily.graceAvailable = true;
+      }
+
       profile.daily.lastDay = today;
       if (profile.daily.streak > profile.daily.bestStreak) {
         profile.daily.bestStreak = profile.daily.streak;
+      }
+
+      // Local retention counters (see defaultProfile().metrics).
+      const m = profile.metrics;
+      m.sessions += 1;
+      if (!m.firstDay) m.firstDay = today;
+      if (m.playDays[m.playDays.length - 1] !== today) {
+        m.playDays.push(today);
+        if (m.playDays.length > PLAY_DAYS_CAP) m.playDays.splice(0, m.playDays.length - PLAY_DAYS_CAP);
       }
 
       // Streak bonus: scales, then caps. Capping matters — an uncapped daily
@@ -453,7 +514,56 @@
       this.credit(bonus, 'daily');
       touch();
 
-      return { event, streak: profile.daily.streak, bonus };
+      return { event, streak: profile.daily.streak, bonus, graceAvailable: profile.daily.graceAvailable };
+    },
+
+    // ---- daily goal --------------------------------------------------------
+    // Rolls over by day key; never stores a derived "expired" flag.
+    _goalToday() {
+      const today = todayKey();
+      const g = profile.daily.goal;
+      if (g.day !== today) { g.day = today; g.done = 0; g.paid = false; }
+      return g;
+    },
+
+    dailyGoal() {
+      const g = this._goalToday();
+      return { done: g.done, target: DAILY_GOAL_TARGET, bonus: DAILY_GOAL_BONUS, paid: g.paid };
+    },
+
+    // ---- retention read-out ------------------------------------------------
+    // "Did this player come back on day N after first opening the game?"
+    // Local and private; for a real cohort view the numbers would have to be
+    // collected somewhere, which this build deliberately does not do.
+    retentionReport() {
+      const m = profile.metrics;
+      const first = m.firstDay;
+      const played = new Set(m.playDays);
+      const plusDays = (n) => {
+        if (!first) return null;
+        const d = new Date(first + 'T12:00:00'); d.setDate(d.getDate() + n);
+        const y = d.getFullYear(), mo = String(d.getMonth() + 1).padStart(2, '0'), da = String(d.getDate()).padStart(2, '0');
+        return `${y}-${mo}-${da}`;
+      };
+      const age = first ? daysBetween(first, todayKey()) : 0;
+      const ret = (n) => (age >= n ? played.has(plusDays(n)) : null); // null = too early to tell
+      return {
+        firstDay: first,
+        ageDays: age,
+        sessions: m.sessions,
+        daysPlayed: played.size,
+        d1: ret(1), d7: ret(7), d30: ret(30),
+        firstSessionDeliveries: m.firstSessionDeliveries,
+        timeToFirstDeliveryMs: m.timeToFirstDeliveryMs,
+        streak: profile.daily.streak,
+        bestStreak: profile.daily.bestStreak,
+        graceAvailable: profile.daily.graceAvailable
+      };
+    },
+
+    noteFirstDelivery(ms) {
+      const v = Math.round(safeNum(ms, 0));
+      if (v > 0 && !profile.metrics.timeToFirstDeliveryMs) { profile.metrics.timeToFirstDeliveryMs = v; touch(); }
     },
 
     dailyStreak() { return profile.daily.streak; },

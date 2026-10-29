@@ -103,6 +103,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Must be registered before the first load so telemetry.js sees it at start-up.
+        webView.addJavascriptInterface(TelemetryBridge(), TelemetryBridge.JS_NAME)
+
         // Load entrypoint via Android WebKit AssetLoader domain for security & WebGL performance
         webView.loadUrl("https://appassets.androidplatform.net/assets/index.html")
     }

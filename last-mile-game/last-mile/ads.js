@@ -30,6 +30,12 @@
     mockDurationMs: 2200 // simulated ad preview duration in dev/offline mode
   };
 
+  // Ads are OFF in the Android app (and so in closed-test builds): there is no real ad SDK
+  // there, only the mock overlay, and the closed test must show no ads. They stay ON in web
+  // and portal builds. The app is detected by the native bridge the Android shell registers.
+  // ?ads=off forces them off for testing.
+  const ADS_DISABLED = !!global.ShiplypNativeTelemetry || /[?&]ads=off\b/.test((global.location && global.location.search) || '');
+
   let config = Object.assign({}, DEFAULT_OPTIONS);
   let activeProvider = PROVIDER.MOCK;
   let lastInterstitialTime = 0;
@@ -206,7 +212,10 @@
       return activeProvider;
     },
 
+    isEnabled() { return !ADS_DISABLED; },
+
     isRewardedAvailable() {
+      if (ADS_DISABLED) return false;
       return true; // Supported across all providers via native SDK or mock fallback
     },
 
@@ -214,6 +223,7 @@
     showInterstitial(placement, callbacks) {
       const now = Date.now();
       const cb = callbacks || {};
+      if (ADS_DISABLED) { if (typeof cb.onSkipped === 'function') cb.onSkipped(); return false; }
 
       // Enforce rate limiting so interstitials are never aggressive
       if (now - lastInterstitialTime < config.minInterstitialIntervalMs) {
@@ -282,6 +292,7 @@
     // ── Rewarded Video Ad ──────────────────────────────────────────────────
     showRewarded(rewardType, callbacks) {
       const cb = callbacks || {};
+      if (ADS_DISABLED) { if (typeof cb.onError === 'function') cb.onError(new Error('ads disabled')); return false; }
       notifyAdStart();
 
       const grantReward = () => {
