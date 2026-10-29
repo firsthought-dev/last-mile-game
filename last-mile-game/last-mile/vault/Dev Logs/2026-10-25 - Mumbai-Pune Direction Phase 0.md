@@ -21,5 +21,6 @@ This note grows as Phase 0 units land. Nothing here changes how the game plays y
 - **Road network groundwork:** the first four junctions with cross roads, lanes and traffic signals now exist as data behind a developer switch, with an automatic check. Nothing changes for players yet.
 - **Junctions now look like junctions** (behind a developer switch): cross roads with road surface and paint, gaps in the footpath and barriers, traffic signal poles with changing lights, and graded ground so the cross roads are not steep. Vehicles can turn onto them.
 - **Traffic is back, behind a developer switch:** scooters, cars, cabs, autos, a goods tempo and buses drive through the new junctions, obey the traffic lights, give way to each other and queue. They do not collide with the player yet.
+- **Crashes now matter:** hitting another vehicle earns a police star, so repeated crashes lead to the existing police stop.
 
 Related: [[Projects/Last-Mile Game]], [[2026-10-25 - Modular Codebase Architecture Split]]

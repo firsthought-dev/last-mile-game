@@ -386,7 +386,7 @@
         this.streakCount = 0;
         sound.playCrash();
         this.addNotification(`${UI.icon('flame')} CRASH! -₹${CONFIG.CRASH_CASH_PENALTY} AND THE STREAK IS GONE`, 'warning', 3000);
-        // WI-09: a crash will also report an offence to the police system here.
+        window.ShiplypPolice?.reportOffence('crash');   // WI-09: a crash earns a star and can bring the police
       }
     },
 

@@ -39,6 +39,7 @@
     offence: {
       redLight: 'Jumped a red light',
       hitPedestrian: 'Hit a pedestrian',
+      crash: 'Crashed into another vehicle',
       speeding: 'Speeding over the {limit} km/h limit',
       speedOff: 'Sped off from the police',
       honestCop: 'Tried to bribe an honest officer'
@@ -47,6 +48,7 @@
     why: {
       redLight: 'running a red light',
       hitPedestrian: 'hitting a pedestrian',
+      crash: 'crashing into another vehicle',
       speeding: 'speeding',
       speedOff: 'speeding off from the police',
       honestCop: 'trying to bribe an honest officer'
@@ -225,7 +227,7 @@
   // --------------------------------------------------------------------------
   const TUNE = {
     maxStars: 5,
-    offenceStars: { redLight: 1, hitPedestrian: 2, speeding: 1, speedOff: 1, honestCop: 1 },
+    offenceStars: { redLight: 1, hitPedestrian: 2, speeding: 1, speedOff: 1, honestCop: 1, crash: 1 },
     repeatWindow: 60,          // s: an offence while an earlier one is still inside this window adds +1 extra (a +1 offence becomes +2)
     postedLimitKmh: 75,        // the posted limit on the speed-camera gantries
     speedingHold: 6,           // s continuously over the limit before it counts
