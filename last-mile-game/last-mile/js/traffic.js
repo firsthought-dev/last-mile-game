@@ -19,15 +19,15 @@
     HEADWAY: 1.2, MIN_GAP: 2.0, DECEL: 3.5, BRAKE: 7.0
   };
   const KINDS = {
-    scooter:    { w: 0.34, v: 7.5, half: 0.9, acc: 3.4, colors: [0xb91c1c, 0x1d4ed8, 0xe7e5e4, 0x16a34a, 0x0f172a, 0xca8a04] },
-    hatchback:  { w: 0.20, v: 8.5, half: 1.9, acc: 2.6, colors: [0xf5f5f4, 0xd6d3d1, 0x6b7280, 0x1f2937, 0xb91c1c, 0x1d4ed8, 0xe5e7eb] },
-    sedan:      { w: 0.10, v: 8.5, half: 2.2, acc: 2.6, colors: [0xf5f5f4, 0xd6d3d1, 0x374151, 0x111827, 0x7f1d1d] },
-    suv:        { w: 0.07, v: 8.0, half: 2.3, acc: 2.4, colors: [0xf5f5f4, 0x111827, 0x6b7280, 0x1e3a5f] },
-    cab:        { w: 0.09, v: 7.5, half: 2.1, acc: 2.4, colors: [0xf7c600] },
-    auto:       { w: 0.10, v: 6.5, half: 1.3, acc: 2.2, colors: [0xf7c600, 0x16a34a] },
-    tempo:      { w: 0.04, v: 6.5, half: 1.7, acc: 1.8, colors: [0x1d4ed8, 0xf5f5f4, 0xea580c] },
-    bus_single: { w: 0.04, v: 6.5, half: 5.2, acc: 1.4, colors: [0xc2410c] },
-    bus_double: { w: 0.02, v: 6.0, half: 5.0, acc: 1.2, colors: [0xb91c1c] }
+    scooter:    { rad: 0.4, w: 0.34, v: 7.5, half: 0.9, acc: 3.4, colors: [0xb91c1c, 0x1d4ed8, 0xe7e5e4, 0x16a34a, 0x0f172a, 0xca8a04] },
+    hatchback:  { rad: 0.85, w: 0.20, v: 8.5, half: 1.9, acc: 2.6, colors: [0xf5f5f4, 0xd6d3d1, 0x6b7280, 0x1f2937, 0xb91c1c, 0x1d4ed8, 0xe5e7eb] },
+    sedan:      { rad: 0.9, w: 0.10, v: 8.5, half: 2.2, acc: 2.6, colors: [0xf5f5f4, 0xd6d3d1, 0x374151, 0x111827, 0x7f1d1d] },
+    suv:        { rad: 0.97, w: 0.07, v: 8.0, half: 2.3, acc: 2.4, colors: [0xf5f5f4, 0x111827, 0x6b7280, 0x1e3a5f] },
+    cab:        { rad: 0.85, w: 0.09, v: 7.5, half: 2.1, acc: 2.4, colors: [0xf7c600] },
+    auto:       { rad: 0.75, w: 0.10, v: 6.5, half: 1.3, acc: 2.2, colors: [0xf7c600, 0x16a34a] },
+    tempo:      { rad: 0.8, w: 0.04, v: 6.5, half: 1.7, acc: 1.8, colors: [0x1d4ed8, 0xf5f5f4, 0xea580c] },
+    bus_single: { rad: 1.25, w: 0.04, v: 6.5, half: 5.2, acc: 1.4, colors: [0xc2410c] },
+    bus_double: { rad: 1.25, w: 0.02, v: 6.0, half: 5.0, acc: 1.2, colors: [0xb91c1c] }
   };
   const KIND_NAMES = Object.keys(KINDS);
 
@@ -40,7 +40,7 @@
       this.agents = []; this.nextId = 1; this.spawnClock = 0;
       this.occ = new Map();                // lane id -> agents on it, kept sorted by d
       this.reserved = new Map();           // connector id -> agent that has claimed it
-      this.stats = { spawned: 0, despawned: 0, watchdog: 0, overlaps: 0, maxCount: 0, steps: 0, sumCount: 0, kinds: {} };
+      this.stats = { collisions: 0, playerHits: 0, spawned: 0, despawned: 0, watchdog: 0, overlaps: 0, maxCount: 0, steps: 0, sumCount: 0, kinds: {} };
       this.roadLanes = [...net.lanes.values()].filter((l) => l.kind === 'road');
       this.render = null;                  // set by attachRender()
       this.playerPos = null;
@@ -82,6 +82,51 @@
           });
           inst.im.instanceMatrix.needsUpdate = true; if (inst.im.instanceColor) inst.im.instanceColor.needsUpdate = true;
         }
+      }
+    }
+
+    // ---------- collisions (WI-08) ------------------------------------------------------------
+    // A vehicle body is a row of circles along its length. Two bodies collide when any pair of circles overlaps.
+    _circles(x, z, tx, tz, half, rad) {
+      const n = Math.max(2, Math.round((half * 2) / (rad * 1.6))), out = [], len = Math.hypot(tx, tz) || 1, ux = tx / len, uz = tz / len;
+      for (let i = 0; i < n; i++) { const f = (n === 1 ? 0 : (i / (n - 1) - 0.5) * 2) * (half - rad); out.push([x + ux * f, z + uz * f]); }
+      return out;
+    }
+    _overlap(A, ra, B, rb) {
+      let best = null;
+      for (const p of A) for (const q of B) { const dx = q[0] - p[0], dz = q[1] - p[1], d = Math.hypot(dx, dz), pen = ra + rb - d; if (pen > 0 && (!best || pen > best.pen)) best = { pen, nx: d > 1e-4 ? dx / d : 1, nz: d > 1e-4 ? dz / d : 0 }; }
+      return best;
+    }
+    _crash(a, reason) { if (a.hit) return; a.hit = 0.001; a.v *= 0.25; if (a.claim) { if (this.reserved.get(a.claim) === a) this.reserved.delete(a.claim); a.claim = null; } if (reason === 'npc') this.stats.collisions++; }
+    _checkCollisions(dt) {
+      const net = this.net;
+      const poses = this.agents.map((a) => net.pose(a.lane, a.d));
+      // vehicle vs vehicle (rare: the gap logic prevents it; this stops any pile-up from freezing the simulation)
+      const circ = this.agents.map((a, i) => this._circles(poses[i].x, poses[i].z, poses[i].tx, poses[i].tz, a.half, a.rad));
+      for (let i = 0; i < this.agents.length; i++) for (let k = i + 1; k < this.agents.length; k++) {
+        const A = this.agents[i], B = this.agents[k];
+        if (Math.abs(poses[i].x - poses[k].x) > A.half + B.half + 1 || Math.abs(poses[i].z - poses[k].z) > A.half + B.half + 1) continue;
+        if (this._overlap(circ[i], A.rad, circ[k], B.rad)) {
+          if (!A.hit && !B.hit && this.opt.audit && (this.collisionLog = this.collisionLog || []).length < 8) this.collisionLog.push(`${A.kind}#${A.id} ${A.lane.id}@${A.d.toFixed(1)}/${A.lane.len.toFixed(0)} v${A.v.toFixed(1)} vs ${B.kind}#${B.id} ${B.lane.id}@${B.d.toFixed(1)}/${B.lane.len.toFixed(0)} v${B.v.toFixed(1)}`);
+          this._crash(A, 'npc'); this._crash(B, 'npc');
+        }
+      }
+      // player vs vehicle
+      const veh = this.game && this.game.vehicle, cb = this.game && this.game._onTrafficCrash;
+      if (!veh || !veh.mesh || !cb) return;
+      const hv = veh.heading, ptx = Math.sin(hv), ptz = Math.cos(hv), pp = veh.mesh.position;
+      const handling = this.game.vehicleHandling ? this.game.vehicleHandling() : 'car';
+      const pHalf = handling === 'car' ? 2.0 : handling === 'threeWheeler' ? 1.4 : 0.9, pRad = handling === 'car' ? 1.0 : handling === 'threeWheeler' ? 0.8 : 0.4;
+      const pc = this._circles(pp.x, pp.z, ptx, ptz, pHalf, pRad);
+      for (let i = 0; i < this.agents.length; i++) {
+        const A = this.agents[i];
+        if (Math.abs(poses[i].x - pp.x) > A.half + pHalf + 1 || Math.abs(poses[i].z - pp.z) > A.half + pHalf + 1) continue;
+        const o = this._overlap(pc, pRad, circ[i], A.rad);
+        if (!o) continue;
+        const rel = Math.hypot(veh.speed * ptx - A.v * poses[i].tx, veh.speed * ptz - A.v * poses[i].tz);
+        this.stats.playerHits++;
+        this._crash(A, 'player');
+        cb.call(this.game, A, { pen: o.pen, nx: o.nx, nz: o.nz, relSpeed: rel });
       }
     }
 
@@ -147,8 +192,10 @@
         if (dist < this.opt.SPAWN_MIN || dist > this.opt.SPAWN_MAX) continue;
         if (lane.toJunction && lane.len - d < 14) continue;
         if (this._occ(lane).some((b) => Math.abs(b.d - d) < 18)) continue;
+        // never appear on top of a vehicle on another lane (for example at the end of a turn that feeds this lane)
+        if (this.agents.some((b) => { const q = this.net.pose(b.lane, b.d); return Math.hypot(q.x - p.x, q.z - p.z) < b.half + 8; })) continue;
         const kind = this._pickKind(), K = KINDS[kind], palette = K.colors;
-        const a = { id: this.nextId++, kind, lane, d, v: Math.min(K.v, 4), vmax: K.v * (0.85 + this.rand() * 0.2), half: K.half, acc: K.acc, color: palette[Math.floor(this.rand() * palette.length)], next: null, stuck: 0, claim: null, age: 0 };
+        const a = { id: this.nextId++, kind, lane, d, v: Math.min(K.v, 4), vmax: K.v * (0.85 + this.rand() * 0.2), half: K.half, rad: K.rad, hit: 0, acc: K.acc, color: palette[Math.floor(this.rand() * palette.length)], next: null, stuck: 0, claim: null, age: 0 };
         a.next = this._chooseNext(a); this.agents.push(a); this._add(a);
         this.stats.spawned++; this.stats.kinds[kind] = (this.stats.kinds[kind] || 0) + 1;
         return;
@@ -170,6 +217,7 @@
         if (!a.next && !lane.succ.some((s) => s.portal)) a.next = this._chooseNext(a);
         else if (!a.next && lane.kind !== 'turn') a.next = this._chooseNext(a);
         let target = a.vmax;
+        if (a.hit) { a.hit += dt; target = 0; if (a.hit > 4) { this._kill(a, 'wreck'); continue; } }   // a crashed vehicle stops, then is cleared so nothing piles up
         if (lane.kind === 'turn') target = Math.min(target, o.JUNCTION_SPEED);
         const distEnd = lane.len - a.d - a.half;          // front bumper to the end of this lane
         // approaching a junction turn: slow to junction speed
@@ -213,6 +261,7 @@
           a.next = this._chooseNext(a);
         }
       }
+      this._checkCollisions(dt);
       // clear stale reservations
       for (const [id, a] of this.reserved) if (!this.agents.includes(a)) this.reserved.delete(id);
       // bookkeeping and an overlap audit (centre distance below 60 % of the summed half-lengths)

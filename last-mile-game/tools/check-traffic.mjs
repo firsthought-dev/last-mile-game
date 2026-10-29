@@ -34,10 +34,29 @@ const r = await page.evaluate((minutes) => {
   if (st.watchdog > 0) F(`${st.watchdog} agents were removed by the watchdog (stuck)`);
   if (st.overlaps > 0) F(`${st.overlaps} overlap samples`);
   if (visits.size < 20) F(`only ${visits.size} vehicles crossed a junction box`);
+  if (st.collisions > 0) F(`${st.collisions} vehicle-vs-vehicle collisions`);
+  // ---- player crash scenario: park the "player" on top of a moving vehicle and check the response
+  const crashes = [];
+  const fake = { vehicle: { mesh: { position: { x: sys.fixedPlayer.x, y: 0, z: sys.fixedPlayer.z } }, heading: 0, speed: 8 }, vehicleHandling: () => 'car', _onTrafficCrash(a, info) { crashes.push({ kind: a.kind, pen: info.pen, rel: info.relSpeed }); } };
+  const sys2 = new S.TrafficSystem(fake, net, { seed: 77, audit: true }); net._t = 0;
+  for (let i = 0; i < 30 * 40 && sys2.agents.length < 6; i++) { net._t += dt; sys2.update(dt); }
+  const target = sys2.agents.find((a) => a.lane.kind === 'road' && a.v > 2);
+  if (!target) F('no moving vehicle to crash into');
+  else {
+    const p0 = net.pose(target.lane, target.d); fake.vehicle.mesh.position.x = p0.x + 0.3; fake.vehicle.mesh.position.z = p0.z; fake.vehicle.heading = Math.atan2(p0.tx, p0.tz);
+    net._t += dt; sys2.update(dt);
+    if (!crashes.length) F('overlapping the player with a vehicle did not register a crash');
+    if (!target.hit) F('the vehicle that was hit did not stop');
+    for (let i = 0; i < 30 * 5; i++) { net._t += dt; sys2.update(dt); }
+    if (sys2.agents.includes(target)) F('the crashed vehicle was not cleared after 5 s');
+  }
+  out.crash = { callbacks: crashes.length, first: crashes[0] || null };
+  out.collisionLog = sys.collisionLog || [];
   out.stuck = sys.stuckLog || []; out.overlapLog = sys.overlapLog || [];
   return out;
 }, minutes);
 await browser.close(); await server.close();
-console.log(JSON.stringify(r.stats)); if (r.overlapLog && r.overlapLog.length) console.log('overlaps:\n' + r.overlapLog.join('\n')); if (r.stuck && r.stuck.length) console.log('stuck samples:\n' + r.stuck.slice(0, 8).map((x) => JSON.stringify(x)).join('\n'));
+if (r.collisionLog && r.collisionLog.length) console.log('collisions:\n' + r.collisionLog.join('\n'));
+console.log(JSON.stringify(r.stats), 'crash test', JSON.stringify(r.crash)); if (r.overlapLog && r.overlapLog.length) console.log('overlaps:\n' + r.overlapLog.join('\n')); if (r.stuck && r.stuck.length) console.log('stuck samples:\n' + r.stuck.slice(0, 8).map((x) => JSON.stringify(x)).join('\n'));
 if (r.fails.length) { console.error(r.fails.join('\n')); console.error('check-traffic FAIL'); process.exit(1); }
 console.log('check-traffic OK');
